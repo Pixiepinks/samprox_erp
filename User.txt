@@ -1,0 +1,20 @@
+User
+  id, name, email, role, password_hash, active
+
+Job
+  id, code, title, description, created_by (User), assigned_to (User?),
+  status, priority, location, expected_completion_date, completed_date,
+  created_at, updated_at, progress_pct (derived), quotation_id (nullable)
+
+Quotation
+  id, job_id (1-1), labor_estimate_hours, labor_rate, material_estimate_cost,
+  notes, created_at
+
+LaborEntry
+  id, job_id, user_id (technician/maint mgr), date, hours, rate, note
+
+MaterialEntry
+  id, job_id, item_name, qty, unit_cost, note
+
+JobComment (optional now)
+  id, job_id, user_id, body, created_at

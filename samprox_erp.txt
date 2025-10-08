@@ -1,0 +1,23 @@
+samprox_erp/
+  app.py
+  config.py
+  extensions.py
+  models.py
+  schemas.py
+  routes/
+    __init__.py
+    auth.py
+    jobs.py
+    quotation.py
+    labor.py
+    materials.py
+    reports.py
+  services/
+    jobs_service.py
+    auth_service.py
+  migrations/   (created by Flask-Migrate)
+  requirements.txt
+  Procfile       (for Railway)
+  runtime.txt    (optional)
+
+

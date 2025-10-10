@@ -63,9 +63,20 @@ def update_job(job_id):
     data = request.get_json()
 
     if "status" in data:
-        if role not in [RoleEnum.maintenance_manager, RoleEnum.admin]:
-            return jsonify({"msg":"Only Maintenance Manager can change status"}), 403
-        j.status = JobStatus(data["status"])
+        new_status = JobStatus(data["status"])
+        can_change_status = role in [RoleEnum.maintenance_manager, RoleEnum.admin]
+
+        if not can_change_status:
+            can_change_status = (
+                role == RoleEnum.production_manager
+                and j.status == JobStatus.NEW
+                and new_status == JobStatus.ACCEPTED
+            )
+
+        if not can_change_status:
+            return jsonify({"msg": "Only Maintenance Manager can change status"}), 403
+
+        j.status = new_status
         if j.status == JobStatus.ACCEPTED and not j.assigned_to_id:
             # auto-assign to the manager performing action
             j.assigned_to_id = claims["sub"]

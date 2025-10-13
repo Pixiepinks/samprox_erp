@@ -22,10 +22,10 @@ def upsert_quotation(job_id):
     q.notes = data.get("notes")
     db.session.add(q)
     db.session.commit()
-    return qs.jsonify(q)
+    return jsonify(qs.dump(q))
 
 @bp.get("/jobs/<int:job_id>/quotation")
 @jwt_required()
 def get_quotation(job_id):
     job = Job.query.get_or_404(job_id)
-    return qs.jsonify(job.quotation) if job.quotation else (jsonify({}), 204)
+    return jsonify(qs.dump(job.quotation)) if job.quotation else (jsonify({}), 204)

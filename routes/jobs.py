@@ -12,15 +12,21 @@ jobs_schema = JobSchema(many=True)
 
 def require_role(*roles):
     claims = get_jwt()
-    if claims.get("role") not in roles:
+    try:
+        current_role = RoleEnum(claims.get("role"))
+    except (ValueError, TypeError):
         return False
-    return True
+    return current_role in roles
 
 @bp.post("")
 @jwt_required()
 def create_job():
     if not require_role(RoleEnum.production_manager, RoleEnum.admin):
         return jsonify({"msg":"Only Production Manager can create"}), 403
+    try:
+        creator_id = int(get_jwt().get("sub"))
+    except (TypeError, ValueError):
+        return jsonify({"msg": "Invalid token subject"}), 422
     data = request.get_json()
     j = Job(
         code=data["code"],
@@ -29,11 +35,11 @@ def create_job():
         priority=data.get("priority","Normal"),
         location=data.get("location"),
         expected_completion_date=date.fromisoformat(data["expected_completion_date"]) if data.get("expected_completion_date") else None,
-        created_by_id=get_jwt()["sub"]
+        created_by_id=creator_id
     )
     db.session.add(j)
     db.session.commit()
-    return job_schema.jsonify(j), 201
+    return jsonify(job_schema.dump(j)), 201
 
 @bp.get("")
 @jwt_required()
@@ -46,20 +52,27 @@ def list_jobs():
     text = request.args.get("q")
     if text:
         q = q.filter(or_(Job.title.ilike(f"%{text}%"), Job.description.ilike(f"%{text}%"), Job.code.ilike(f"%{text}%")))
-    return jobs_schema.jsonify(q.order_by(Job.created_at.desc()).all())
+    return jsonify(jobs_schema.dump(q.order_by(Job.created_at.desc()).all()))
 
 @bp.get("/<int:job_id>")
 @jwt_required()
 def get_job(job_id):
     j = Job.query.get_or_404(job_id)
-    return job_schema.jsonify(j)
+    return jsonify(job_schema.dump(j))
 
 @bp.patch("/<int:job_id>")
 @jwt_required()
 def update_job(job_id):
     j = Job.query.get_or_404(job_id)
     claims = get_jwt()
-    role = claims.get("role")
+    try:
+        role = RoleEnum(claims.get("role"))
+    except (ValueError, TypeError):
+        return jsonify({"msg": "Invalid role"}), 403
+    try:
+        actor_id = int(claims.get("sub"))
+    except (TypeError, ValueError):
+        return jsonify({"msg": "Invalid token subject"}), 422
     data = request.get_json()
 
     if "status" in data:
@@ -79,7 +92,7 @@ def update_job(job_id):
         j.status = new_status
         if j.status == JobStatus.ACCEPTED and not j.assigned_to_id:
             # auto-assign to the manager performing action
-            j.assigned_to_id = claims["sub"]
+            j.assigned_to_id = actor_id
 
     if "assigned_to_id" in data and role in [RoleEnum.maintenance_manager, RoleEnum.admin]:
         j.assigned_to_id = data["assigned_to_id"]
@@ -92,7 +105,7 @@ def update_job(job_id):
         j.progress_pct_manual = int(data["progress_pct_manual"])
 
     db.session.commit()
-    return job_schema.jsonify(j)
+    return jsonify(job_schema.dump(j))
 
 @bp.post("/<int:job_id>/complete")
 @jwt_required()
@@ -103,4 +116,4 @@ def complete_job(job_id):
     j.status = JobStatus.COMPLETED
     j.completed_date = date.today()
     db.session.commit()
-    return job_schema.jsonify(j)
+    return jsonify(job_schema.dump(j))

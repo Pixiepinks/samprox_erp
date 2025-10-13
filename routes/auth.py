@@ -10,7 +10,12 @@ bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 @jwt_required()  # only admins can register
 def register():
     claims = get_jwt()
-    if claims.get("role") != RoleEnum.admin:
+    try:
+        requester_role = RoleEnum(claims.get("role"))
+    except (ValueError, TypeError):
+        return jsonify({"msg": "Admins only"}), 403
+
+    if requester_role != RoleEnum.admin:
         return jsonify({"msg": "Admins only"}), 403
 
     data = request.get_json() or {}
@@ -49,5 +54,8 @@ def login():
     if not u or not u.check_password(password) or not u.active:
         return jsonify({"msg": "Invalid email or password"}), 401
 
-    token = create_access_token(identity=u.id, additional_claims={"role": u.role})
-    return jsonify(access_token=token, user={"id": u.id, "name": u.name, "role": u.role})
+    token = create_access_token(identity=str(u.id), additional_claims={"role": u.role.value})
+    return jsonify(
+        access_token=token,
+        user={"id": u.id, "name": u.name, "role": u.role.value},
+    )

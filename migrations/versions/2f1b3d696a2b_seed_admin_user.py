@@ -35,29 +35,16 @@ ADMIN_PASSWORD = "Admin@123"
 def upgrade():
     bind = op.get_bind()
 
-    existing_id = bind.execute(
-        sa.select(user_table.c.id).where(user_table.c.email == ADMIN_EMAIL)
+    existing = bind.execute(
+        sa.select(sa.literal(1)).select_from(user_table).where(user_table.c.email == ADMIN_EMAIL)
     ).scalar()
 
-    password_hash = generate_password_hash(ADMIN_PASSWORD)
-
-    if existing_id is None:
+    if existing is None:
         bind.execute(
             user_table.insert().values(
                 name="System Administrator",
                 email=ADMIN_EMAIL,
-                password_hash=password_hash,
-                role="admin",
-                active=True,
-            )
-        )
-    else:
-        bind.execute(
-            user_table.update()
-            .where(user_table.c.id == existing_id)
-            .values(
-                name="System Administrator",
-                password_hash=password_hash,
+                password_hash=generate_password_hash(ADMIN_PASSWORD),
                 role="admin",
                 active=True,
             )

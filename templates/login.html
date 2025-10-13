@@ -20,7 +20,8 @@
                     <p class="panel__subtitle">Welcome back! Sign in to continue.</p>
                 </div>
             </header>
-            <form class="form" method="post" action="/api/auth/login" novalidate>
+            <form class="form" id="login-form" method="post" action="/api/auth/login" novalidate>
+                <div class="alert" id="form-error" role="alert" hidden></div>
                 <div class="input-group">
                     <label for="email">Email</label>
                     <input id="email" name="email" type="email" autocomplete="email" placeholder="name@company.com" required />
@@ -50,5 +51,54 @@
             <p>Manage Samprox Resources effortlessly.</p>
         </section>
     </main>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const form = document.getElementById("login-form");
+            const errorBox = document.getElementById("form-error");
+            const submitButton = form.querySelector('button[type="submit"]');
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                errorBox.hidden = true;
+                errorBox.textContent = "";
+
+                const formData = new FormData(form);
+                const payload = {
+                    email: formData.get("email"),
+                    password: formData.get("password"),
+                };
+
+                submitButton.disabled = true;
+                submitButton.dataset.loading = "true";
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({ msg: "Unable to sign in" }));
+                        throw new Error(data.msg || "Unable to sign in");
+                    }
+
+                    const data = await response.json();
+                    localStorage.setItem("samprox_token", data.access_token);
+                    localStorage.setItem("samprox_user", JSON.stringify(data.user));
+                    window.location.href = "/jobs";
+                } catch (error) {
+                    errorBox.textContent = error.message || "Unable to sign in";
+                    errorBox.hidden = false;
+                } finally {
+                    submitButton.disabled = false;
+                    delete submitButton.dataset.loading;
+                }
+            });
+        });
+    </script>
 </body>
 </html>

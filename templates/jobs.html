@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jobs | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jobs.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Job Dashboard</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <main class="layout">
+            <section class="panel panel--form">
+                <header class="panel__header">
+                    <div>
+                        <h2>Create a new job</h2>
+                        <p class="panel__subtitle">Add new work orders for the maintenance team.</p>
+                    </div>
+                </header>
+                <div class="panel__body">
+                    <div class="alert alert--info" id="creation-notice" hidden></div>
+                    <div class="alert alert--success" id="creation-success" hidden>Job created successfully.</div>
+                    <div class="alert alert--error" id="creation-error" hidden></div>
+                    <form class="form" id="job-form" novalidate>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label for="code">Job code <span class="required">*</span></label>
+                                <input id="code" name="code" type="text" placeholder="JOB-001" required />
+                            </div>
+                            <div class="input-group">
+                                <label for="title">Title <span class="required">*</span></label>
+                                <input id="title" name="title" type="text" placeholder="Routine maintenance" required />
+                            </div>
+                            <div class="input-group">
+                                <label for="priority">Priority</label>
+                                <select id="priority" name="priority">
+                                    <option value="Normal" selected>Normal</option>
+                                    <option value="High">High</option>
+                                    <option value="Low">Low</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="location">Location</label>
+                                <input id="location" name="location" type="text" placeholder="Plant 1" />
+                            </div>
+                            <div class="input-group">
+                                <label for="expected_completion_date">Expected completion</label>
+                                <input id="expected_completion_date" name="expected_completion_date" type="date" />
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="description">Description</label>
+                            <textarea id="description" name="description" rows="4" placeholder="Provide any additional details"></textarea>
+                        </div>
+                        <div class="form__footer">
+                            <button type="submit" class="button">Create job</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+            <section class="panel panel--list">
+                <header class="panel__header">
+                    <div>
+                        <h2>Jobs</h2>
+                        <p class="panel__subtitle">Latest jobs ordered by creation date.</p>
+                    </div>
+                    <button type="button" class="button button--ghost" id="refresh-jobs">Refresh</button>
+                </header>
+                <div class="panel__body">
+                    <div class="alert alert--error" id="jobs-error" hidden></div>
+                    <div class="empty-state" id="jobs-empty" hidden>
+                        <p>No jobs have been created yet.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="jobs-table" aria-describedby="jobs-empty">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Code</th>
+                                    <th scope="col">Title</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Priority</th>
+                                    <th scope="col">Assigned</th>
+                                    <th scope="col">Expected completion</th>
+                                    <th scope="col">Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobs-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const allowedRoles = ["production_manager", "admin"];
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+        const jobForm = document.getElementById("job-form");
+        const creationNotice = document.getElementById("creation-notice");
+        const creationSuccess = document.getElementById("creation-success");
+        const creationError = document.getElementById("creation-error");
+        const jobsError = document.getElementById("jobs-error");
+        const jobsEmpty = document.getElementById("jobs-empty");
+        const jobsTableBody = document.getElementById("jobs-table-body");
+        const refreshJobsButton = document.getElementById("refresh-jobs");
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            technician: "Technician",
+        };
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+
+        const canCreate = allowedRoles.includes(user?.role);
+
+        if (!canCreate) {
+            creationNotice.textContent = "Only Production Managers can create jobs. You can still view existing jobs.";
+            creationNotice.hidden = false;
+            jobForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
+                element.disabled = true;
+            });
+        }
+
+        function formatDate(value, withTime = false) {
+            if (!value) return "—";
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return withTime ? date.toLocaleString() : date.toLocaleDateString();
+        }
+
+        function renderJobs(jobs) {
+            jobsTableBody.innerHTML = "";
+
+            if (!Array.isArray(jobs) || jobs.length === 0) {
+                jobsEmpty.hidden = false;
+                return;
+            }
+
+            jobsEmpty.hidden = true;
+
+            jobs.forEach((job) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td data-label="Code">${job.code}</td>
+                    <td data-label="Title">${job.title}</td>
+                    <td data-label="Status">${job.status}</td>
+                    <td data-label="Priority">${job.priority}</td>
+                    <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
+                    <td data-label="Expected">${formatDate(job.expected_completion_date)}</td>
+                    <td data-label="Created">${formatDate(job.created_at, true)}</td>
+                `;
+                jobsTableBody.appendChild(row);
+            });
+        }
+
+        async function loadJobs() {
+            jobsError.hidden = true;
+            jobsError.textContent = "";
+
+            try {
+                const response = await fetch("/api/jobs", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error("Unable to load jobs");
+                }
+
+                const jobs = await response.json();
+                renderJobs(jobs);
+            } catch (error) {
+                jobsError.textContent = error.message || "Unable to load jobs";
+                jobsError.hidden = false;
+                renderJobs([]);
+            }
+        }
+
+        refreshJobsButton.addEventListener("click", loadJobs);
+
+        if (canCreate) {
+            jobForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                creationSuccess.hidden = true;
+                creationError.hidden = true;
+                creationError.textContent = "";
+
+                const formData = new FormData(jobForm);
+                const payload = {
+                    code: formData.get("code")?.trim(),
+                    title: formData.get("title")?.trim(),
+                    priority: formData.get("priority") || "Normal",
+                    location: formData.get("location")?.trim() || null,
+                    description: formData.get("description")?.trim() || null,
+                    expected_completion_date: formData.get("expected_completion_date") || null,
+                };
+
+                if (!payload.code || !payload.title) {
+                    creationError.textContent = "Code and Title are required.";
+                    creationError.hidden = false;
+                    return;
+                }
+
+                const submitButton = jobForm.querySelector('button[type="submit"]');
+                submitButton.disabled = true;
+
+                try {
+                    const response = await fetch("/api/jobs", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({ msg: "Unable to create job" }));
+                        throw new Error(data.msg || "Unable to create job");
+                    }
+
+                    jobForm.reset();
+                    creationSuccess.hidden = false;
+                    await loadJobs();
+                } catch (error) {
+                    creationError.textContent = error.message || "Unable to create job";
+                    creationError.hidden = false;
+                } finally {
+                    submitButton.disabled = false;
+                }
+            });
+        }
+
+        loadJobs();
+    </script>
+</body>
+</html>

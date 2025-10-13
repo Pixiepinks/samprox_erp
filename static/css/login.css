@@ -62,7 +62,7 @@ body {
     width: 52px;
     height: 52px;
     border-radius: 16px;
-    background: linear-gradient(135deg, #1d4ed8, #38bdf8);
+    background: linear-gradient(135deg, #16a34a, #86efa);
     color: #fff;
     font-size: 1.5rem;
     font-weight: 700;
@@ -146,7 +146,7 @@ body {
 }
 
 button[type="submit"] {
-    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    background: linear-gradient(135deg, #16a34a, #86efa);
     border: none;
     color: #fff;
     font-weight: 600;

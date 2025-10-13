@@ -1,0 +1,71 @@
+import importlib
+import os
+import sys
+import unittest
+
+
+class AdminSeedTestCase(unittest.TestCase):
+    def setUp(self):
+        os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+        for var in ("RUN_SEED_ADMIN", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+            os.environ.pop(var, None)
+
+        if "app" in sys.modules:
+            self.app_module = importlib.reload(sys.modules["app"])
+        else:
+            self.app_module = importlib.import_module("app")
+
+        self.app = self.app_module.create_app()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        self.app_module.db.create_all()
+
+    def tearDown(self):
+        self.app_module.db.session.remove()
+        self.app_module.db.drop_all()
+        self.ctx.pop()
+        for var in ("DATABASE_URL", "RUN_SEED_ADMIN", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+            os.environ.pop(var, None)
+        if "app" in sys.modules:
+            del sys.modules["app"]
+
+    def test_default_admin_created_and_login_succeeds(self):
+        status, email = self.app_module._ensure_admin_user(flask_app=self.app)
+        self.assertEqual(status, "created")
+        self.assertEqual(email, "admin@samprox.lk")
+
+        admin = self.app_module.User.query.filter_by(role=self.app_module.RoleEnum.admin).one()
+        self.assertTrue(admin.check_password("Admin@123"))
+
+        client = self.app.test_client()
+        response = client.post(
+            "/api/auth/login",
+            json={"email": email, "password": "Admin@123"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("access_token", data)
+        self.assertEqual(data["user"]["role"], "admin")
+
+    def test_force_reset_updates_password(self):
+        status, email = self.app_module._ensure_admin_user(flask_app=self.app)
+        self.assertEqual(status, "created")
+        self.assertEqual(email, "admin@samprox.lk")
+
+        admin = self.app_module.User.query.filter_by(email=email).one()
+        admin.set_password("OldPassword!1")
+        self.app_module.db.session.commit()
+
+        status, _ = self.app_module._ensure_admin_user(
+            flask_app=self.app,
+            password="NewPassword!2",
+            force_reset=True,
+        )
+        self.assertEqual(status, "reset")
+
+        refreshed = self.app_module.db.session.get(self.app_module.User, admin.id)
+        self.assertTrue(refreshed.check_password("NewPassword!2"))
+
+
+if __name__ == "__main__":
+    unittest.main()

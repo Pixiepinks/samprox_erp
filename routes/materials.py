@@ -24,10 +24,10 @@ def add_material(job_id):
         note=d.get("note")
     )
     db.session.add(me); db.session.commit()
-    return ms.jsonify(me), 201
+    return jsonify(ms.dump(me)), 201
 
 @bp.get("/jobs/<int:job_id>/materials")
 @jwt_required()
 def list_materials(job_id):
     items = MaterialEntry.query.filter_by(job_id=job_id).all()
-    return mms.jsonify(items)
+    return jsonify(mms.dump(items))

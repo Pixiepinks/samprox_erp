@@ -26,10 +26,10 @@ def add_labor(job_id):
         note=d.get("note")
     )
     db.session.add(le); db.session.commit()
-    return ls.jsonify(le), 201
+    return jsonify(ls.dump(le)), 201
 
 @bp.get("/jobs/<int:job_id>/labor")
 @jwt_required()
 def list_labor(job_id):
     items = LaborEntry.query.filter_by(job_id=job_id).all()
-    return lms.jsonify(items)
+    return jsonify(lms.dump(items))

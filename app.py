@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+import click
 from config import Config
 from extensions import db, migrate, jwt
 from routes import auth, jobs, quotation, labor, materials, reports, ui
@@ -31,6 +32,25 @@ def create_app():
     return app
 
 app = create_app()
+
+# ---- CLI: seed or reset admin ----
+@app.cli.command("seed-admin")
+@click.option("--email", default="admin@samprox.lk", help="Admin email")
+@click.option("--password", default="Admin@123", help="Admin password")
+def seed_admin(email, password):
+    """Create or reset the admin user."""
+    with app.app_context():
+        u = User.query.filter_by(email=email).first()
+        if not u:
+            u = User(name="Admin", email=email, role=RoleEnum.admin)
+            u.set_password(password)
+            db.session.add(u)
+            db.session.commit()
+            click.echo(f"✅ Admin created: {email}")
+        else:
+            u.set_password(password)
+            db.session.commit()
+            click.echo(f"✅ Admin password reset: {email}")
 
 if __name__ == "__main__":
     app.run(debug=True, port=int(os.getenv("PORT", 5000)))

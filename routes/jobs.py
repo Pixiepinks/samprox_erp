@@ -28,6 +28,18 @@ def create_job():
     except (TypeError, ValueError):
         return jsonify({"msg": "Invalid token subject"}), 422
     data = request.get_json()
+
+    assigned_to_id = data.get("assigned_to_id")
+    if assigned_to_id is not None:
+        try:
+            assigned_to_id = int(assigned_to_id)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "Invalid assigned_to_id"}), 422
+
+        assigned_user = User.query.get(assigned_to_id)
+        if not assigned_user:
+            return jsonify({"msg": "Assigned user not found"}), 404
+    
     j = Job(
         code=data["code"],
         title=data["title"],
@@ -35,7 +47,8 @@ def create_job():
         priority=data.get("priority","Normal"),
         location=data.get("location"),
         expected_completion_date=date.fromisoformat(data["expected_completion_date"]) if data.get("expected_completion_date") else None,
-        created_by_id=creator_id
+        created_by_id=creator_id,
+        assigned_to_id=assigned_to_id
     )
     db.session.add(j)
     db.session.commit()

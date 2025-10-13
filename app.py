@@ -36,6 +36,31 @@ def create_app():
 
 app = create_app()
 
+
+def _seed_admin_if_requested():
+    """Create or reset the admin user when RUN_SEED_ADMIN=1 is set."""
+    if os.getenv("RUN_SEED_ADMIN") != "1":
+        return
+    email = os.getenv("ADMIN_EMAIL", "admin@samprox.lk")
+    password = os.getenv("ADMIN_PASSWORD", "Admin@123")
+
+    with app.app_context():
+        u = User.query.filter_by(email=email).first()
+        if not u:
+            u = User(name="Admin", email=email, role=RoleEnum.admin)
+            u.set_password(password)
+            db.session.add(u)
+            db.session.commit()
+            print(f"✅ Admin created: {email}")
+        else:
+            u.set_password(password)
+            db.session.commit()
+            print(f"✅ Admin password reset: {email}")
+
+
+# Call the hook at startup (idempotent)
+_seed_admin_if_requested()
+
 # ---- CLI: seed or reset admin ----
 @app.cli.command("seed-admin")
 @click.option("--email", default="admin@samprox.lk", help="Admin email")

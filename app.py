@@ -1,10 +1,13 @@
-from flask import Flask, jsonify
+import os
+
 import click
+from flask import Flask, jsonify
+from sqlalchemy import func
+
 from config import Config
 from extensions import db, migrate, jwt
-from routes import auth, jobs, quotation, labor, materials, reports, ui
 from models import User, RoleEnum
-import os
+from routes import auth, jobs, quotation, labor, materials, reports, ui
 
 def create_app():
     app = Flask(__name__)
@@ -40,17 +43,18 @@ app = create_app()
 def seed_admin(email, password):
     """Create or reset the admin user."""
     with app.app_context():
-        u = User.query.filter_by(email=email).first()
+        normalized_email = email.strip().lower()
+        u = User.query.filter(func.lower(User.email) == normalized_email).first()
         if not u:
-            u = User(name="Admin", email=email, role=RoleEnum.admin)
+            u = User(name="Admin", email=normalized_email, role=RoleEnum.admin)
             u.set_password(password)
             db.session.add(u)
             db.session.commit()
-            click.echo(f"✅ Admin created: {email}")
+            click.echo(f"✅ Admin created: {normalized_email}")
         else:
             u.set_password(password)
             db.session.commit()
-            click.echo(f"✅ Admin password reset: {email}")
+            click.echo(f"✅ Admin password reset: {normalized_email}")
 
 if __name__ == "__main__":
     app.run(debug=True, port=int(os.getenv("PORT", 5000)))

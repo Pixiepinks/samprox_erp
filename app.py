@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from config import Config
 from extensions import db, migrate, jwt
-from routes import auth, jobs, quotation, labor, materials, reports
+from routes import auth, jobs, quotation, labor, materials, reports, ui
 from models import User, RoleEnum
 import os
 
@@ -23,6 +23,7 @@ def create_app():
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)
     app.register_blueprint(reports.bp)
+    app.register_blueprint(ui.bp)
 
     @app.get("/api/health")
     def health(): return jsonify({"ok": True})

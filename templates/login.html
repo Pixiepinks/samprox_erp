@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in to Samprox ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}" />
+</head>
+<body>
+    <div class="background"></div>
+    <main class="page">
+        <section class="panel">
+            <header class="panel__header">
+                <div class="panel__logo">S</div>
+                <div>
+                    <p class="panel__brand">Samprox ERP</p>
+                    <p class="panel__subtitle">Welcome back! Sign in to continue.</p>
+                </div>
+            </header>
+            <form class="form" method="post" action="/api/auth/login" novalidate>
+                <div class="input-group">
+                    <label for="email">Email</label>
+                    <input id="email" name="email" type="email" autocomplete="email" placeholder="name@company.com" required />
+                </div>
+                <div class="input-group">
+                    <div class="input-group__label">
+                        <label for="password">Password</label>
+                        <a class="link" href="#">Forgot password?</a>
+                    </div>
+                    <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+                </div>
+                <div class="form__footer">
+                    <label class="checkbox">
+                        <input type="checkbox" name="remember" />
+                        <span>Remember me</span>
+                    </label>
+                    <button type="submit">Sign in</button>
+                </div>
+            </form>
+            <footer class="panel__footer">
+                <span>New to Samprox?</span>
+                <a class="link" href="#">Create an account</a>
+            </footer>
+        </section>
+        <section class="promo">
+            <h1>Build projects with clarity.</h1>
+            <p>Track jobs, materials, and labor effortlessly with a unified dashboard tailored for modern project teams.</p>
+        </section>
+    </main>
+</body>
+</html>

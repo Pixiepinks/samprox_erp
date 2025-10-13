@@ -89,7 +89,7 @@
                     const data = await response.json();
                     localStorage.setItem("samprox_token", data.access_token);
                     localStorage.setItem("samprox_user", JSON.stringify(data.user));
-                    window.location.href = "/jobs";
+                    window.location.href = "/dashboard";
                 } catch (error) {
                     errorBox.textContent = error.message || "Unable to sign in";
                     errorBox.hidden = false;

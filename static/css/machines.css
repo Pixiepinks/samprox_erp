@@ -72,6 +72,42 @@ body {
     gap: 1.5rem;
 }
 
+.subnav {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 18px;
+    padding: 0.9rem 1.2rem;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
+}
+
+.subnav__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    color: #1d4ed8;
+    background: rgba(59, 130, 246, 0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.subnav__link:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(59, 130, 246, 0.25);
+}
+
+.subnav__link--active {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: #fff;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+}
+
 .user-summary {
     display: flex;
     flex-direction: column;

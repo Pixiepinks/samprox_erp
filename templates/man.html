@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Man | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Man Resource Planning</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.dashboard') }}">Dashboard</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="5M navigation">
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.man_page') }}">Man</a>
+            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
+            <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
+            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <h1>People & capability overview</h1>
+            </header>
+            <p class="section__description">
+                Manage the workforce pipeline by tracking available skills, upcoming shifts, and
+                training requirements. Use this page to ensure the right technicians are ready for
+                each maintenance job and production order.
+            </p>
+            <div class="section__grid">
+                <article class="tile">
+                    <h2 class="tile__title">Team roster</h2>
+                    <p class="tile__description">
+                        View key team members, their roles, and certification status. Identify coverage
+                        gaps before they impact production schedules.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Training tracker</h2>
+                    <p class="tile__description">
+                        Monitor mandatory trainings, license renewals, and development plans to keep the
+                        workforce compliant and skilled.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Shift planning</h2>
+                    <p class="tile__description">
+                        Align technician shifts with maintenance demand and active work orders. Balance
+                        workloads to prevent burnout.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Safety briefings</h2>
+                    <p class="tile__description">
+                        Document toolbox talks and safety observations. Share recurring hazards with the
+                        wider team to improve awareness.
+                    </p>
+                </article>
+            </div>
+        </section>
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            technician: "Technician",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+    </script>
+</body>
+</html>

@@ -60,7 +60,7 @@
                                     <div class="form-grid">
                                         <div class="input-group">
                                             <label for="asset-code">Asset code <span class="required">*</span></label>
-                                            <input id="asset-code" name="code" type="text" placeholder="MCH-001" required />
+                                            <input id="asset-code" name="code" type="text" placeholder="Select a category" required readonly />
                                         </div>
                                         <div class="input-group">
                                             <label for="asset-name">Name <span class="required">*</span></label>
@@ -538,6 +538,8 @@
         const assetPartsList = document.getElementById("asset-parts-list");
         const assetPartsEmpty = document.getElementById("asset-parts-empty");
         const closeAssetDetail = document.getElementById("close-asset-detail");
+        const assetCodeInput = document.getElementById("asset-code");
+        const assetCategorySelect = document.getElementById("asset-category");
 
         const jobForm = document.getElementById("job-form");
         const creationNotice = document.getElementById("creation-notice");
@@ -569,6 +571,7 @@
 
         let assets = [];
         let currentAssetId = null;
+        let latestCodeRequest = 0;
 
         if (!canManageAssets) {
             assetFormNotice.textContent = "Only Production Managers or Admins can add assets.";
@@ -660,6 +663,37 @@
             }
 
             return response.json();
+        }
+
+        async function refreshAssetCodePreview() {
+            if (!canManageAssets || !assetCodeInput || !assetCategorySelect) return;
+
+            const category = assetCategorySelect.value?.trim();
+
+            if (!category) {
+                assetCodeInput.value = "";
+                assetCodeInput.placeholder = "Select a category";
+                return;
+            }
+
+            const requestId = ++latestCodeRequest;
+            assetCodeInput.value = "";
+            assetCodeInput.placeholder = "Generating code…";
+
+            try {
+                const data = await fetchJson(
+                    `/api/machines/assets/code?category=${encodeURIComponent(category)}`
+                );
+                if (latestCodeRequest !== requestId) return;
+                assetCodeInput.value = data.code || "";
+                assetCodeInput.placeholder = data.code ? data.code : "Select a category";
+            } catch (error) {
+                if (latestCodeRequest !== requestId) return;
+                assetCodeInput.value = "";
+                assetCodeInput.placeholder = "Unable to generate";
+                assetFormError.textContent = error.message || "Unable to generate asset code.";
+                assetFormError.hidden = false;
+            }
         }
 
         function renderAssets() {
@@ -902,26 +936,40 @@
 
         refreshAssetsButton.addEventListener("click", loadAssets);
 
+        if (canManageAssets && assetCategorySelect) {
+            assetCategorySelect.addEventListener("change", () => {
+                assetFormError.hidden = true;
+                assetFormSuccess.hidden = true;
+                refreshAssetCodePreview();
+            });
+        }
+
         if (canManageAssets) {
             assetForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 assetFormSuccess.hidden = true;
                 assetFormError.hidden = true;
                 const formData = new FormData(assetForm);
-                const payload = Object.fromEntries(formData.entries());
-                payload.code = payload.code?.trim();
-                payload.name = payload.name?.trim();
-                payload.category = payload.category?.trim() || null;
-                payload.location = payload.location?.trim() || null;
-                payload.manufacturer = payload.manufacturer?.trim() || null;
-                payload.model_number = payload.model_number?.trim() || null;
-                payload.serial_number = payload.serial_number?.trim() || null;
-                payload.installed_on = payload.installed_on || null;
-                payload.status = payload.status?.trim() || null;
-                payload.notes = payload.notes?.trim() || null;
+                const payload = {
+                    name: formData.get("name")?.trim() || "",
+                    category: formData.get("category")?.trim() || null,
+                    location: formData.get("location")?.trim() || null,
+                    manufacturer: formData.get("manufacturer")?.trim() || null,
+                    model_number: formData.get("model_number")?.trim() || null,
+                    serial_number: formData.get("serial_number")?.trim() || null,
+                    installed_on: formData.get("installed_on") || null,
+                    status: formData.get("status")?.trim() || null,
+                    notes: formData.get("notes")?.trim() || null,
+                };
 
-                if (!payload.code || !payload.name) {
-                    assetFormError.textContent = "Code and name are required.";
+                if (!payload.name) {
+                    assetFormError.textContent = "Name is required.";
+                    assetFormError.hidden = false;
+                    return;
+                }
+
+                if (!payload.category) {
+                    assetFormError.textContent = "Select a category to generate an asset code.";
                     assetFormError.hidden = false;
                     return;
                 }
@@ -934,8 +982,13 @@
                         method: "POST",
                         body: JSON.stringify(payload),
                     });
+                    const selectedCategory = assetCategorySelect?.value || null;
                     assetForm.reset();
                     assetFormSuccess.hidden = false;
+                    if (assetCategorySelect && selectedCategory) {
+                        assetCategorySelect.value = selectedCategory;
+                        await refreshAssetCodePreview();
+                    }
                     await loadAssets();
                 } catch (error) {
                     assetFormError.textContent = error.message || "Unable to add asset";
@@ -944,6 +997,10 @@
                     submitButton.disabled = false;
                 }
             });
+        }
+
+        if (canManageAssets && assetCategorySelect) {
+            refreshAssetCodePreview();
         }
 
         if (canManageParts) {

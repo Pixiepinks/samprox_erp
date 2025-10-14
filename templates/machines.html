@@ -175,8 +175,8 @@
                                                 <input id="part-name" name="name" type="text" placeholder="Hydraulic pump" required />
                                             </div>
                                             <div class="input-group">
-                                                <label for="part-number">Part number</label>
-                                                <input id="part-number" name="part_number" type="text" placeholder="P-009" />
+                                                <label for="part-number">Part number <span class="required">*</span></label>
+                                                <input id="part-number" name="part_number" type="text" placeholder="P-009" required readonly />
                                             </div>
                                             <div class="input-group">
                                                 <label for="part-life">Expected life (hrs)</label>
@@ -1037,13 +1037,18 @@
                 const formData = new FormData(assetPartForm);
                 const payload = {
                     name: formData.get("name")?.trim(),
-                    part_number: formData.get("part_number")?.trim() || null,
+                    part_number: formData.get("part_number")?.trim(),
                     expected_life_hours: formData.get("expected_life_hours") || null,
                     description: formData.get("description")?.trim() || null,
                     notes: formData.get("notes")?.trim() || null,
                 };
                 if (!payload.name) {
                     assetPartError.textContent = "Part name is required.";
+                    assetPartError.hidden = false;
+                    return;
+                }
+                if (!payload.part_number) {
+                    assetPartError.textContent = "Part number is required.";
                     assetPartError.hidden = false;
                     return;
                 }

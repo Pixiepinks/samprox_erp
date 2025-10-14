@@ -537,6 +537,7 @@
         const assetPartSuccess = document.getElementById("asset-part-success");
         const assetPartsList = document.getElementById("asset-parts-list");
         const assetPartsEmpty = document.getElementById("asset-parts-empty");
+        const partNumberInput = document.getElementById("part-number");
         const closeAssetDetail = document.getElementById("close-asset-detail");
         const assetCodeInput = document.getElementById("asset-code");
         const assetCategorySelect = document.getElementById("asset-category");
@@ -779,8 +780,32 @@
             }
         }
 
+        function computeNextPartNumber(parts) {
+            if (!Array.isArray(parts) || parts.length === 0) {
+                return "P-001";
+            }
+            let maxNumber = 0;
+            parts.forEach((part) => {
+                if (!part || typeof part.part_number !== "string") return;
+                const match = part.part_number.trim().match(/^P-(\d+)$/i);
+                if (!match) return;
+                const numeric = Number.parseInt(match[1], 10);
+                if (!Number.isNaN(numeric)) {
+                    maxNumber = Math.max(maxNumber, numeric);
+                }
+            });
+            return `P-${String(maxNumber + 1).padStart(3, "0")}`;
+        }
+
+        function updatePartNumberField(parts) {
+            if (!canManageParts || !partNumberInput) return;
+            const nextNumber = computeNextPartNumber(parts);
+            partNumberInput.value = nextNumber;
+        }
+
         function renderParts(parts) {
             assetPartsList.innerHTML = "";
+            updatePartNumberField(parts);
             if (!Array.isArray(parts) || parts.length === 0) {
                 assetPartsEmpty.hidden = false;
                 return;

@@ -83,7 +83,6 @@ class MachineApiTestCase(unittest.TestCase):
         # Add a part
         part_payload = {
             "name": "Hydraulic pump",
-            "part_number": "P-100",
             "expected_life_hours": 1200,
             "description": "Primary pressure pump",
         }
@@ -93,7 +92,9 @@ class MachineApiTestCase(unittest.TestCase):
             json=part_payload,
         )
         self.assertEqual(response.status_code, 201)
-        part_id = response.get_json()["id"]
+        part = response.get_json()
+        self.assertEqual(part["part_number"], "P-001")
+        part_id = part["id"]
 
         # Log a replacement via maintenance manager
         replacement_payload = {
@@ -117,6 +118,7 @@ class MachineApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         parts = response.get_json()
         self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0]["part_number"], "P-001")
         self.assertEqual(parts[0]["replacement_history"][0]["reason"], "Preventive maintenance")
 
         # Record idle event

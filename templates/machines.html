@@ -165,6 +165,18 @@
                                 <section class="asset-parts">
                                     <header class="asset-parts__header">
                                         <h3>Complete knock down (CKD) parts</h3>
+                                        <div class="asset-parts__search">
+                                            <label class="visually-hidden" for="asset-part-search">Search CKD parts</label>
+                                            <input
+                                                id="asset-part-search"
+                                                class="asset-parts__search-input"
+                                                type="search"
+                                                name="asset-part-search"
+                                                placeholder="Search parts"
+                                                autocomplete="off"
+                                                spellcheck="false"
+                                            />
+                                        </div>
                                     </header>
                                     <div class="alert alert--error" id="asset-part-error" hidden></div>
                                     <div class="alert alert--success" id="asset-part-success" hidden>Part added successfully.</div>
@@ -537,6 +549,8 @@
         const assetPartSuccess = document.getElementById("asset-part-success");
         const assetPartsList = document.getElementById("asset-parts-list");
         const assetPartsEmpty = document.getElementById("asset-parts-empty");
+        const assetPartSearchInput = document.getElementById("asset-part-search");
+        const assetPartsEmptyMessage = document.querySelector("#asset-parts-empty p");
         const partNumberInput = document.getElementById("part-number");
         const closeAssetDetail = document.getElementById("close-asset-detail");
         const assetCodeInput = document.getElementById("asset-code");
@@ -572,7 +586,12 @@
 
         let assets = [];
         let currentAssetId = null;
+        let currentParts = [];
         let latestCodeRequest = 0;
+
+        const DEFAULT_PARTS_EMPTY_MESSAGE = assetPartsEmptyMessage?.textContent?.trim() ||
+            "No parts have been registered for this asset yet.";
+        const FILTERED_PARTS_EMPTY_MESSAGE = "No parts match your search.";
 
         if (!canManageAssets) {
             assetFormNotice.textContent = "Only Production Managers or Admins can add assets.";
@@ -588,6 +607,15 @@
             });
             assetPartError.textContent = "Only authorised maintenance roles can add parts or log replacements.";
             assetPartError.hidden = false;
+        }
+
+        if (assetPartSearchInput) {
+            assetPartSearchInput.addEventListener("input", () => {
+                renderFilteredParts();
+            });
+            assetPartSearchInput.addEventListener("search", () => {
+                renderFilteredParts();
+            });
         }
 
         if (!canCreateJobs) {
@@ -772,11 +800,15 @@
             assetPartSuccess.hidden = true;
             try {
                 const parts = await fetchJson(`/api/machines/assets/${assetId}/parts`);
-                renderParts(parts);
+                currentParts = Array.isArray(parts) ? parts : [];
+                updatePartNumberField(currentParts);
+                renderFilteredParts();
             } catch (error) {
                 assetPartError.textContent = error.message || "Unable to load parts";
                 assetPartError.hidden = false;
-                renderParts([]);
+                currentParts = [];
+                updatePartNumberField(currentParts);
+                renderFilteredParts();
             }
         }
 
@@ -803,14 +835,55 @@
             partNumberInput.value = nextNumber;
         }
 
-        function renderParts(parts) {
+        function partMatchesQuery(part, query) {
+            if (!query) return true;
+            const terms = query.split(/\s+/).filter(Boolean);
+            if (!terms.length) return true;
+            const partNumber = typeof part.part_number === "string" ? part.part_number : "";
+            const normalizedPartNumber = partNumber.replace(/[^a-z0-9]/gi, "");
+            const haystack = [
+                part.name,
+                partNumber,
+                normalizedPartNumber,
+                part.description,
+                part.notes,
+                part.expected_life_hours != null ? String(part.expected_life_hours) : "",
+                Array.isArray(part.replacement_history)
+                    ? part.replacement_history
+                          .map((replacement) =>
+                              [
+                                  replacement.replaced_on,
+                                  replacement.replaced_by,
+                                  replacement.reason,
+                                  replacement.notes,
+                              ]
+                                  .filter(Boolean)
+                                  .join(" ")
+                          )
+                          .join(" ")
+                    : "",
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+            return terms.every((term) => haystack.includes(term));
+        }
+
+        function renderPartsList(parts, { filtered = false } = {}) {
             assetPartsList.innerHTML = "";
-            updatePartNumberField(parts);
             if (!Array.isArray(parts) || parts.length === 0) {
                 assetPartsEmpty.hidden = false;
+                if (assetPartsEmptyMessage) {
+                    assetPartsEmptyMessage.textContent = filtered
+                        ? FILTERED_PARTS_EMPTY_MESSAGE
+                        : DEFAULT_PARTS_EMPTY_MESSAGE;
+                }
                 return;
             }
             assetPartsEmpty.hidden = true;
+            if (assetPartsEmptyMessage) {
+                assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
+            }
 
             parts.forEach((part) => {
                 const card = document.createElement("article");
@@ -926,6 +999,15 @@
             });
         }
 
+        function renderFilteredParts() {
+            const query = assetPartSearchInput?.value?.trim().toLowerCase() || "";
+            const partsToRender = query
+                ? currentParts.filter((part) => partMatchesQuery(part, query))
+                : currentParts.slice();
+            const isFiltered = Boolean(query) && currentParts.length > 0;
+            renderPartsList(partsToRender, { filtered: isFiltered });
+        }
+
         assetsTableBody.addEventListener("click", (event) => {
             const button = event.target.closest("[data-action='ckd']");
             if (!button) return;
@@ -933,6 +1015,12 @@
             const asset = assets.find((item) => item.id === assetId);
             if (!asset) return;
             currentAssetId = asset.id;
+            if (assetPartSearchInput) {
+                assetPartSearchInput.value = "";
+            }
+            if (assetPartsEmptyMessage) {
+                assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
+            }
             assetDetailTitle.textContent = `${asset.name} (${asset.code})`;
             const metaParts = asset.part_count === 1 ? "1 part" : `${asset.part_count || 0} parts`;
             const metaLocation = asset.location ? ` • ${asset.location}` : "";
@@ -955,8 +1043,16 @@
         closeAssetDetail.addEventListener("click", () => {
             assetDetail.hidden = true;
             currentAssetId = null;
+            currentParts = [];
             assetPartsList.innerHTML = "";
             assetPartsEmpty.hidden = true;
+            if (assetPartSearchInput) {
+                assetPartSearchInput.value = "";
+            }
+            if (assetPartsEmptyMessage) {
+                assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
+            }
+            updatePartNumberField(currentParts);
         });
 
         refreshAssetsButton.addEventListener("click", loadAssets);

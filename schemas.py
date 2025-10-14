@@ -50,3 +50,67 @@ class JobSchema(Schema):
 
     def get_progress(self, obj):
         return obj.progress_pct
+
+
+class MachinePartReplacementSchema(Schema):
+    id = fields.Int()
+    part_id = fields.Int()
+    replaced_on = fields.Date()
+    replaced_by = fields.Str(allow_none=True)
+    reason = fields.Str(allow_none=True)
+    notes = fields.Str(allow_none=True)
+
+
+class MachinePartSchema(Schema):
+    id = fields.Int()
+    asset_id = fields.Int()
+    name = fields.Str()
+    part_number = fields.Str(allow_none=True)
+    description = fields.Str(allow_none=True)
+    expected_life_hours = fields.Int(allow_none=True)
+    notes = fields.Str(allow_none=True)
+    replacement_history = fields.Nested(MachinePartReplacementSchema, many=True)
+
+
+class MachineAssetSchema(Schema):
+    id = fields.Int()
+    code = fields.Str()
+    name = fields.Str()
+    category = fields.Str(allow_none=True)
+    location = fields.Str(allow_none=True)
+    manufacturer = fields.Str(allow_none=True)
+    model_number = fields.Str(allow_none=True)
+    serial_number = fields.Str(allow_none=True)
+    installed_on = fields.Date(allow_none=True)
+    status = fields.Str(allow_none=True)
+    notes = fields.Str(allow_none=True)
+    part_count = fields.Method("get_part_count")
+
+    def get_part_count(self, obj):
+        try:
+            return len(obj.parts)
+        except TypeError:
+            return 0
+
+
+class MachineIdleEventSchema(Schema):
+    id = fields.Int()
+    asset_id = fields.Int()
+    started_at = fields.DateTime()
+    ended_at = fields.DateTime(allow_none=True)
+    reason = fields.Str(allow_none=True)
+    notes = fields.Str(allow_none=True)
+    duration_minutes = fields.Int(allow_none=True)
+    asset = fields.Nested(MachineAssetSchema(only=("id", "name", "code")))
+
+
+class ServiceSupplierSchema(Schema):
+    id = fields.Int()
+    name = fields.Str()
+    contact_person = fields.Str(allow_none=True)
+    phone = fields.Str(allow_none=True)
+    email = fields.Str(allow_none=True)
+    services_offered = fields.Str(allow_none=True)
+    preferred_assets = fields.Str(allow_none=True)
+    notes = fields.Str(allow_none=True)
+    created_at = fields.DateTime()

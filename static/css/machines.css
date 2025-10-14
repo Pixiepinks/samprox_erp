@@ -166,10 +166,55 @@ body {
     box-shadow: none;
 }
 
-.layout {
+.machine-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.machine-tabs {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.machine-tab {
+    border: none;
+    border-radius: 16px;
+    padding: 0.75rem 1.4rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    box-shadow: 0 12px 18px rgba(37, 99, 235, 0.15);
+}
+
+.machine-tab:hover {
+    transform: translateY(-1px);
+}
+
+.machine-tab.is-active {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: #fff;
+    box-shadow: 0 16px 30px rgba(37, 99, 235, 0.3);
+}
+
+.machine-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.panel-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 2rem;
+}
+
+.panel--detail {
+    grid-column: 1 / -1;
 }
 
 .panel {
@@ -189,6 +234,12 @@ body {
     align-items: flex-start;
 }
 
+.panel__header-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
 .panel__header h2 {
     margin: 0;
     font-size: 1.4rem;
@@ -198,6 +249,10 @@ body {
     margin: 0.4rem 0 0;
     color: #475569;
     font-size: 0.95rem;
+}
+
+.tab-panel:not(.is-active) {
+    display: none;
 }
 
 .panel__body {
@@ -294,16 +349,20 @@ body {
     overflow-x: auto;
 }
 
+.data-table,
 .jobs-table {
     width: 100%;
     border-collapse: collapse;
     min-width: 640px;
 }
 
+.data-table thead,
 .jobs-table thead {
     background: rgba(15, 23, 42, 0.04);
 }
 
+.data-table th,
+.data-table td,
 .jobs-table th,
 .jobs-table td {
     text-align: left;
@@ -312,8 +371,142 @@ body {
     font-size: 0.95rem;
 }
 
+.data-table tbody tr:hover,
 .jobs-table tbody tr:hover {
     background: rgba(59, 130, 246, 0.08);
+}
+
+.button--small {
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 999px;
+}
+
+.asset-detail__body {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) minmax(320px, 2fr);
+    gap: 2rem;
+}
+
+.asset-detail__column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.asset-detail__column--wide {
+    gap: 1.5rem;
+}
+
+.asset-detail__facts {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.asset-detail__facts div {
+    background: rgba(148, 163, 184, 0.12);
+    padding: 0.75rem 1rem;
+    border-radius: 14px;
+}
+
+.asset-detail__facts dt {
+    font-weight: 600;
+    margin: 0 0 0.3rem;
+}
+
+.asset-detail__facts dd {
+    margin: 0;
+    color: #475569;
+}
+
+.asset-parts__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.asset-part-form {
+    margin-bottom: 1.5rem;
+    border: 1px dashed rgba(148, 163, 184, 0.5);
+    padding: 1.2rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.asset-parts__list {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.part-card {
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 18px;
+    padding: 1.4rem;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.part-card__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.part-card__title {
+    margin: 0 0 0.4rem;
+}
+
+.part-card__meta {
+    margin: 0.2rem 0 0;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.part-card__description,
+.part-card__notes {
+    margin: 0;
+    color: #1f2937;
+}
+
+.part-card__actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.part-card__history {
+    border-radius: 12px;
+    background: rgba(59, 130, 246, 0.08);
+    padding: 0.75rem 1rem;
+}
+
+.part-card__history summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #1d4ed8;
+}
+
+.part-card__history-list {
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.75rem;
+    color: #1f2937;
+}
+
+.part-card__history-list li {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.part-card__form {
+    border-top: 1px solid rgba(148, 163, 184, 0.35);
+    padding-top: 1rem;
 }
 
 .empty-state {
@@ -345,11 +538,24 @@ body {
         align-items: flex-start;
     }
 
-    .layout {
+    .machine-tabs {
+        flex-direction: column;
+    }
+
+    .machine-tab {
+        width: 100%;
+    }
+
+    .panel-grid {
         grid-template-columns: 1fr;
     }
 
-    .jobs-table {
+    .asset-detail__body {
+        grid-template-columns: 1fr;
+    }
+
+    .jobs-table,
+    .data-table {
         min-width: 100%;
     }
 }

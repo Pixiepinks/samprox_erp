@@ -122,6 +122,26 @@ def list_assets():
     return jsonify(assets_schema.dump(assets))
 
 
+@bp.get("/assets/code")
+@jwt_required()
+def generate_asset_code():
+    """Return the next asset code for the provided category."""
+    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+        return (
+            jsonify({"msg": "Only Production Managers or Admins can generate asset codes."}),
+            403,
+        )
+
+    category = request.args.get("category")
+
+    try:
+        code = _generate_asset_code(category)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    return jsonify({"code": code})
+
+
 @bp.post("/assets")
 @jwt_required()
 def create_asset():

@@ -197,5 +197,46 @@ class MachineApiTestCase(unittest.TestCase):
         self.assertEqual(response.get_json()["code"], "VEH0002")
 
 
+    def test_generate_asset_code_endpoint(self):
+        response = self.client.get(
+            "/api/machines/assets/code?category=Plant%20%26%20Machines",
+            headers=self._auth_headers(self.mm_token),
+        )
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.get(
+            "/api/machines/assets/code",
+            headers=self._auth_headers(self.pm_token),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Category is required", response.get_json()["msg"])
+
+        response = self.client.get(
+            "/api/machines/assets/code?category=Plant%20%26%20Machines",
+            headers=self._auth_headers(self.pm_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], "MCH-0001")
+
+        payload = {
+            "name": "CNC Machine",
+            "category": "Plant & Machines",
+        }
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["code"], "MCH-0001")
+
+        response = self.client.get(
+            "/api/machines/assets/code?category=Plant%20%26%20Machines",
+            headers=self._auth_headers(self.pm_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], "MCH-0002")
+
+
 if __name__ == "__main__":
     unittest.main()

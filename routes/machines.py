@@ -211,9 +211,9 @@ def create_part(asset_id: int):
             return jsonify({"msg": "Expected life must be a number."}), 400
 
     raw_part_number = payload.get("part_number")
-    if isinstance(raw_part_number, str):
-        raw_part_number = raw_part_number.strip()
-    part_number = raw_part_number or MachinePart.generate_part_number()
+    if not isinstance(raw_part_number, str) or not raw_part_number.strip():
+        return jsonify({"msg": "Part number is required."}), 400
+    part_number = raw_part_number.strip()
 
     part = MachinePart(
         asset=asset,

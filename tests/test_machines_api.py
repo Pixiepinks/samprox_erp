@@ -83,6 +83,7 @@ class MachineApiTestCase(unittest.TestCase):
         # Add a part
         part_payload = {
             "name": "Hydraulic pump",
+            "part_number": "P-001",
             "expected_life_hours": 1200,
             "description": "Primary pressure pump",
         }
@@ -168,6 +169,27 @@ class MachineApiTestCase(unittest.TestCase):
         suppliers = response.get_json()
         self.assertEqual(len(suppliers), 1)
         self.assertEqual(suppliers[0]["name"], "Rapid Repairs")
+
+    def test_part_number_required_when_creating_part(self):
+        asset_payload = {
+            "name": "CNC Machine",
+            "category": "Plant & Machines",
+        }
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json=asset_payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        asset_id = response.get_json()["id"]
+
+        response = self.client.post(
+            f"/api/machines/assets/{asset_id}/parts",
+            headers=self._auth_headers(self.pm_token),
+            json={"name": "Hydraulic pump"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Part number is required", response.get_json()["msg"])
 
     def test_maintenance_manager_cannot_create_assets(self):
         response = self.client.post(

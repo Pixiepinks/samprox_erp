@@ -210,10 +210,15 @@ def create_part(asset_id: int):
         except (TypeError, ValueError):
             return jsonify({"msg": "Expected life must be a number."}), 400
 
+    raw_part_number = payload.get("part_number")
+    if isinstance(raw_part_number, str):
+        raw_part_number = raw_part_number.strip()
+    part_number = raw_part_number or MachinePart.generate_part_number()
+
     part = MachinePart(
         asset=asset,
         name=name,
-        part_number=(payload.get("part_number") or None),
+        part_number=part_number,
         description=(payload.get("description") or None),
         expected_life_hours=expected_life,
         notes=(payload.get("notes") or None),

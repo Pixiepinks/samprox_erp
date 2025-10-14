@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from enum import Enum
 from extensions import db
@@ -119,6 +120,24 @@ class MachinePart(db.Model):
         "MachineAsset",
         backref=db.backref("parts", cascade="all,delete-orphan", order_by="MachinePart.name"),
     )
+
+    @classmethod
+    def generate_part_number(cls):
+        prefix = "P-"
+        max_number = 0
+        numbers = (
+            db.session.query(cls.part_number)
+            .filter(cls.part_number.isnot(None))
+            .filter(cls.part_number.ilike(f"{prefix}%"))
+            .all()
+        )
+        for (value,) in numbers:
+            if not value:
+                continue
+            match = re.match(r"^P-(\d+)$", value.strip(), re.IGNORECASE)
+            if match:
+                max_number = max(max_number, int(match.group(1)))
+        return f"{prefix}{max_number + 1:03d}"
 
 
 class MachinePartReplacement(db.Model):

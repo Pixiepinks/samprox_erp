@@ -114,27 +114,6 @@ def _generate_asset_code(category_value):
     return f"{prefix}{next_number:04d}"
 
 
-@bp.get("/assets/code")
-@jwt_required()
-def preview_asset_code():
-    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
-        return (
-            jsonify(
-                {
-                    "msg": "Only Production Managers or Admins can generate asset codes.",
-                }
-            ),
-            403,
-        )
-
-    try:
-        code = _generate_asset_code(request.args.get("category"))
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
-
-    return jsonify({"code": code})
-
-
 @bp.get("/assets")
 @jwt_required()
 def list_assets():

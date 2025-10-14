@@ -175,44 +175,6 @@ class MachineApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_preview_asset_code_endpoint(self):
-        response = self.client.get(
-            "/api/machines/assets/code",
-            headers=self._auth_headers(self.pm_token),
-            query_string={"category": "Plant & Machines"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["code"], "MCH-0001")
-
-        create_response = self.client.post(
-            "/api/machines/assets",
-            headers=self._auth_headers(self.pm_token),
-            json={"name": "Laser Cutter", "category": "Plant & Machines"},
-        )
-        self.assertEqual(create_response.status_code, 201)
-
-        response = self.client.get(
-            "/api/machines/assets/code",
-            headers=self._auth_headers(self.pm_token),
-            query_string={"category": "Plant & Machines"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json()["code"], "MCH-0002")
-
-        response = self.client.get(
-            "/api/machines/assets/code",
-            headers=self._auth_headers(self.pm_token),
-            query_string={"category": "Unknown"},
-        )
-        self.assertEqual(response.status_code, 400)
-
-        response = self.client.get(
-            "/api/machines/assets/code",
-            headers=self._auth_headers(self.mm_token),
-            query_string={"category": "Plant & Machines"},
-        )
-        self.assertEqual(response.status_code, 403)
-
     def test_codes_increment_per_category(self):
         payload = {
             "name": "Forklift",

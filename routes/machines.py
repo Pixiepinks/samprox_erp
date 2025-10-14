@@ -36,6 +36,18 @@ supplier_schema = ServiceSupplierSchema()
 suppliers_schema = ServiceSupplierSchema(many=True)
 
 
+CATEGORY_CODE_PREFIXES = {
+    "land & building": "BUL-",
+    "plant & machines": "MCH-",
+    "vehicles": "VEH",
+    "furniture & fixtures": "FUR-",
+    "tools & equipment": "EQU-",
+    "computers": "COM",
+    "electronic equipments": "ELE-",
+    "phones": "PHO-",
+}
+
+
 def require_role(*roles: RoleEnum) -> bool:
     """Return ``True`` if the current JWT belongs to one of the roles."""
     claims = get_jwt()
@@ -73,6 +85,56 @@ def _parse_datetime(value, *, field_name: str):
         raise ValueError(f"Invalid datetime for {field_name}")
 
 
+def _generate_asset_code(category_value):
+    category = (category_value or "").strip()
+    if not category:
+        raise ValueError("Category is required to generate asset code.")
+
+    prefix = CATEGORY_CODE_PREFIXES.get(category.lower())
+    if not prefix:
+        valid_categories = ", ".join(sorted({k.title() for k in CATEGORY_CODE_PREFIXES}))
+        raise ValueError(
+            "Unsupported asset category. Valid categories are: "
+            f"{valid_categories}."
+        )
+
+    like_pattern = f"{prefix}%"
+    existing_codes = (
+        db.session.query(MachineAsset.code)
+        .filter(MachineAsset.code.like(like_pattern))
+        .all()
+    )
+
+    next_number = 1
+    for (code,) in existing_codes:
+        suffix = code[len(prefix) :]
+        if suffix.isdigit():
+            next_number = max(next_number, int(suffix) + 1)
+
+    return f"{prefix}{next_number:04d}"
+
+
+@bp.get("/assets/code")
+@jwt_required()
+def preview_asset_code():
+    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+        return (
+            jsonify(
+                {
+                    "msg": "Only Production Managers or Admins can generate asset codes.",
+                }
+            ),
+            403,
+        )
+
+    try:
+        code = _generate_asset_code(request.args.get("category"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    return jsonify({"code": code})
+
+
 @bp.get("/assets")
 @jwt_required()
 def list_assets():
@@ -88,10 +150,14 @@ def create_asset():
         return jsonify({"msg": "Only Production Managers or Admins can create assets."}), 403
 
     payload = request.get_json() or {}
-    code = (payload.get("code") or "").strip()
     name = (payload.get("name") or "").strip()
-    if not code or not name:
-        return jsonify({"msg": "Code and name are required."}), 400
+    if not name:
+        return jsonify({"msg": "Name is required."}), 400
+
+    try:
+        code = _generate_asset_code(payload.get("category"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
 
     asset = MachineAsset(
         code=code,

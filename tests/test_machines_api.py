@@ -53,8 +53,8 @@ class MachineApiTestCase(unittest.TestCase):
     def test_asset_part_idle_and_supplier_flow(self):
         # Create an asset
         asset_payload = {
-            "code": "AST-01",
             "name": "CNC Machine",
+            "category": "Plant & Machines",
             "location": "Plant A",
             "manufacturer": "ACME",
             "installed_on": "2024-01-10",
@@ -66,7 +66,9 @@ class MachineApiTestCase(unittest.TestCase):
             json=asset_payload,
         )
         self.assertEqual(response.status_code, 201)
-        asset_id = response.get_json()["id"]
+        asset = response.get_json()
+        asset_id = asset["id"]
+        self.assertEqual(asset["code"], "MCH-0001")
 
         # List assets and ensure part count is zero initially
         response = self.client.get(
@@ -169,9 +171,68 @@ class MachineApiTestCase(unittest.TestCase):
         response = self.client.post(
             "/api/machines/assets",
             headers=self._auth_headers(self.mm_token),
-            json={"code": "AST-02", "name": "Lathe"},
+            json={"name": "Lathe", "category": "Plant & Machines"},
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_preview_asset_code_endpoint(self):
+        response = self.client.get(
+            "/api/machines/assets/code",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"category": "Plant & Machines"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], "MCH-0001")
+
+        create_response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json={"name": "Laser Cutter", "category": "Plant & Machines"},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        response = self.client.get(
+            "/api/machines/assets/code",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"category": "Plant & Machines"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["code"], "MCH-0002")
+
+        response = self.client.get(
+            "/api/machines/assets/code",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"category": "Unknown"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.get(
+            "/api/machines/assets/code",
+            headers=self._auth_headers(self.mm_token),
+            query_string={"category": "Plant & Machines"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_codes_increment_per_category(self):
+        payload = {
+            "name": "Forklift",
+            "category": "Vehicles",
+        }
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["code"], "VEH0001")
+
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json={"name": "Electric Car", "category": "Vehicles"},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["code"], "VEH0002")
 
 
 if __name__ == "__main__":

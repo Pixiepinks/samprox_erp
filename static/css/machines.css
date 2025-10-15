@@ -219,6 +219,35 @@ body {
     gap: 2rem;
 }
 
+.panel-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    scroll-margin-top: 6rem;
+}
+
+.panel-group + .panel-group {
+    margin-top: 0.5rem;
+}
+
+.panel-group__header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.panel-group__header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #0f172a;
+}
+
+.panel-group__header p {
+    margin: 0;
+    color: #475569;
+    max-width: 60ch;
+}
+
 .panel-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -255,6 +284,11 @@ body {
 .panel__header h2 {
     margin: 0;
     font-size: 1.4rem;
+}
+
+.panel__header h3 {
+    margin: 0;
+    font-size: 1.25rem;
 }
 
 .panel__subtitle {

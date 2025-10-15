@@ -52,74 +52,31 @@
                             <p>Capture the latest machine information for your records.</p>
                         </header>
                         <div class="panel-grid">
-                            <section class="panel panel--form">
+                            <section class="panel panel--menu">
                                 <header class="panel__header">
                                     <div>
-                                        <h3>Register a new asset</h3>
-                                        <p class="panel__subtitle">Maintain an up-to-date registry of every machine on site.</p>
+                                        <h3>Input actions</h3>
+                                        <p class="panel__subtitle">Choose an action to open it in a popup without leaving the page.</p>
                                     </div>
                                 </header>
                                 <div class="panel__body">
-                                    <div class="alert alert--info" id="asset-form-notice" hidden></div>
-                                    <div class="alert alert--success" id="asset-form-success" hidden>Asset added successfully.</div>
-                                    <div class="alert alert--error" id="asset-form-error" hidden></div>
-                                    <form class="form" id="asset-form" novalidate>
-                                        <div class="form-grid">
-                                            <div class="input-group">
-                                                <label for="asset-code">Asset code <span class="required">*</span></label>
-                                                <input id="asset-code" name="code" type="text" placeholder="Select a category" required readonly />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-name">Name <span class="required">*</span></label>
-                                                <input id="asset-name" name="name" type="text" placeholder="Hydraulic press" required />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-category">Category</label>
-                                                <select id="asset-category" name="category">
-                                                    <option value="" selected hidden>Select a category</option>
-                                                    <option value="Land &amp; Building">Land &amp; Building</option>
-                                                    <option value="Plant &amp; Machines">Plant &amp; Machines</option>
-                                                    <option value="Vehicles">Vehicles</option>
-                                                    <option value="Furniture &amp; Fixtures">Furniture &amp; Fixtures</option>
-                                                    <option value="Tools &amp; Equipment">Tools &amp; Equipment</option>
-                                                    <option value="Computers">Computers</option>
-                                                    <option value="Electronic Equipments">Electronic Equipments</option>
-                                                    <option value="Phones">Phones</option>
-                                                </select>
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-location">Location</label>
-                                                <input id="asset-location" name="location" type="text" placeholder="Plant 1" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-manufacturer">Manufacturer</label>
-                                                <input id="asset-manufacturer" name="manufacturer" type="text" placeholder="OEM" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-model">Model number</label>
-                                                <input id="asset-model" name="model_number" type="text" placeholder="HP-300" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-serial">Serial number</label>
-                                                <input id="asset-serial" name="serial_number" type="text" placeholder="SN12345" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-installed">Installed on</label>
-                                                <input id="asset-installed" name="installed_on" type="date" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="asset-status">Status</label>
-                                                <input id="asset-status" name="status" type="text" placeholder="Operational" />
-                                            </div>
-                                        </div>
-                                        <div class="input-group">
-                                            <label for="asset-notes">Notes</label>
-                                            <textarea id="asset-notes" name="notes" rows="3" placeholder="Any supporting notes"></textarea>
-                                        </div>
-                                        <div class="form__footer">
-                                            <button type="submit" class="button">Add asset</button>
-                                        </div>
-                                    </form>
+                                    <nav class="input-menu" data-input-menu>
+                                        <button type="button" class="input-menu__toggle" data-menu-toggle aria-expanded="false">
+                                            <span>Inputs</span>
+                                            <span class="input-menu__chevron" aria-hidden="true"></span>
+                                        </button>
+                                        <ul class="input-menu__list" data-menu-list>
+                                            <li class="input-menu__item">
+                                                <button type="button" class="input-menu__link" data-modal-open="asset-modal">Add new asset</button>
+                                            </li>
+                                            <li class="input-menu__item">
+                                                <button type="button" class="input-menu__link" data-modal-open="ckd-modal">Add CKD part to machine</button>
+                                            </li>
+                                            <li class="input-menu__item">
+                                                <button type="button" class="input-menu__link" data-modal-open="maintenance-modal">Request maintenance job</button>
+                                            </li>
+                                        </ul>
+                                    </nav>
                                 </div>
                             </section>
                         </div>
@@ -470,6 +427,115 @@
                 </section>
             </div>
         </main>
+        <div class="modal" id="asset-modal" role="dialog" aria-modal="true" aria-labelledby="asset-modal-title" data-modal hidden>
+            <div class="modal__backdrop" data-modal-close></div>
+            <div class="modal__window" role="document">
+                <header class="modal__header" data-modal-handle>
+                    <h2 class="modal__title" id="asset-modal-title">Register a new asset</h2>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
+                </header>
+                <div class="modal__body">
+                    <p class="modal__subtitle">Maintain an up-to-date registry of every machine on site.</p>
+                    <div class="alert alert--info" id="asset-form-notice" hidden></div>
+                    <div class="alert alert--success" id="asset-form-success" hidden>Asset added successfully.</div>
+                    <div class="alert alert--error" id="asset-form-error" hidden></div>
+                    <form class="form" id="asset-form" novalidate>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label for="asset-code">Asset code <span class="required">*</span></label>
+                                <input id="asset-code" name="code" type="text" placeholder="Select a category" required readonly />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-name">Name <span class="required">*</span></label>
+                                <input id="asset-name" name="name" type="text" placeholder="Hydraulic press" required />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-category">Category</label>
+                                <select id="asset-category" name="category">
+                                    <option value="" selected hidden>Select a category</option>
+                                    <option value="Land &amp; Building">Land &amp; Building</option>
+                                    <option value="Plant &amp; Machines">Plant &amp; Machines</option>
+                                    <option value="Vehicles">Vehicles</option>
+                                    <option value="Furniture &amp; Fixtures">Furniture &amp; Fixtures</option>
+                                    <option value="Tools &amp; Equipment">Tools &amp; Equipment</option>
+                                    <option value="Computers">Computers</option>
+                                    <option value="Electronic Equipments">Electronic Equipments</option>
+                                    <option value="Phones">Phones</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-location">Location</label>
+                                <input id="asset-location" name="location" type="text" placeholder="Plant 1" />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-manufacturer">Manufacturer</label>
+                                <input id="asset-manufacturer" name="manufacturer" type="text" placeholder="OEM" />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-model">Model number</label>
+                                <input id="asset-model" name="model_number" type="text" placeholder="HP-300" />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-serial">Serial number</label>
+                                <input id="asset-serial" name="serial_number" type="text" placeholder="SN12345" />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-installed">Installed on</label>
+                                <input id="asset-installed" name="installed_on" type="date" />
+                            </div>
+                            <div class="input-group">
+                                <label for="asset-status">Status</label>
+                                <input id="asset-status" name="status" type="text" placeholder="Operational" />
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="asset-notes">Notes</label>
+                            <textarea id="asset-notes" name="notes" rows="3" placeholder="Any supporting notes"></textarea>
+                        </div>
+                        <div class="form__footer">
+                            <button type="submit" class="button">Add asset</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="modal" id="ckd-modal" role="dialog" aria-modal="true" aria-labelledby="ckd-modal-title" data-modal hidden>
+            <div class="modal__backdrop" data-modal-close></div>
+            <div class="modal__window" role="document">
+                <header class="modal__header" data-modal-handle>
+                    <h2 class="modal__title" id="ckd-modal-title">Add CKD part to machine</h2>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
+                </header>
+                <div class="modal__body">
+                    <p class="modal__subtitle">Quickly register CKD parts for a selected machine.</p>
+                    <ol class="modal__list">
+                        <li>Open an asset from the register to view its CKD parts.</li>
+                        <li>Use the part form to add details such as part number, life and notes.</li>
+                        <li>Save the part to keep the machine register up to date.</li>
+                    </ol>
+                    <p class="modal__hint">Need to jump there now?</p>
+                    <div class="modal__actions">
+                        <button type="button" class="button" data-scroll-target="#machine-outputs" data-modal-close-after>Go to assets register</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal" id="maintenance-modal" role="dialog" aria-modal="true" aria-labelledby="maintenance-modal-title" data-modal hidden>
+            <div class="modal__backdrop" data-modal-close></div>
+            <div class="modal__window" role="document">
+                <header class="modal__header" data-modal-handle>
+                    <h2 class="modal__title" id="maintenance-modal-title">Request maintenance job</h2>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
+                </header>
+                <div class="modal__body">
+                    <p class="modal__subtitle">Create a work order for the maintenance team without leaving this page.</p>
+                    <p>Switch to the maintenance tab to fill in the job form, track priorities and review job status.</p>
+                    <div class="modal__actions">
+                        <button type="button" class="button" data-activate-tab="maintenance" data-modal-close-after>Open maintenance management</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -506,11 +572,248 @@
             window.location.href = "/";
         });
 
+        const inputMenu = document.querySelector("[data-input-menu]");
+        const inputMenuToggle = inputMenu?.querySelector("[data-menu-toggle]");
+        let inputMenuCloseTimeout = null;
+
+        function setInputMenuState(open) {
+            if (!inputMenu) return;
+            if (open) {
+                inputMenu.classList.add("is-open");
+            } else {
+                inputMenu.classList.remove("is-open");
+            }
+            if (inputMenuToggle) {
+                inputMenuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+            }
+        }
+
+        if (inputMenu && inputMenuToggle) {
+            const handleOpen = () => {
+                if (inputMenuCloseTimeout) {
+                    clearTimeout(inputMenuCloseTimeout);
+                }
+                setInputMenuState(true);
+            };
+
+            const handleClose = () => {
+                if (inputMenuCloseTimeout) {
+                    clearTimeout(inputMenuCloseTimeout);
+                }
+                inputMenuCloseTimeout = setTimeout(() => setInputMenuState(false), 120);
+            };
+
+            inputMenuToggle.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setInputMenuState(!inputMenu.classList.contains("is-open"));
+            });
+
+            inputMenu.addEventListener("mouseenter", handleOpen);
+            inputMenu.addEventListener("mouseleave", handleClose);
+            inputMenu.addEventListener("focusin", handleOpen);
+            inputMenu.addEventListener("focusout", (event) => {
+                if (!inputMenu.contains(event.relatedTarget)) {
+                    handleClose();
+                }
+            });
+
+            document.addEventListener("click", (event) => {
+                if (!inputMenu.contains(event.target)) {
+                    setInputMenuState(false);
+                }
+            });
+        }
+
+        const modalStack = [];
+        const modalFocusMemory = new Map();
+
+        function resetModalPosition(modal) {
+            const windowEl = modal?.querySelector?.(".modal__window");
+            if (!windowEl) return;
+            windowEl.dataset.offsetX = "0";
+            windowEl.dataset.offsetY = "0";
+            windowEl.style.transform = "translate(-50%, -50%)";
+            windowEl.classList.remove("is-dragging");
+        }
+
+        function enableModalDrag(modal) {
+            const windowEl = modal?.querySelector?.(".modal__window");
+            const handle = modal?.querySelector?.("[data-modal-handle]");
+            if (!windowEl || !handle) return;
+
+            windowEl.dataset.offsetX = windowEl.dataset.offsetX || "0";
+            windowEl.dataset.offsetY = windowEl.dataset.offsetY || "0";
+
+            let pointerId = null;
+            let startX = 0;
+            let startY = 0;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            const onPointerDown = (event) => {
+                if (event.button !== 0) return;
+                pointerId = event.pointerId;
+                startX = event.clientX;
+                startY = event.clientY;
+                offsetX = parseFloat(windowEl.dataset.offsetX || "0");
+                offsetY = parseFloat(windowEl.dataset.offsetY || "0");
+                windowEl.classList.add("is-dragging");
+                handle.setPointerCapture(pointerId);
+                event.preventDefault();
+            };
+
+            const onPointerMove = (event) => {
+                if (pointerId !== event.pointerId) return;
+                const deltaX = event.clientX - startX;
+                const deltaY = event.clientY - startY;
+                const nextX = offsetX + deltaX;
+                const nextY = offsetY + deltaY;
+                windowEl.style.transform = `translate(calc(-50% + ${nextX}px), calc(-50% + ${nextY}px))`;
+                windowEl.dataset.currentX = String(nextX);
+                windowEl.dataset.currentY = String(nextY);
+            };
+
+            const onPointerUp = (event) => {
+                if (pointerId !== event.pointerId) return;
+                handle.releasePointerCapture(pointerId);
+                pointerId = null;
+                windowEl.classList.remove("is-dragging");
+                windowEl.dataset.offsetX = windowEl.dataset.currentX || windowEl.dataset.offsetX || "0";
+                windowEl.dataset.offsetY = windowEl.dataset.currentY || windowEl.dataset.offsetY || "0";
+                delete windowEl.dataset.currentX;
+                delete windowEl.dataset.currentY;
+            };
+
+            handle.addEventListener("pointerdown", onPointerDown);
+            handle.addEventListener("pointermove", onPointerMove);
+            handle.addEventListener("pointerup", onPointerUp);
+            handle.addEventListener("pointercancel", onPointerUp);
+        }
+
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal || modalStack.includes(modal)) return;
+            resetModalPosition(modal);
+            modal.hidden = false;
+            requestAnimationFrame(() => {
+                modal.classList.add("is-open");
+            });
+            modalStack.push(modal);
+            modalFocusMemory.set(modal, document.activeElement instanceof HTMLElement ? document.activeElement : null);
+            document.body.classList.add("has-open-modal");
+            const focusTarget = modal.querySelector(
+                'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            );
+            if (focusTarget instanceof HTMLElement) {
+                focusTarget.focus({ preventScroll: true });
+            }
+        }
+
+        function closeModal(modal) {
+            if (!modal) return;
+            modal.classList.remove("is-open");
+            const index = modalStack.indexOf(modal);
+            if (index !== -1) {
+                modalStack.splice(index, 1);
+            }
+            if (modalStack.length === 0) {
+                document.body.classList.remove("has-open-modal");
+            }
+            const previousFocus = modalFocusMemory.get(modal);
+            modalFocusMemory.delete(modal);
+            setTimeout(() => {
+                if (!modal.classList.contains("is-open")) {
+                    modal.hidden = true;
+                }
+            }, 200);
+            if (previousFocus instanceof HTMLElement) {
+                previousFocus.focus({ preventScroll: true });
+            }
+        }
+
+        const modalElements = document.querySelectorAll("[data-modal]");
+
+        modalElements.forEach((modal) => {
+            enableModalDrag(modal);
+            modal.addEventListener("click", (event) => {
+                const closeTrigger = event.target.closest("[data-modal-close]");
+                if (closeTrigger) {
+                    event.preventDefault();
+                    closeModal(modal);
+                }
+            });
+            const windowEl = modal.querySelector(".modal__window");
+            if (windowEl) {
+                windowEl.addEventListener("click", (event) => event.stopPropagation());
+            }
+        });
+
+        document.querySelectorAll("[data-modal-open]").forEach((trigger) => {
+            trigger.addEventListener("click", (event) => {
+                event.preventDefault();
+                const targetId = trigger.dataset.modalOpen;
+                if (targetId) {
+                    openModal(targetId);
+                    setInputMenuState(false);
+                }
+            });
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && modalStack.length > 0) {
+                const lastModal = modalStack[modalStack.length - 1];
+                closeModal(lastModal);
+            }
+        });
+
+        document.querySelectorAll("[data-scroll-target]").forEach((element) => {
+            element.addEventListener("click", (event) => {
+                const targetSelector = element.dataset.scrollTarget;
+                if (!targetSelector) return;
+                const target = document.querySelector(targetSelector);
+                if (target) {
+                    target.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            });
+        });
+
+        document.querySelectorAll("[data-activate-tab]").forEach((element) => {
+            element.addEventListener("click", (event) => {
+                const tabTarget = element.dataset.activateTab;
+                if (!tabTarget) return;
+                activateTab(tabTarget);
+            });
+        });
+
+        document.querySelectorAll("[data-modal-close-after]").forEach((element) => {
+            element.addEventListener("click", () => {
+                const modal = element.closest("[data-modal]");
+                if (modal) {
+                    closeModal(modal);
+                }
+            });
+        });
+
         const canManageAssets = ["production_manager", "admin"].includes(user?.role);
         const canManageParts = canManageAssets || ["maintenance_manager"].includes(user?.role);
         const canCreateJobs = ["production_manager", "admin"].includes(user?.role);
         const canLogIdle = ["production_manager", "maintenance_manager", "admin"].includes(user?.role);
         const canAddSuppliers = ["production_manager", "admin"].includes(user?.role);
+
+        const addAssetTrigger = document.querySelector('[data-modal-open="asset-modal"]');
+        if (addAssetTrigger && !canManageAssets) {
+            addAssetTrigger.disabled = true;
+            addAssetTrigger.setAttribute("aria-disabled", "true");
+            addAssetTrigger.title = "Only Production Managers or Admins can add assets.";
+        }
+
+        const maintenanceTrigger = document.querySelector('[data-modal-open="maintenance-modal"]');
+        if (maintenanceTrigger && !canCreateJobs) {
+            maintenanceTrigger.disabled = true;
+            maintenanceTrigger.setAttribute("aria-disabled", "true");
+            maintenanceTrigger.title = "Only Production Managers or Admins can request maintenance jobs.";
+        }
 
         const tabs = document.querySelectorAll(".machine-tab");
         const panels = document.querySelectorAll(".tab-panel");

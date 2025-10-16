@@ -88,6 +88,60 @@
                     </div>
                 </header>
                 <div class="production-card__body">
+                    <div class="production-totals" aria-live="polite">
+                        <div class="production-totals__row">
+                            <span class="production-totals__title">Today</span>
+                            <div class="production-totals__metrics">
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">Total MCH-0001 (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-today-mch-0001"
+                                    >0.00</span>
+                                </div>
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">Total MCH-0002 (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-today-mch-0002"
+                                    >0.00</span>
+                                </div>
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">Total (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-today-total"
+                                    >0.00</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="production-totals__row">
+                            <span class="production-totals__title">Month to Date</span>
+                            <div class="production-totals__metrics">
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">MTD MCH-0001 (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-mtd-mch-0001"
+                                    >0.00</span>
+                                </div>
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">MTD MCH-0002 (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-mtd-mch-0002"
+                                    >0.00</span>
+                                </div>
+                                <div class="production-totals__metric">
+                                    <span class="production-totals__metric-label">MTD Total (tons)</span>
+                                    <span
+                                        class="production-totals__metric-value"
+                                        id="production-mtd-total"
+                                    >0.00</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <form class="production-form" id="production-form" novalidate>
                         <div class="production-form__grid">
                             <div class="production-input">
@@ -234,11 +288,56 @@
         }
 
         const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
+        const totalsTodayTotal = document.getElementById("production-today-total");
+        const totalsMtdTotal = document.getElementById("production-mtd-total");
+        const totalsTodayMachineElements = {};
+        const totalsMtdMachineElements = {};
+
+        SUMMARY_MACHINE_CODES.forEach((code) => {
+            const normalized = code.toLowerCase();
+            totalsTodayMachineElements[code] = document.getElementById(
+                `production-today-${normalized}`,
+            );
+            totalsMtdMachineElements[code] = document.getElementById(
+                `production-mtd-${normalized}`,
+            );
+        });
+
         let latestSummary = null;
 
         function formatQuantity(value) {
             const number = Number(value);
             return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+        }
+
+        function updateTotalElement(element, value) {
+            if (!element) return;
+            const number = Number(value ?? 0);
+            element.textContent = formatQuantity(number);
+        }
+
+        function renderTotals(data) {
+            const totals = data?.totals || {};
+            const todayTotals = totals.today || {};
+            const mtdTotals = totals.mtd || {};
+            const todayMachines = todayTotals.machines || {};
+            const mtdMachines = mtdTotals.machines || {};
+
+            SUMMARY_MACHINE_CODES.forEach((code) => {
+                updateTotalElement(
+                    totalsTodayMachineElements[code],
+                    todayMachines[code],
+                );
+                updateTotalElement(
+                    totalsMtdMachineElements[code],
+                    mtdMachines[code],
+                );
+            });
+
+            const fallbackTodayTotal =
+                todayTotals.total ?? data?.total_quantity_tons ?? 0;
+            updateTotalElement(totalsTodayTotal, fallbackTodayTotal);
+            updateTotalElement(totalsMtdTotal, mtdTotals.total);
         }
 
         function renderSummary(data) {
@@ -306,8 +405,11 @@
                 productionTableBody.appendChild(tr);
             }
 
-            const total = Number(data?.total_quantity_tons ?? 0);
+            const total = Number(
+                data?.totals?.today?.total ?? data?.total_quantity_tons ?? 0,
+            );
             productionTotal.textContent = formatQuantity(total);
+            renderTotals(data);
         }
 
         function updateQuantityFieldFromSummary() {
@@ -369,6 +471,7 @@
                     emptyCell.textContent = "Unable to load production summary.";
                 }
                 productionTableBody.appendChild(productionEmptyRow);
+                renderTotals(null);
                 showMessage(
                     productionError,
                     error.message || "Unable to load production summary.",
@@ -410,6 +513,7 @@
 
                 await loadProductionSummary();
             } catch (error) {
+                renderTotals(null);
                 showMessage(productionError, error.message || "Unable to load machines");
             }
         }

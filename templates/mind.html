@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard | SAMPROX ERP</title>
+    <title>Mind | SAMPROX ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -16,7 +16,7 @@
                 <div class="brand__logo">S</div>
                 <div class="brand__details">
                     <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">6M Operations Dashboard</p>
+                    <p class="brand__section">7M Operations Overview</p>
                 </div>
             </div>
             <div class="topbar__actions">
@@ -27,7 +27,8 @@
                 <button type="button" class="button button--secondary" id="logout">Sign out</button>
             </div>
         </header>
-        <nav class="subnav" aria-label="6M navigation">
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.mind_page') }}">Mind</a>
             <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
             <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
             <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
@@ -37,13 +38,23 @@
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Manage the entire operation with the 6M model</h1>
+                <h1>Manage the entire operation with the 7M model</h1>
             </header>
             <p class="section__description">
                 Track each resource pillar with focused workspaces. Use the cards below to open the
                 dedicated page for each "M" and keep teams aligned on their responsibilities.
             </p>
             <div class="dashboard">
+                <article class="card">
+                    <h2 class="card__title">Mind</h2>
+                    <p class="card__description">
+                        Align leadership focus, strategic initiatives, and continuous improvement efforts.
+                        Keep a pulse on innovation projects and cultural priorities across the operation.
+                    </p>
+                    <div class="card__actions">
+                        <a class="card__link" href="{{ url_for('ui.mind_page') }}">Open Mind workspace</a>
+                    </div>
+                </article>
                 <article class="card">
                     <h2 class="card__title">Man</h2>
                     <p class="card__description">

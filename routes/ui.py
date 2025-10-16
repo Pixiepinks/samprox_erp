@@ -15,10 +15,16 @@ def jobs_page():
     return redirect(url_for("ui.machines_page"))
 
 
+@bp.get("/mind")
+def mind_page():
+    """Render the Mind operations overview."""
+    return render_template("mind.html")
+
+
 @bp.get("/dashboard")
-def dashboard():
-    """Render the ERP overview dashboard."""
-    return render_template("dashboard.html")
+def dashboard_redirect():
+    """Preserve the legacy dashboard route by redirecting to Mind."""
+    return redirect(url_for("ui.mind_page"))
 
 
 @bp.get("/man")

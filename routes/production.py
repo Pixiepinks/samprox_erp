@@ -1,18 +1,21 @@
 """REST endpoints for manufacturing daily production tracking."""
 
-from datetime import date as dt_date
+from datetime import date as dt_date, datetime
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 
 from extensions import db
 from models import DailyProductionEntry, MachineAsset, RoleEnum
+from sqlalchemy.orm import joinedload
 from schemas import DailyProductionEntrySchema
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
 
 entry_schema = DailyProductionEntrySchema()
+
+SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
 
 
 def require_role(*roles: RoleEnum) -> bool:
@@ -183,6 +186,157 @@ def get_daily_production():
             "name": asset.name,
         },
         "entries": results,
+        "total_quantity_tons": round(total_quantity, 3),
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/daily/summary")
+@jwt_required()
+def get_daily_production_summary():
+    if not require_role(
+        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    query_date_raw = request.args.get("date")
+    try:
+        query_date = _parse_date(query_date_raw, field_name="date") or dt_date.today()
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    machine_codes_param = request.args.get("machine_codes")
+    if machine_codes_param:
+        raw_codes = [code.strip() for code in machine_codes_param.split(",") if code.strip()]
+    else:
+        raw_codes = list(SUMMARY_MACHINE_CODES)
+
+    machine_codes = []
+    seen_codes = set()
+    for code in raw_codes:
+        if code and code not in seen_codes:
+            machine_codes.append(code)
+            seen_codes.add(code)
+
+    if not machine_codes:
+        machine_codes = list(SUMMARY_MACHINE_CODES)
+
+    canonical_codes = {}
+    for code in machine_codes:
+        if code:
+            canonical_codes[code.lower()] = code
+
+    assets = (
+        MachineAsset.query.filter(MachineAsset.code.in_(machine_codes))
+        .order_by(MachineAsset.code.asc())
+        .all()
+    )
+    asset_by_code = {asset.code: asset for asset in assets}
+
+    entries = (
+        DailyProductionEntry.query.options(joinedload(DailyProductionEntry.asset))
+        .filter_by(date=query_date)
+        .all()
+    )
+
+    summary_by_hour = {hour: {} for hour in range(1, 25)}
+
+    for entry in entries:
+        asset = entry.asset
+        if not asset or not asset.code:
+            continue
+        code = canonical_codes.get(asset.code.lower())
+        if not code:
+            continue
+
+        quantity = 0.0
+        try:
+            quantity = float(entry.quantity_tons or 0.0)
+        except (TypeError, ValueError):
+            quantity = 0.0
+
+        updated_at = getattr(entry, "updated_at", None)
+        if updated_at is None:
+            updated_at = getattr(entry, "created_at", None)
+
+        if entry.hour_no < 1 or entry.hour_no > 24:
+            continue
+
+        summary_by_hour.setdefault(entry.hour_no, {})
+        summary_by_hour[entry.hour_no][code] = {
+            "entry_id": entry.id,
+            "asset_id": asset.id,
+            "machine_code": code,
+            "quantity_tons": round(quantity, 3),
+            "updated_at": updated_at.isoformat() if updated_at else None,
+        }
+
+        if code not in asset_by_code:
+            asset_by_code[code] = asset
+
+    hours = []
+    total_quantity = 0.0
+
+    for hour in range(1, 25):
+        hour_data = summary_by_hour.get(hour, {})
+        machines_payload = {}
+        hour_total = 0.0
+        latest_update = None
+
+        for code in machine_codes:
+            machine_entry = hour_data.get(code)
+            if machine_entry is None:
+                asset = asset_by_code.get(code)
+                machine_entry = {
+                    "entry_id": None,
+                    "asset_id": getattr(asset, "id", None),
+                    "machine_code": code,
+                    "quantity_tons": 0.0,
+                    "updated_at": None,
+                }
+            machines_payload[code] = machine_entry
+
+            try:
+                hour_total += float(machine_entry.get("quantity_tons") or 0.0)
+            except (TypeError, ValueError):
+                pass
+
+            updated_value = machine_entry.get("updated_at")
+            if updated_value:
+                try:
+                    candidate = datetime.fromisoformat(updated_value)
+                except ValueError:
+                    candidate = None
+                if candidate is not None:
+                    if latest_update is None or candidate > latest_update:
+                        latest_update = candidate
+
+        total_quantity += hour_total
+
+        hour_payload = {
+            "hour_no": hour,
+            "machines": machines_payload,
+            "hour_total_tons": round(hour_total, 3),
+            "last_updated": latest_update.isoformat() if latest_update else None,
+        }
+        hours.append(hour_payload)
+
+    machines_metadata = []
+    for code in machine_codes:
+        asset = asset_by_code.get(code)
+        machines_metadata.append(
+            {
+                "code": code,
+                "id": getattr(asset, "id", None),
+                "name": getattr(asset, "name", code),
+            }
+        )
+
+    response = {
+        "date": query_date.isoformat(),
+        "machines": machines_metadata,
+        "hours": hours,
         "total_quantity_tons": round(total_quantity, 3),
     }
 

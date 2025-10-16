@@ -7,6 +7,7 @@ from flask_jwt_extended import get_jwt, jwt_required
 
 from extensions import db
 from models import DailyProductionEntry, MachineAsset, RoleEnum
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from schemas import DailyProductionEntrySchema
 
@@ -278,6 +279,8 @@ def get_daily_production_summary():
     hours = []
     total_quantity = 0.0
 
+    daily_totals_by_machine = {code: 0.0 for code in machine_codes}
+
     for hour in range(1, 25):
         hour_data = summary_by_hour.get(hour, {})
         machines_payload = {}
@@ -298,7 +301,9 @@ def get_daily_production_summary():
             machines_payload[code] = machine_entry
 
             try:
-                hour_total += float(machine_entry.get("quantity_tons") or 0.0)
+                machine_quantity = float(machine_entry.get("quantity_tons") or 0.0)
+                hour_total += machine_quantity
+                daily_totals_by_machine[code] = daily_totals_by_machine.get(code, 0.0) + machine_quantity
             except (TypeError, ValueError):
                 pass
 
@@ -333,11 +338,58 @@ def get_daily_production_summary():
             }
         )
 
+    today_totals = {
+        "machines": {
+            code: round(daily_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
+        },
+    }
+    today_totals["total"] = round(
+        sum(today_totals["machines"].values()),
+        3,
+    )
+
+    month_start = query_date.replace(day=1)
+    mtd_totals_by_machine = {code: 0.0 for code in machine_codes}
+
+    mtd_entries = (
+        db.session.query(
+            MachineAsset.code,
+            func.coalesce(func.sum(DailyProductionEntry.quantity_tons), 0),
+        )
+        .join(DailyProductionEntry, DailyProductionEntry.asset_id == MachineAsset.id)
+        .filter(
+            DailyProductionEntry.date >= month_start,
+            DailyProductionEntry.date <= query_date,
+            MachineAsset.code.in_(machine_codes),
+        )
+        .group_by(MachineAsset.code)
+        .all()
+    )
+
+    for code_value, total_value in mtd_entries:
+        canonical_code = canonical_codes.get(code_value.lower()) if code_value else None
+        if canonical_code:
+            try:
+                mtd_totals_by_machine[canonical_code] = float(total_value or 0.0)
+            except (TypeError, ValueError):
+                mtd_totals_by_machine[canonical_code] = 0.0
+
+    mtd_totals = {
+        "machines": {
+            code: round(mtd_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
+        },
+    }
+    mtd_totals["total"] = round(sum(mtd_totals["machines"].values()), 3)
+
     response = {
         "date": query_date.isoformat(),
         "machines": machines_metadata,
         "hours": hours,
         "total_quantity_tons": round(total_quantity, 3),
+        "totals": {
+            "today": today_totals,
+            "mtd": mtd_totals,
+        },
     }
 
     return jsonify(response)

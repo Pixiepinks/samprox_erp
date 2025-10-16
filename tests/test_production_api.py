@@ -143,13 +143,13 @@ class ProductionApiTestCase(unittest.TestCase):
         first_asset = self._create_machine()
         second_asset = self._create_machine()
 
-        def save_output(machine_code, hour_no, quantity):
+        def save_output(machine_code, hour_no, quantity, date="2024-05-12"):
             response = self.client.post(
                 "/api/production/daily",
                 headers=self._auth_headers(self.pm_token),
                 json={
                     "machine_code": machine_code,
-                    "date": "2024-05-12",
+                    "date": date,
                     "hour_no": hour_no,
                     "quantity_tons": quantity,
                 },
@@ -159,6 +159,7 @@ class ProductionApiTestCase(unittest.TestCase):
         save_output(first_asset["code"], 1, 3.5)
         save_output(second_asset["code"], 1, 4.0)
         save_output(first_asset["code"], 2, 1.0)
+        save_output(first_asset["code"], 1, 2.5, date="2024-05-01")
 
         response = self.client.get(
             "/api/production/daily/summary",
@@ -208,6 +209,30 @@ class ProductionApiTestCase(unittest.TestCase):
             hour_three["machines"][second_asset["code"]]["quantity_tons"],
             0.0,
         )
+
+        totals = data.get("totals") or {}
+        today_totals = totals.get("today") or {}
+        mtd_totals = totals.get("mtd") or {}
+
+        self.assertAlmostEqual(
+            today_totals["machines"][first_asset["code"]],
+            4.5,
+        )
+        self.assertAlmostEqual(
+            today_totals["machines"][second_asset["code"]],
+            4.0,
+        )
+        self.assertAlmostEqual(today_totals["total"], 8.5)
+
+        self.assertAlmostEqual(
+            mtd_totals["machines"][first_asset["code"]],
+            7.0,
+        )
+        self.assertAlmostEqual(
+            mtd_totals["machines"][second_asset["code"]],
+            4.0,
+        )
+        self.assertAlmostEqual(mtd_totals["total"], 11.0)
 
 
 if __name__ == "__main__":

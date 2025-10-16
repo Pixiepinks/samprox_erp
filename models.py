@@ -185,3 +185,32 @@ class ServiceSupplier(db.Model):
     preferred_assets = db.Column(db.String(255))
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class DailyProductionEntry(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint("date", "asset_id", "hour_no", name="uq_daily_production_entry_day_asset_hour"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("machine_asset.id"), nullable=False, index=True)
+    hour_no = db.Column(db.Integer, nullable=False)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    asset = db.relationship(
+        "MachineAsset",
+        backref=db.backref(
+            "daily_production_entries",
+            cascade="all,delete-orphan",
+            order_by="DailyProductionEntry.hour_no",
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<DailyProductionEntry date={self.date} asset_id={self.asset_id} "
+            f"hour={self.hour_no} qty={self.quantity_tons}>"
+        )

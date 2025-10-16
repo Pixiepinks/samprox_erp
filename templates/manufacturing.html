@@ -75,6 +75,79 @@
                     </p>
                 </article>
             </div>
+            <div class="production-card" aria-live="polite">
+                <header class="production-card__header">
+                    <div>
+                        <h2>Daily production sheet</h2>
+                        <p>Capture hourly output in tons for each manufacturing asset.</p>
+                    </div>
+                    <div class="production-summary">
+                        <span class="production-summary__label">Total (tons)</span>
+                        <span class="production-summary__value" id="production-total">0.00</span>
+                    </div>
+                </header>
+                <div class="production-card__body">
+                    <form class="production-form" id="production-form" novalidate>
+                        <div class="production-form__grid">
+                            <div class="production-input">
+                                <label for="production-date">Date <span class="required">*</span></label>
+                                <input id="production-date" name="date" type="date" required />
+                            </div>
+                            <div class="production-input">
+                                <label for="production-machine">Machine ID <span class="required">*</span></label>
+                                <select id="production-machine" name="machine_code" required>
+                                    <option value="" disabled selected>Select machine</option>
+                                </select>
+                            </div>
+                            <div class="production-input">
+                                <label for="production-hour">Hour no. <span class="required">*</span></label>
+                                <select id="production-hour" name="hour_no" required>
+                                    {% for hour in range(1, 25) %}
+                                    <option value="{{ hour }}">{{ "%02d" % hour }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="production-input">
+                                <label for="production-qty">Production qty (tons) <span class="required">*</span></label>
+                                <input
+                                    id="production-qty"
+                                    name="quantity_tons"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div class="production-actions">
+                            <button type="submit" class="button" id="production-submit">Save hour</button>
+                        </div>
+                        <p class="production-feedback production-feedback--success" id="production-success" hidden>
+                            Production updated successfully.
+                        </p>
+                        <p class="production-feedback production-feedback--error" id="production-error" hidden></p>
+                    </form>
+                    <div class="production-table-wrapper">
+                        <table class="production-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Hour</th>
+                                    <th scope="col">Quantity (tons)</th>
+                                    <th scope="col">Last updated</th>
+                                </tr>
+                            </thead>
+                            <tbody id="production-table-body">
+                                <tr id="production-empty-row">
+                                    <td colspan="3" class="production-table__empty">
+                                        Select a machine to view hourly production.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
     <script>
@@ -111,6 +184,256 @@
             localStorage.removeItem("samprox_user");
             window.location.href = "/";
         });
+
+        const machineSelect = document.getElementById("production-machine");
+        const dateInput = document.getElementById("production-date");
+        const hourSelect = document.getElementById("production-hour");
+        const quantityInput = document.getElementById("production-qty");
+        const productionForm = document.getElementById("production-form");
+        const productionSuccess = document.getElementById("production-success");
+        const productionError = document.getElementById("production-error");
+        const productionTableBody = document.getElementById("production-table-body");
+        const productionEmptyRow = document.getElementById("production-empty-row");
+        const productionTotal = document.getElementById("production-total");
+        const productionSubmit = document.getElementById("production-submit");
+
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        dateInput.value = `${yyyy}-${mm}-${dd}`;
+
+        const authHeaders = {
+            Authorization: `Bearer ${token}`,
+        };
+
+        function showMessage(element, message = "") {
+            if (!element) return;
+            if (message) {
+                element.textContent = message;
+                element.hidden = false;
+            } else {
+                element.hidden = true;
+            }
+        }
+
+        function clearFeedback() {
+            showMessage(productionSuccess);
+            showMessage(productionError);
+        }
+
+        function setFormDisabled(disabled) {
+            productionSubmit.disabled = disabled;
+            dateInput.disabled = disabled;
+            machineSelect.disabled = disabled;
+            hourSelect.disabled = disabled;
+            quantityInput.disabled = disabled;
+        }
+
+        function renderEntries(data) {
+            productionTableBody.innerHTML = "";
+
+            if (!data || !Array.isArray(data.entries) || data.entries.length === 0) {
+                productionEmptyRow.hidden = false;
+                productionTableBody.appendChild(productionEmptyRow);
+                productionTotal.textContent = "0.00";
+                return;
+            }
+
+            productionEmptyRow.hidden = true;
+
+            data.entries.forEach((entry) => {
+                const tr = document.createElement("tr");
+                tr.dataset.hour = entry.hour_no;
+                tr.dataset.quantity = entry.quantity_tons ?? 0;
+
+                const hourCell = document.createElement("th");
+                hourCell.scope = "row";
+                hourCell.textContent = String(entry.hour_no).padStart(2, "0");
+
+                const quantityCell = document.createElement("td");
+                const qtyNumber = Number(entry.quantity_tons ?? 0);
+                quantityCell.textContent = Number.isFinite(qtyNumber)
+                    ? qtyNumber.toFixed(2)
+                    : "0.00";
+
+                const updatedCell = document.createElement("td");
+                if (entry.updated_at) {
+                    const updatedDate = new Date(entry.updated_at);
+                    updatedCell.textContent = updatedDate.toLocaleString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    });
+                } else {
+                    updatedCell.textContent = "—";
+                }
+
+                tr.appendChild(hourCell);
+                tr.appendChild(quantityCell);
+                tr.appendChild(updatedCell);
+                productionTableBody.appendChild(tr);
+            });
+
+            const total = Number(data.total_quantity_tons ?? 0);
+            productionTotal.textContent = Number.isFinite(total) ? total.toFixed(2) : "0.00";
+
+            productionTableBody.appendChild(productionEmptyRow);
+        }
+
+        async function fetchMachines() {
+            try {
+                const response = await fetch("/api/machines/assets", { headers: authHeaders });
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Failed to load machines");
+                }
+
+                const machines = await response.json();
+                machineSelect.innerHTML = "";
+                if (!Array.isArray(machines) || machines.length === 0) {
+                    const option = document.createElement("option");
+                    option.textContent = "No machines available";
+                    option.value = "";
+                    machineSelect.appendChild(option);
+                    machineSelect.disabled = true;
+                    renderEntries({ entries: [] });
+                    return;
+                }
+
+                machines.forEach((machine, index) => {
+                    const option = document.createElement("option");
+                    option.value = machine.code;
+                    option.textContent = `${machine.code} — ${machine.name}`;
+                    if (index === 0) {
+                        option.selected = true;
+                    }
+                    machineSelect.appendChild(option);
+                });
+
+                machineSelect.disabled = false;
+                await loadProduction();
+            } catch (error) {
+                showMessage(productionError, error.message || "Unable to load machines");
+            }
+        }
+
+        async function loadProduction() {
+            const machineCode = machineSelect.value;
+            if (!machineCode) {
+                renderEntries({ entries: [] });
+                return;
+            }
+
+            const params = new URLSearchParams({
+                machine_code: machineCode,
+            });
+            if (dateInput.value) {
+                params.set("date", dateInput.value);
+            }
+
+            try {
+                const response = await fetch(`/api/production/daily?${params.toString()}`, {
+                    headers: authHeaders,
+                });
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (response.status === 404) {
+                    renderEntries({ entries: [] });
+                    showMessage(productionError, "Selected machine was not found.");
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Failed to load production data");
+                }
+
+                const data = await response.json();
+                renderEntries(data);
+                clearFeedback();
+            } catch (error) {
+                showMessage(productionError, error.message || "Unable to load production data.");
+            }
+        }
+
+        productionForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+
+            const machineCode = machineSelect.value;
+            const dateValue = dateInput.value;
+            const hourValue = hourSelect.value;
+            const quantityValue = quantityInput.value;
+
+            if (!machineCode || !dateValue || !hourValue) {
+                showMessage(productionError, "Please complete all required fields.");
+                return;
+            }
+
+            setFormDisabled(true);
+
+            try {
+                const response = await fetch("/api/production/daily", {
+                    method: "POST",
+                    headers: {
+                        ...authHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        machine_code: machineCode,
+                        date: dateValue,
+                        hour_no: Number(hourValue),
+                        quantity_tons: quantityValue ? Number(quantityValue) : 0,
+                    }),
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    const message = payload?.msg || "Unable to save production.";
+                    showMessage(productionError, message);
+                    return;
+                }
+
+                showMessage(productionSuccess, "Production updated successfully.");
+                await loadProduction();
+            } catch (error) {
+                showMessage(productionError, error.message || "Unable to save production.");
+            } finally {
+                setFormDisabled(false);
+            }
+        });
+
+        machineSelect.addEventListener("change", () => {
+            clearFeedback();
+            loadProduction();
+        });
+
+        dateInput.addEventListener("change", () => {
+            clearFeedback();
+            loadProduction();
+        });
+
+        productionTableBody.addEventListener("click", (event) => {
+            const row = event.target.closest("tr");
+            if (!row || !row.dataset.hour) {
+                return;
+            }
+
+            hourSelect.value = row.dataset.hour;
+            const qty = Number(row.dataset.quantity ?? 0);
+            quantityInput.value = Number.isFinite(qty) ? qty.toFixed(2) : "";
+        });
+
+        fetchMachines();
     </script>
 </body>
 </html>

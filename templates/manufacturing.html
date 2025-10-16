@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Money | SAMPROX ERP</title>
+    <title>Manufacturing | SAMPROX ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -16,7 +16,7 @@
                 <div class="brand__logo">S</div>
                 <div class="brand__details">
                     <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">Money Overview</p>
+                    <p class="brand__section">Manufacturing Operations</p>
                 </div>
             </div>
             <div class="topbar__actions">
@@ -33,40 +33,45 @@
             <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
             <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
             <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
-            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
-            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.money_page') }}">Money</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Financial performance snapshot</h1>
+                <h1>Production flow coordination</h1>
             </header>
             <p class="section__description">
-                Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
-                insights here to control costs and prioritize high-value work.
+                Oversee the end-to-end production process, from work order release to final quality
+                checks. Align capacity, resources, and schedules so every shift meets delivery
+                commitments without sacrificing quality.
             </p>
             <div class="section__grid">
                 <article class="tile">
-                    <h2 class="tile__title">Budget vs. actual</h2>
+                    <h2 class="tile__title">Work order control</h2>
                     <p class="tile__description">
-                        Compare planned spending against actuals across departments and job types.
+                        Track live work orders, their routing steps, and current status to remove
+                        bottlenecks before they impact throughput.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Job costing</h2>
+                    <h2 class="tile__title">Capacity planning</h2>
                     <p class="tile__description">
-                        Track labour, material, and machine time consumption to understand job margins.
+                        Balance machine availability and staffing across shifts to keep utilization high
+                        while maintaining buffer for urgent jobs.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Cash flow outlook</h2>
+                    <h2 class="tile__title">Quality checkpoints</h2>
                     <p class="tile__description">
-                        Review upcoming receivables and payables to plan funding and investments.
+                        Coordinate in-process inspections, capture deviations, and escalate corrective
+                        actions to protect outgoing quality.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Capital planning</h2>
+                    <h2 class="tile__title">Production analytics</h2>
                     <p class="tile__description">
-                        Highlight equipment upgrades and large purchases to align with financial targets.
+                        Analyze yield, cycle times, and first-pass success to drive continuous
+                        improvement initiatives across lines.
                     </p>
                 </article>
             </div>

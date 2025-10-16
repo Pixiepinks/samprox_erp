@@ -114,3 +114,26 @@ class ServiceSupplierSchema(Schema):
     preferred_assets = fields.Str(allow_none=True)
     notes = fields.Str(allow_none=True)
     created_at = fields.DateTime()
+
+
+class DailyProductionEntrySchema(Schema):
+    id = fields.Int()
+    date = fields.Date()
+    hour_no = fields.Int()
+    quantity_tons = fields.Float()
+    asset_id = fields.Int()
+    machine_code = fields.Method("get_machine_code")
+    machine_name = fields.Method("get_machine_name")
+    updated_at = fields.DateTime(allow_none=True)
+
+    def get_machine_code(self, obj):
+        try:
+            return obj.asset.code
+        except AttributeError:
+            return None
+
+    def get_machine_name(self, obj):
+        try:
+            return obj.asset.name
+        except AttributeError:
+            return None

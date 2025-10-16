@@ -9,7 +9,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from config import Config
 from extensions import db, migrate, jwt
 from models import User, RoleEnum
-from routes import auth, jobs, quotation, labor, materials, machines, reports, ui
+from routes import auth, jobs, quotation, labor, materials, machines, production, reports, ui
 
 def create_app():
     app = Flask(__name__)
@@ -29,6 +29,7 @@ def create_app():
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)
     app.register_blueprint(machines.bp)
+    app.register_blueprint(production.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(ui.bp)
 

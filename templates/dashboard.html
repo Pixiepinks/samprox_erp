@@ -16,7 +16,7 @@
                 <div class="brand__logo">S</div>
                 <div class="brand__details">
                     <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">5M Operations Dashboard</p>
+                    <p class="brand__section">6M Operations Dashboard</p>
                 </div>
             </div>
             <div class="topbar__actions">
@@ -27,16 +27,17 @@
                 <button type="button" class="button button--secondary" id="logout">Sign out</button>
             </div>
         </header>
-        <nav class="subnav" aria-label="5M navigation">
+        <nav class="subnav" aria-label="6M navigation">
             <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
             <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
             <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
             <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Manage the entire operation with the 5M model</h1>
+                <h1>Manage the entire operation with the 6M model</h1>
             </header>
             <p class="section__description">
                 Track each resource pillar with focused workspaces. Use the cards below to open the
@@ -81,6 +82,16 @@
                     </p>
                     <div class="card__actions">
                         <a class="card__link" href="{{ url_for('ui.market_page') }}">Open Market workspace</a>
+                    </div>
+                </article>
+                <article class="card">
+                    <h2 class="card__title">Manufacturing</h2>
+                    <p class="card__description">
+                        Coordinate production schedules, capacity plans, and in-process quality checks
+                        to keep every order on track from release to shipment.
+                    </p>
+                    <div class="card__actions">
+                        <a class="card__link" href="{{ url_for('ui.manufacturing_page') }}">Open Manufacturing workspace</a>
                     </div>
                 </article>
                 <article class="card">

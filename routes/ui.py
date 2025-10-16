@@ -49,3 +49,9 @@ def market_page():
 def money_page():
     """Render the financial overview page."""
     return render_template("money.html")
+
+
+@bp.get("/manufacturing")
+def manufacturing_page():
+    """Render the manufacturing operations page."""
+    return render_template("manufacturing.html")

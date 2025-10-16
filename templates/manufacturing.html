@@ -134,14 +134,16 @@
                             <thead>
                                 <tr>
                                     <th scope="col">Hour</th>
-                                    <th scope="col">Quantity (tons)</th>
+                                    <th scope="col">MCH-0001 (tons)</th>
+                                    <th scope="col">MCH-0002 (tons)</th>
+                                    <th scope="col">Hour total (tons)</th>
                                     <th scope="col">Last updated</th>
                                 </tr>
                             </thead>
                             <tbody id="production-table-body">
                                 <tr id="production-empty-row">
-                                    <td colspan="3" class="production-table__empty">
-                                        Select a machine to view hourly production.
+                                    <td colspan="5" class="production-table__empty">
+                                        No production records are available for this date.
                                     </td>
                                 </tr>
                             </tbody>
@@ -231,54 +233,147 @@
             quantityInput.disabled = disabled;
         }
 
-        function renderEntries(data) {
-            productionTableBody.innerHTML = "";
+        const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
+        let latestSummary = null;
 
-            if (!data || !Array.isArray(data.entries) || data.entries.length === 0) {
-                productionEmptyRow.hidden = false;
-                productionTableBody.appendChild(productionEmptyRow);
-                productionTotal.textContent = "0.00";
-                return;
+        function formatQuantity(value) {
+            const number = Number(value);
+            return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+        }
+
+        function renderSummary(data) {
+            productionTableBody.innerHTML = "";
+            productionEmptyRow.hidden = true;
+            const emptyCell = productionEmptyRow.querySelector("td");
+            if (emptyCell) {
+                emptyCell.textContent = "No production records are available for this date.";
             }
 
-            productionEmptyRow.hidden = true;
+            const hoursMap = new Map();
+            if (data && Array.isArray(data.hours)) {
+                data.hours.forEach((hour) => {
+                    const hourNumber = Number(hour?.hour_no);
+                    if (Number.isFinite(hourNumber)) {
+                        hoursMap.set(hourNumber, hour);
+                    }
+                });
+            }
 
-            data.entries.forEach((entry) => {
+            for (let hour = 1; hour <= 24; hour += 1) {
+                const hourData = hoursMap.get(hour) || {};
+                const machinesMap = hourData.machines || {};
+
                 const tr = document.createElement("tr");
-                tr.dataset.hour = entry.hour_no;
-                tr.dataset.quantity = entry.quantity_tons ?? 0;
+                tr.dataset.hour = String(hour);
 
                 const hourCell = document.createElement("th");
                 hourCell.scope = "row";
-                hourCell.textContent = String(entry.hour_no).padStart(2, "0");
+                hourCell.textContent = String(hour).padStart(2, "0");
+                tr.appendChild(hourCell);
 
-                const quantityCell = document.createElement("td");
-                const qtyNumber = Number(entry.quantity_tons ?? 0);
-                quantityCell.textContent = Number.isFinite(qtyNumber)
-                    ? qtyNumber.toFixed(2)
-                    : "0.00";
+                SUMMARY_MACHINE_CODES.forEach((code) => {
+                    const machineCell = document.createElement("td");
+                    machineCell.dataset.machineCode = code;
+                    const machineData = machinesMap[code];
+                    const quantity = Number(machineData?.quantity_tons ?? 0);
+                    machineCell.textContent = formatQuantity(quantity);
+                    machineCell.dataset.quantity = Number.isFinite(quantity) ? quantity : 0;
+                    tr.appendChild(machineCell);
+                });
+
+                const totalCell = document.createElement("td");
+                const hourTotal = Number(hourData.hour_total_tons ?? 0);
+                totalCell.textContent = formatQuantity(hourTotal);
+                tr.appendChild(totalCell);
 
                 const updatedCell = document.createElement("td");
-                if (entry.updated_at) {
-                    const updatedDate = new Date(entry.updated_at);
-                    updatedCell.textContent = updatedDate.toLocaleString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                    });
+                const updatedValue = hourData.last_updated;
+                if (updatedValue) {
+                    const updatedDate = new Date(updatedValue);
+                    if (!Number.isNaN(updatedDate.valueOf())) {
+                        updatedCell.textContent = updatedDate.toLocaleString(undefined, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        });
+                    } else {
+                        updatedCell.textContent = "—";
+                    }
                 } else {
                     updatedCell.textContent = "—";
                 }
-
-                tr.appendChild(hourCell);
-                tr.appendChild(quantityCell);
                 tr.appendChild(updatedCell);
+
                 productionTableBody.appendChild(tr);
-            });
+            }
 
-            const total = Number(data.total_quantity_tons ?? 0);
-            productionTotal.textContent = Number.isFinite(total) ? total.toFixed(2) : "0.00";
+            const total = Number(data?.total_quantity_tons ?? 0);
+            productionTotal.textContent = formatQuantity(total);
+        }
 
-            productionTableBody.appendChild(productionEmptyRow);
+        function updateQuantityFieldFromSummary() {
+            const machineCode = machineSelect.value;
+            const hourValue = Number(hourSelect.value);
+
+            if (!machineCode || !Number.isFinite(hourValue)) {
+                quantityInput.value = "";
+                return;
+            }
+
+            if (!latestSummary || !Array.isArray(latestSummary.hours)) {
+                quantityInput.value = formatQuantity(0);
+                return;
+            }
+
+            const hourData = latestSummary.hours.find(
+                (hour) => Number(hour?.hour_no) === hourValue,
+            );
+            const machineData = hourData?.machines?.[machineCode];
+            const quantity = Number(machineData?.quantity_tons ?? 0);
+            quantityInput.value = formatQuantity(quantity);
+        }
+
+        async function loadProductionSummary() {
+            showMessage(productionError);
+
+            const params = new URLSearchParams();
+            if (dateInput.value) {
+                params.set("date", dateInput.value);
+            }
+            if (SUMMARY_MACHINE_CODES.length > 0) {
+                params.set("machine_codes", SUMMARY_MACHINE_CODES.join(","));
+            }
+
+            try {
+                const response = await fetch(`/api/production/daily/summary?${params.toString()}`, {
+                    headers: authHeaders,
+                });
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Failed to load production summary.");
+                }
+
+                const data = await response.json();
+                latestSummary = data;
+                renderSummary(data);
+                updateQuantityFieldFromSummary();
+            } catch (error) {
+                latestSummary = null;
+                productionTotal.textContent = "0.00";
+                productionTableBody.innerHTML = "";
+                productionEmptyRow.hidden = false;
+                const emptyCell = productionEmptyRow.querySelector("td");
+                if (emptyCell) {
+                    emptyCell.textContent = "Unable to load production summary.";
+                }
+                productionTableBody.appendChild(productionEmptyRow);
+                showMessage(
+                    productionError,
+                    error.message || "Unable to load production summary.",
+                );
+            }
         }
 
         async function fetchMachines() {
@@ -300,63 +395,22 @@
                     option.value = "";
                     machineSelect.appendChild(option);
                     machineSelect.disabled = true;
-                    renderEntries({ entries: [] });
-                    return;
+                } else {
+                    machines.forEach((machine, index) => {
+                        const option = document.createElement("option");
+                        option.value = machine.code;
+                        option.textContent = `${machine.code} — ${machine.name}`;
+                        if (index === 0) {
+                            option.selected = true;
+                        }
+                        machineSelect.appendChild(option);
+                    });
+                    machineSelect.disabled = false;
                 }
 
-                machines.forEach((machine, index) => {
-                    const option = document.createElement("option");
-                    option.value = machine.code;
-                    option.textContent = `${machine.code} — ${machine.name}`;
-                    if (index === 0) {
-                        option.selected = true;
-                    }
-                    machineSelect.appendChild(option);
-                });
-
-                machineSelect.disabled = false;
-                await loadProduction();
+                await loadProductionSummary();
             } catch (error) {
                 showMessage(productionError, error.message || "Unable to load machines");
-            }
-        }
-
-        async function loadProduction() {
-            const machineCode = machineSelect.value;
-            if (!machineCode) {
-                renderEntries({ entries: [] });
-                return;
-            }
-
-            const params = new URLSearchParams({
-                machine_code: machineCode,
-            });
-            if (dateInput.value) {
-                params.set("date", dateInput.value);
-            }
-
-            try {
-                const response = await fetch(`/api/production/daily?${params.toString()}`, {
-                    headers: authHeaders,
-                });
-                if (response.status === 401) {
-                    logoutButton.click();
-                    return;
-                }
-                if (response.status === 404) {
-                    renderEntries({ entries: [] });
-                    showMessage(productionError, "Selected machine was not found.");
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error("Failed to load production data");
-                }
-
-                const data = await response.json();
-                renderEntries(data);
-                clearFeedback();
-            } catch (error) {
-                showMessage(productionError, error.message || "Unable to load production data.");
             }
         }
 
@@ -405,7 +459,7 @@
                 }
 
                 showMessage(productionSuccess, "Production updated successfully.");
-                await loadProduction();
+                await loadProductionSummary();
             } catch (error) {
                 showMessage(productionError, error.message || "Unable to save production.");
             } finally {
@@ -415,23 +469,49 @@
 
         machineSelect.addEventListener("change", () => {
             clearFeedback();
-            loadProduction();
+            updateQuantityFieldFromSummary();
+        });
+
+        hourSelect.addEventListener("change", () => {
+            clearFeedback();
+            updateQuantityFieldFromSummary();
         });
 
         dateInput.addEventListener("change", () => {
             clearFeedback();
-            loadProduction();
+            loadProductionSummary();
         });
 
         productionTableBody.addEventListener("click", (event) => {
-            const row = event.target.closest("tr");
+            const machineCell = event.target.closest("td[data-machine-code]");
+            if (machineCell) {
+                const row = machineCell.closest("tr[data-hour]");
+                if (row?.dataset.hour) {
+                    hourSelect.value = String(Number(row.dataset.hour));
+                }
+
+                const machineCode = machineCell.dataset.machineCode;
+                const option = Array.from(machineSelect.options).find(
+                    (opt) => opt.value === machineCode,
+                );
+                if (option) {
+                    machineSelect.value = machineCode;
+                }
+
+                const qty = Number(machineCell.dataset.quantity ?? 0);
+                quantityInput.value = formatQuantity(qty);
+                clearFeedback();
+                return;
+            }
+
+            const row = event.target.closest("tr[data-hour]");
             if (!row || !row.dataset.hour) {
                 return;
             }
 
-            hourSelect.value = row.dataset.hour;
-            const qty = Number(row.dataset.quantity ?? 0);
-            quantityInput.value = Number.isFinite(qty) ? qty.toFixed(2) : "";
+            hourSelect.value = String(Number(row.dataset.hour));
+            updateQuantityFieldFromSummary();
+            clearFeedback();
         });
 
         fetchMachines();

@@ -116,8 +116,36 @@
                     </div>
                 </article>
             </div>
+            <section class="production-chart" aria-labelledby="production-chart-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="production-chart-title">Monthly production</h2>
+                        <p>Review day-by-day output and spot trends instantly.</p>
+                    </div>
+                    <div class="production-chart__controls">
+                        <label class="production-chart__select">
+                            <span>Time period</span>
+                            <select id="production-period">
+                                <option value="2024-08">August 2024</option>
+                                <option value="2024-07">July 2024</option>
+                                <option value="2024-06">June 2024</option>
+                            </select>
+                        </label>
+                        <button type="button" class="button button--ghost" id="production-compare-toggle" aria-pressed="false">
+                            Compare with previous month
+                        </button>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="production-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas id="production-chart" height="320" aria-label="Daily production bar chart" role="img"></canvas>
+                    </div>
+                </div>
+            </section>
         </section>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-2hsX9lbZx66ijOEX08NEz6q0Go7slp6eyfrSxgJQnJ6vq6VI0RZIueukgPHmR8h4" crossorigin="anonymous"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -152,6 +180,209 @@
             localStorage.removeItem("samprox_user");
             window.location.href = "/";
         });
+
+        const monthlyProduction = {
+            "2024-06": {
+                label: "June 2024",
+                days: 30,
+                values: [118, 124, 129, 121, 132, 128, 136, 138, 140, 134, 129, 133, 137, 141, 139, 144, 138, 142, 145, 147, 149, 148, 152, 150, 153, 155, 158, 154, 157, 160],
+            },
+            "2024-07": {
+                label: "July 2024",
+                days: 31,
+                values: [122, 128, 135, 138, 140, 144, 142, 147, 151, 149, 152, 155, 158, 162, 166, 168, 170, 167, 169, 172, 174, 170, 168, 171, 175, 179, 176, 173, 177, 180, 182],
+            },
+            "2024-08": {
+                label: "August 2024",
+                days: 31,
+                values: [130, 135, 138, 142, 145, 149, 151, 155, 158, 160, 162, 165, 167, 170, 172, 175, 178, 181, 185, 188, 190, 187, 189, 192, 195, 198, 200, 202, 205, 207, 210],
+            },
+        };
+
+        const periodSelect = document.getElementById("production-period");
+        const compareToggle = document.getElementById("production-compare-toggle");
+        const summaryContainer = document.getElementById("production-summary");
+        const chartCanvas = document.getElementById("production-chart");
+
+        const formatNumber = (value) => value.toLocaleString();
+
+        const buildSummary = (values, compareValues = null) => {
+            const total = values.reduce((sum, value) => sum + value, 0);
+            const average = Math.round(total / values.length);
+            const peakValue = Math.max(...values);
+            const peakDay = values.indexOf(peakValue) + 1;
+
+            const summaryMetrics = [
+                {
+                    label: "Total units",
+                    value: formatNumber(total),
+                },
+                {
+                    label: "Average / day",
+                    value: formatNumber(average),
+                },
+                {
+                    label: "Peak day",
+                    value: `Day ${peakDay} – ${formatNumber(peakValue)} units`,
+                },
+            ];
+
+            if (compareValues) {
+                const compareTotal = compareValues.reduce((sum, value) => sum + value, 0);
+                const delta = total - compareTotal;
+                const deltaPercentage = ((delta / compareTotal) * 100).toFixed(1);
+                summaryMetrics.push({
+                    label: "Change vs. prior month",
+                    value: `${delta >= 0 ? "+" : ""}${formatNumber(delta)} units (${deltaPercentage}%)`,
+                });
+            }
+
+            summaryContainer.innerHTML = summaryMetrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.value}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const getPreviousPeriodKey = (periodKey) => {
+            const periodKeys = Object.keys(monthlyProduction).sort();
+            const index = periodKeys.indexOf(periodKey);
+            if (index <= 0) {
+                return null;
+            }
+            return periodKeys[index - 1];
+        };
+
+        const buildDataset = (periodKey, includePrevious = false) => {
+            const period = monthlyProduction[periodKey];
+            if (!period) {
+                return null;
+            }
+
+            const labels = Array.from({ length: period.days }, (_, index) => index + 1);
+
+            const datasets = [
+                {
+                    label: period.label,
+                    data: [...period.values],
+                    backgroundColor: "rgba(37, 99, 235, 0.65)",
+                    borderRadius: 6,
+                    maxBarThickness: 18,
+                },
+            ];
+
+            let compareValues = null;
+
+            if (includePrevious) {
+                const previousKey = getPreviousPeriodKey(periodKey);
+                if (previousKey) {
+                    const previousPeriod = monthlyProduction[previousKey];
+                    compareValues = previousPeriod.values;
+                    const comparisonData = labels.map((_, index) => {
+                        if (index < previousPeriod.values.length) {
+                            return previousPeriod.values[index];
+                        }
+                        return null;
+                    });
+                    datasets.push({
+                        label: previousPeriod.label,
+                        data: comparisonData,
+                        backgroundColor: "rgba(148, 163, 184, 0.65)",
+                        borderRadius: 6,
+                        maxBarThickness: 18,
+                    });
+                }
+            }
+
+            buildSummary(period.values, compareValues);
+            return { labels, datasets };
+        };
+
+        const buildChart = () => {
+            const periodKey = periodSelect.value;
+            const includePrevious = compareToggle.getAttribute("aria-pressed") === "true";
+            const dataset = buildDataset(periodKey, includePrevious);
+            if (!dataset) {
+                return;
+            }
+
+            if (window.productionChartInstance) {
+                window.productionChartInstance.data.labels = dataset.labels;
+                window.productionChartInstance.data.datasets = dataset.datasets;
+                window.productionChartInstance.update();
+                return;
+            }
+
+            window.productionChartInstance = new Chart(chartCanvas, {
+                type: "bar",
+                data: dataset,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: "Day of month",
+                            },
+                            grid: {
+                                display: false,
+                            },
+                            ticks: {
+                                maxRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                            },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: "Units produced",
+                            },
+                            ticks: {
+                                callback: (value) => formatNumber(value),
+                            },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                usePointStyle: true,
+                            },
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const label = context.dataset.label || "";
+                                    const value = context.parsed.y;
+                                    return `${label}: ${formatNumber(value)} units`;
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+        };
+
+        periodSelect.addEventListener("change", () => {
+            buildChart();
+        });
+
+        compareToggle.addEventListener("click", () => {
+            const isActive = compareToggle.getAttribute("aria-pressed") === "true";
+            compareToggle.setAttribute("aria-pressed", String(!isActive));
+            compareToggle.classList.toggle("button--active", !isActive);
+            buildChart();
+        });
+
+        buildChart();
     </script>
 </body>
 </html>

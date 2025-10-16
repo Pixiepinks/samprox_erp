@@ -327,6 +327,107 @@ body {
     gap: 1.5rem;
 }
 
+.production-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 2.5rem;
+}
+
+.production-chart__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.production-chart__header h2 {
+    margin: 0 0 0.25rem;
+}
+
+.production-chart__header p {
+    margin: 0;
+    color: #475569;
+}
+
+.production-chart__body {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.production-chart__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.production-chart__select {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.production-chart__select select {
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.65);
+    padding: 0.55rem 0.75rem;
+    font: inherit;
+    background: #fff;
+    min-width: 160px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.production-chart__select select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.button--ghost.button--active {
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+}
+
+.production-chart__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.production-chart__metric {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 14px;
+    padding: 0.9rem 1.1rem;
+    min-width: 180px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.production-chart__metric-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+}
+
+.production-chart__metric-value {
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: #0f172a;
+}
+
+.production-chart__canvas {
+    position: relative;
+    width: 100%;
+    height: 320px;
+}
+
 .production-summary {
     display: inline-flex;
     flex-direction: column;

@@ -9,7 +9,18 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from config import Config, current_database_url
 from extensions import db, migrate, jwt
 from models import Customer, RoleEnum, SalesActualEntry, SalesForecastEntry, User
-from routes import auth, jobs, quotation, labor, materials, machines, production, reports, ui
+from routes import (
+    auth,
+    jobs,
+    labor,
+    machines,
+    market,
+    materials,
+    production,
+    reports,
+    quotation,
+    ui,
+)
 
 def create_app():
     app = Flask(__name__)

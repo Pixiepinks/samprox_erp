@@ -216,9 +216,54 @@ class DailyProductionEntry(db.Model):
         )
 
 
+class CustomerCategory(str, Enum):
+    PLANTATION = "plantation"
+    INDUSTRIAL = "industrial"
+
+
+class CustomerCreditTerm(str, Enum):
+    CASH = "cash"
+    DAYS_14 = "14_days"
+    DAYS_30 = "30_days"
+    DAYS_45 = "45_days"
+    DAYS_60 = "60_days"
+
+
+class CustomerTransportMode(str, Enum):
+    SAMPROX_LORRY = "samprox_lorry"
+    CUSTOMER_LORRY = "customer_lorry"
+
+
+class CustomerType(str, Enum):
+    REGULAR = "regular"
+    SEASONAL = "seasonal"
+
+
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
+    category = db.Column(
+        db.Enum(CustomerCategory), nullable=False, default=CustomerCategory.PLANTATION
+    )
+    credit_term = db.Column(
+        db.Enum(CustomerCreditTerm), nullable=False, default=CustomerCreditTerm.CASH
+    )
+    transport_mode = db.Column(
+        db.Enum(CustomerTransportMode),
+        nullable=False,
+        default=CustomerTransportMode.SAMPROX_LORRY,
+    )
+    customer_type = db.Column(
+        db.Enum(CustomerType), nullable=False, default=CustomerType.REGULAR
+    )
+    sales_coordinator_name = db.Column(db.String(120), nullable=False, default="")
+    sales_coordinator_phone = db.Column(db.String(50), nullable=False, default="")
+    store_keeper_name = db.Column(db.String(120), nullable=False, default="")
+    store_keeper_phone = db.Column(db.String(50), nullable=False, default="")
+    payment_coordinator_name = db.Column(db.String(120), nullable=False, default="")
+    payment_coordinator_phone = db.Column(db.String(50), nullable=False, default="")
+    special_note = db.Column(db.Text, nullable=False, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

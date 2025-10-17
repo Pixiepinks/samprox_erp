@@ -36,12 +36,15 @@ def _normalize_db_url(url: str) -> str:
     return urlunparse(parsed)
 
 
+def current_database_url() -> str:
+    return _normalize_db_url(os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL))
+
+
 class Config:
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "SQLALCHEMY_DATABASE_URI", current_database_url()
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=10)
     ENV = os.getenv("FLASK_ENV", "production")
-
-
-def current_database_url() -> str:
-    return _normalize_db_url(os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL))

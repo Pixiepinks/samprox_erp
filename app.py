@@ -3,8 +3,9 @@ from typing import Optional, Tuple
 
 import click
 from flask import Flask, jsonify
-from sqlalchemy import func
+from sqlalchemy import create_engine, func, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.engine import make_url
 
 from config import Config, current_database_url
 from extensions import db, migrate, jwt
@@ -22,10 +23,48 @@ from routes import (
     ui,
 )
 
+
+def _ensure_database_exists(database_url: str) -> None:
+    """Ensure the target database exists for PostgreSQL connections."""
+
+    try:
+        url = make_url(database_url)
+    except Exception:
+        return
+
+    if url.get_backend_name() not in {"postgresql", "postgresql+psycopg2"}:
+        return
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        orig = getattr(exc, "orig", None)
+        if getattr(orig, "pgcode", None) != "3D000":
+            raise
+
+        engine.dispose()
+
+        maintenance_url = url.set(database="postgres")
+        maintenance_engine = create_engine(maintenance_url)
+        try:
+            with maintenance_engine.connect() as connection:
+                connection = connection.execution_options(isolation_level="AUTOCOMMIT")
+                connection.execute(text(f'CREATE DATABASE "{url.database}"'))
+                print(f"✅ Created missing database: {url.database}")
+        finally:
+            maintenance_engine.dispose()
+    finally:
+        engine.dispose()
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    app.config["SQLALCHEMY_DATABASE_URI"] = current_database_url()
+    database_url = current_database_url()
+    _ensure_database_exists(database_url)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -196,8 +235,6 @@ def _bootstrap_accessall_user():
         print(f"✅ Accessall password reset: {normalized_email}")
     elif status == "updated":
         print(f"✅ Accessall user updated: {normalized_email}")
-
-
 # Call the hooks at startup (idempotent)
 _bootstrap_admin_user()
 _bootstrap_accessall_user()

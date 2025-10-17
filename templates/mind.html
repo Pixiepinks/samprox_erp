@@ -124,12 +124,12 @@
                     </div>
                     <div class="production-chart__controls">
                         <label class="production-chart__select">
-                            <span>Time period</span>
-                            <select id="production-period">
-                                <option value="2024-08">August 2024</option>
-                                <option value="2024-07">July 2024</option>
-                                <option value="2024-06">June 2024</option>
-                            </select>
+                            <span>Year</span>
+                            <select id="production-year"></select>
+                        </label>
+                        <label class="production-chart__select">
+                            <span>Month</span>
+                            <select id="production-month"></select>
                         </label>
                         <button type="button" class="button button--ghost" id="production-compare-toggle" aria-pressed="false">
                             Compare with previous month
@@ -181,7 +181,8 @@
             window.location.href = "/";
         });
 
-        const periodSelect = document.getElementById("production-period");
+        const yearSelect = document.getElementById("production-year");
+        const monthSelect = document.getElementById("production-month");
         const compareToggle = document.getElementById("production-compare-toggle");
         const summaryContainer = document.getElementById("production-summary");
         const chartCanvas = document.getElementById("production-chart");
@@ -198,6 +199,87 @@
             minimumFractionDigits: 0,
             maximumFractionDigits: 1,
         });
+
+        const availablePeriods = [
+            { value: "2024-08", label: "August 2024" },
+            { value: "2024-07", label: "July 2024" },
+            { value: "2024-06", label: "June 2024" },
+        ].map((item) => {
+            const [year, month] = item.value.split("-");
+            const monthIndex = Number(month) - 1;
+            const monthLabel = new Date(Number(year), monthIndex, 1).toLocaleString(undefined, {
+                month: "long",
+            });
+            return {
+                ...item,
+                year,
+                month,
+                monthLabel,
+            };
+        });
+        const availableYears = [...new Set(availablePeriods.map((period) => period.year))];
+
+        const populateYearOptions = () => {
+            yearSelect.innerHTML = "";
+            availableYears.forEach((year, index) => {
+                const option = document.createElement("option");
+                option.value = year;
+                option.textContent = year;
+                if (index === 0) {
+                    option.selected = true;
+                }
+                yearSelect.append(option);
+            });
+            yearSelect.disabled = availableYears.length === 0;
+        };
+
+        const populateMonthOptions = (year, selectedValue = null) => {
+            monthSelect.innerHTML = "";
+            const monthsForYear = availablePeriods.filter((period) => period.year === year);
+
+            if (monthsForYear.length === 0) {
+                const placeholderOption = document.createElement("option");
+                placeholderOption.value = "";
+                placeholderOption.textContent = "No months available";
+                placeholderOption.selected = true;
+                monthSelect.append(placeholderOption);
+                monthSelect.disabled = true;
+                return;
+            }
+
+            monthsForYear.forEach((period, index) => {
+                const option = document.createElement("option");
+                option.value = period.value;
+                option.textContent = period.monthLabel;
+                if (
+                    (selectedValue && selectedValue === period.value) ||
+                    (!selectedValue && index === 0)
+                ) {
+                    option.selected = true;
+                }
+                monthSelect.append(option);
+            });
+
+            monthSelect.disabled = false;
+        };
+
+        const initializePeriodSelectors = () => {
+            populateYearOptions();
+            if (availablePeriods.length === 0) {
+                showSummaryError("No production periods available.");
+                return false;
+            }
+
+            const initialPeriod = availablePeriods[0];
+            yearSelect.value = initialPeriod.year;
+            populateMonthOptions(initialPeriod.year, initialPeriod.value);
+            return true;
+        };
+
+        const getSelectedPeriodKey = () => {
+            const periodKey = monthSelect.value;
+            return periodKey ? periodKey : null;
+        };
 
         const periodCache = new Map();
 
@@ -385,7 +467,7 @@
             `;
 
             try {
-                const periodKey = periodSelect.value;
+                const periodKey = getSelectedPeriodKey();
                 const includePrevious = compareToggle.getAttribute("aria-pressed") === "true";
                 const dataset = await buildDataset(periodKey, includePrevious);
                 if (!dataset) {
@@ -464,7 +546,15 @@
             });
         };
 
-        periodSelect.addEventListener("change", () => {
+        const selectorsInitialized = initializePeriodSelectors();
+
+        yearSelect.addEventListener("change", () => {
+            const previousSelection = getSelectedPeriodKey();
+            populateMonthOptions(yearSelect.value, previousSelection);
+            refreshChart();
+        });
+
+        monthSelect.addEventListener("change", () => {
             refreshChart();
         });
 
@@ -475,7 +565,9 @@
             refreshChart();
         });
 
-        refreshChart();
+        if (selectorsInitialized) {
+            refreshChart();
+        }
     </script>
 </body>
 </html>

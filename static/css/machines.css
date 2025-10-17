@@ -311,9 +311,18 @@ body {
     align-items: stretch;
 }
 
+.panel--menu {
+    position: relative;
+}
+
 .input-menu {
     position: relative;
     width: min(260px, 100%);
+    z-index: 1;
+}
+
+.input-menu.is-open {
+    z-index: 5;
 }
 
 .input-menu__toggle {
@@ -361,6 +370,7 @@ body {
 .input-menu__list {
     position: absolute;
     inset-inline-start: 0;
+    top: calc(100% + 0.35rem);
     margin: 0;
     padding: 0.5rem 0;
     list-style: none;
@@ -368,10 +378,10 @@ body {
     background: rgba(255, 255, 255, 0.98);
     border-radius: 16px;
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
-    transform: translateY(-6px);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateY(-6px);
     z-index: 10;
 }
 

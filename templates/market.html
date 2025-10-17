@@ -499,6 +499,7 @@
                 return;
             }
 
+            let hasUpdates = false;
             customers.forEach((customer) => {
                 const normalized = normalizeCustomer(customer);
                 if (!normalized) {
@@ -570,8 +571,7 @@
             refreshCustomerSelectors();
         }
 
-        function updateEntryTotal() {
-            if (!entryTotalOutput) {
+            if (!hasUpdates && customerSelect.options.length > 0) {
                 return;
             }
 
@@ -807,111 +807,10 @@
                     }
                 }
             });
-        }
 
-        if (entryForm) {
-            if (entryDateInput) {
-                const today = new Date().toISOString().split("T")[0];
-                entryDateInput.value = today;
+            if (currentValue && knownCustomers.has(Number(currentValue))) {
+                customerSelect.value = currentValue;
             }
-
-            updateEntryTotal();
-
-            if (entryUnitPriceInput) {
-                entryUnitPriceInput.addEventListener("input", updateEntryTotal);
-                entryUnitPriceInput.addEventListener("change", updateEntryTotal);
-            }
-
-            if (entryQuantityInput) {
-                entryQuantityInput.addEventListener("input", updateEntryTotal);
-                entryQuantityInput.addEventListener("change", updateEntryTotal);
-            }
-
-            entryForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-
-                if (!token) {
-                    setEntryFeedback("You are not signed in.", "error");
-                    return;
-                }
-
-                if (!entryCustomerSelect || !entryDateInput || !entryTypeSelect || !entryUnitPriceInput || !entryQuantityInput) {
-                    setEntryFeedback("Sales entry form is not ready.", "error");
-                    return;
-                }
-
-                const customerValue = entryCustomerSelect.value;
-                if (!customerValue || customerValue === addCustomerOptionValue) {
-                    setEntryFeedback("Please select a customer.", "error");
-                    return;
-                }
-
-                const dateValue = entryDateInput.value;
-                if (!dateValue) {
-                    setEntryFeedback("Please choose a date.", "error");
-                    return;
-                }
-
-                const unitPriceValue = Number(entryUnitPriceInput.value);
-                const quantityValue = Number(entryQuantityInput.value);
-
-                if (!Number.isFinite(unitPriceValue) || unitPriceValue < 0 || !Number.isFinite(quantityValue) || quantityValue < 0) {
-                    setEntryFeedback("Enter valid unit price and quantity values.", "error");
-                    return;
-                }
-
-                const payload = {
-                    date: dateValue,
-                    customer_id: Number(customerValue),
-                    sale_type: entryTypeSelect.value,
-                    unit_price: unitPriceValue,
-                    quantity_tons: quantityValue,
-                };
-
-                setEntryFeedback("Saving sales entry…");
-                if (entrySubmitButton) {
-                    entrySubmitButton.disabled = true;
-                }
-
-                try {
-                    const response = await fetch("/api/market/sales", {
-                        method: "POST",
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                            Accept: "application/json",
-                        },
-                        body: JSON.stringify(payload),
-                    });
-
-                    if (response.status === 401) {
-                        handleUnauthorized();
-                        return;
-                    }
-
-                    const data = await response.json().catch(() => ({}));
-                    if (!response.ok) {
-                        throw new Error(data.msg || "Unable to save sales entry.");
-                    }
-
-                    setEntryFeedback("Sales entry recorded successfully.", "success");
-                    if (entryUnitPriceInput) {
-                        entryUnitPriceInput.value = "";
-                    }
-                    if (entryQuantityInput) {
-                        entryQuantityInput.value = "";
-                    }
-                    updateEntryTotal();
-                    await loadReport();
-                } catch (error) {
-                    console.error(error);
-                    setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
-                } finally {
-                    if (entrySubmitButton) {
-                        entrySubmitButton.disabled = false;
-                    }
-                }
-            });
         }
 
         populateCustomerFormOptions();
@@ -1089,7 +988,7 @@
         }
 
         async function loadReport() {
-            if (!token || !monthSelect || !yearSelect || !submitButton || !resultsEl) {
+            if (!token) {
                 return;
             }
 
@@ -1119,7 +1018,9 @@
                 });
 
                 if (response.status === 401) {
-                    handleUnauthorized();
+                    localStorage.removeItem("samprox_token");
+                    localStorage.removeItem("samprox_user");
+                    window.location.href = "/";
                     return;
                 }
 

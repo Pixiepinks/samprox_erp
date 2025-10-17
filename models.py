@@ -241,6 +241,7 @@ class CustomerType(str, Enum):
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
     category = db.Column(db.Enum(CustomerCategory), nullable=False)
     credit_term = db.Column(db.Enum(CustomerCreditTerm), nullable=False)

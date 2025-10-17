@@ -1,6 +1,7 @@
 """REST endpoints for manufacturing daily production tracking."""
 
-from datetime import date as dt_date
+import calendar
+from datetime import date as dt_date, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
@@ -8,6 +9,7 @@ from flask_jwt_extended import get_jwt, jwt_required
 from extensions import db
 from models import DailyProductionEntry, MachineAsset, RoleEnum
 from schemas import DailyProductionEntrySchema
+from sqlalchemy import func
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
@@ -185,5 +187,112 @@ def get_daily_production():
         "entries": results,
         "total_quantity_tons": round(total_quantity, 3),
     }
+
+    return jsonify(response)
+
+
+@bp.get("/monthly-summary")
+@jwt_required()
+def get_monthly_summary():
+    """Return aggregated production totals for each day of a month."""
+
+    if not require_role(
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    period_raw = (request.args.get("period") or "").strip()
+
+    if period_raw:
+        try:
+            year_str, month_str = period_raw.split("-", 1)
+            year = int(year_str)
+            month = int(month_str)
+            if month < 1 or month > 12:
+                raise ValueError
+            reference_date = dt_date(year, month, 1)
+        except (ValueError, AttributeError):
+            return jsonify({"msg": "Invalid period. Use YYYY-MM format."}), 400
+    else:
+        today = dt_date.today()
+        reference_date = dt_date(today.year, today.month, 1)
+
+    _, days_in_month = calendar.monthrange(reference_date.year, reference_date.month)
+    start_date = reference_date
+    end_date = reference_date + timedelta(days=days_in_month - 1)
+
+    asset_payload = {
+        "asset_id": request.args.get("asset_id"),
+        "machine_code": request.args.get("machine_code"),
+    }
+    asset = None
+
+    if asset_payload["asset_id"] is not None or asset_payload["machine_code"]:
+        try:
+            asset = _get_asset(asset_payload)
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+        except LookupError as exc:
+            return jsonify({"msg": str(exc)}), 404
+
+    query = db.session.query(
+        DailyProductionEntry.date,
+        func.sum(DailyProductionEntry.quantity_tons).label("total_quantity"),
+    ).filter(
+        DailyProductionEntry.date >= start_date,
+        DailyProductionEntry.date <= end_date,
+    )
+
+    if asset is not None:
+        query = query.filter(DailyProductionEntry.asset_id == asset.id)
+
+    rows = query.group_by(DailyProductionEntry.date).order_by(DailyProductionEntry.date).all()
+
+    totals_by_day = {}
+    for row in rows:
+        entry_date, total_quantity = row
+        try:
+            quantity = float(total_quantity or 0.0)
+        except (TypeError, ValueError):
+            quantity = 0.0
+        totals_by_day[entry_date.day] = round(quantity, 3)
+
+    values = [
+        totals_by_day.get(day, 0.0) for day in range(1, days_in_month + 1)
+    ]
+
+    total_quantity_tons = round(sum(values), 3)
+    average_quantity_tons = round(total_quantity_tons / days_in_month, 3) if days_in_month else 0.0
+
+    peak_day = None
+    peak_quantity = 0.0
+    if values:
+        peak_quantity = max(values)
+        try:
+            peak_index = values.index(peak_quantity)
+        except ValueError:
+            peak_index = None
+        if peak_index is not None:
+            peak_day = peak_index + 1
+
+    response = {
+        "period": f"{reference_date.year:04d}-{reference_date.month:02d}",
+        "label": reference_date.strftime("%B %Y"),
+        "days": days_in_month,
+        "values": values,
+        "total_quantity_tons": total_quantity_tons,
+        "average_quantity_tons": average_quantity_tons,
+        "peak_day": peak_day,
+        "peak_quantity_tons": peak_quantity,
+    }
+
+    if asset is not None:
+        response["machine"] = {
+            "id": asset.id,
+            "code": asset.code,
+            "name": asset.name,
+        }
 
     return jsonify(response)

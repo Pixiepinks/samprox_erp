@@ -71,6 +71,67 @@
                     </p>
                 </article>
             </div>
+            <article class="production-card sales-entry" aria-labelledby="sales-entry-title">
+                <div>
+                    <h2 id="sales-entry-title">Record sales entry</h2>
+                    <p class="sales-entry__subtitle">
+                        Capture forecasted or actual sales to instantly refresh the performance report below.
+                    </p>
+                </div>
+                <form id="sales-entry-form" class="sales-entry__form" aria-label="Record sales entry">
+                    <label class="sales-entry__field" for="sales-entry-date">
+                        <span class="sales-entry__label">Date</span>
+                        <input type="date" id="sales-entry-date" name="date" class="sales-entry__input" required />
+                    </label>
+                    <label class="sales-entry__field" for="sales-entry-customer">
+                        <span class="sales-entry__label">Customer</span>
+                        <select id="sales-entry-customer" name="customer_id" class="sales-entry__select" required></select>
+                    </label>
+                    <label class="sales-entry__field" for="sales-entry-type">
+                        <span class="sales-entry__label">Entry type</span>
+                        <select id="sales-entry-type" name="sale_type" class="sales-entry__select" required>
+                            <option value="actual">Actual sale</option>
+                            <option value="forecast">Forecast sale</option>
+                        </select>
+                    </label>
+                    <label class="sales-entry__field" for="sales-entry-unit-price">
+                        <span class="sales-entry__label">Unit price (Rs/Ton)</span>
+                        <input
+                            type="number"
+                            id="sales-entry-unit-price"
+                            name="unit_price"
+                            class="sales-entry__input"
+                            inputmode="decimal"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            required
+                        />
+                    </label>
+                    <label class="sales-entry__field" for="sales-entry-quantity">
+                        <span class="sales-entry__label">Quantity (Tons)</span>
+                        <input
+                            type="number"
+                            id="sales-entry-quantity"
+                            name="quantity_tons"
+                            class="sales-entry__input"
+                            inputmode="decimal"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            required
+                        />
+                    </label>
+                    <div class="sales-entry__field">
+                        <span class="sales-entry__label">Sales value (Rs)</span>
+                        <output id="sales-entry-total" class="sales-entry__total" aria-live="polite">0.00</output>
+                    </div>
+                    <div class="sales-entry__actions">
+                        <button type="submit" class="button" id="sales-entry-submit">Save entry</button>
+                    </div>
+                </form>
+                <p id="sales-entry-feedback" class="sales-entry__feedback" role="status" aria-live="polite"></p>
+            </article>
             <article class="production-card sales-report" aria-labelledby="sales-report-title">
                 <div class="production-card__header">
                     <div>
@@ -127,14 +188,28 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
+        const entryForm = document.getElementById("sales-entry-form");
+        const entryDateInput = document.getElementById("sales-entry-date");
+        const entryCustomerSelect = document.getElementById("sales-entry-customer");
+        const entryTypeSelect = document.getElementById("sales-entry-type");
+        const entryUnitPriceInput = document.getElementById("sales-entry-unit-price");
+        const entryQuantityInput = document.getElementById("sales-entry-quantity");
+        const entryTotalOutput = document.getElementById("sales-entry-total");
+        const entryFeedbackEl = document.getElementById("sales-entry-feedback");
+        const entrySubmitButton = document.getElementById("sales-entry-submit");
+        const addCustomerOptionValue = "__create__";
+
+        function handleUnauthorized() {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        }
 
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
 
         logoutButton.addEventListener("click", () => {
-            localStorage.removeItem("samprox_token");
-            localStorage.removeItem("samprox_user");
-            window.location.href = "/";
+            handleUnauthorized();
         });
 
         const monthNames = [
@@ -209,45 +284,330 @@
             feedbackEl.classList.add("sales-report__feedback--visible");
         }
 
-        function updateCustomerOptions(customers) {
-            if (!Array.isArray(customers) || !customerSelect) {
+        function setEntryFeedback(message, variant = "info") {
+            if (!entryFeedbackEl) {
                 return;
             }
 
-            let hasUpdates = false;
+            const variants = ["sales-entry__feedback--error", "sales-entry__feedback--success"];
+            entryFeedbackEl.classList.remove("sales-entry__feedback--visible", ...variants);
+
+            if (!message) {
+                entryFeedbackEl.textContent = "";
+                return;
+            }
+
+            entryFeedbackEl.textContent = message;
+            if (variant === "error") {
+                entryFeedbackEl.classList.add("sales-entry__feedback--error");
+            } else if (variant === "success") {
+                entryFeedbackEl.classList.add("sales-entry__feedback--success");
+            }
+            entryFeedbackEl.classList.add("sales-entry__feedback--visible");
+        }
+
+        function registerCustomers(customers) {
+            if (!Array.isArray(customers)) {
+                return;
+            }
+
             customers.forEach((customer) => {
-                if (!knownCustomers.has(customer.customer_id)) {
-                    knownCustomers.set(customer.customer_id, customer.customer_name);
-                    hasUpdates = true;
+                const id = Number(customer.customer_id ?? customer.id);
+                const name = customer.customer_name ?? customer.name;
+                if (!id || !name) {
+                    return;
+                }
+                const existingName = knownCustomers.get(id);
+                if (existingName !== name) {
+                    knownCustomers.set(id, name);
                 }
             });
+        }
 
-            if (!hasUpdates && customerSelect.options.length > 0) {
+        function refreshCustomerSelectors() {
+            const sorted = Array.from(knownCustomers.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+            if (customerSelect) {
+                const previousValue = customerSelect.value;
+                customerSelect.innerHTML = "";
+                const defaultOption = document.createElement("option");
+                defaultOption.value = "";
+                defaultOption.textContent = "All customers";
+                customerSelect.appendChild(defaultOption);
+
+                sorted.forEach(([id, name]) => {
+                    const option = document.createElement("option");
+                    option.value = String(id);
+                    option.textContent = name;
+                    customerSelect.appendChild(option);
+                });
+
+                if (previousValue && customerSelect.querySelector(`option[value="${previousValue}"]`)) {
+                    customerSelect.value = previousValue;
+                }
+            }
+
+            if (entryCustomerSelect) {
+                const previousValue =
+                    entryCustomerSelect.value && entryCustomerSelect.value !== addCustomerOptionValue
+                        ? entryCustomerSelect.value
+                        : "";
+                entryCustomerSelect.innerHTML = "";
+
+                const placeholderOption = document.createElement("option");
+                placeholderOption.value = "";
+                placeholderOption.textContent = "Select a customer";
+                entryCustomerSelect.appendChild(placeholderOption);
+
+                const createOption = document.createElement("option");
+                createOption.value = addCustomerOptionValue;
+                createOption.textContent = "➕ Add new customer";
+                entryCustomerSelect.appendChild(createOption);
+
+                sorted.forEach(([id, name]) => {
+                    const option = document.createElement("option");
+                    option.value = String(id);
+                    option.textContent = name;
+                    entryCustomerSelect.appendChild(option);
+                });
+
+                if (previousValue && entryCustomerSelect.querySelector(`option[value="${previousValue}"]`)) {
+                    entryCustomerSelect.value = previousValue;
+                } else {
+                    entryCustomerSelect.value = "";
+                }
+            }
+        }
+
+        function updateCustomerOptions(customers) {
+            registerCustomers(customers);
+            refreshCustomerSelectors();
+        }
+
+        function updateEntryTotal() {
+            if (!entryTotalOutput) {
                 return;
             }
 
-            const currentValue = customerSelect.value;
-            customerSelect.innerHTML = "";
-            const defaultOption = document.createElement("option");
-            defaultOption.value = "";
-            defaultOption.textContent = "All customers";
-            customerSelect.appendChild(defaultOption);
+            const unit = Number.parseFloat(entryUnitPriceInput?.value ?? "0");
+            const quantity = Number.parseFloat(entryQuantityInput?.value ?? "0");
+            const safeUnit = Number.isFinite(unit) ? unit : 0;
+            const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+            const total = safeUnit * safeQuantity;
+            entryTotalOutput.textContent = numberFormatter.format(total || 0);
+        }
 
-            const sorted = Array.from(knownCustomers.entries()).sort((a, b) => {
-                return a[1].localeCompare(b[1]);
+        async function createCustomer(name) {
+            if (!token) {
+                return null;
+            }
+
+            const response = await fetch("/api/market/customers", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({ name }),
             });
 
-            sorted.forEach(([id, name]) => {
-                const option = document.createElement("option");
-                option.value = String(id);
-                option.textContent = name;
-                customerSelect.appendChild(option);
-            });
+            if (response.status === 401) {
+                handleUnauthorized();
+                return null;
+            }
 
-            if (currentValue && knownCustomers.has(Number(currentValue))) {
-                customerSelect.value = currentValue;
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 409 && data.customer) {
+                    return { customer: data.customer, alreadyExists: true };
+                }
+                throw new Error(data.msg || "Unable to create customer.");
+            }
+
+            return { customer: data.customer, alreadyExists: false };
+        }
+
+        async function loadCustomers() {
+            if (!token) {
+                refreshCustomerSelectors();
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/market/customers", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error("Unable to load customers");
+                }
+
+                const data = await response.json();
+                registerCustomers(data.customers || []);
+            } catch (error) {
+                console.error(error);
+            } finally {
+                refreshCustomerSelectors();
             }
         }
+
+        if (entryCustomerSelect) {
+            entryCustomerSelect.addEventListener("change", async (event) => {
+                if (event.target.value !== addCustomerOptionValue) {
+                    return;
+                }
+
+                const name = window.prompt("Enter the new customer name:");
+                if (!name) {
+                    entryCustomerSelect.value = "";
+                    return;
+                }
+
+                const trimmedName = name.trim();
+                if (!trimmedName) {
+                    entryCustomerSelect.value = "";
+                    setEntryFeedback("Customer name cannot be empty.", "error");
+                    return;
+                }
+
+                try {
+                    const result = await createCustomer(trimmedName);
+                    if (!result || !result.customer) {
+                        entryCustomerSelect.value = "";
+                        return;
+                    }
+                    const { customer, alreadyExists } = result;
+                    registerCustomers([customer]);
+                    refreshCustomerSelectors();
+                    entryCustomerSelect.value = String(customer.id);
+                    const message = alreadyExists
+                        ? `Customer "${customer.name}" already exists and is ready to use.`
+                        : `Customer "${customer.name}" created successfully.`;
+                    setEntryFeedback(message, "success");
+                } catch (error) {
+                    console.error(error);
+                    entryCustomerSelect.value = "";
+                    setEntryFeedback(error?.message || "Unable to create customer.", "error");
+                }
+            });
+        }
+
+        if (entryForm) {
+            if (entryDateInput) {
+                const today = new Date().toISOString().split("T")[0];
+                entryDateInput.value = today;
+            }
+
+            updateEntryTotal();
+
+            if (entryUnitPriceInput) {
+                entryUnitPriceInput.addEventListener("input", updateEntryTotal);
+                entryUnitPriceInput.addEventListener("change", updateEntryTotal);
+            }
+
+            if (entryQuantityInput) {
+                entryQuantityInput.addEventListener("input", updateEntryTotal);
+                entryQuantityInput.addEventListener("change", updateEntryTotal);
+            }
+
+            entryForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                if (!token) {
+                    setEntryFeedback("You are not signed in.", "error");
+                    return;
+                }
+
+                if (!entryCustomerSelect || !entryDateInput || !entryTypeSelect || !entryUnitPriceInput || !entryQuantityInput) {
+                    setEntryFeedback("Sales entry form is not ready.", "error");
+                    return;
+                }
+
+                const customerValue = entryCustomerSelect.value;
+                if (!customerValue || customerValue === addCustomerOptionValue) {
+                    setEntryFeedback("Please select a customer.", "error");
+                    return;
+                }
+
+                const dateValue = entryDateInput.value;
+                if (!dateValue) {
+                    setEntryFeedback("Please choose a date.", "error");
+                    return;
+                }
+
+                const unitPriceValue = Number(entryUnitPriceInput.value);
+                const quantityValue = Number(entryQuantityInput.value);
+
+                if (!Number.isFinite(unitPriceValue) || unitPriceValue < 0 || !Number.isFinite(quantityValue) || quantityValue < 0) {
+                    setEntryFeedback("Enter valid unit price and quantity values.", "error");
+                    return;
+                }
+
+                const payload = {
+                    date: dateValue,
+                    customer_id: Number(customerValue),
+                    sale_type: entryTypeSelect.value,
+                    unit_price: unitPriceValue,
+                    quantity_tons: quantityValue,
+                };
+
+                setEntryFeedback("Saving sales entry…");
+                if (entrySubmitButton) {
+                    entrySubmitButton.disabled = true;
+                }
+
+                try {
+                    const response = await fetch("/api/market/sales", {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (response.status === 401) {
+                        handleUnauthorized();
+                        return;
+                    }
+
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data.msg || "Unable to save sales entry.");
+                    }
+
+                    setEntryFeedback("Sales entry recorded successfully.", "success");
+                    if (entryUnitPriceInput) {
+                        entryUnitPriceInput.value = "";
+                    }
+                    if (entryQuantityInput) {
+                        entryQuantityInput.value = "";
+                    }
+                    updateEntryTotal();
+                    await loadReport();
+                } catch (error) {
+                    console.error(error);
+                    setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
+                } finally {
+                    if (entrySubmitButton) {
+                        entrySubmitButton.disabled = false;
+                    }
+                }
+            });
+        }
+
+        refreshCustomerSelectors();
+        loadCustomers();
 
         function renderCustomer(customer) {
             const card = document.createElement("article");
@@ -420,7 +780,7 @@
         }
 
         async function loadReport() {
-            if (!token) {
+            if (!token || !monthSelect || !yearSelect || !submitButton || !resultsEl) {
                 return;
             }
 
@@ -450,9 +810,7 @@
                 });
 
                 if (response.status === 401) {
-                    localStorage.removeItem("samprox_token");
-                    localStorage.removeItem("samprox_user");
-                    window.location.href = "/";
+                    handleUnauthorized();
                     return;
                 }
 

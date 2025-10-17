@@ -50,11 +50,29 @@ class ReportsApiTestCase(unittest.TestCase):
 
     def test_customer_sales_report_combines_forecast_and_actual(self):
         Customer = self.app_module.Customer
+        CustomerCategory = self.app_module.CustomerCategory
+        CustomerCreditTerm = self.app_module.CustomerCreditTerm
+        CustomerTransportMode = self.app_module.CustomerTransportMode
+        CustomerType = self.app_module.CustomerType
         SalesForecastEntry = self.app_module.SalesForecastEntry
         SalesActualEntry = self.app_module.SalesActualEntry
 
-        acme = Customer(name="ACME Corp")
-        beta = Customer(name="Beta Industries")
+        customer_kwargs = dict(
+            category=CustomerCategory.plantation,
+            credit_term=CustomerCreditTerm.cash,
+            transport_mode=CustomerTransportMode.samprox_lorry,
+            customer_type=CustomerType.regular,
+            sales_coordinator_name="Alex",
+            sales_coordinator_phone="0710000000",
+            store_keeper_name="Sam",
+            store_keeper_phone="0711111111",
+            payment_coordinator_name="Chris",
+            payment_coordinator_phone="0712222222",
+            special_note="Key account",
+        )
+
+        acme = Customer(name="ACME Corp", **customer_kwargs)
+        beta = Customer(name="Beta Industries", **customer_kwargs)
         self.app_module.db.session.add_all([acme, beta])
         self.app_module.db.session.commit()
 

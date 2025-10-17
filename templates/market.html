@@ -132,6 +132,111 @@
                 </form>
                 <p id="sales-entry-feedback" class="sales-entry__feedback" role="status" aria-live="polite"></p>
             </article>
+            <dialog id="customer-dialog" class="modal" aria-labelledby="customer-dialog-title">
+                <form id="customer-form" class="modal__form">
+                    <header class="modal__header">
+                        <h2 id="customer-dialog-title" class="modal__title">Add new customer</h2>
+                        <p class="modal__subtitle">Customer ID will be assigned automatically (e.g. 00001).</p>
+                    </header>
+                    <div class="modal__grid">
+                        <label class="modal__field" for="customer-name">
+                            <span class="modal__label">Customer name</span>
+                            <input id="customer-name" name="name" type="text" class="modal__input" required />
+                        </label>
+                        <label class="modal__field" for="customer-category">
+                            <span class="modal__label">Category</span>
+                            <select id="customer-category" name="category" class="modal__select" required></select>
+                        </label>
+                        <label class="modal__field" for="customer-credit-term">
+                            <span class="modal__label">Credit term</span>
+                            <select id="customer-credit-term" name="credit_term" class="modal__select" required></select>
+                        </label>
+                        <label class="modal__field" for="customer-transport-mode">
+                            <span class="modal__label">Transport mode</span>
+                            <select id="customer-transport-mode" name="transport_mode" class="modal__select" required></select>
+                        </label>
+                        <label class="modal__field" for="customer-type">
+                            <span class="modal__label">Type</span>
+                            <select id="customer-type" name="customer_type" class="modal__select" required></select>
+                        </label>
+                        <label class="modal__field" for="customer-sales-coordinator-name">
+                            <span class="modal__label">Sales coordinator name</span>
+                            <input
+                                id="customer-sales-coordinator-name"
+                                name="sales_coordinator_name"
+                                type="text"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field" for="customer-sales-coordinator-phone">
+                            <span class="modal__label">Sales coordinator telephone</span>
+                            <input
+                                id="customer-sales-coordinator-phone"
+                                name="sales_coordinator_phone"
+                                type="tel"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field" for="customer-store-keeper-name">
+                            <span class="modal__label">Store keeper name</span>
+                            <input
+                                id="customer-store-keeper-name"
+                                name="store_keeper_name"
+                                type="text"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field" for="customer-store-keeper-phone">
+                            <span class="modal__label">Store keeper telephone</span>
+                            <input
+                                id="customer-store-keeper-phone"
+                                name="store_keeper_phone"
+                                type="tel"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field" for="customer-payment-coordinator-name">
+                            <span class="modal__label">Payment coordinator name</span>
+                            <input
+                                id="customer-payment-coordinator-name"
+                                name="payment_coordinator_name"
+                                type="text"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field" for="customer-payment-coordinator-phone">
+                            <span class="modal__label">Payment coordinator telephone</span>
+                            <input
+                                id="customer-payment-coordinator-phone"
+                                name="payment_coordinator_phone"
+                                type="tel"
+                                class="modal__input"
+                                required
+                            />
+                        </label>
+                        <label class="modal__field modal__field--full" for="customer-special-note">
+                            <span class="modal__label">Special note</span>
+                            <textarea
+                                id="customer-special-note"
+                                name="special_note"
+                                class="modal__textarea"
+                                rows="3"
+                                required
+                            ></textarea>
+                        </label>
+                    </div>
+                    <p id="customer-form-feedback" class="modal__feedback" role="status" aria-live="polite"></p>
+                    <div class="modal__actions">
+                        <button type="button" class="button button--secondary" id="customer-form-cancel">Cancel</button>
+                        <button type="submit" class="button" id="customer-form-submit">Save customer</button>
+                    </div>
+                </form>
+            </dialog>
             <article class="production-card sales-report" aria-labelledby="sales-report-title">
                 <div class="production-card__header">
                     <div>
@@ -197,6 +302,23 @@
         const entryTotalOutput = document.getElementById("sales-entry-total");
         const entryFeedbackEl = document.getElementById("sales-entry-feedback");
         const entrySubmitButton = document.getElementById("sales-entry-submit");
+        const customerDialog = document.getElementById("customer-dialog");
+        const customerForm = document.getElementById("customer-form");
+        const customerFormSubmit = document.getElementById("customer-form-submit");
+        const customerFormCancel = document.getElementById("customer-form-cancel");
+        const customerFormFeedback = document.getElementById("customer-form-feedback");
+        const customerCategorySelect = document.getElementById("customer-category");
+        const customerCreditTermSelect = document.getElementById("customer-credit-term");
+        const customerTransportSelect = document.getElementById("customer-transport-mode");
+        const customerTypeSelect = document.getElementById("customer-type");
+        const customerNameInput = document.getElementById("customer-name");
+        const customerSalesCoordinatorName = document.getElementById("customer-sales-coordinator-name");
+        const customerSalesCoordinatorPhone = document.getElementById("customer-sales-coordinator-phone");
+        const customerStoreKeeperName = document.getElementById("customer-store-keeper-name");
+        const customerStoreKeeperPhone = document.getElementById("customer-store-keeper-phone");
+        const customerPaymentCoordinatorName = document.getElementById("customer-payment-coordinator-name");
+        const customerPaymentCoordinatorPhone = document.getElementById("customer-payment-coordinator-phone");
+        const customerSpecialNote = document.getElementById("customer-special-note");
         const addCustomerOptionValue = "__create__";
 
         function handleUnauthorized() {
@@ -236,11 +358,51 @@
         const resultsEl = document.getElementById("sales-report-results");
         const subtitleEl = document.getElementById("sales-report-subtitle");
 
+        const customerCategoryOptions = [
+            { value: "plantation", label: "Plantation" },
+            { value: "industrial", label: "Industrial" },
+        ];
+        const customerCreditTermOptions = [
+            { value: "cash", label: "Cash" },
+            { value: "14_days", label: "14 Days" },
+            { value: "30_days", label: "30 Days" },
+            { value: "45_days", label: "45 Days" },
+            { value: "60_days", label: "60 Days" },
+        ];
+        const customerTransportOptions = [
+            { value: "samprox_lorry", label: "Samprox lorry" },
+            { value: "customer_lorry", label: "Customer lorry" },
+        ];
+        const customerTypeOptions = [
+            { value: "regular", label: "Regular" },
+            { value: "seasonal", label: "Seasonal" },
+        ];
+
         const knownCustomers = new Map();
         const numberFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
+
+        function populateSelectOptions(select, options) {
+            if (!select) {
+                return;
+            }
+            select.innerHTML = "";
+            options.forEach((option) => {
+                const el = document.createElement("option");
+                el.value = option.value;
+                el.textContent = option.label;
+                select.appendChild(el);
+            });
+        }
+
+        function populateCustomerFormOptions() {
+            populateSelectOptions(customerCategorySelect, customerCategoryOptions);
+            populateSelectOptions(customerCreditTermSelect, customerCreditTermOptions);
+            populateSelectOptions(customerTransportSelect, customerTransportOptions);
+            populateSelectOptions(customerTypeSelect, customerTypeOptions);
+        }
 
         function formatAmount(value) {
             return numberFormatter.format(value || 0);
@@ -306,26 +468,50 @@
             entryFeedbackEl.classList.add("sales-entry__feedback--visible");
         }
 
+        function formatCustomerLabel(customer) {
+            if (!customer) {
+                return "";
+            }
+            return customer.code ? `${customer.code} — ${customer.name}` : customer.name;
+        }
+
+        function normalizeCustomer(customer) {
+            if (!customer) {
+                return null;
+            }
+
+            const id = customer.id ?? customer.customer_id;
+            const name = customer.name ?? customer.customer_name;
+            if (!id || !name) {
+                return null;
+            }
+
+            return {
+                ...customer,
+                id: String(id),
+                name,
+                code: customer.code ?? customer.customer_code ?? null,
+            };
+        }
+
         function registerCustomers(customers) {
             if (!Array.isArray(customers)) {
                 return;
             }
 
             customers.forEach((customer) => {
-                const id = Number(customer.customer_id ?? customer.id);
-                const name = customer.customer_name ?? customer.name;
-                if (!id || !name) {
+                const normalized = normalizeCustomer(customer);
+                if (!normalized) {
                     return;
                 }
-                const existingName = knownCustomers.get(id);
-                if (existingName !== name) {
-                    knownCustomers.set(id, name);
-                }
+                knownCustomers.set(normalized.id, normalized);
             });
         }
 
         function refreshCustomerSelectors() {
-            const sorted = Array.from(knownCustomers.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+            const sorted = Array.from(knownCustomers.values()).sort((a, b) =>
+                (a.name || "").localeCompare(b.name || "")
+            );
 
             if (customerSelect) {
                 const previousValue = customerSelect.value;
@@ -335,10 +521,10 @@
                 defaultOption.textContent = "All customers";
                 customerSelect.appendChild(defaultOption);
 
-                sorted.forEach(([id, name]) => {
+                sorted.forEach((customer) => {
                     const option = document.createElement("option");
-                    option.value = String(id);
-                    option.textContent = name;
+                    option.value = customer.id;
+                    option.textContent = formatCustomerLabel(customer);
                     customerSelect.appendChild(option);
                 });
 
@@ -364,10 +550,10 @@
                 createOption.textContent = "➕ Add new customer";
                 entryCustomerSelect.appendChild(createOption);
 
-                sorted.forEach(([id, name]) => {
+                sorted.forEach((customer) => {
                     const option = document.createElement("option");
-                    option.value = String(id);
-                    option.textContent = name;
+                    option.value = customer.id;
+                    option.textContent = formatCustomerLabel(customer);
                     entryCustomerSelect.appendChild(option);
                 });
 
@@ -397,7 +583,7 @@
             entryTotalOutput.textContent = numberFormatter.format(total || 0);
         }
 
-        async function createCustomer(name) {
+        async function createCustomer(customerData) {
             if (!token) {
                 return null;
             }
@@ -409,7 +595,7 @@
                     "Content-Type": "application/json",
                     Accept: "application/json",
                 },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify(customerData),
             });
 
             if (response.status === 401) {
@@ -460,43 +646,165 @@
             }
         }
 
+        function closeCustomerDialog() {
+            if (!customerDialog) {
+                return;
+            }
+            if (typeof customerDialog.close === "function") {
+                customerDialog.close();
+            } else {
+                customerDialog.removeAttribute("open");
+            }
+        }
+
+        function resetCustomerForm() {
+            if (customerForm) {
+                customerForm.reset();
+            }
+            setCustomerFormFeedback("");
+        }
+
+        function setCustomerFormFeedback(message, variant = "error") {
+            if (!customerFormFeedback) {
+                return;
+            }
+            customerFormFeedback.textContent = message || "";
+            customerFormFeedback.classList.remove(
+                "modal__feedback--visible",
+                "modal__feedback--error",
+                "modal__feedback--success",
+            );
+
+            if (!message) {
+                return;
+            }
+
+            if (variant === "success") {
+                customerFormFeedback.classList.add("modal__feedback--success");
+            } else {
+                customerFormFeedback.classList.add("modal__feedback--error");
+            }
+            customerFormFeedback.classList.add("modal__feedback--visible");
+        }
+
+        function openCustomerDialog() {
+            resetCustomerForm();
+            populateCustomerFormOptions();
+            if (customerDialog) {
+                if (typeof customerDialog.showModal === "function") {
+                    customerDialog.showModal();
+                } else {
+                    customerDialog.setAttribute("open", "");
+                }
+            }
+            customerNameInput?.focus();
+        }
+
+        if (customerDialog) {
+            customerDialog.addEventListener("cancel", (event) => {
+                event.preventDefault();
+                closeCustomerDialog();
+                resetCustomerForm();
+                if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
+                    entryCustomerSelect.value = "";
+                }
+            });
+            customerDialog.addEventListener("close", () => {
+                if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
+                    entryCustomerSelect.value = "";
+                }
+            });
+        }
+
         if (entryCustomerSelect) {
-            entryCustomerSelect.addEventListener("change", async (event) => {
+            entryCustomerSelect.addEventListener("change", (event) => {
                 if (event.target.value !== addCustomerOptionValue) {
                     return;
                 }
+                event.target.value = "";
+                openCustomerDialog();
+            });
+        }
 
-                const name = window.prompt("Enter the new customer name:");
-                if (!name) {
+        if (customerFormCancel) {
+            customerFormCancel.addEventListener("click", (event) => {
+                event.preventDefault();
+                closeCustomerDialog();
+                resetCustomerForm();
+                if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
                     entryCustomerSelect.value = "";
+                }
+            });
+        }
+
+        function collectCustomerFormData() {
+            const payload = {
+                name: customerNameInput?.value?.trim() || "",
+                category: customerCategorySelect?.value || "",
+                credit_term: customerCreditTermSelect?.value || "",
+                transport_mode: customerTransportSelect?.value || "",
+                customer_type: customerTypeSelect?.value || "",
+                sales_coordinator_name: customerSalesCoordinatorName?.value?.trim() || "",
+                sales_coordinator_phone: customerSalesCoordinatorPhone?.value?.trim() || "",
+                store_keeper_name: customerStoreKeeperName?.value?.trim() || "",
+                store_keeper_phone: customerStoreKeeperPhone?.value?.trim() || "",
+                payment_coordinator_name: customerPaymentCoordinatorName?.value?.trim() || "",
+                payment_coordinator_phone: customerPaymentCoordinatorPhone?.value?.trim() || "",
+                special_note: customerSpecialNote?.value?.trim() || "",
+            };
+
+            return payload;
+        }
+
+        if (customerForm) {
+            customerForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (!customerForm.checkValidity()) {
+                    customerForm.reportValidity();
                     return;
                 }
 
-                const trimmedName = name.trim();
-                if (!trimmedName) {
-                    entryCustomerSelect.value = "";
-                    setEntryFeedback("Customer name cannot be empty.", "error");
+                const payload = collectCustomerFormData();
+                const values = Object.values(payload);
+                if (values.some((value) => value === "")) {
+                    setCustomerFormFeedback("All fields are required.", "error");
                     return;
+                }
+
+                setCustomerFormFeedback("");
+                if (customerFormSubmit) {
+                    customerFormSubmit.disabled = true;
                 }
 
                 try {
-                    const result = await createCustomer(trimmedName);
+                    const result = await createCustomer(payload);
                     if (!result || !result.customer) {
-                        entryCustomerSelect.value = "";
-                        return;
+                        throw new Error("Unable to create customer.");
                     }
+
                     const { customer, alreadyExists } = result;
                     registerCustomers([customer]);
                     refreshCustomerSelectors();
-                    entryCustomerSelect.value = String(customer.id);
+                    closeCustomerDialog();
+                    resetCustomerForm();
+
+                    const customerIdValue = customer.id ?? customer.customer_id;
+                    if (entryCustomerSelect && customerIdValue) {
+                        entryCustomerSelect.value = String(customerIdValue);
+                    }
+
+                    const code = customer.code ?? customer.customer_code ?? customerIdValue;
                     const message = alreadyExists
                         ? `Customer "${customer.name}" already exists and is ready to use.`
-                        : `Customer "${customer.name}" created successfully.`;
+                        : `Customer "${customer.name}" (ID ${code}) created successfully.`;
                     setEntryFeedback(message, "success");
                 } catch (error) {
                     console.error(error);
-                    entryCustomerSelect.value = "";
-                    setEntryFeedback(error?.message || "Unable to create customer.", "error");
+                    setCustomerFormFeedback(error?.message || "Unable to create customer.");
+                } finally {
+                    if (customerFormSubmit) {
+                        customerFormSubmit.disabled = false;
+                    }
                 }
             });
         }
@@ -606,6 +914,7 @@
             });
         }
 
+        populateCustomerFormOptions();
         refreshCustomerSelectors();
         loadCustomers();
 

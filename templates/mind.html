@@ -200,79 +200,81 @@
             maximumFractionDigits: 1,
         });
 
-        const availablePeriods = [
-            { value: "2024-08", label: "August 2024" },
-            { value: "2024-07", label: "July 2024" },
-            { value: "2024-06", label: "June 2024" },
-        ].map((item) => {
-            const [year, month] = item.value.split("-");
-            const monthIndex = Number(month) - 1;
-            const monthLabel = new Date(Number(year), monthIndex, 1).toLocaleString(undefined, {
+        const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+            const value = String(index + 1).padStart(2, "0");
+            const label = new Date(2000, index, 1).toLocaleString(undefined, {
                 month: "long",
             });
-            return {
-                ...item,
-                year,
-                month,
-                monthLabel,
-            };
+            return { value, label };
         });
-        const availableYears = [...new Set(availablePeriods.map((period) => period.year))];
+        const MIN_YEAR = 1900;
+        const MAX_YEAR = 2100;
 
-        const populateYearOptions = () => {
+        const populateYearOptions = (selectedYear) => {
             yearSelect.innerHTML = "";
-            availableYears.forEach((year, index) => {
+            const parsedYear = Number(selectedYear);
+            const startYear = Number.isFinite(parsedYear)
+                ? Math.min(MIN_YEAR, parsedYear)
+                : MIN_YEAR;
+            const endYear = Number.isFinite(parsedYear)
+                ? Math.max(MAX_YEAR, parsedYear)
+                : MAX_YEAR;
+
+            for (let year = endYear; year >= startYear; year -= 1) {
                 const option = document.createElement("option");
-                option.value = year;
+                option.value = String(year);
                 option.textContent = year;
-                if (index === 0) {
+                if (String(year) === String(selectedYear)) {
                     option.selected = true;
                 }
                 yearSelect.append(option);
-            });
-            yearSelect.disabled = availableYears.length === 0;
+            }
+            yearSelect.disabled = yearSelect.options.length === 0;
         };
 
-        const populateMonthOptions = (year, selectedValue = null) => {
+        const populateMonthOptions = (year, selectedPeriod = null) => {
             monthSelect.innerHTML = "";
-            const monthsForYear = availablePeriods.filter((period) => period.year === year);
+            const targetMonth = selectedPeriod ? selectedPeriod.split("-")[1] : null;
 
-            if (monthsForYear.length === 0) {
-                const placeholderOption = document.createElement("option");
-                placeholderOption.value = "";
-                placeholderOption.textContent = "No months available";
-                placeholderOption.selected = true;
-                monthSelect.append(placeholderOption);
-                monthSelect.disabled = true;
-                return;
-            }
-
-            monthsForYear.forEach((period, index) => {
+            MONTH_OPTIONS.forEach(({ value, label }) => {
                 const option = document.createElement("option");
-                option.value = period.value;
-                option.textContent = period.monthLabel;
-                if (
-                    (selectedValue && selectedValue === period.value) ||
-                    (!selectedValue && index === 0)
-                ) {
+                option.value = `${year}-${value}`;
+                option.textContent = label;
+                if (targetMonth ? targetMonth === value : false) {
                     option.selected = true;
                 }
                 monthSelect.append(option);
             });
 
-            monthSelect.disabled = false;
+            if (!monthSelect.value && monthSelect.options.length > 0) {
+                const today = new Date();
+                const currentMonth = String(today.getMonth() + 1).padStart(2, "0");
+                const fallbackValue = `${year}-${currentMonth}`;
+                const fallbackOption = Array.from(monthSelect.options).find(
+                    (option) => option.value === fallbackValue,
+                );
+                if (fallbackOption) {
+                    fallbackOption.selected = true;
+                } else {
+                    monthSelect.options[0].selected = true;
+                }
+            }
+
+            monthSelect.disabled = monthSelect.options.length === 0;
         };
 
         const initializePeriodSelectors = () => {
-            populateYearOptions();
-            if (availablePeriods.length === 0) {
+            const today = new Date();
+            const initialYear = String(today.getFullYear());
+            const initialPeriod = `${initialYear}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+
+            populateYearOptions(initialYear);
+            if (yearSelect.disabled) {
                 showSummaryError("No production periods available.");
                 return false;
             }
 
-            const initialPeriod = availablePeriods[0];
-            yearSelect.value = initialPeriod.year;
-            populateMonthOptions(initialPeriod.year, initialPeriod.value);
+            populateMonthOptions(initialYear, initialPeriod);
             return true;
         };
 

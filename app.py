@@ -6,24 +6,15 @@ from flask import Flask, jsonify
 from sqlalchemy import func
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from config import Config
+from config import Config, current_database_url
 from extensions import db, migrate, jwt
-from models import (
-    Customer,
-    CustomerCategory,
-    CustomerCreditTerm,
-    CustomerTransportMode,
-    CustomerType,
-    RoleEnum,
-    SalesActualEntry,
-    SalesForecastEntry,
-    User,
-)
-from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, ui
+from models import Customer, RoleEnum, SalesActualEntry, SalesForecastEntry, User
+from routes import auth, jobs, quotation, labor, materials, machines, production, reports, ui
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    app.config["SQLALCHEMY_DATABASE_URI"] = current_database_url()
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)

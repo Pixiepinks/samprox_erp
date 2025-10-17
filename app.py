@@ -3,10 +3,11 @@ from typing import Optional, Tuple
 
 import click
 from flask import Flask, jsonify
-from sqlalchemy import func
+from sqlalchemy import create_engine, func, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.engine import make_url
 
-from config import Config
+from config import Config, current_database_url
 from extensions import db, migrate, jwt
 from models import (
     Customer,
@@ -24,6 +25,9 @@ from routes import auth, jobs, quotation, labor, materials, machines, market, pr
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+    database_url = current_database_url()
+    _ensure_database_exists(database_url)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -200,8 +204,6 @@ def _bootstrap_accessall_user(flask_app=None):
         print(f"✅ Accessall password reset: {normalized_email}")
     elif status == "updated":
         print(f"✅ Accessall user updated: {normalized_email}")
-
-
 # Call the hooks at startup (idempotent)
 _bootstrap_admin_user(flask_app=app)
 _bootstrap_accessall_user(flask_app=app)

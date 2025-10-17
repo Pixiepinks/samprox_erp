@@ -8,7 +8,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from config import Config
 from extensions import db, migrate, jwt
-from models import User, RoleEnum
+from models import Customer, RoleEnum, SalesActualEntry, SalesForecastEntry, User
 from routes import auth, jobs, quotation, labor, materials, machines, production, reports, ui
 
 def create_app():

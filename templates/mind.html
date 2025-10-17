@@ -125,7 +125,11 @@
                     <div class="production-chart__controls">
                         <label class="production-chart__select">
                             <span>Time period</span>
-                            <select id="production-period"></select>
+                            <select id="production-period">
+                                <option value="2024-08">August 2024</option>
+                                <option value="2024-07">July 2024</option>
+                                <option value="2024-06">June 2024</option>
+                            </select>
                         </label>
                         <button type="button" class="button button--ghost" id="production-compare-toggle" aria-pressed="false">
                             Compare with previous month
@@ -133,7 +137,6 @@
                     </div>
                 </header>
                 <div class="production-chart__body">
-                    <p id="production-status" class="production-chart__status" role="status" hidden></p>
                     <div class="production-chart__summary" id="production-summary" aria-live="polite"></div>
                     <div class="production-chart__canvas">
                         <canvas id="production-chart" height="320" aria-label="Daily production bar chart" role="img"></canvas>
@@ -178,80 +181,59 @@
             window.location.href = "/";
         });
 
+        const monthlyProduction = {
+            "2024-06": {
+                label: "June 2024",
+                days: 30,
+                values: [118, 124, 129, 121, 132, 128, 136, 138, 140, 134, 129, 133, 137, 141, 139, 144, 138, 142, 145, 147, 149, 148, 152, 150, 153, 155, 158, 154, 157, 160],
+            },
+            "2024-07": {
+                label: "July 2024",
+                days: 31,
+                values: [122, 128, 135, 138, 140, 144, 142, 147, 151, 149, 152, 155, 158, 162, 166, 168, 170, 167, 169, 172, 174, 170, 168, 171, 175, 179, 176, 173, 177, 180, 182],
+            },
+            "2024-08": {
+                label: "August 2024",
+                days: 31,
+                values: [130, 135, 138, 142, 145, 149, 151, 155, 158, 160, 162, 165, 167, 170, 172, 175, 178, 181, 185, 188, 190, 187, 189, 192, 195, 198, 200, 202, 205, 207, 210],
+            },
+        };
+
         const periodSelect = document.getElementById("production-period");
         const compareToggle = document.getElementById("production-compare-toggle");
         const summaryContainer = document.getElementById("production-summary");
         const chartCanvas = document.getElementById("production-chart");
-        const statusEl = document.getElementById("production-status");
 
-        const monthlyCache = new Map();
+        const formatNumber = (value) => value.toLocaleString();
 
-        const formatNumber = (value, { minimumFractionDigits = 0, maximumFractionDigits = 0 } = {}) => {
-            const numericValue = Number(value) || 0;
-            return numericValue.toLocaleString(undefined, {
-                minimumFractionDigits,
-                maximumFractionDigits,
-            });
-        };
-
-        const formatQuantity = (value) => formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-        const setStatus = (message, type = "info") => {
-            if (!statusEl) {
-                return;
-            }
-            if (!message) {
-                statusEl.textContent = "";
-                statusEl.hidden = true;
-                statusEl.classList.remove("production-chart__status--error");
-                return;
-            }
-            statusEl.textContent = message;
-            statusEl.hidden = false;
-            statusEl.classList.toggle("production-chart__status--error", type === "error");
-        };
-
-        const buildSummary = (periodData, compareData = null) => {
-            const values = (periodData?.values || []).map((value) => Number(value) || 0);
-            if (!values.length) {
-                summaryContainer.innerHTML = "";
-                return;
-            }
-
-            const total = Number(periodData?.total_quantity_tons ?? values.reduce((sum, value) => sum + value, 0));
-            const average = Number(periodData?.average_quantity_tons ?? (total / values.length));
-            const peakValue = Number(periodData?.peak_quantity_tons ?? Math.max(...values));
-            const peakDayIndex = periodData?.peak_day ? periodData.peak_day - 1 : values.indexOf(peakValue);
-            const peakDay = peakDayIndex >= 0 ? peakDayIndex + 1 : null;
+        const buildSummary = (values, compareValues = null) => {
+            const total = values.reduce((sum, value) => sum + value, 0);
+            const average = Math.round(total / values.length);
+            const peakValue = Math.max(...values);
+            const peakDay = values.indexOf(peakValue) + 1;
 
             const summaryMetrics = [
                 {
-                    label: "Total (tons)",
-                    value: formatQuantity(total),
+                    label: "Total units",
+                    value: formatNumber(total),
                 },
                 {
-                    label: "Average / day (tons)",
-                    value: formatQuantity(average),
+                    label: "Average / day",
+                    value: formatNumber(average),
                 },
                 {
                     label: "Peak day",
-                    value: peakDay
-                        ? `Day ${peakDay} – ${formatQuantity(peakValue)} tons`
-                        : "No production recorded",
+                    value: `Day ${peakDay} – ${formatNumber(peakValue)} units`,
                 },
             ];
 
-            if (compareData) {
-                const compareValues = (compareData.values || []).map((value) => Number(value) || 0);
-                const compareTotal = Number(compareData.total_quantity_tons ?? compareValues.reduce((sum, value) => sum + value, 0));
+            if (compareValues) {
+                const compareTotal = compareValues.reduce((sum, value) => sum + value, 0);
                 const delta = total - compareTotal;
-                const deltaPercentage = compareTotal !== 0 ? ((delta / compareTotal) * 100).toFixed(1) : null;
+                const deltaPercentage = ((delta / compareTotal) * 100).toFixed(1);
                 summaryMetrics.push({
                     label: "Change vs. prior month",
-                    value:
-                        compareTotal === 0
-                            ? `${delta >= 0 ? "+" : ""}${formatQuantity(delta)} tons`
-                            : `${delta >= 0 ? "+" : ""}${formatQuantity(delta)} tons (${deltaPercentage}%)`,
+                    value: `${delta >= 0 ? "+" : ""}${formatNumber(delta)} units (${deltaPercentage}%)`,
                 });
             }
 
@@ -268,89 +250,63 @@
         };
 
         const getPreviousPeriodKey = (periodKey) => {
-            if (!periodKey) {
+            const periodKeys = Object.keys(monthlyProduction).sort();
+            const index = periodKeys.indexOf(periodKey);
+            if (index <= 0) {
                 return null;
             }
-            const [yearStr, monthStr] = periodKey.split("-");
-            const year = Number(yearStr);
-            const month = Number(monthStr);
-            if (!Number.isFinite(year) || !Number.isFinite(month)) {
+            return periodKeys[index - 1];
+        };
+
+        const buildDataset = (periodKey, includePrevious = false) => {
+            const period = monthlyProduction[periodKey];
+            if (!period) {
                 return null;
             }
-            const previousDate = new Date(year, month - 2, 1);
-            const previousYear = previousDate.getFullYear();
-            const previousMonth = previousDate.getMonth() + 1;
-            return `${previousYear.toString().padStart(4, "0")}-${previousMonth
-                .toString()
-                .padStart(2, "0")}`;
-        };
 
-        const loadPeriodData = async (periodKey) => {
-            if (!periodKey) {
-                throw new Error("Select a period to view production data.");
-            }
-            if (monthlyCache.has(periodKey)) {
-                return monthlyCache.get(periodKey);
-            }
-
-            const params = new URLSearchParams({ period: periodKey });
-            const response = await fetch(`/api/production/monthly-summary?${params.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
-
-            if (!response.ok) {
-                const payload = await response.json().catch(() => null);
-                const message = payload?.msg || "Unable to load production data.";
-                throw new Error(message);
-            }
-
-            const payload = await response.json();
-            const normalizedValues = (payload.values || []).map((value) => Number(value) || 0);
-            const data = {
-                ...payload,
-                values: normalizedValues,
-            };
-
-            monthlyCache.set(periodKey, data);
-            return data;
-        };
-
-        const buildDataset = (primaryData, comparisonData = null) => {
-            const labels = Array.from({ length: primaryData.days || primaryData.values.length }, (_, index) => index + 1);
+            const labels = Array.from({ length: period.days }, (_, index) => index + 1);
 
             const datasets = [
                 {
-                    label: primaryData.label,
-                    data: [...primaryData.values],
+                    label: period.label,
+                    data: [...period.values],
                     backgroundColor: "rgba(37, 99, 235, 0.65)",
                     borderRadius: 6,
                     maxBarThickness: 18,
                 },
             ];
 
-            if (comparisonData) {
-                const comparisonValues = labels.map((_, index) => {
-                    if (index < comparisonData.values.length) {
-                        return comparisonData.values[index];
-                    }
-                    return null;
-                });
+            let compareValues = null;
 
-                datasets.push({
-                    label: comparisonData.label,
-                    data: comparisonValues,
-                    backgroundColor: "rgba(148, 163, 184, 0.65)",
-                    borderRadius: 6,
-                    maxBarThickness: 18,
-                });
+            if (includePrevious) {
+                const previousKey = getPreviousPeriodKey(periodKey);
+                if (previousKey) {
+                    const previousPeriod = monthlyProduction[previousKey];
+                    compareValues = previousPeriod.values;
+                    const comparisonData = labels.map((_, index) => {
+                        if (index < previousPeriod.values.length) {
+                            return previousPeriod.values[index];
+                        }
+                        return null;
+                    });
+                    datasets.push({
+                        label: previousPeriod.label,
+                        data: comparisonData,
+                        backgroundColor: "rgba(148, 163, 184, 0.65)",
+                        borderRadius: 6,
+                        maxBarThickness: 18,
+                    });
+                }
             }
 
+            buildSummary(period.values, compareValues);
             return { labels, datasets };
         };
 
-        const renderChart = (dataset) => {
+        const buildChart = () => {
+            const periodKey = periodSelect.value;
+            const includePrevious = compareToggle.getAttribute("aria-pressed") === "true";
+            const dataset = buildDataset(periodKey, includePrevious);
             if (!dataset) {
                 return;
             }
@@ -387,10 +343,10 @@
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: "Tons produced",
+                                text: "Units produced",
                             },
                             ticks: {
-                                callback: (value) => formatQuantity(value),
+                                callback: (value) => formatNumber(value),
                             },
                         },
                     },
@@ -406,7 +362,7 @@
                                 label: (context) => {
                                     const label = context.dataset.label || "";
                                     const value = context.parsed.y;
-                                    return `${label}: ${formatQuantity(value)} tons`;
+                                    return `${label}: ${formatNumber(value)} units`;
                                 },
                             },
                         },
@@ -415,82 +371,18 @@
             });
         };
 
-        let activeRequestId = 0;
-
-        const updateChart = async () => {
-            const requestId = ++activeRequestId;
-            const periodKey = periodSelect.value;
-            const includePrevious = compareToggle.getAttribute("aria-pressed") === "true";
-
-            summaryContainer.innerHTML = "";
-            setStatus("Loading daily production…");
-
-            try {
-                const primaryData = await loadPeriodData(periodKey);
-                if (requestId !== activeRequestId) {
-                    return;
-                }
-
-                let comparisonData = null;
-                if (includePrevious) {
-                    const previousKey = getPreviousPeriodKey(periodKey);
-                    if (previousKey) {
-                        comparisonData = await loadPeriodData(previousKey);
-                    }
-                }
-
-                if (requestId !== activeRequestId) {
-                    return;
-                }
-
-                const dataset = buildDataset(primaryData, comparisonData);
-                buildSummary(primaryData, comparisonData);
-                renderChart(dataset);
-                setStatus("");
-            } catch (error) {
-                if (requestId !== activeRequestId) {
-                    return;
-                }
-                console.error(error);
-                renderChart(null);
-                setStatus(error.message || "Unable to load production data.", "error");
-            }
-        };
-
-        const buildPeriodOptions = () => {
-            const monthsToShow = 6;
-            const today = new Date();
-            periodSelect.innerHTML = "";
-
-            for (let offset = 0; offset < monthsToShow; offset += 1) {
-                const optionDate = new Date(today.getFullYear(), today.getMonth() - offset, 1);
-                const key = `${optionDate.getFullYear().toString().padStart(4, "0")}-${(optionDate.getMonth() + 1)
-                    .toString()
-                    .padStart(2, "0")}`;
-                const label = optionDate.toLocaleDateString(undefined, {
-                    month: "long",
-                    year: "numeric",
-                });
-                const option = document.createElement("option");
-                option.value = key;
-                option.textContent = label;
-                periodSelect.appendChild(option);
-            }
-        };
-
         periodSelect.addEventListener("change", () => {
-            updateChart();
+            buildChart();
         });
 
         compareToggle.addEventListener("click", () => {
             const isActive = compareToggle.getAttribute("aria-pressed") === "true";
             compareToggle.setAttribute("aria-pressed", String(!isActive));
             compareToggle.classList.toggle("button--active", !isActive);
-            updateChart();
+            buildChart();
         });
 
-        buildPeriodOptions();
-        updateChart();
+        buildChart();
     </script>
 </body>
 </html>

@@ -139,6 +139,101 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("permission", response.get_json()["msg"].lower())
 
+    def test_daily_summary_returns_machine_and_hour_totals(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+
+        def save_output(machine_code, hour_no, quantity, date="2024-05-12"):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        save_output(first_asset["code"], 1, 3.5)
+        save_output(second_asset["code"], 1, 4.0)
+        save_output(first_asset["code"], 2, 1.0)
+        save_output(first_asset["code"], 1, 2.5, date="2024-05-01")
+
+        response = self.client.get(
+            "/api/production/daily/summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={
+                "date": "2024-05-12",
+                "machine_codes": f"{first_asset['code']},{second_asset['code']}",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(len(data["hours"]), 24)
+        self.assertAlmostEqual(data["total_quantity_tons"], 8.5)
+
+        machines_meta = {machine["code"]: machine for machine in data["machines"]}
+        self.assertIn(first_asset["code"], machines_meta)
+        self.assertIn(second_asset["code"], machines_meta)
+
+        hour_one = next(hour for hour in data["hours"] if hour["hour_no"] == 1)
+        self.assertAlmostEqual(
+            hour_one["machines"][first_asset["code"]]["quantity_tons"],
+            3.5,
+        )
+        self.assertAlmostEqual(
+            hour_one["machines"][second_asset["code"]]["quantity_tons"],
+            4.0,
+        )
+        self.assertAlmostEqual(hour_one["hour_total_tons"], 7.5)
+
+        hour_two = next(hour for hour in data["hours"] if hour["hour_no"] == 2)
+        self.assertAlmostEqual(
+            hour_two["machines"][first_asset["code"]]["quantity_tons"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            hour_two["machines"][second_asset["code"]]["quantity_tons"],
+            0.0,
+        )
+
+        hour_three = next(hour for hour in data["hours"] if hour["hour_no"] == 3)
+        self.assertAlmostEqual(
+            hour_three["machines"][first_asset["code"]]["quantity_tons"],
+            0.0,
+        )
+        self.assertAlmostEqual(
+            hour_three["machines"][second_asset["code"]]["quantity_tons"],
+            0.0,
+        )
+
+        totals = data.get("totals") or {}
+        today_totals = totals.get("today") or {}
+        mtd_totals = totals.get("mtd") or {}
+
+        self.assertAlmostEqual(
+            today_totals["machines"][first_asset["code"]],
+            4.5,
+        )
+        self.assertAlmostEqual(
+            today_totals["machines"][second_asset["code"]],
+            4.0,
+        )
+        self.assertAlmostEqual(today_totals["total"], 8.5)
+
+        self.assertAlmostEqual(
+            mtd_totals["machines"][first_asset["code"]],
+            7.0,
+        )
+        self.assertAlmostEqual(
+            mtd_totals["machines"][second_asset["code"]],
+            4.0,
+        )
+        self.assertAlmostEqual(mtd_totals["total"], 11.0)
+
 
 if __name__ == "__main__":
     unittest.main()

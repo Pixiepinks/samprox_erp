@@ -31,6 +31,7 @@ def create_app():
     app.register_blueprint(materials.bp)
     app.register_blueprint(machines.bp)
     app.register_blueprint(production.bp)
+    app.register_blueprint(market.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(ui.bp)
 

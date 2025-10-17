@@ -127,14 +127,95 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
+        const entryForm = document.getElementById("sales-entry-form");
+        const entryDateInput = document.getElementById("sales-entry-date");
+        const entryCustomerSelect = document.getElementById("sales-entry-customer");
+        const entryTypeSelect = document.getElementById("sales-entry-type");
+        const entryUnitPriceInput = document.getElementById("sales-entry-unit-price");
+        const entryQuantityInput = document.getElementById("sales-entry-quantity");
+        const entryTotalOutput = document.getElementById("sales-entry-total");
+        const entryFeedbackEl = document.getElementById("sales-entry-feedback");
+        const entrySubmitButton = document.getElementById("sales-entry-submit");
+        const customerDialog = document.getElementById("customer-dialog");
+        const customerForm = document.getElementById("customer-form");
+        const customerFormSubmit = document.getElementById("customer-form-submit");
+        const customerFormCancel = document.getElementById("customer-form-cancel");
+        const customerFormFeedback = document.getElementById("customer-form-feedback");
+        const customerCategorySelect = document.getElementById("customer-category");
+        const customerCreditTermSelect = document.getElementById("customer-credit-term");
+        const customerTransportSelect = document.getElementById("customer-transport-mode");
+        const customerTypeSelect = document.getElementById("customer-type");
+        const customerNameInput = document.getElementById("customer-name");
+        const customerSalesCoordinatorName = document.getElementById("customer-sales-coordinator-name");
+        const customerSalesCoordinatorPhone = document.getElementById("customer-sales-coordinator-phone");
+        const customerStoreKeeperName = document.getElementById("customer-store-keeper-name");
+        const customerStoreKeeperPhone = document.getElementById("customer-store-keeper-phone");
+        const customerPaymentCoordinatorName = document.getElementById("customer-payment-coordinator-name");
+        const customerPaymentCoordinatorPhone = document.getElementById("customer-payment-coordinator-phone");
+        const customerSpecialNote = document.getElementById("customer-special-note");
+        const addCustomerOptionValue = "__create__";
+
+        function handleUnauthorized() {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        }
 
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
 
         logoutButton.addEventListener("click", () => {
-            localStorage.removeItem("samprox_token");
-            localStorage.removeItem("samprox_user");
-            window.location.href = "/";
+            handleUnauthorized();
+        });
+
+        const monthNames = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ];
+
+        const reportForm = document.getElementById("sales-report-form");
+        const monthSelect = document.getElementById("sales-report-month");
+        const yearSelect = document.getElementById("sales-report-year");
+        const customerSelect = document.getElementById("sales-report-customer");
+        const submitButton = document.getElementById("sales-report-submit");
+        const feedbackEl = document.getElementById("sales-report-feedback");
+        const resultsEl = document.getElementById("sales-report-results");
+        const subtitleEl = document.getElementById("sales-report-subtitle");
+
+        const customerCategoryOptions = [
+            { value: "plantation", label: "Plantation" },
+            { value: "industrial", label: "Industrial" },
+        ];
+        const customerCreditTermOptions = [
+            { value: "cash", label: "Cash" },
+            { value: "14_days", label: "14 Days" },
+            { value: "30_days", label: "30 Days" },
+            { value: "45_days", label: "45 Days" },
+            { value: "60_days", label: "60 Days" },
+        ];
+        const customerTransportOptions = [
+            { value: "samprox_lorry", label: "Samprox lorry" },
+            { value: "customer_lorry", label: "Customer lorry" },
+        ];
+        const customerTypeOptions = [
+            { value: "regular", label: "Regular" },
+            { value: "seasonal", label: "Seasonal" },
+        ];
+
+        const knownCustomers = new Map();
+        const numberFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
         });
 
         const monthNames = [

@@ -74,7 +74,7 @@ def _ensure_admin_user(
     ``{"created", "reset", "updated", "skipped"}``.
     """
 
-    target_app = flask_app or app
+    target_app = flask_app or globals().get("app")
     if target_app is None:
         return "skipped", _normalize_email(email)
 
@@ -126,7 +126,7 @@ def _ensure_accessall_user(
     ensure_if_missing: bool = True,
     force_reset: bool = False,
 ):
-    target_app = flask_app or app
+    target_app = flask_app or globals().get("app")
     normalized_email = _normalize_email(email or os.getenv("ACCESSALL_EMAIL", "accessall@samprox.lk"))
     password = password or os.getenv("ACCESSALL_PASSWORD", "123")
     name = name or os.getenv("ACCESSALL_NAME", "Accessall")
@@ -180,8 +180,11 @@ def _ensure_accessall_user(
         return "created", normalized_email
 
 
-def _bootstrap_admin_user():
-    status, normalized_email = _ensure_admin_user(force_reset=os.getenv("RUN_SEED_ADMIN") == "1")
+def _bootstrap_admin_user(flask_app=None):
+    status, normalized_email = _ensure_admin_user(
+        flask_app=flask_app,
+        force_reset=os.getenv("RUN_SEED_ADMIN") == "1",
+    )
     if status == "created":
         print(f"✅ Admin created: {normalized_email}")
     elif status == "reset":
@@ -190,8 +193,11 @@ def _bootstrap_admin_user():
         print(f"✅ Admin role updated: {normalized_email}")
 
 
-def _bootstrap_accessall_user():
-    status, normalized_email = _ensure_accessall_user(force_reset=os.getenv("RUN_SEED_ACCESSALL") == "1")
+def _bootstrap_accessall_user(flask_app=None):
+    status, normalized_email = _ensure_accessall_user(
+        flask_app=flask_app,
+        force_reset=os.getenv("RUN_SEED_ACCESSALL") == "1",
+    )
     if status == "created":
         print(f"✅ Accessall user created: {normalized_email}")
     elif status == "reset":
@@ -199,8 +205,8 @@ def _bootstrap_accessall_user():
     elif status == "updated":
         print(f"✅ Accessall user updated: {normalized_email}")
 # Call the hooks at startup (idempotent)
-_bootstrap_admin_user()
-_bootstrap_accessall_user()
+_bootstrap_admin_user(flask_app=app)
+_bootstrap_accessall_user(flask_app=app)
 
 # ---- CLI: seed or reset admin ----
 @app.cli.command("seed-admin")
@@ -210,6 +216,7 @@ def seed_admin(email, password):
     """Create or reset the admin user."""
     with app.app_context():
         status, normalized_email = _ensure_admin_user(
+            flask_app=app,
             email=email,
             password=password,
             ensure_if_missing=True,
@@ -235,6 +242,7 @@ def seed_accessall(email, password, name):
 
     with app.app_context():
         status, normalized_email = _ensure_accessall_user(
+            flask_app=app,
             email=email,
             password=password,
             name=name,

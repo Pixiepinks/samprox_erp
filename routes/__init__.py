@@ -1,4 +1,4 @@
-from . import auth, jobs, quotation, labor, materials, machines, production, reports, ui
+from . import auth, jobs, quotation, labor, materials, machines, market, production, reports, ui
 
 __all__ = [
     "auth",
@@ -7,6 +7,7 @@ __all__ = [
     "labor",
     "materials",
     "machines",
+    "market",
     "production",
     "reports",
     "ui",

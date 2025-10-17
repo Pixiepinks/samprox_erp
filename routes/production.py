@@ -10,6 +10,7 @@ from models import DailyProductionEntry, MachineAsset, RoleEnum
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from schemas import DailyProductionEntrySchema
+from sqlalchemy import func
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")

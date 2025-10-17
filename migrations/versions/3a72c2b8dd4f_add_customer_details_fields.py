@@ -6,7 +6,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "3a72c2b8dd4f"
-down_revision = "2e172ffd71bd"
+down_revision = "8e1d273b3f5f"
 branch_labels = None
 depends_on = None
 
@@ -26,6 +26,8 @@ customer_type_enum = sa.Enum("regular", "seasonal", name="customer_type")
 
 def upgrade():
     bind = op.get_bind()
+    dialect = bind.dialect.name
+
     customer_category_enum.create(bind, checkfirst=True)
     customer_credit_term_enum.create(bind, checkfirst=True)
     customer_transport_enum.create(bind, checkfirst=True)
@@ -131,17 +133,18 @@ def upgrade():
         ),
     )
 
-    op.alter_column("customer", "category", server_default=None)
-    op.alter_column("customer", "credit_term", server_default=None)
-    op.alter_column("customer", "transport_mode", server_default=None)
-    op.alter_column("customer", "customer_type", server_default=None)
-    op.alter_column("customer", "sales_coordinator_name", server_default=None)
-    op.alter_column("customer", "sales_coordinator_phone", server_default=None)
-    op.alter_column("customer", "store_keeper_name", server_default=None)
-    op.alter_column("customer", "store_keeper_phone", server_default=None)
-    op.alter_column("customer", "payment_coordinator_name", server_default=None)
-    op.alter_column("customer", "payment_coordinator_phone", server_default=None)
-    op.alter_column("customer", "special_note", server_default=None)
+    if dialect != "sqlite":
+        op.alter_column("customer", "category", server_default=None)
+        op.alter_column("customer", "credit_term", server_default=None)
+        op.alter_column("customer", "transport_mode", server_default=None)
+        op.alter_column("customer", "customer_type", server_default=None)
+        op.alter_column("customer", "sales_coordinator_name", server_default=None)
+        op.alter_column("customer", "sales_coordinator_phone", server_default=None)
+        op.alter_column("customer", "store_keeper_name", server_default=None)
+        op.alter_column("customer", "store_keeper_phone", server_default=None)
+        op.alter_column("customer", "payment_coordinator_name", server_default=None)
+        op.alter_column("customer", "payment_coordinator_phone", server_default=None)
+        op.alter_column("customer", "special_note", server_default=None)
 
 
 def downgrade():

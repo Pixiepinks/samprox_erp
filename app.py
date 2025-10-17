@@ -9,55 +9,18 @@ from sqlalchemy.engine import make_url
 
 from config import Config, current_database_url
 from extensions import db, migrate, jwt
-from models import Customer, RoleEnum, SalesActualEntry, SalesForecastEntry, User
-from routes import (
-    auth,
-    jobs,
-    labor,
-    machines,
-    market,
-    materials,
-    production,
-    reports,
-    quotation,
-    ui,
+from models import (
+    Customer,
+    CustomerCategory,
+    CustomerCreditTerm,
+    CustomerTransportMode,
+    CustomerType,
+    RoleEnum,
+    SalesActualEntry,
+    SalesForecastEntry,
+    User,
 )
-
-
-def _ensure_database_exists(database_url: str) -> None:
-    """Ensure the target database exists for PostgreSQL connections."""
-
-    try:
-        url = make_url(database_url)
-    except Exception:
-        return
-
-    if url.get_backend_name() not in {"postgresql", "postgresql+psycopg2"}:
-        return
-
-    engine = create_engine(database_url)
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-    except OperationalError as exc:
-        orig = getattr(exc, "orig", None)
-        if getattr(orig, "pgcode", None) != "3D000":
-            raise
-
-        engine.dispose()
-
-        maintenance_url = url.set(database="postgres")
-        maintenance_engine = create_engine(maintenance_url)
-        try:
-            with maintenance_engine.connect() as connection:
-                connection = connection.execution_options(isolation_level="AUTOCOMMIT")
-                connection.execute(text(f'CREATE DATABASE "{url.database}"'))
-                print(f"✅ Created missing database: {url.database}")
-        finally:
-            maintenance_engine.dispose()
-    finally:
-        engine.dispose()
-
+from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, ui
 
 def create_app():
     app = Flask(__name__)

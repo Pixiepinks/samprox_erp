@@ -7,7 +7,7 @@ DEFAULT_DATABASE_URL = "sqlite:///samprox.db"
 
 def _normalize_db_url(url: str) -> str:
     if not url:
-        return url
+        return DEFAULT_DATABASE_URL
 
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
@@ -36,14 +36,22 @@ def _normalize_db_url(url: str) -> str:
     return urlunparse(parsed)
 
 
+def _env_database_url() -> str | None:
+    url = os.getenv("DATABASE_URL")
+    return url if url and url.strip() else None
+
+
 def current_database_url() -> str:
-    return _normalize_db_url(os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL))
+    return _normalize_db_url(_env_database_url() or DEFAULT_DATABASE_URL)
+
+
+def _env_sqlalchemy_database_uri() -> str | None:
+    uri = os.getenv("SQLALCHEMY_DATABASE_URI")
+    return uri if uri and uri.strip() else None
 
 
 class Config:
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "SQLALCHEMY_DATABASE_URI", current_database_url()
-    )
+    SQLALCHEMY_DATABASE_URI = _env_sqlalchemy_database_uri() or current_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=10)

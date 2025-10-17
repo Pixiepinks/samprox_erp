@@ -322,6 +322,211 @@ body {
     color: #475569;
 }
 
+.sales-report {
+    gap: 1.5rem;
+}
+
+.sales-report__subtitle {
+    margin: 0;
+    color: #475569;
+    font-size: 0.95rem;
+}
+
+.sales-report__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    justify-content: flex-end;
+}
+
+.sales-report__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 140px;
+}
+
+.sales-report__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #475569;
+    letter-spacing: 0.04em;
+}
+
+.sales-report__input {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    padding: 0.6rem 0.75rem;
+    font: inherit;
+    background: #fff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sales-report__input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.sales-report__feedback {
+    display: none;
+    margin: 0;
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    background: rgba(148, 163, 184, 0.12);
+    color: #334155;
+}
+
+.sales-report__feedback--visible {
+    display: block;
+}
+
+.sales-report__feedback--info {
+    background: rgba(148, 163, 184, 0.12);
+    color: #334155;
+}
+
+.sales-report__feedback--success {
+    background: rgba(16, 185, 129, 0.18);
+    color: #0f5132;
+}
+
+.sales-report__feedback--error {
+    background: rgba(248, 113, 113, 0.18);
+    color: #991b1b;
+}
+
+.sales-report__results {
+    display: block;
+}
+
+.sales-report__customers {
+    display: grid;
+    gap: 1rem;
+}
+
+.sales-report__customer {
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(255, 255, 255, 0.92);
+    padding: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.sales-report__customer-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.sales-report__customer-name {
+    margin: 0 0 0.25rem;
+    font-size: 1.1rem;
+}
+
+.sales-report__customer-summary {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.sales-report__totals {
+    margin: 0;
+    display: grid;
+    gap: 0.5rem 1.25rem;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(120px, 1fr);
+}
+
+.sales-report__totals-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.sales-report__totals-item dt {
+    font-size: 0.75rem;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.sales-report__totals-value {
+    font-weight: 600;
+    font-size: 1rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.sales-report__table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(248, 250, 252, 0.75);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.sales-report__table thead {
+    background: rgba(37, 99, 235, 0.08);
+}
+
+.sales-report__table th,
+.sales-report__table td {
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    font-size: 0.95rem;
+}
+
+.sales-report__table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.sales-report__cell--numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.sales-report__empty {
+    margin: 0;
+    padding: 1rem 1.2rem;
+    border-radius: 14px;
+    background: rgba(248, 250, 252, 0.85);
+    border: 1px dashed rgba(148, 163, 184, 0.4);
+    color: #475569;
+    text-align: center;
+}
+
+.sales-report__empty-row {
+    text-align: center;
+    color: #64748b;
+    font-size: 0.95rem;
+}
+
+.sales-report__loading {
+    margin: 0;
+    padding: 1rem 1.2rem;
+    border-radius: 14px;
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+    text-align: center;
+    font-weight: 500;
+}
+
+.sales-report__variance--positive {
+    color: #047857;
+}
+
+.sales-report__variance--negative {
+    color: #b91c1c;
+}
+
 .production-card__body {
     display: grid;
     gap: 1.5rem;
@@ -618,5 +823,24 @@ body {
 
     .dashboard {
         grid-template-columns: 1fr;
+    }
+
+    .sales-report__controls {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .sales-report__field {
+        flex: 1 1 140px;
+    }
+
+    .sales-report__totals {
+        width: 100%;
+        grid-auto-flow: row;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+
+    .sales-report__totals-value {
+        text-align: left;
     }
 }

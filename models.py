@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -214,3 +214,40 @@ class DailyProductionEntry(db.Model):
             f"<DailyProductionEntry date={self.date} asset_id={self.asset_id} "
             f"hour={self.hour_no} qty={self.quantity_tons}>"
         )
+
+
+class Customer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SalesForecastEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False)
+    note = db.Column(db.String(255))
+    customer = db.relationship("Customer", backref=db.backref("sales_forecasts", cascade="all,delete-orphan"))
+
+    @classmethod
+    def for_month(cls, customer_id: int, target_date: date):
+        first_day = target_date.replace(day=1)
+        if first_day.month == 12:
+            next_month = date(first_day.year + 1, 1, 1)
+        else:
+            next_month = date(first_day.year, first_day.month + 1, 1)
+        return (
+            cls.query.filter_by(customer_id=customer_id)
+            .filter(cls.date >= first_day, cls.date < next_month)
+            .order_by(cls.date.asc())
+        )
+
+
+class SalesActualEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False)
+    reference = db.Column(db.String(120))
+    customer = db.relationship("Customer", backref=db.backref("sales_actuals", cascade="all,delete-orphan"))

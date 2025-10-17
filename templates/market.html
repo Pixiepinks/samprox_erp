@@ -71,6 +71,35 @@
                     </p>
                 </article>
             </div>
+            <article class="production-card sales-report" aria-labelledby="sales-report-title">
+                <div class="production-card__header">
+                    <div>
+                        <h2 id="sales-report-title">Customer sales performance</h2>
+                        <p id="sales-report-subtitle" class="sales-report__subtitle">
+                            Select a month and year to compare forecasted versus actual sales by customer.
+                        </p>
+                    </div>
+                    <form id="sales-report-form" class="sales-report__controls" aria-label="Customer sales filters">
+                        <label class="sales-report__field" for="sales-report-month">
+                            <span class="sales-report__label">Month</span>
+                            <select id="sales-report-month" name="month" class="sales-report__input" required></select>
+                        </label>
+                        <label class="sales-report__field" for="sales-report-year">
+                            <span class="sales-report__label">Year</span>
+                            <select id="sales-report-year" name="year" class="sales-report__input" required></select>
+                        </label>
+                        <label class="sales-report__field" for="sales-report-customer">
+                            <span class="sales-report__label">Customer</span>
+                            <select id="sales-report-customer" name="customer_id" class="sales-report__input">
+                                <option value="">All customers</option>
+                            </select>
+                        </label>
+                        <button type="submit" class="button" id="sales-report-submit">Load report</button>
+                    </form>
+                </div>
+                <p id="sales-report-feedback" class="sales-report__feedback" role="status" aria-live="polite"></p>
+                <div id="sales-report-results" class="sales-report__results" aria-live="polite"></div>
+            </article>
         </section>
     </div>
     <script>
@@ -107,6 +136,362 @@
             localStorage.removeItem("samprox_user");
             window.location.href = "/";
         });
+
+        const monthNames = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ];
+
+        const reportForm = document.getElementById("sales-report-form");
+        const monthSelect = document.getElementById("sales-report-month");
+        const yearSelect = document.getElementById("sales-report-year");
+        const customerSelect = document.getElementById("sales-report-customer");
+        const submitButton = document.getElementById("sales-report-submit");
+        const feedbackEl = document.getElementById("sales-report-feedback");
+        const resultsEl = document.getElementById("sales-report-results");
+        const subtitleEl = document.getElementById("sales-report-subtitle");
+
+        const knownCustomers = new Map();
+        const numberFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+
+        function formatAmount(value) {
+            return numberFormatter.format(value || 0);
+        }
+
+        function updateSubtitle(year, month) {
+            if (!subtitleEl) {
+                return;
+            }
+            if (!year || !month) {
+                subtitleEl.textContent =
+                    "Select a month and year to compare forecasted versus actual sales by customer.";
+                return;
+            }
+            const monthIndex = Math.max(1, Math.min(12, Number(month))) - 1;
+            const monthName = monthNames[monthIndex] || "";
+            subtitleEl.textContent = `${monthName} ${year}`.trim();
+        }
+
+        function setFeedback(message, variant = "info") {
+            if (!feedbackEl) {
+                return;
+            }
+
+            const variants = ["sales-report__feedback--error", "sales-report__feedback--success", "sales-report__feedback--info"];
+            feedbackEl.classList.remove("sales-report__feedback--visible", ...variants);
+
+            if (!message) {
+                feedbackEl.textContent = "";
+                return;
+            }
+
+            feedbackEl.textContent = message;
+            if (variant === "error") {
+                feedbackEl.classList.add("sales-report__feedback--error");
+            } else if (variant === "success") {
+                feedbackEl.classList.add("sales-report__feedback--success");
+            } else {
+                feedbackEl.classList.add("sales-report__feedback--info");
+            }
+            feedbackEl.classList.add("sales-report__feedback--visible");
+        }
+
+        function updateCustomerOptions(customers) {
+            if (!Array.isArray(customers) || !customerSelect) {
+                return;
+            }
+
+            let hasUpdates = false;
+            customers.forEach((customer) => {
+                if (!knownCustomers.has(customer.customer_id)) {
+                    knownCustomers.set(customer.customer_id, customer.customer_name);
+                    hasUpdates = true;
+                }
+            });
+
+            if (!hasUpdates && customerSelect.options.length > 0) {
+                return;
+            }
+
+            const currentValue = customerSelect.value;
+            customerSelect.innerHTML = "";
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "All customers";
+            customerSelect.appendChild(defaultOption);
+
+            const sorted = Array.from(knownCustomers.entries()).sort((a, b) => {
+                return a[1].localeCompare(b[1]);
+            });
+
+            sorted.forEach(([id, name]) => {
+                const option = document.createElement("option");
+                option.value = String(id);
+                option.textContent = name;
+                customerSelect.appendChild(option);
+            });
+
+            if (currentValue && knownCustomers.has(Number(currentValue))) {
+                customerSelect.value = currentValue;
+            }
+        }
+
+        function renderCustomer(customer) {
+            const card = document.createElement("article");
+            card.className = "sales-report__customer";
+
+            const header = document.createElement("div");
+            header.className = "sales-report__customer-header";
+
+            const headingWrapper = document.createElement("div");
+            const nameEl = document.createElement("h3");
+            nameEl.className = "sales-report__customer-name";
+            nameEl.textContent = customer.customer_name;
+            headingWrapper.appendChild(nameEl);
+
+            const summaryEl = document.createElement("p");
+            summaryEl.className = "sales-report__customer-summary";
+            summaryEl.textContent = "Daily comparison of forecasted and actual sales.";
+            headingWrapper.appendChild(summaryEl);
+
+            const totals = document.createElement("dl");
+            totals.className = "sales-report__totals";
+
+            const variance = customer.monthly_actual_total - customer.monthly_forecast_total;
+            const totalsConfig = [
+                { label: "Forecast", value: customer.monthly_forecast_total },
+                { label: "Actual", value: customer.monthly_actual_total },
+                { label: "Variance", value: variance },
+            ];
+
+            totalsConfig.forEach(({ label, value }) => {
+                const group = document.createElement("div");
+                group.className = "sales-report__totals-item";
+                const dt = document.createElement("dt");
+                dt.textContent = label;
+                const dd = document.createElement("dd");
+                dd.textContent = formatAmount(value);
+                dd.className = "sales-report__totals-value";
+                if (label === "Variance") {
+                    if (value > 0) {
+                        dd.classList.add("sales-report__variance--positive");
+                    } else if (value < 0) {
+                        dd.classList.add("sales-report__variance--negative");
+                    }
+                }
+                group.appendChild(dt);
+                group.appendChild(dd);
+                totals.appendChild(group);
+            });
+
+            header.appendChild(headingWrapper);
+            header.appendChild(totals);
+            card.appendChild(header);
+
+            const table = document.createElement("table");
+            table.className = "sales-report__table";
+
+            const thead = document.createElement("thead");
+            const headRow = document.createElement("tr");
+            ["Date", "Forecast", "Actual", "Variance"].forEach((label, index) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                if (index > 0) {
+                    th.className = "sales-report__cell--numeric";
+                }
+                headRow.appendChild(th);
+            });
+            thead.appendChild(headRow);
+            table.appendChild(thead);
+
+            const tbody = document.createElement("tbody");
+
+            if (!customer.dates.length) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = 4;
+                cell.className = "sales-report__empty-row";
+                cell.textContent = "No sales recorded for this customer.";
+                row.appendChild(cell);
+                tbody.appendChild(row);
+            } else {
+                customer.dates.forEach((entry) => {
+                    const row = document.createElement("tr");
+
+                    const dateCell = document.createElement("td");
+                    dateCell.textContent = entry.date;
+                    row.appendChild(dateCell);
+
+                    const forecastCell = document.createElement("td");
+                    forecastCell.textContent = formatAmount(entry.forecast_amount);
+                    forecastCell.className = "sales-report__cell--numeric";
+                    row.appendChild(forecastCell);
+
+                    const actualCell = document.createElement("td");
+                    actualCell.textContent = formatAmount(entry.actual_amount);
+                    actualCell.className = "sales-report__cell--numeric";
+                    row.appendChild(actualCell);
+
+                    const varianceValue = entry.actual_amount - entry.forecast_amount;
+                    const varianceCell = document.createElement("td");
+                    varianceCell.textContent = formatAmount(varianceValue);
+                    varianceCell.className = "sales-report__cell--numeric";
+                    if (varianceValue > 0) {
+                        varianceCell.classList.add("sales-report__variance--positive");
+                    } else if (varianceValue < 0) {
+                        varianceCell.classList.add("sales-report__variance--negative");
+                    }
+                    row.appendChild(varianceCell);
+
+                    tbody.appendChild(row);
+                });
+            }
+
+            table.appendChild(tbody);
+            card.appendChild(table);
+            return card;
+        }
+
+        function renderReport(data) {
+            if (!resultsEl) {
+                return;
+            }
+
+            resultsEl.innerHTML = "";
+            if (!data || !Array.isArray(data.customers) || data.customers.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "sales-report__empty";
+                empty.textContent = "No sales data available for the selected period.";
+                resultsEl.appendChild(empty);
+                return;
+            }
+
+            const container = document.createElement("div");
+            container.className = "sales-report__customers";
+
+            data.customers.forEach((customer) => {
+                container.appendChild(renderCustomer(customer));
+            });
+
+            resultsEl.appendChild(container);
+        }
+
+        function populateSelectors() {
+            if (!monthSelect || !yearSelect) {
+                return;
+            }
+
+            const now = new Date();
+            const currentMonth = now.getMonth() + 1;
+            const currentYear = now.getFullYear();
+
+            monthNames.forEach((name, index) => {
+                const option = document.createElement("option");
+                option.value = String(index + 1);
+                option.textContent = name;
+                monthSelect.appendChild(option);
+            });
+
+            const startYear = currentYear - 2;
+            const endYear = currentYear + 1;
+            for (let year = endYear; year >= startYear; year -= 1) {
+                const option = document.createElement("option");
+                option.value = String(year);
+                option.textContent = String(year);
+                yearSelect.appendChild(option);
+            }
+
+            monthSelect.value = String(currentMonth);
+            yearSelect.value = String(currentYear);
+            updateSubtitle(currentYear, currentMonth);
+        }
+
+        async function loadReport() {
+            if (!token) {
+                return;
+            }
+
+            const year = yearSelect.value;
+            const month = monthSelect.value;
+
+            updateSubtitle(year, month);
+            setFeedback("Loading customer sales…", "info");
+            resultsEl.innerHTML = '<p class="sales-report__loading">Loading report…</p>';
+
+            submitButton.disabled = true;
+
+            try {
+                const params = new URLSearchParams({
+                    year: String(year),
+                    month: String(month),
+                });
+                if (customerSelect && customerSelect.value) {
+                    params.append("customer_id", customerSelect.value);
+                }
+
+                const response = await fetch(`/api/reports/customer-sales?${params.toString()}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    localStorage.removeItem("samprox_token");
+                    localStorage.removeItem("samprox_user");
+                    window.location.href = "/";
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ msg: "Unable to load report" }));
+                    throw new Error(errorData.msg || "Unable to load report");
+                }
+
+                const data = await response.json();
+                updateCustomerOptions(data.customers || []);
+                renderReport(data);
+
+                if (data.customers && data.customers.length > 0) {
+                    const totalCustomers = data.customers.length;
+                    setFeedback(
+                        `Showing sales data for ${totalCustomers} ${totalCustomers === 1 ? "customer" : "customers"}.`,
+                        "success",
+                    );
+                } else {
+                    setFeedback("No sales data recorded for the selected period.", "info");
+                }
+            } catch (error) {
+                console.error(error);
+                resultsEl.innerHTML = "";
+                const errorMessage = error?.message || "Unable to load report.";
+                setFeedback(errorMessage, "error");
+            } finally {
+                submitButton.disabled = false;
+            }
+        }
+
+        if (reportForm) {
+            populateSelectors();
+            reportForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                loadReport();
+            });
+            loadReport();
+        }
     </script>
 </body>
 </html>

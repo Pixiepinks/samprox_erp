@@ -216,10 +216,50 @@ class DailyProductionEntry(db.Model):
         )
 
 
+class CustomerCategory(str, Enum):
+    plantation = "plantation"
+    industrial = "industrial"
+
+
+class CustomerCreditTerm(str, Enum):
+    cash = "cash"
+    days14 = "14_days"
+    days30 = "30_days"
+    days45 = "45_days"
+    days60 = "60_days"
+
+
+class CustomerTransportMode(str, Enum):
+    samprox_lorry = "samprox_lorry"
+    customer_lorry = "customer_lorry"
+
+
+class CustomerType(str, Enum):
+    regular = "regular"
+    seasonal = "seasonal"
+
+
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
+    category = db.Column(db.Enum(CustomerCategory), nullable=False)
+    credit_term = db.Column(db.Enum(CustomerCreditTerm), nullable=False)
+    transport_mode = db.Column(db.Enum(CustomerTransportMode), nullable=False)
+    customer_type = db.Column(db.Enum(CustomerType), nullable=False)
+    sales_coordinator_name = db.Column(db.String(120), nullable=False)
+    sales_coordinator_phone = db.Column(db.String(50), nullable=False)
+    store_keeper_name = db.Column(db.String(120), nullable=False)
+    store_keeper_phone = db.Column(db.String(50), nullable=False)
+    payment_coordinator_name = db.Column(db.String(120), nullable=False)
+    payment_coordinator_phone = db.Column(db.String(50), nullable=False)
+    special_note = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def code(self):
+        if self.id is None:
+            return None
+        return f"{self.id:05d}"
 
 
 class SalesForecastEntry(db.Model):

@@ -927,3 +927,117 @@ body {
         text-align: left;
     }
 }
+
+.modal {
+    border: none;
+    border-radius: 20px;
+    padding: 0;
+    max-width: 640px;
+    width: min(640px, 90vw);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
+}
+
+.modal::backdrop {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.modal__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 2rem;
+}
+
+.modal__header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.modal__title {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.modal__subtitle {
+    margin: 0;
+    color: #475569;
+    font-size: 0.95rem;
+}
+
+.modal__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.modal__field--full {
+    grid-column: 1 / -1;
+}
+
+.modal__label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+}
+
+.modal__input,
+.modal__select,
+.modal__textarea {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    padding: 0.65rem 0.75rem;
+    font: inherit;
+    background: #fff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modal__textarea {
+    resize: vertical;
+}
+
+.modal__input:focus,
+.modal__select:focus,
+.modal__textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.modal__feedback {
+    margin: 0;
+    font-size: 0.95rem;
+    display: none;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+}
+
+.modal__feedback--visible {
+    display: block;
+}
+
+.modal__feedback--error {
+    background: rgba(248, 113, 113, 0.18);
+    color: #991b1b;
+}
+
+.modal__feedback--success {
+    background: rgba(16, 185, 129, 0.18);
+    color: #0f5132;
+}
+
+.modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}

@@ -1,5 +1,6 @@
 """REST endpoints for manufacturing daily production tracking."""
 
+import calendar
 from datetime import date as dt_date, datetime
 
 from flask import Blueprint, jsonify, request
@@ -10,7 +11,6 @@ from models import DailyProductionEntry, MachineAsset, RoleEnum
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from schemas import DailyProductionEntrySchema
-from sqlalchemy import func
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
@@ -40,6 +40,33 @@ def _parse_date(value, *, field_name: str):
         return dt_date.fromisoformat(value)
     except (TypeError, ValueError):
         raise ValueError(f"Invalid date for {field_name}")
+
+
+def _parse_machine_codes_param(param_value):
+    if param_value:
+        raw_codes = [code.strip() for code in param_value.split(",") if code.strip()]
+    else:
+        raw_codes = list(SUMMARY_MACHINE_CODES)
+
+    machine_codes = []
+    seen = set()
+    for code in raw_codes:
+        normalized = (code or "").strip().upper()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        machine_codes.append(normalized)
+        seen.add(key)
+
+    if not machine_codes:
+        machine_codes = list(SUMMARY_MACHINE_CODES)
+
+    canonical = {code.lower(): code for code in machine_codes}
+    filters = list(canonical.keys())
+
+    return machine_codes, canonical, filters
 
 
 def _get_asset(payload):
@@ -208,33 +235,21 @@ def get_daily_production_summary():
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
-    machine_codes_param = request.args.get("machine_codes")
-    if machine_codes_param:
-        raw_codes = [code.strip() for code in machine_codes_param.split(",") if code.strip()]
-    else:
-        raw_codes = list(SUMMARY_MACHINE_CODES)
-
-    machine_codes = []
-    seen_codes = set()
-    for code in raw_codes:
-        if code and code not in seen_codes:
-            machine_codes.append(code)
-            seen_codes.add(code)
-
-    if not machine_codes:
-        machine_codes = list(SUMMARY_MACHINE_CODES)
-
-    canonical_codes = {}
-    for code in machine_codes:
-        if code:
-            canonical_codes[code.lower()] = code
+    machine_codes, canonical_codes, machine_filters = _parse_machine_codes_param(
+        request.args.get("machine_codes")
+    )
 
     assets = (
-        MachineAsset.query.filter(MachineAsset.code.in_(machine_codes))
+        MachineAsset.query.filter(func.lower(MachineAsset.code).in_(machine_filters))
         .order_by(MachineAsset.code.asc())
         .all()
     )
-    asset_by_code = {asset.code: asset for asset in assets}
+    asset_by_code = {}
+    for asset in assets:
+        asset_code = (asset.code or "").lower()
+        canonical_code = canonical_codes.get(asset_code)
+        if canonical_code:
+            asset_by_code[canonical_code] = asset
 
     entries = (
         DailyProductionEntry.query.options(joinedload(DailyProductionEntry.asset))
@@ -361,7 +376,7 @@ def get_daily_production_summary():
         .filter(
             DailyProductionEntry.date >= month_start,
             DailyProductionEntry.date <= query_date,
-            MachineAsset.code.in_(machine_codes),
+            func.lower(MachineAsset.code).in_(machine_filters),
         )
         .group_by(MachineAsset.code)
         .all()
@@ -391,6 +406,97 @@ def get_daily_production_summary():
             "today": today_totals,
             "mtd": mtd_totals,
         },
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/monthly/summary")
+@jwt_required()
+def get_monthly_production_summary():
+    if not require_role(
+        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    period_param = request.args.get("period")
+    if period_param:
+        try:
+            anchor = datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+    else:
+        anchor = dt_date.today().replace(day=1)
+
+    machine_codes, canonical_codes, machine_filters = _parse_machine_codes_param(
+        request.args.get("machine_codes")
+    )
+
+    month_days = calendar.monthrange(anchor.year, anchor.month)[1]
+    month_start = anchor
+    month_end = dt_date(anchor.year, anchor.month, month_days)
+
+    totals_query = (
+        db.session.query(
+            DailyProductionEntry.date,
+            func.coalesce(func.sum(DailyProductionEntry.quantity_tons), 0.0),
+        )
+        .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
+        .filter(
+            DailyProductionEntry.date >= month_start,
+            DailyProductionEntry.date <= month_end,
+            func.lower(MachineAsset.code).in_(machine_filters),
+        )
+        .group_by(DailyProductionEntry.date)
+        .order_by(DailyProductionEntry.date.asc())
+    )
+
+    totals_by_date = {}
+    for date_value, total_value in totals_query.all():
+        if not isinstance(date_value, dt_date):
+            continue
+        try:
+            totals_by_date[date_value] = float(total_value or 0.0)
+        except (TypeError, ValueError):
+            totals_by_date[date_value] = 0.0
+
+    daily_totals = []
+    for day in range(1, month_days + 1):
+        current_date = dt_date(anchor.year, anchor.month, day)
+        total_value = round(totals_by_date.get(current_date, 0.0), 3)
+        daily_totals.append(
+            {
+                "day": day,
+                "date": current_date.isoformat(),
+                "total_tons": total_value,
+            }
+        )
+
+    total_production = round(sum(item["total_tons"] for item in daily_totals), 3)
+    average_day_production = round(
+        total_production / month_days if month_days else 0.0,
+        3,
+    )
+    peak_day_payload = max(daily_totals, key=lambda item: item["total_tons"], default=None)
+    if peak_day_payload:
+        peak = {
+            "day": peak_day_payload["day"],
+            "total_tons": peak_day_payload["total_tons"],
+        }
+    else:
+        peak = {"day": None, "total_tons": 0.0}
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": month_days,
+        "machine_codes": machine_codes,
+        "daily_totals": daily_totals,
+        "total_production": total_production,
+        "average_day_production": average_day_production,
+        "peak": peak,
     }
 
     return jsonify(response)

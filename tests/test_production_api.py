@@ -235,5 +235,64 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(mtd_totals["total"], 11.0)
 
 
+    def test_monthly_summary_returns_daily_totals(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+
+        def record_output(machine_code, date, hour_no, quantity):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        record_output(first_asset["code"], "2024-05-01", 1, 3.5)
+        record_output(first_asset["code"], "2024-05-01", 2, 1.5)
+        record_output(second_asset["code"], "2024-05-01", 1, 2.0)
+        record_output(first_asset["code"], "2024-05-02", 1, 5.0)
+        record_output(second_asset["code"], "2024-05-15", 5, 1.25)
+        record_output(first_asset["code"], "2024-04-30", 1, 9.0)
+
+        response = self.client.get(
+            "/api/production/monthly/summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-05"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertEqual(len(data["daily_totals"]), data["days"])
+
+        totals_by_day = {item["day"]: item["total_tons"] for item in data["daily_totals"]}
+        self.assertAlmostEqual(totals_by_day[1], 7.0)
+        self.assertAlmostEqual(totals_by_day[2], 5.0)
+        self.assertAlmostEqual(totals_by_day[15], 1.25)
+        self.assertAlmostEqual(totals_by_day.get(3, 0.0), 0.0)
+
+        self.assertAlmostEqual(data["total_production"], 13.25)
+        self.assertAlmostEqual(data["average_day_production"], round(13.25 / 31, 3))
+        self.assertEqual(data["peak"]["day"], 1)
+        self.assertAlmostEqual(data["peak"]["total_tons"], 7.0)
+        self.assertIn("MCH-0001", data["machine_codes"])
+        self.assertIn("MCH-0002", data["machine_codes"])
+
+
+    def test_monthly_summary_validates_period(self):
+        response = self.client.get(
+            "/api/production/monthly/summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-13"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

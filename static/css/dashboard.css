@@ -388,6 +388,21 @@ body {
     color: #0f172a;
 }
 
+#summary-average-price {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.summary-card__unit {
+    font-size: 0.6em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    color: inherit;
+}
+
 .summary-card__detail {
     margin: 0;
     color: #475569;

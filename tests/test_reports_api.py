@@ -77,12 +77,48 @@ class ReportsApiTestCase(unittest.TestCase):
         self.app_module.db.session.commit()
 
         entries = [
-            SalesForecastEntry(customer_id=acme.id, date=date(2024, 5, 1), amount=100.0),
-            SalesForecastEntry(customer_id=acme.id, date=date(2024, 5, 2), amount=150.0),
-            SalesForecastEntry(customer_id=beta.id, date=date(2024, 5, 3), amount=250.0),
-            SalesActualEntry(customer_id=acme.id, date=date(2024, 5, 1), amount=90.0),
-            SalesActualEntry(customer_id=acme.id, date=date(2024, 5, 3), amount=200.0),
-            SalesActualEntry(customer_id=beta.id, date=date(2024, 5, 3), amount=300.0),
+            SalesForecastEntry(
+                customer_id=acme.id,
+                date=date(2024, 5, 1),
+                amount=100.0,
+                unit_price=10.0,
+                quantity_tons=10.0,
+            ),
+            SalesForecastEntry(
+                customer_id=acme.id,
+                date=date(2024, 5, 2),
+                amount=150.0,
+                unit_price=10.0,
+                quantity_tons=15.0,
+            ),
+            SalesForecastEntry(
+                customer_id=beta.id,
+                date=date(2024, 5, 3),
+                amount=250.0,
+                unit_price=10.0,
+                quantity_tons=25.0,
+            ),
+            SalesActualEntry(
+                customer_id=acme.id,
+                date=date(2024, 5, 1),
+                amount=90.0,
+                unit_price=10.0,
+                quantity_tons=9.0,
+            ),
+            SalesActualEntry(
+                customer_id=acme.id,
+                date=date(2024, 5, 3),
+                amount=200.0,
+                unit_price=10.0,
+                quantity_tons=20.0,
+            ),
+            SalesActualEntry(
+                customer_id=beta.id,
+                date=date(2024, 5, 3),
+                amount=300.0,
+                unit_price=10.0,
+                quantity_tons=30.0,
+            ),
         ]
         self.app_module.db.session.add_all(entries)
         self.app_module.db.session.commit()
@@ -105,19 +141,51 @@ class ReportsApiTestCase(unittest.TestCase):
 
         self.assertAlmostEqual(acme_report["monthly_forecast_total"], 250.0)
         self.assertAlmostEqual(acme_report["monthly_actual_total"], 290.0)
+        self.assertAlmostEqual(
+            acme_report["monthly_forecast_quantity_tons"], 25.0
+        )
+        self.assertAlmostEqual(acme_report["monthly_actual_quantity_tons"], 29.0)
         self.assertEqual(
             acme_report["dates"],
             [
-                {"date": "2024-05-01", "forecast_amount": 100.0, "actual_amount": 90.0},
-                {"date": "2024-05-02", "forecast_amount": 150.0, "actual_amount": 0.0},
-                {"date": "2024-05-03", "forecast_amount": 0.0, "actual_amount": 200.0},
+                {
+                    "date": "2024-05-01",
+                    "forecast_amount": 100.0,
+                    "actual_amount": 90.0,
+                    "forecast_quantity_tons": 10.0,
+                    "actual_quantity_tons": 9.0,
+                },
+                {
+                    "date": "2024-05-02",
+                    "forecast_amount": 150.0,
+                    "actual_amount": 0.0,
+                    "forecast_quantity_tons": 15.0,
+                    "actual_quantity_tons": 0.0,
+                },
+                {
+                    "date": "2024-05-03",
+                    "forecast_amount": 0.0,
+                    "actual_amount": 200.0,
+                    "forecast_quantity_tons": 0.0,
+                    "actual_quantity_tons": 20.0,
+                },
             ],
         )
 
         self.assertAlmostEqual(beta_report["monthly_forecast_total"], 250.0)
         self.assertAlmostEqual(beta_report["monthly_actual_total"], 300.0)
+        self.assertAlmostEqual(beta_report["monthly_forecast_quantity_tons"], 25.0)
+        self.assertAlmostEqual(beta_report["monthly_actual_quantity_tons"], 30.0)
         self.assertEqual(
             beta_report["dates"],
-            [{"date": "2024-05-03", "forecast_amount": 250.0, "actual_amount": 300.0}],
+            [
+                {
+                    "date": "2024-05-03",
+                    "forecast_amount": 250.0,
+                    "actual_amount": 300.0,
+                    "forecast_quantity_tons": 25.0,
+                    "actual_quantity_tons": 30.0,
+                }
+            ],
         )
 

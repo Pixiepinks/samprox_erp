@@ -75,6 +75,14 @@ def customer_sales_report():
         return jsonify({"year": year, "month": month, "customers": []})
 
     customer_ids = [customer.id for customer in customers]
+    def _empty_day():
+        return {
+            "forecast_amount": 0.0,
+            "actual_amount": 0.0,
+            "forecast_quantity_tons": 0.0,
+            "actual_quantity_tons": 0.0,
+        }
+
     summary = {customer.id: {"customer": customer, "dates": {}} for customer in customers}
 
     forecast_rows = (
@@ -82,6 +90,7 @@ def customer_sales_report():
             SalesForecastEntry.customer_id,
             SalesForecastEntry.date,
             func.sum(SalesForecastEntry.amount).label("amount"),
+            func.sum(SalesForecastEntry.quantity_tons).label("quantity"),
         )
         .filter(SalesForecastEntry.date >= start_date, SalesForecastEntry.date < end_date)
         .filter(SalesForecastEntry.customer_id.in_(customer_ids))
@@ -93,16 +102,16 @@ def customer_sales_report():
         bucket = summary.get(row.customer_id)
         if not bucket:
             continue
-        bucket["dates"].setdefault(
-            row.date, {"forecast_amount": 0.0, "actual_amount": 0.0}
-        )
-        bucket["dates"][row.date]["forecast_amount"] = float(row.amount)
+        bucket["dates"].setdefault(row.date, _empty_day())
+        bucket["dates"][row.date]["forecast_amount"] = float(row.amount or 0.0)
+        bucket["dates"][row.date]["forecast_quantity_tons"] = float(row.quantity or 0.0)
 
     actual_rows = (
         db.session.query(
             SalesActualEntry.customer_id,
             SalesActualEntry.date,
             func.sum(SalesActualEntry.amount).label("amount"),
+            func.sum(SalesActualEntry.quantity_tons).label("quantity"),
         )
         .filter(SalesActualEntry.date >= start_date, SalesActualEntry.date < end_date)
         .filter(SalesActualEntry.customer_id.in_(customer_ids))
@@ -114,25 +123,30 @@ def customer_sales_report():
         bucket = summary.get(row.customer_id)
         if not bucket:
             continue
-        bucket["dates"].setdefault(
-            row.date, {"forecast_amount": 0.0, "actual_amount": 0.0}
-        )
-        bucket["dates"][row.date]["actual_amount"] = float(row.amount)
+        bucket["dates"].setdefault(row.date, _empty_day())
+        bucket["dates"][row.date]["actual_amount"] = float(row.amount or 0.0)
+        bucket["dates"][row.date]["actual_quantity_tons"] = float(row.quantity or 0.0)
 
     payload = []
     for customer_id_value, bucket in summary.items():
         dates = []
         monthly_forecast_total = 0.0
         monthly_actual_total = 0.0
+        monthly_forecast_quantity = 0.0
+        monthly_actual_quantity = 0.0
         for day in sorted(bucket["dates"].keys()):
             entry = bucket["dates"][day]
             monthly_forecast_total += entry["forecast_amount"]
             monthly_actual_total += entry["actual_amount"]
+            monthly_forecast_quantity += entry["forecast_quantity_tons"]
+            monthly_actual_quantity += entry["actual_quantity_tons"]
             dates.append(
                 {
                     "date": day.isoformat(),
                     "forecast_amount": entry["forecast_amount"],
                     "actual_amount": entry["actual_amount"],
+                    "forecast_quantity_tons": entry["forecast_quantity_tons"],
+                    "actual_quantity_tons": entry["actual_quantity_tons"],
                 }
             )
 
@@ -143,6 +157,8 @@ def customer_sales_report():
                 "dates": dates,
                 "monthly_forecast_total": monthly_forecast_total,
                 "monthly_actual_total": monthly_actual_total,
+                "monthly_forecast_quantity_tons": monthly_forecast_quantity,
+                "monthly_actual_quantity_tons": monthly_actual_quantity,
             }
         )
 

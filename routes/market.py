@@ -156,10 +156,18 @@ def record_sale_entry():
 
     amount = unit_price * quantity_tons
 
+    entry_kwargs = dict(
+        customer_id=customer.id,
+        date=entry_date,
+        amount=amount,
+        unit_price=unit_price,
+        quantity_tons=quantity_tons,
+    )
+
     if sale_type == "forecast":
-        entry = SalesForecastEntry(customer_id=customer.id, date=entry_date, amount=amount)
+        entry = SalesForecastEntry(**entry_kwargs)
     else:
-        entry = SalesActualEntry(customer_id=customer.id, date=entry_date, amount=amount)
+        entry = SalesActualEntry(**entry_kwargs)
 
     db.session.add(entry)
     db.session.commit()

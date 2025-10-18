@@ -458,7 +458,7 @@
             populateSelectOptions(customerTypeSelect, customerTypeOptions);
         }
 
-        function formatAmount(value) {
+        function formatNumber(value) {
             return numberFormatter.format(value || 0);
         }
 
@@ -1020,11 +1020,13 @@
             const totals = document.createElement("dl");
             totals.className = "sales-report__totals";
 
-            const variance = customer.monthly_actual_total - customer.monthly_forecast_total;
+            const forecastQuantity = customer.monthly_forecast_quantity_tons || 0;
+            const actualQuantity = customer.monthly_actual_quantity_tons || 0;
+            const variance = actualQuantity - forecastQuantity;
             const totalsConfig = [
-                { label: "Forecast", value: customer.monthly_forecast_total },
-                { label: "Actual", value: customer.monthly_actual_total },
-                { label: "Variance", value: variance },
+                { label: "Forecast qty (tons)", value: forecastQuantity },
+                { label: "Actual qty (tons)", value: actualQuantity },
+                { label: "Variance qty (tons)", value: variance },
             ];
 
             totalsConfig.forEach(({ label, value }) => {
@@ -1033,9 +1035,9 @@
                 const dt = document.createElement("dt");
                 dt.textContent = label;
                 const dd = document.createElement("dd");
-                dd.textContent = formatAmount(value);
+                dd.textContent = formatNumber(value);
                 dd.className = "sales-report__totals-value";
-                if (label === "Variance") {
+                if (label.toLowerCase().includes("variance")) {
                     if (value > 0) {
                         dd.classList.add("sales-report__variance--positive");
                     } else if (value < 0) {
@@ -1056,14 +1058,16 @@
 
             const thead = document.createElement("thead");
             const headRow = document.createElement("tr");
-            ["Date", "Forecast", "Actual", "Variance"].forEach((label, index) => {
-                const th = document.createElement("th");
-                th.textContent = label;
-                if (index > 0) {
-                    th.className = "sales-report__cell--numeric";
+            ["Date", "Forecast qty (tons)", "Actual qty (tons)", "Variance qty (tons)"].forEach(
+                (label, index) => {
+                    const th = document.createElement("th");
+                    th.textContent = label;
+                    if (index > 0) {
+                        th.className = "sales-report__cell--numeric";
+                    }
+                    headRow.appendChild(th);
                 }
-                headRow.appendChild(th);
-            });
+            );
             thead.appendChild(headRow);
             table.appendChild(thead);
 
@@ -1086,18 +1090,19 @@
                     row.appendChild(dateCell);
 
                     const forecastCell = document.createElement("td");
-                    forecastCell.textContent = formatAmount(entry.forecast_amount);
+                    forecastCell.textContent = formatNumber(entry.forecast_quantity_tons);
                     forecastCell.className = "sales-report__cell--numeric";
                     row.appendChild(forecastCell);
 
                     const actualCell = document.createElement("td");
-                    actualCell.textContent = formatAmount(entry.actual_amount);
+                    actualCell.textContent = formatNumber(entry.actual_quantity_tons);
                     actualCell.className = "sales-report__cell--numeric";
                     row.appendChild(actualCell);
 
-                    const varianceValue = entry.actual_amount - entry.forecast_amount;
+                    const varianceValue =
+                        (entry.actual_quantity_tons || 0) - (entry.forecast_quantity_tons || 0);
                     const varianceCell = document.createElement("td");
-                    varianceCell.textContent = formatAmount(varianceValue);
+                    varianceCell.textContent = formatNumber(varianceValue);
                     varianceCell.className = "sales-report__cell--numeric";
                     if (varianceValue > 0) {
                         varianceCell.classList.add("sales-report__variance--positive");

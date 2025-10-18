@@ -268,6 +268,8 @@ class SalesForecastEntry(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0.0)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0.0)
     note = db.Column(db.String(255))
     customer = db.relationship("Customer", backref=db.backref("sales_forecasts", cascade="all,delete-orphan"))
 
@@ -290,5 +292,7 @@ class SalesActualEntry(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
     date = db.Column(db.Date, nullable=False, index=True)
     amount = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0.0)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0.0)
     reference = db.Column(db.String(120))
     customer = db.relationship("Customer", backref=db.backref("sales_actuals", cascade="all,delete-orphan"))

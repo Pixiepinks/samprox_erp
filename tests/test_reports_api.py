@@ -139,6 +139,9 @@ class ReportsApiTestCase(unittest.TestCase):
         acme_report = next(item for item in data["customers"] if item["customer_name"] == "ACME Corp")
         beta_report = next(item for item in data["customers"] if item["customer_name"] == "Beta Industries")
 
+        self.assertEqual(acme_report["customer_category"], "plantation")
+        self.assertEqual(beta_report["customer_category"], "plantation")
+
         self.assertAlmostEqual(acme_report["monthly_forecast_total"], 250.0)
         self.assertAlmostEqual(acme_report["monthly_actual_total"], 290.0)
         self.assertAlmostEqual(

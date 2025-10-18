@@ -553,7 +553,6 @@
                 return;
             }
 
-            let hasUpdates = false;
             customers.forEach((customer) => {
                 const normalized = normalizeCustomer(customer);
                 if (!normalized) {
@@ -625,7 +624,8 @@
             refreshCustomerSelectors();
         }
 
-            if (!hasUpdates && customerSelect.options.length > 0) {
+        function updateEntryTotal() {
+            if (!entryTotalOutput) {
                 return;
             }
 
@@ -635,6 +635,24 @@
             const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
             const total = safeUnit * safeQuantity;
             entryTotalOutput.textContent = numberFormatter.format(total || 0);
+        }
+
+        function collectSalesEntryData() {
+            return {
+                date: entryDateInput?.value || "",
+                customer_id: entryCustomerSelect?.value || "",
+                sale_type: entryTypeSelect?.value || "",
+                unit_price: entryUnitPriceInput?.value || "",
+                quantity_tons: entryQuantityInput?.value || "",
+            };
+        }
+
+        function resetSalesEntryForm() {
+            entryForm?.reset();
+            if (entryCustomerSelect) {
+                entryCustomerSelect.value = "";
+            }
+            updateEntryTotal();
         }
 
         async function createCustomer(customerData) {
@@ -803,6 +821,90 @@
                 openCustomerDialog();
             });
         }
+
+        if (entryUnitPriceInput) {
+            entryUnitPriceInput.addEventListener("input", () => {
+                updateEntryTotal();
+            });
+        }
+
+        if (entryQuantityInput) {
+            entryQuantityInput.addEventListener("input", () => {
+                updateEntryTotal();
+            });
+        }
+
+        if (entryForm) {
+            entryForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                if (!token) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (!entryForm.checkValidity()) {
+                    entryForm.reportValidity();
+                    return;
+                }
+
+                const payload = collectSalesEntryData();
+
+                if (!payload.customer_id || payload.customer_id === addCustomerOptionValue) {
+                    setEntryFeedback("Please select a customer before saving the entry.", "error");
+                    return;
+                }
+
+                setEntryFeedback("");
+
+                if (entrySubmitButton) {
+                    entrySubmitButton.disabled = true;
+                }
+
+                try {
+                    const response = await fetch("/api/market/sales", {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (response.status === 401) {
+                        handleUnauthorized();
+                        return;
+                    }
+
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(data.msg || "Unable to save sales entry.");
+                    }
+
+                    resetSalesEntryForm();
+
+                    const successMessage = payload.sale_type === "forecast"
+                        ? "Forecast sales entry saved successfully."
+                        : "Actual sales entry saved successfully.";
+                    setEntryFeedback(successMessage, "success");
+
+                    if (typeof loadReport === "function") {
+                        loadReport();
+                    }
+                } catch (error) {
+                    console.error(error);
+                    setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
+                } finally {
+                    if (entrySubmitButton) {
+                        entrySubmitButton.disabled = false;
+                    }
+                }
+            });
+        }
+
+        updateEntryTotal();
 
         if (entryAddCustomerButton) {
             entryAddCustomerButton.addEventListener("click", () => {

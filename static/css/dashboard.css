@@ -322,6 +322,113 @@ body {
     color: #475569;
 }
 
+.sales-summary__header {
+    align-items: flex-start;
+}
+
+.sales-summary__subtitle {
+    margin: 0;
+    color: #475569;
+}
+
+.sales-summary__status {
+    margin: 0;
+    font-weight: 600;
+    color: #2563eb;
+}
+
+.sales-summary__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.2rem;
+}
+
+.sales-summary--loading .summary-card {
+    opacity: 0.6;
+}
+
+.sales-summary--error .sales-summary__status {
+    color: #b91c1c;
+}
+
+.sales-summary--success .sales-summary__status {
+    color: #0f172a;
+}
+
+.summary-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 18px;
+    padding: 1.1rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    min-height: 180px;
+}
+
+.summary-card__title {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+}
+
+.summary-card__subtitle {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.summary-card__value {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.summary-card__detail {
+    margin: 0;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.summary-card--compact {
+    justify-content: center;
+}
+
+.summary-card--accent {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(14, 165, 233, 0.18));
+    border-color: rgba(59, 130, 246, 0.35);
+    box-shadow: 0 16px 36px rgba(59, 130, 246, 0.18);
+}
+
+.summary-card--accent .summary-card__title {
+    color: #1d4ed8;
+}
+
+.summary-card--accent .summary-card__detail {
+    color: #1e3a8a;
+    font-weight: 500;
+}
+
+.sparkline {
+    width: 100%;
+    height: 48px;
+}
+
+.sparkline__line {
+    fill: none;
+    stroke: #2563eb;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+}
+
+.sparkline__fill {
+    fill: rgba(59, 130, 246, 0.2);
+}
+
 .sales-entry__header {
     align-items: center;
 }
@@ -974,6 +1081,14 @@ body {
 
     .sales-report__totals-value {
         text-align: left;
+    }
+
+    .sales-summary__grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .summary-card {
+        min-height: auto;
     }
 }
 

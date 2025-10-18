@@ -193,3 +193,112 @@ class ReportsApiTestCase(unittest.TestCase):
             ],
         )
 
+    def test_sales_summary_returns_monthly_snapshots(self):
+        Customer = self.app_module.Customer
+        CustomerCategory = self.app_module.CustomerCategory
+        CustomerCreditTerm = self.app_module.CustomerCreditTerm
+        CustomerTransportMode = self.app_module.CustomerTransportMode
+        CustomerType = self.app_module.CustomerType
+        SalesActualEntry = self.app_module.SalesActualEntry
+
+        customer_kwargs = dict(
+            category=CustomerCategory.plantation,
+            credit_term=CustomerCreditTerm.cash,
+            transport_mode=CustomerTransportMode.samprox_lorry,
+            customer_type=CustomerType.regular,
+            sales_coordinator_name="Alex",
+            sales_coordinator_phone="0710000000",
+            store_keeper_name="Sam",
+            store_keeper_phone="0711111111",
+            payment_coordinator_name="Chris",
+            payment_coordinator_phone="0712222222",
+            special_note="Key account",
+        )
+
+        acme = Customer(name="ACME Corp", **customer_kwargs)
+        beta = Customer(name="Beta Industries", **customer_kwargs)
+        self.app_module.db.session.add_all([acme, beta])
+        self.app_module.db.session.commit()
+
+        entries = [
+            SalesActualEntry(
+                customer_id=acme.id,
+                date=date(2024, 1, 10),
+                amount=400.0,
+                unit_price=10.0,
+                quantity_tons=40.0,
+            ),
+            SalesActualEntry(
+                customer_id=beta.id,
+                date=date(2024, 2, 5),
+                amount=500.0,
+                unit_price=10.0,
+                quantity_tons=50.0,
+            ),
+            SalesActualEntry(
+                customer_id=acme.id,
+                date=date(2024, 3, 1),
+                amount=600.0,
+                unit_price=10.0,
+                quantity_tons=60.0,
+            ),
+            SalesActualEntry(
+                customer_id=beta.id,
+                date=date(2024, 3, 3),
+                amount=700.0,
+                unit_price=10.0,
+                quantity_tons=70.0,
+            ),
+            SalesActualEntry(
+                customer_id=beta.id,
+                date=date(2024, 3, 10),
+                amount=800.0,
+                unit_price=10.0,
+                quantity_tons=80.0,
+            ),
+        ]
+
+        self.app_module.db.session.add_all(entries)
+        self.app_module.db.session.commit()
+
+        response = self.client.get(
+            "/api/reports/sales-summary",
+            headers=self._auth_headers(),
+            query_string={"as_of": "2024-03-21"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["year"], 2024)
+        self.assertEqual(data["month"], 3)
+        self.assertEqual(data["as_of"], "2024-03-21")
+
+        ytd = data["year_to_date"]
+        self.assertAlmostEqual(ytd["quantity_tons"], 300.0)
+        self.assertAlmostEqual(ytd["sales_value"], 3000.0)
+        self.assertEqual(len(ytd["monthly_values"]), 12)
+        self.assertEqual(ytd["monthly_values"][0], 400.0)
+        self.assertEqual(ytd["monthly_values"][1], 500.0)
+        self.assertEqual(ytd["monthly_values"][2], 2100.0)
+        self.assertEqual(len(ytd["monthly_quantities"]), 12)
+        self.assertEqual(ytd["monthly_quantities"][0], 40.0)
+        self.assertEqual(ytd["monthly_quantities"][1], 50.0)
+        self.assertEqual(ytd["monthly_quantities"][2], 210.0)
+
+        mtd = data["month_to_date"]
+        self.assertAlmostEqual(mtd["sales_value"], 2100.0)
+        self.assertAlmostEqual(mtd["quantity_tons"], 210.0)
+        self.assertEqual(len(mtd["daily_values"]), 31)
+        self.assertEqual(mtd["daily_values"][0], 600.0)
+        self.assertEqual(mtd["daily_values"][2], 700.0)
+        self.assertEqual(mtd["daily_values"][9], 800.0)
+
+        self.assertAlmostEqual(data["monthly_average_unit_price"], 10.0)
+
+        top_customer = data["top_customer"]
+        self.assertIsNotNone(top_customer)
+        self.assertEqual(top_customer["name"], "Beta Industries")
+        self.assertAlmostEqual(top_customer["quantity_tons"], 200.0)
+        self.assertAlmostEqual(top_customer["sales_value"], 2000.0)
+

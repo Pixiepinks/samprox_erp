@@ -45,6 +45,60 @@
                 Keep production aligned with market demand by reviewing orders, forecasts, and customer
                 feedback. Use this page to coordinate priorities across sales, production, and service.
             </p>
+            <article class="production-card sales-summary" id="sales-summary" aria-labelledby="sales-summary-title">
+                <header class="production-card__header sales-summary__header">
+                    <div>
+                        <h2 id="sales-summary-title">Sales performance snapshot</h2>
+                        <p class="sales-summary__subtitle">
+                            Quick glance at how actual sales are trending against the current year.
+                        </p>
+                    </div>
+                    <p id="sales-summary-status" class="sales-summary__status" role="status"></p>
+                </header>
+                <div class="sales-summary__grid" role="list">
+                    <article class="summary-card" role="listitem">
+                        <h3 class="summary-card__title">Year-to-date sales qty</h3>
+                        <p class="summary-card__subtitle">Tons dispatched so far this year</p>
+                        <p class="summary-card__value" id="summary-ytd-quantity">--</p>
+                        <svg class="sparkline" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon class="sparkline__fill" id="summary-ytd-quantity-fill" points=""></polygon>
+                            <polyline class="sparkline__line" id="summary-ytd-quantity-line" points=""></polyline>
+                        </svg>
+                    </article>
+                    <article class="summary-card" role="listitem">
+                        <h3 class="summary-card__title">Year-to-date sales value</h3>
+                        <p class="summary-card__subtitle">Actual revenue captured in the current year</p>
+                        <p class="summary-card__value" id="summary-ytd-value">--</p>
+                        <svg class="sparkline" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon class="sparkline__fill" id="summary-ytd-value-fill" points=""></polygon>
+                            <polyline class="sparkline__line" id="summary-ytd-value-line" points=""></polyline>
+                        </svg>
+                    </article>
+                    <article class="summary-card" role="listitem">
+                        <h3 class="summary-card__title">Month-to-date sales</h3>
+                        <p class="summary-card__subtitle">Actual sales recorded in the selected month</p>
+                        <p class="summary-card__value" id="summary-mtd-value">--</p>
+                        <p class="summary-card__detail" id="summary-mtd-quantity">Qty: --</p>
+                        <svg class="sparkline" viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon class="sparkline__fill" id="summary-mtd-value-fill" points=""></polygon>
+                            <polyline class="sparkline__line" id="summary-mtd-value-line" points=""></polyline>
+                        </svg>
+                    </article>
+                    <article class="summary-card summary-card--compact" role="listitem">
+                        <h3 class="summary-card__title">Monthly average unit price</h3>
+                        <p class="summary-card__subtitle">Calculated from month-to-date actuals</p>
+                        <p class="summary-card__value" id="summary-average-price">--</p>
+                        <p class="summary-card__detail">Keep tabs on pricing discipline</p>
+                    </article>
+                    <article class="summary-card summary-card--accent" role="listitem">
+                        <h3 class="summary-card__title">Top customer</h3>
+                        <p class="summary-card__subtitle">Highest sales value year-to-date</p>
+                        <p class="summary-card__value" id="summary-top-customer-name">--</p>
+                        <p class="summary-card__detail" id="summary-top-customer-value">Value: --</p>
+                        <p class="summary-card__detail" id="summary-top-customer-quantity">Qty: --</p>
+                    </article>
+                </div>
+            </article>
             <div class="section__grid">
                 <article class="tile">
                     <h2 class="tile__title">Sales pipeline</h2>
@@ -411,6 +465,34 @@
         const feedbackEl = document.getElementById("sales-report-feedback");
         const resultsEl = document.getElementById("sales-report-results");
         const subtitleEl = document.getElementById("sales-report-subtitle");
+        const summaryContainer = document.getElementById("sales-summary");
+        const summaryStatusEl = document.getElementById("sales-summary-status");
+        const summaryElements = {
+            ytdQuantity: {
+                valueEl: document.getElementById("summary-ytd-quantity"),
+                lineEl: document.getElementById("summary-ytd-quantity-line"),
+                fillEl: document.getElementById("summary-ytd-quantity-fill"),
+            },
+            ytdValue: {
+                valueEl: document.getElementById("summary-ytd-value"),
+                lineEl: document.getElementById("summary-ytd-value-line"),
+                fillEl: document.getElementById("summary-ytd-value-fill"),
+            },
+            mtdSales: {
+                valueEl: document.getElementById("summary-mtd-value"),
+                quantityEl: document.getElementById("summary-mtd-quantity"),
+                lineEl: document.getElementById("summary-mtd-value-line"),
+                fillEl: document.getElementById("summary-mtd-value-fill"),
+            },
+            averagePrice: {
+                valueEl: document.getElementById("summary-average-price"),
+            },
+            topCustomer: {
+                nameEl: document.getElementById("summary-top-customer-name"),
+                valueEl: document.getElementById("summary-top-customer-value"),
+                quantityEl: document.getElementById("summary-top-customer-quantity"),
+            },
+        };
 
         const customerCategoryOptions = [
             { value: "plantation", label: "Plantation" },
@@ -460,6 +542,18 @@
 
         function formatNumber(value) {
             return numberFormatter.format(value || 0);
+        }
+
+        function formatCurrency(value) {
+            return `Rs ${formatNumber(value)}`;
+        }
+
+        function formatTons(value) {
+            return `${formatNumber(value)} tons`;
+        }
+
+        function formatUnitPrice(value) {
+            return `Rs ${formatNumber(value)} / ton`;
         }
 
         function updateSubtitle(year, month) {
@@ -718,6 +812,186 @@
             }
         }
 
+        function setSalesSummaryStatus(message, variant = "info") {
+            if (!summaryContainer || !summaryStatusEl) {
+                return;
+            }
+
+            summaryStatusEl.textContent = message || "";
+            summaryContainer.classList.remove(
+                "sales-summary--loading",
+                "sales-summary--error",
+                "sales-summary--success",
+            );
+
+            if (variant === "loading") {
+                summaryContainer.classList.add("sales-summary--loading");
+            } else if (variant === "error") {
+                summaryContainer.classList.add("sales-summary--error");
+            } else if (variant === "success") {
+                summaryContainer.classList.add("sales-summary--success");
+            }
+        }
+
+        function buildSparklinePoints(series) {
+            if (!Array.isArray(series) || series.length === 0) {
+                return { line: "", fill: "" };
+            }
+
+            const width = 100;
+            const height = 36;
+            const padding = 4;
+            const bottom = height - padding;
+            const maxValue = Math.max(...series, 0);
+            const safeMax = maxValue > 0 ? maxValue : 1;
+            const count = series.length;
+            const step = count > 1 ? width / (count - 1) : 0;
+
+            const points = series.map((value, index) => {
+                const safeValue = Math.max(0, Number(value) || 0);
+                const ratio = safeValue / safeMax;
+                const x = count > 1 ? step * index : width / 2;
+                const y = bottom - ratio * (height - padding * 2);
+                return `${x.toFixed(2)},${y.toFixed(2)}`;
+            });
+
+            const firstX = count > 1 ? 0 : width / 2;
+            const lastX = count > 1 ? width : width / 2;
+            const fillPoints = `${firstX.toFixed(2)},${bottom.toFixed(2)} ${points.join(" ")} ${lastX.toFixed(2)},${bottom.toFixed(2)}`;
+
+            return {
+                line: points.join(" "),
+                fill: fillPoints,
+            };
+        }
+
+        function renderSparkline(lineEl, fillEl, series) {
+            if (!lineEl || !fillEl) {
+                return;
+            }
+
+            if (!Array.isArray(series) || series.length === 0) {
+                lineEl.setAttribute("points", "");
+                fillEl.setAttribute("points", "");
+                return;
+            }
+
+            const { line, fill } = buildSparklinePoints(series);
+            lineEl.setAttribute("points", line);
+            fillEl.setAttribute("points", fill);
+        }
+
+        function applySalesSummary(data) {
+            if (!data) {
+                return;
+            }
+
+            const ytdQuantity = data?.year_to_date?.quantity_tons ?? 0;
+            if (summaryElements.ytdQuantity.valueEl) {
+                summaryElements.ytdQuantity.valueEl.textContent = formatTons(ytdQuantity);
+            }
+            renderSparkline(
+                summaryElements.ytdQuantity.lineEl,
+                summaryElements.ytdQuantity.fillEl,
+                data?.year_to_date?.monthly_quantities || [],
+            );
+
+            const ytdValue = data?.year_to_date?.sales_value ?? 0;
+            if (summaryElements.ytdValue.valueEl) {
+                summaryElements.ytdValue.valueEl.textContent = formatCurrency(ytdValue);
+            }
+            renderSparkline(
+                summaryElements.ytdValue.lineEl,
+                summaryElements.ytdValue.fillEl,
+                data?.year_to_date?.monthly_values || [],
+            );
+
+            const monthToDateValue = data?.month_to_date?.sales_value ?? 0;
+            const monthToDateQuantity = data?.month_to_date?.quantity_tons ?? 0;
+            if (summaryElements.mtdSales.valueEl) {
+                summaryElements.mtdSales.valueEl.textContent = formatCurrency(monthToDateValue);
+            }
+            if (summaryElements.mtdSales.quantityEl) {
+                summaryElements.mtdSales.quantityEl.textContent = `Qty: ${formatTons(monthToDateQuantity)}`;
+            }
+            renderSparkline(
+                summaryElements.mtdSales.lineEl,
+                summaryElements.mtdSales.fillEl,
+                data?.month_to_date?.daily_values || [],
+            );
+
+            if (summaryElements.averagePrice.valueEl) {
+                summaryElements.averagePrice.valueEl.textContent = formatUnitPrice(
+                    data?.monthly_average_unit_price ?? 0,
+                );
+            }
+
+            const topCustomer = data?.top_customer;
+            if (topCustomer) {
+                if (summaryElements.topCustomer.nameEl) {
+                    summaryElements.topCustomer.nameEl.textContent = topCustomer.name || `Customer ${topCustomer.id}`;
+                }
+                if (summaryElements.topCustomer.valueEl) {
+                    summaryElements.topCustomer.valueEl.textContent = `Value: ${formatCurrency(
+                        topCustomer.sales_value || 0,
+                    )}`;
+                }
+                if (summaryElements.topCustomer.quantityEl) {
+                    summaryElements.topCustomer.quantityEl.textContent = `Qty: ${formatTons(
+                        topCustomer.quantity_tons || 0,
+                    )}`;
+                }
+            } else {
+                if (summaryElements.topCustomer.nameEl) {
+                    summaryElements.topCustomer.nameEl.textContent = "No sales recorded";
+                }
+                if (summaryElements.topCustomer.valueEl) {
+                    summaryElements.topCustomer.valueEl.textContent = "Value: --";
+                }
+                if (summaryElements.topCustomer.quantityEl) {
+                    summaryElements.topCustomer.quantityEl.textContent = "Qty: --";
+                }
+            }
+        }
+
+        async function loadSalesSummary() {
+            if (!token || !summaryContainer) {
+                return;
+            }
+
+            setSalesSummaryStatus("Loading sales snapshot…", "loading");
+
+            try {
+                const response = await fetch("/api/reports/sales-summary", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ msg: "Unable to load sales summary." }));
+                    throw new Error(errorData.msg || "Unable to load sales summary.");
+                }
+
+                const data = await response.json();
+                applySalesSummary(data);
+
+                const monthIndex = (Number(data?.month) || 1) - 1;
+                const monthName = monthNames[monthIndex] || "";
+                const periodLabel = monthName ? `${monthName} ${data?.year ?? ""}`.trim() : "the current period";
+                setSalesSummaryStatus(`Updated for ${periodLabel}.`, "success");
+            } catch (error) {
+                console.error(error);
+                setSalesSummaryStatus(error?.message || "Unable to load sales summary.", "error");
+            }
+        }
+
         function closeCustomerDialog() {
             if (!customerDialog) {
                 return;
@@ -893,6 +1167,9 @@
                     if (typeof loadReport === "function") {
                         loadReport();
                     }
+                    if (typeof loadSalesSummary === "function") {
+                        loadSalesSummary();
+                    }
                 } catch (error) {
                     console.error(error);
                     setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
@@ -998,6 +1275,7 @@
         populateCustomerFormOptions();
         refreshCustomerSelectors();
         loadCustomers();
+        loadSalesSummary();
 
         function renderCustomer(customer) {
             const card = document.createElement("article");

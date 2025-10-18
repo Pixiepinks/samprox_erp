@@ -72,73 +72,93 @@
                 </article>
             </div>
             <article class="production-card sales-entry" aria-labelledby="sales-entry-title">
-                <div>
-                    <h2 id="sales-entry-title">Record sales entry</h2>
-                    <p class="sales-entry__subtitle">
-                        Capture forecasted or actual sales to instantly refresh the performance report below.
-                    </p>
-                </div>
-                <form id="sales-entry-form" class="sales-entry__form" aria-label="Record sales entry">
-                    <label class="sales-entry__field" for="sales-entry-date">
-                        <span class="sales-entry__label">Date</span>
-                        <input type="date" id="sales-entry-date" name="date" class="sales-entry__input" required />
-                    </label>
-                    <div class="sales-entry__field sales-entry__field--customer">
-                        <label class="sales-entry__label" for="sales-entry-customer">Customer</label>
-                        <div class="sales-entry__customer-controls">
-                            <select
-                                id="sales-entry-customer"
-                                name="customer_id"
-                                class="sales-entry__select"
-                                required
-                            ></select>
-                            <button
-                                type="button"
-                                class="button button--ghost sales-entry__add-customer"
-                                id="sales-entry-add-customer"
-                            >
-                                Add new customer
-                            </button>
-                        </div>
+                <header class="production-card__header sales-entry__header">
+                    <div>
+                        <h2 id="sales-entry-title">Record sales entry</h2>
+                        <p class="sales-entry__subtitle">
+                            Capture forecasted or actual sales to instantly refresh the performance report below.
+                        </p>
                     </div>
-                    <label class="sales-entry__field" for="sales-entry-type">
-                        <span class="sales-entry__label">Entry type</span>
-                        <select id="sales-entry-type" name="sale_type" class="sales-entry__select" required>
-                            <option value="actual">Actual sale</option>
-                            <option value="forecast">Forecast sale</option>
-                        </select>
-                    </label>
-                    <label class="sales-entry__field" for="sales-entry-unit-price">
-                        <span class="sales-entry__label">Unit price (Rs/Ton)</span>
-                        <input
-                            type="number"
-                            id="sales-entry-unit-price"
-                            name="unit_price"
-                            class="sales-entry__input"
-                            inputmode="decimal"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            required
-                        />
-                    </label>
-                    <label class="sales-entry__field" for="sales-entry-quantity">
-                        <span class="sales-entry__label">Quantity (Tons)</span>
-                        <input
-                            type="number"
-                            id="sales-entry-quantity"
-                            name="quantity_tons"
-                            class="sales-entry__input"
-                            inputmode="decimal"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            required
-                        />
-                    </label>
-                    <div class="sales-entry__field">
-                        <span class="sales-entry__label">Sales value (Rs)</span>
-                        <output id="sales-entry-total" class="sales-entry__total" aria-live="polite">0.00</output>
+                    <div class="sales-entry__summary" aria-live="polite">
+                        <span class="sales-entry__summary-label">Sales value (Rs)</span>
+                        <span class="sales-entry__summary-value" id="sales-entry-total">0.00</span>
+                    </div>
+                </header>
+                <form
+                    id="sales-entry-form"
+                    class="sales-entry__form"
+                    aria-label="Record sales entry"
+                    novalidate
+                >
+                    <div class="sales-form__grid">
+                        <div class="sales-input">
+                            <label for="sales-entry-date">Date <span class="required">*</span></label>
+                            <input
+                                type="date"
+                                id="sales-entry-date"
+                                name="date"
+                                class="sales-input__control"
+                                required
+                            />
+                        </div>
+                        <div class="sales-input sales-input--customer">
+                            <label for="sales-entry-customer">Customer <span class="required">*</span></label>
+                            <div class="sales-input__customer-controls">
+                                <select
+                                    id="sales-entry-customer"
+                                    name="customer_id"
+                                    class="sales-input__control"
+                                    required
+                                ></select>
+                                <button
+                                    type="button"
+                                    class="button button--ghost sales-input__add-customer"
+                                    id="sales-entry-add-customer"
+                                >
+                                    Add new customer
+                                </button>
+                            </div>
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-type">Entry type <span class="required">*</span></label>
+                            <select
+                                id="sales-entry-type"
+                                name="sale_type"
+                                class="sales-input__control"
+                                required
+                            >
+                                <option value="actual">Actual sale</option>
+                                <option value="forecast">Forecast sale</option>
+                            </select>
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-unit-price">Unit price (Rs/Ton) <span class="required">*</span></label>
+                            <input
+                                type="number"
+                                id="sales-entry-unit-price"
+                                name="unit_price"
+                                class="sales-input__control"
+                                inputmode="decimal"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                required
+                            />
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-quantity">Quantity (Tons) <span class="required">*</span></label>
+                            <input
+                                type="number"
+                                id="sales-entry-quantity"
+                                name="quantity_tons"
+                                class="sales-input__control"
+                                inputmode="decimal"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                required
+                            />
+                        </div>
                     </div>
                     <div class="sales-entry__actions">
                         <button type="submit" class="button" id="sales-entry-submit">Save entry</button>
@@ -146,7 +166,12 @@
                 </form>
                 <p id="sales-entry-feedback" class="sales-entry__feedback" role="status" aria-live="polite"></p>
             </article>
-            <dialog id="customer-dialog" class="modal" aria-labelledby="customer-dialog-title">
+            <dialog
+                id="customer-dialog"
+                class="modal"
+                aria-labelledby="customer-dialog-title"
+                aria-modal="true"
+            >
                 <form id="customer-form" class="modal__form">
                     <header class="modal__header">
                         <h2 id="customer-dialog-title" class="modal__title">Add new customer</h2>
@@ -335,6 +360,14 @@
         const customerPaymentCoordinatorPhone = document.getElementById("customer-payment-coordinator-phone");
         const customerSpecialNote = document.getElementById("customer-special-note");
         const addCustomerOptionValue = "__create__";
+        const dialogSupported =
+            typeof HTMLDialogElement === "function" &&
+            typeof HTMLDialogElement.prototype.showModal === "function";
+
+        if (customerDialog && !dialogSupported) {
+            customerDialog.setAttribute("data-polyfill", "true");
+            customerDialog.setAttribute("hidden", "");
+        }
 
         function handleUnauthorized() {
             localStorage.removeItem("samprox_token");
@@ -665,10 +698,18 @@
             if (!customerDialog) {
                 return;
             }
-            if (typeof customerDialog.close === "function") {
+            if (dialogSupported && typeof customerDialog.close === "function") {
                 customerDialog.close();
+                document.body.classList.remove("modal-polyfill-active");
             } else {
+                customerDialog.removeAttribute("data-polyfill-open");
+                customerDialog.setAttribute("hidden", "");
                 customerDialog.removeAttribute("open");
+                document.body.classList.remove("modal-polyfill-active");
+                customerDialog.dispatchEvent(new Event("close"));
+            }
+            if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
+                entryCustomerSelect.value = "";
             }
         }
 
@@ -706,29 +747,45 @@
             resetCustomerForm();
             populateCustomerFormOptions();
             if (customerDialog) {
-                if (typeof customerDialog.showModal === "function") {
+                if (dialogSupported && typeof customerDialog.showModal === "function") {
                     customerDialog.showModal();
                 } else {
+                    customerDialog.setAttribute("data-polyfill-open", "true");
+                    customerDialog.removeAttribute("hidden");
                     customerDialog.setAttribute("open", "");
+                    document.body.classList.add("modal-polyfill-active");
                 }
             }
             customerNameInput?.focus();
         }
 
         if (customerDialog) {
-            customerDialog.addEventListener("cancel", (event) => {
-                event.preventDefault();
-                closeCustomerDialog();
-                resetCustomerForm();
-                if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
-                    entryCustomerSelect.value = "";
-                }
-            });
+            if (dialogSupported) {
+                customerDialog.addEventListener("cancel", (event) => {
+                    event.preventDefault();
+                    closeCustomerDialog();
+                    resetCustomerForm();
+                });
+            }
             customerDialog.addEventListener("close", () => {
+                document.body.classList.remove("modal-polyfill-active");
+                if (!dialogSupported) {
+                    customerDialog.removeAttribute("data-polyfill-open");
+                    customerDialog.setAttribute("hidden", "");
+                }
                 if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
                     entryCustomerSelect.value = "";
                 }
             });
+            if (!dialogSupported) {
+                document.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape" && customerDialog.hasAttribute("data-polyfill-open")) {
+                        event.preventDefault();
+                        closeCustomerDialog();
+                        resetCustomerForm();
+                    }
+                });
+            }
         }
 
         if (entryCustomerSelect) {

@@ -92,6 +92,31 @@ class MarketApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["customer"]["special_note"], "")
 
+    def test_create_customer_persists_enum_values_for_days_credit_terms(self):
+        payload = self._create_customer_payload(
+            name="Noyan Lanka Pvt Ltd",
+            category="industrial",
+            credit_term="14_days",
+            transport_mode="samprox_lorry",
+            customer_type="regular",
+        )
+
+        response = self.client.post(
+            "/api/market/customers",
+            json=payload,
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        data = response.get_json()
+        self.assertEqual(data["customer"]["credit_term"], "14_days")
+
+        Customer = self.app_module.Customer
+        CustomerCreditTerm = self.app_module.CustomerCreditTerm
+        created = Customer.query.filter_by(name="Noyan Lanka Pvt Ltd").first()
+        self.assertIsNotNone(created)
+        self.assertEqual(created.credit_term, CustomerCreditTerm.days14)
+
 
 if __name__ == "__main__":
     unittest.main()

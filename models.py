@@ -239,11 +239,22 @@ class CustomerType(str, Enum):
     seasonal = "seasonal"
 
 
+def _enum_values(enum_cls):
+    return [member.value for member in enum_cls]
+
+
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), unique=True, nullable=False)
     category = db.Column(db.Enum(CustomerCategory), nullable=False)
-    credit_term = db.Column(db.Enum(CustomerCreditTerm), nullable=False)
+    credit_term = db.Column(
+        db.Enum(
+            CustomerCreditTerm,
+            values_callable=_enum_values,
+            name="customer_credit_term",
+        ),
+        nullable=False,
+    )
     transport_mode = db.Column(db.Enum(CustomerTransportMode), nullable=False)
     customer_type = db.Column(db.Enum(CustomerType), nullable=False)
     sales_coordinator_name = db.Column(db.String(120), nullable=False)

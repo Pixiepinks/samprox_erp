@@ -83,10 +83,24 @@
                         <span class="sales-entry__label">Date</span>
                         <input type="date" id="sales-entry-date" name="date" class="sales-entry__input" required />
                     </label>
-                    <label class="sales-entry__field" for="sales-entry-customer">
-                        <span class="sales-entry__label">Customer</span>
-                        <select id="sales-entry-customer" name="customer_id" class="sales-entry__select" required></select>
-                    </label>
+                    <div class="sales-entry__field sales-entry__field--customer">
+                        <label class="sales-entry__label" for="sales-entry-customer">Customer</label>
+                        <div class="sales-entry__customer-controls">
+                            <select
+                                id="sales-entry-customer"
+                                name="customer_id"
+                                class="sales-entry__select"
+                                required
+                            ></select>
+                            <button
+                                type="button"
+                                class="button button--ghost sales-entry__add-customer"
+                                id="sales-entry-add-customer"
+                            >
+                                Add new customer
+                            </button>
+                        </div>
+                    </div>
                     <label class="sales-entry__field" for="sales-entry-type">
                         <span class="sales-entry__label">Entry type</span>
                         <select id="sales-entry-type" name="sale_type" class="sales-entry__select" required>
@@ -296,6 +310,7 @@
         const entryForm = document.getElementById("sales-entry-form");
         const entryDateInput = document.getElementById("sales-entry-date");
         const entryCustomerSelect = document.getElementById("sales-entry-customer");
+        const entryAddCustomerButton = document.getElementById("sales-entry-add-customer");
         const entryTypeSelect = document.getElementById("sales-entry-type");
         const entryUnitPriceInput = document.getElementById("sales-entry-unit-price");
         const entryQuantityInput = document.getElementById("sales-entry-quantity");
@@ -722,6 +737,12 @@
                     return;
                 }
                 event.target.value = "";
+                openCustomerDialog();
+            });
+        }
+
+        if (entryAddCustomerButton) {
+            entryAddCustomerButton.addEventListener("click", () => {
                 openCustomerDialog();
             });
         }

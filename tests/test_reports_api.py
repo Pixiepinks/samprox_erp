@@ -145,6 +145,8 @@ class ReportsApiTestCase(unittest.TestCase):
             acme_report["monthly_forecast_quantity_tons"], 25.0
         )
         self.assertAlmostEqual(acme_report["monthly_actual_quantity_tons"], 29.0)
+        self.assertAlmostEqual(acme_report["monthly_average_unit_price"], 10.0)
+        self.assertAlmostEqual(acme_report["monthly_total_sales_amount"], 290.0)
         self.assertEqual(
             acme_report["dates"],
             [
@@ -176,6 +178,8 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(beta_report["monthly_actual_total"], 300.0)
         self.assertAlmostEqual(beta_report["monthly_forecast_quantity_tons"], 25.0)
         self.assertAlmostEqual(beta_report["monthly_actual_quantity_tons"], 30.0)
+        self.assertAlmostEqual(beta_report["monthly_average_unit_price"], 10.0)
+        self.assertAlmostEqual(beta_report["monthly_total_sales_amount"], 300.0)
         self.assertEqual(
             beta_report["dates"],
             [

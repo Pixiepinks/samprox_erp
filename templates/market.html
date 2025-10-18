@@ -1023,10 +1023,21 @@
             const forecastQuantity = customer.monthly_forecast_quantity_tons || 0;
             const actualQuantity = customer.monthly_actual_quantity_tons || 0;
             const variance = actualQuantity - forecastQuantity;
+            const averageUnitPrice = customer.monthly_average_unit_price || 0;
+            const totalSales =
+                customer.monthly_total_sales_amount ?? customer.monthly_actual_total ?? 0;
             const totalsConfig = [
-                { label: "Forecast qty (tons)", value: forecastQuantity },
-                { label: "Actual qty (tons)", value: actualQuantity },
+                { label: "Month Forecast Total (Qty)", value: forecastQuantity },
+                { label: "Month Actual Total (Qty)", value: actualQuantity },
                 { label: "Variance qty (tons)", value: variance },
+                {
+                    label: "Month Average Unit Price (Rs.)",
+                    value: averageUnitPrice,
+                },
+                {
+                    label: "Month Total Sales (Rs.)",
+                    value: totalSales,
+                },
             ];
 
             totalsConfig.forEach(({ label, value }) => {

@@ -150,6 +150,11 @@ def customer_sales_report():
                 }
             )
 
+        if monthly_actual_quantity:
+            monthly_average_unit_price = monthly_actual_total / monthly_actual_quantity
+        else:
+            monthly_average_unit_price = 0.0
+
         payload.append(
             {
                 "customer_id": customer_id_value,
@@ -159,6 +164,8 @@ def customer_sales_report():
                 "monthly_actual_total": monthly_actual_total,
                 "monthly_forecast_quantity_tons": monthly_forecast_quantity,
                 "monthly_actual_quantity_tons": monthly_actual_quantity,
+                "monthly_average_unit_price": monthly_average_unit_price,
+                "monthly_total_sales_amount": monthly_actual_total,
             }
         )
 

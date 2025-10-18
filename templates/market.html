@@ -135,7 +135,7 @@
                     </div>
                     <div class="sales-entry__summary" aria-live="polite">
                         <span class="sales-entry__summary-label">Sales value (Rs)</span>
-                        <span class="sales-entry__summary-value" id="sales-entry-total">0.00</span>
+                        <span class="sales-entry__summary-value" id="sales-entry-total">0</span>
                     </div>
                 </header>
                 <form
@@ -515,9 +515,13 @@
         ];
 
         const knownCustomers = new Map();
-        const numberFormatter = new Intl.NumberFormat(undefined, {
+        const quantityFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
+        });
+        const currencyFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
         });
 
         function populateSelectOptions(select, options) {
@@ -541,11 +545,15 @@
         }
 
         function formatNumber(value) {
-            return numberFormatter.format(value || 0);
+            return quantityFormatter.format(value || 0);
+        }
+
+        function formatCurrencyNumber(value) {
+            return currencyFormatter.format(value || 0);
         }
 
         function formatCurrency(value) {
-            return `Rs ${formatNumber(value)}`;
+            return `Rs ${formatCurrencyNumber(value)}`;
         }
 
         function formatTons(value) {
@@ -553,7 +561,21 @@
         }
 
         function formatUnitPrice(value) {
-            return `Rs ${formatNumber(value)} / ton`;
+            return `Rs ${formatCurrencyNumber(value)} <span class="summary-card__unit">/ ton</span>`;
+        }
+
+        function extractFirstName(name) {
+            if (typeof name !== "string") {
+                return "";
+            }
+
+            const trimmed = name.trim();
+            if (!trimmed) {
+                return "";
+            }
+
+            const [firstName] = trimmed.split(/\s+/);
+            return firstName || "";
         }
 
         function updateSubtitle(year, month) {
@@ -728,7 +750,7 @@
             const safeUnit = Number.isFinite(unit) ? unit : 0;
             const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
             const total = safeUnit * safeQuantity;
-            entryTotalOutput.textContent = numberFormatter.format(total || 0);
+            entryTotalOutput.textContent = formatCurrencyNumber(total || 0);
         }
 
         function collectSalesEntryData() {
@@ -921,7 +943,7 @@
             );
 
             if (summaryElements.averagePrice.valueEl) {
-                summaryElements.averagePrice.valueEl.textContent = formatUnitPrice(
+                summaryElements.averagePrice.valueEl.innerHTML = formatUnitPrice(
                     data?.monthly_average_unit_price ?? 0,
                 );
             }
@@ -929,7 +951,9 @@
             const topCustomer = data?.top_customer;
             if (topCustomer) {
                 if (summaryElements.topCustomer.nameEl) {
-                    summaryElements.topCustomer.nameEl.textContent = topCustomer.name || `Customer ${topCustomer.id}`;
+                    const displayName =
+                        extractFirstName(topCustomer.name) || `Customer ${topCustomer.id}`;
+                    summaryElements.topCustomer.nameEl.textContent = displayName;
                 }
                 if (summaryElements.topCustomer.valueEl) {
                     summaryElements.topCustomer.valueEl.textContent = `Value: ${formatCurrency(
@@ -1305,26 +1329,28 @@
             const totalSales =
                 customer.monthly_total_sales_amount ?? customer.monthly_actual_total ?? 0;
             const totalsConfig = [
-                { label: "Month Forecast Total (Qty)", value: forecastQuantity },
-                { label: "Month Actual Total (Qty)", value: actualQuantity },
-                { label: "Variance qty (tons)", value: variance },
+                { label: "Month Forecast Total (Qty)", value: forecastQuantity, formatter: formatNumber },
+                { label: "Month Actual Total (Qty)", value: actualQuantity, formatter: formatNumber },
+                { label: "Variance qty (tons)", value: variance, formatter: formatNumber },
                 {
                     label: "Month Average Unit Price (Rs.)",
                     value: averageUnitPrice,
+                    formatter: formatCurrencyNumber,
                 },
                 {
                     label: "Month Total Sales (Rs.)",
                     value: totalSales,
+                    formatter: formatCurrencyNumber,
                 },
             ];
 
-            totalsConfig.forEach(({ label, value }) => {
+            totalsConfig.forEach(({ label, value, formatter = formatNumber }) => {
                 const group = document.createElement("div");
                 group.className = "sales-report__totals-item";
                 const dt = document.createElement("dt");
                 dt.textContent = label;
                 const dd = document.createElement("dd");
-                dd.textContent = formatNumber(value);
+                dd.textContent = formatter(value);
                 dd.className = "sales-report__totals-value";
                 if (label.toLowerCase().includes("variance")) {
                     if (value > 0) {

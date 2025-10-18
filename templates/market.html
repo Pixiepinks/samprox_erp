@@ -357,6 +357,7 @@
                     </form>
                 </div>
                 <p id="sales-report-feedback" class="sales-report__feedback" role="status" aria-live="polite"></p>
+                <div id="sales-report-overview" class="sales-report__overview" aria-live="polite"></div>
                 <div id="sales-report-results" class="sales-report__results" aria-live="polite"></div>
             </article>
         </section>
@@ -463,6 +464,7 @@
         const customerSelect = document.getElementById("sales-report-customer");
         const submitButton = document.getElementById("sales-report-submit");
         const feedbackEl = document.getElementById("sales-report-feedback");
+        const overviewEl = document.getElementById("sales-report-overview");
         const resultsEl = document.getElementById("sales-report-results");
         const subtitleEl = document.getElementById("sales-report-subtitle");
         const summaryContainer = document.getElementById("sales-summary");
@@ -564,6 +566,15 @@
             return `Rs ${formatCurrencyNumber(value)} <span class="summary-card__unit">/ ton</span>`;
         }
 
+        function formatAverageUnitPrice(amount, quantity) {
+            if (!quantity) {
+                return "--";
+            }
+
+            const unitPrice = amount / quantity;
+            return `Rs ${formatCurrencyNumber(unitPrice)} / ton`;
+        }
+
         function extractFirstName(name) {
             if (typeof name !== "string") {
                 return "";
@@ -614,6 +625,326 @@
                 feedbackEl.classList.add("sales-report__feedback--info");
             }
             feedbackEl.classList.add("sales-report__feedback--visible");
+        }
+
+        function clearOverview() {
+            if (!overviewEl) {
+                return;
+            }
+
+            overviewEl.classList.remove("sales-report__overview--visible");
+            overviewEl.innerHTML = "";
+        }
+
+        function calculateOverviewMetrics(customers) {
+            const totalCustomers = Array.isArray(customers) ? customers.length : 0;
+            const metrics = {
+                totals: {
+                    forecastQuantity: 0,
+                    forecastAmount: 0,
+                    actualQuantity: 0,
+                    actualAmount: 0,
+                },
+                counts: {
+                    forecast: 0,
+                    actual: 0,
+                    total: totalCustomers,
+                },
+                forecastOnly: [],
+                categories: {
+                    industrial: {
+                        customers: 0,
+                        forecast: { quantity: 0, amount: 0 },
+                        actual: { quantity: 0, amount: 0 },
+                    },
+                    plantation: {
+                        customers: 0,
+                        forecast: { quantity: 0, amount: 0 },
+                        actual: { quantity: 0, amount: 0 },
+                    },
+                },
+            };
+
+            if (!Array.isArray(customers)) {
+                return metrics;
+            }
+
+            customers.forEach((customer) => {
+                const forecastQuantity = Number.parseFloat(customer?.monthly_forecast_quantity_tons ?? 0) || 0;
+                const forecastAmount = Number.parseFloat(customer?.monthly_forecast_total ?? 0) || 0;
+                const actualQuantity = Number.parseFloat(customer?.monthly_actual_quantity_tons ?? 0) || 0;
+                const actualAmount = Number.parseFloat(customer?.monthly_actual_total ?? 0) || 0;
+                const categoryKey = String(customer?.customer_category || "").toLowerCase();
+
+                metrics.totals.forecastQuantity += forecastQuantity;
+                metrics.totals.forecastAmount += forecastAmount;
+                metrics.totals.actualQuantity += actualQuantity;
+                metrics.totals.actualAmount += actualAmount;
+
+                if (forecastQuantity > 0 || forecastAmount > 0) {
+                    metrics.counts.forecast += 1;
+                }
+                if (actualQuantity > 0 || actualAmount > 0) {
+                    metrics.counts.actual += 1;
+                }
+                if (
+                    (forecastQuantity > 0 || forecastAmount > 0) &&
+                    actualQuantity === 0 &&
+                    actualAmount === 0
+                ) {
+                    const customerName = customer?.customer_name || customer?.name || "Unnamed customer";
+                    metrics.forecastOnly.push(customerName);
+                }
+
+                const categoryBucket = metrics.categories[categoryKey];
+                if (categoryBucket) {
+                    categoryBucket.customers += 1;
+                    categoryBucket.forecast.quantity += forecastQuantity;
+                    categoryBucket.forecast.amount += forecastAmount;
+                    categoryBucket.actual.quantity += actualQuantity;
+                    categoryBucket.actual.amount += actualAmount;
+                }
+            });
+
+            return metrics;
+        }
+
+        function createOverviewCard({ title, value, details = [], tone }) {
+            const card = document.createElement("article");
+            card.className = "sales-report__overview-card";
+            if (tone) {
+                card.classList.add(`sales-report__overview-card--${tone}`);
+            }
+
+            const titleEl = document.createElement("h4");
+            titleEl.className = "sales-report__overview-card-title";
+            titleEl.textContent = title;
+            card.appendChild(titleEl);
+
+            const valueEl = document.createElement("p");
+            valueEl.className = "sales-report__overview-value";
+            valueEl.textContent = value;
+            card.appendChild(valueEl);
+
+            details
+                .filter(Boolean)
+                .forEach((detail) => {
+                    if (detail?.type === "list") {
+                        const listEl = document.createElement("ul");
+                        listEl.className = "sales-report__overview-list";
+                        const items = Array.isArray(detail.items) ? detail.items : [];
+                        if (items.length === 0) {
+                            const itemEl = document.createElement("li");
+                            itemEl.textContent = "None";
+                            listEl.appendChild(itemEl);
+                        } else {
+                            items.forEach((item) => {
+                                const itemEl = document.createElement("li");
+                                itemEl.textContent = item;
+                                listEl.appendChild(itemEl);
+                            });
+                        }
+                        card.appendChild(listEl);
+                    } else if (detail?.text) {
+                        const detailEl = document.createElement("p");
+                        detailEl.className = "sales-report__overview-detail";
+                        detailEl.textContent = detail.text;
+                        card.appendChild(detailEl);
+                    }
+                });
+
+            return card;
+        }
+
+        function createOverviewGroup(title, cards) {
+            const section = document.createElement("section");
+            section.className = "sales-report__overview-group";
+
+            const heading = document.createElement("h3");
+            heading.className = "sales-report__overview-heading";
+            heading.textContent = title;
+            section.appendChild(heading);
+
+            const grid = document.createElement("div");
+            grid.className = "sales-report__overview-grid";
+            cards.filter(Boolean).forEach((card) => {
+                grid.appendChild(card);
+            });
+            section.appendChild(grid);
+
+            return section;
+        }
+
+        function renderOverview(customers) {
+            if (!overviewEl) {
+                return;
+            }
+
+            clearOverview();
+
+            if (!Array.isArray(customers) || customers.length === 0) {
+                return;
+            }
+
+            const metrics = calculateOverviewMetrics(customers);
+            overviewEl.classList.add("sales-report__overview--visible");
+
+            const salesGroup = createOverviewGroup("Sales snapshot", [
+                createOverviewCard({
+                    title: "Forecast sales",
+                    value: formatTons(metrics.totals.forecastQuantity),
+                    details: [
+                        { text: `Value: ${formatCurrency(metrics.totals.forecastAmount)}` },
+                        {
+                            text: `Avg unit price: ${formatAverageUnitPrice(
+                                metrics.totals.forecastAmount,
+                                metrics.totals.forecastQuantity,
+                            )}`,
+                        },
+                    ],
+                    tone: "forecast",
+                }),
+                createOverviewCard({
+                    title: "Actual sales",
+                    value: formatTons(metrics.totals.actualQuantity),
+                    details: [
+                        { text: `Value: ${formatCurrency(metrics.totals.actualAmount)}` },
+                        {
+                            text: `Avg unit price: ${formatAverageUnitPrice(
+                                metrics.totals.actualAmount,
+                                metrics.totals.actualQuantity,
+                            )}`,
+                        },
+                    ],
+                    tone: "actual",
+                }),
+            ]);
+
+            const coverageGroup = createOverviewGroup("Customer coverage", [
+                createOverviewCard({
+                    title: "Customers with forecast",
+                    value: String(metrics.counts.forecast),
+                    details: [
+                        {
+                            text: `Out of ${metrics.counts.total} loaded ${
+                                metrics.counts.total === 1 ? "customer" : "customers"
+                            }`,
+                        },
+                    ],
+                    tone: "forecast",
+                }),
+                createOverviewCard({
+                    title: "Customers with actuals",
+                    value: String(metrics.counts.actual),
+                    details: [
+                        {
+                            text: `Out of ${metrics.counts.total} loaded ${
+                                metrics.counts.total === 1 ? "customer" : "customers"
+                            }`,
+                        },
+                    ],
+                    tone: "actual",
+                }),
+                createOverviewCard({
+                    title: "Forecast without orders",
+                    value: String(metrics.forecastOnly.length),
+                    details:
+                        metrics.forecastOnly.length > 0
+                            ? [
+                                  {
+                                      type: "list",
+                                      items: metrics.forecastOnly.slice(0, 5),
+                                  },
+                                  metrics.forecastOnly.length > 5
+                                      ? {
+                                            text: `+${
+                                                metrics.forecastOnly.length - 5
+                                            } more forecast customers awaiting orders`,
+                                        }
+                                      : null,
+                              ]
+                            : [{ text: "All forecasted customers placed orders." }],
+                    tone: metrics.forecastOnly.length ? "alert" : undefined,
+                }),
+            ]);
+
+            const sections = [salesGroup, coverageGroup];
+
+            const industrialStats = metrics.categories.industrial;
+            if (industrialStats.customers > 0) {
+                sections.push(
+                    createOverviewGroup("Industrial channel", [
+                        createOverviewCard({
+                            title: "Forecast industrial sales",
+                            value: formatTons(industrialStats.forecast.quantity),
+                            details: [
+                                { text: `Value: ${formatCurrency(industrialStats.forecast.amount)}` },
+                                {
+                                    text: `Avg unit price: ${formatAverageUnitPrice(
+                                        industrialStats.forecast.amount,
+                                        industrialStats.forecast.quantity,
+                                    )}`,
+                                },
+                            ],
+                            tone: "forecast",
+                        }),
+                        createOverviewCard({
+                            title: "Actual industrial sales",
+                            value: formatTons(industrialStats.actual.quantity),
+                            details: [
+                                { text: `Value: ${formatCurrency(industrialStats.actual.amount)}` },
+                                {
+                                    text: `Avg unit price: ${formatAverageUnitPrice(
+                                        industrialStats.actual.amount,
+                                        industrialStats.actual.quantity,
+                                    )}`,
+                                },
+                            ],
+                            tone: "actual",
+                        }),
+                    ]),
+                );
+            }
+
+            const plantationStats = metrics.categories.plantation;
+            if (plantationStats.customers > 0) {
+                sections.push(
+                    createOverviewGroup("Plantation channel", [
+                        createOverviewCard({
+                            title: "Forecast plantation sales",
+                            value: formatTons(plantationStats.forecast.quantity),
+                            details: [
+                                { text: `Value: ${formatCurrency(plantationStats.forecast.amount)}` },
+                                {
+                                    text: `Avg unit price: ${formatAverageUnitPrice(
+                                        plantationStats.forecast.amount,
+                                        plantationStats.forecast.quantity,
+                                    )}`,
+                                },
+                            ],
+                            tone: "forecast",
+                        }),
+                        createOverviewCard({
+                            title: "Actual plantation sales",
+                            value: formatTons(plantationStats.actual.quantity),
+                            details: [
+                                { text: `Value: ${formatCurrency(plantationStats.actual.amount)}` },
+                                {
+                                    text: `Avg unit price: ${formatAverageUnitPrice(
+                                        plantationStats.actual.amount,
+                                        plantationStats.actual.quantity,
+                                    )}`,
+                                },
+                            ],
+                            tone: "actual",
+                        }),
+                    ]),
+                );
+            }
+
+            sections.forEach((section) => {
+                overviewEl.appendChild(section);
+            });
         }
 
         function setEntryFeedback(message, variant = "info") {
@@ -1440,6 +1771,7 @@
                 return;
             }
 
+            clearOverview();
             resultsEl.innerHTML = "";
             if (!data || !Array.isArray(data.customers) || data.customers.length === 0) {
                 const empty = document.createElement("p");
@@ -1449,6 +1781,7 @@
                 return;
             }
 
+            renderOverview(data.customers);
             const container = document.createElement("div");
             container.className = "sales-report__customers";
 
@@ -1499,6 +1832,7 @@
 
             updateSubtitle(year, month);
             setFeedback("Loading customer sales…", "info");
+            clearOverview();
             resultsEl.innerHTML = '<p class="sales-report__loading">Loading report…</p>';
 
             submitButton.disabled = true;
@@ -1547,6 +1881,7 @@
             } catch (error) {
                 console.error(error);
                 resultsEl.innerHTML = "";
+                clearOverview();
                 const errorMessage = error?.message || "Unable to load report.";
                 setFeedback(errorMessage, "error");
             } finally {

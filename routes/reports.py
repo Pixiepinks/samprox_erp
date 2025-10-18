@@ -160,6 +160,7 @@ def customer_sales_report():
             {
                 "customer_id": customer_id_value,
                 "customer_name": bucket["customer"].name,
+                "customer_category": bucket["customer"].category.value,
                 "dates": dates,
                 "monthly_forecast_total": monthly_forecast_total,
                 "monthly_actual_total": monthly_actual_total,

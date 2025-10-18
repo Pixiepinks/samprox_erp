@@ -22,6 +22,53 @@ from models import (
 )
 from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, ui
 
+
+def _ensure_database_exists(database_url: str | None) -> None:
+    if not database_url:
+        return
+
+    url = make_url(database_url)
+    backend = (url.get_backend_name() or "").lower()
+
+    if backend.startswith("sqlite"):
+        database_path = url.database
+        if database_path and database_path not in {":memory:", ""}:
+            directory = os.path.dirname(os.path.abspath(database_path))
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+        return
+
+    database_name = url.database
+    if not database_name:
+        return
+
+    engine = create_engine(url)
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return
+    except OperationalError:
+        pass
+    finally:
+        engine.dispose()
+
+    if not backend.startswith("postgresql"):
+        return
+
+    admin_url = url.set(database="postgres")
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    try:
+        with admin_engine.connect() as connection:
+            exists = connection.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": database_name},
+            ).scalar()
+            if not exists:
+                connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+    finally:
+        admin_engine.dispose()
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -52,6 +99,7 @@ def create_app():
     def health(): return jsonify({"ok": True})
 
     return app
+
 
 app = create_app()
 

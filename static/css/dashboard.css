@@ -322,6 +322,48 @@ body {
     color: #475569;
 }
 
+.sales-entry__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.sales-entry__field--customer {
+    gap: 0.75rem;
+}
+
+.sales-entry__label {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.sales-entry__customer-controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.sales-entry__customer-controls .sales-entry__select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sales-entry__add-customer {
+    padding: 0.6rem 1rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    .sales-entry__customer-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .sales-entry__add-customer {
+        width: 100%;
+    }
+}
+
 .sales-report {
     gap: 1.5rem;
 }

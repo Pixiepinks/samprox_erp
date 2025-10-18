@@ -56,12 +56,25 @@ def create_customer():
         return value
 
     def _parse_enum(field_name, enum_cls, label):
-        raw_value = (payload.get(field_name) or "").strip().lower()
+        raw_value = (payload.get(field_name) or "").strip()
+        if not raw_value:
+            raise ValueError(f"{label} is required")
+
         try:
             return enum_cls(raw_value)
-        except ValueError as exc:
-            valid_values = ", ".join(sorted(member.value for member in enum_cls))
-            raise ValueError(f"{label} must be one of: {valid_values}") from exc
+        except ValueError:
+            pass
+
+        normalized_value = "".join(ch for ch in raw_value.lower() if ch.isalnum())
+        for member in enum_cls:
+            if normalized_value in {
+                "".join(ch for ch in member.value.lower() if ch.isalnum()),
+                "".join(ch for ch in member.name.lower() if ch.isalnum()),
+            }:
+                return member
+
+        valid_values = ", ".join(sorted(member.value for member in enum_cls))
+        raise ValueError(f"{label} must be one of: {valid_values}")
 
     try:
         name = _required_text("name", "Customer name")
@@ -85,7 +98,7 @@ def create_customer():
         payment_coordinator_phone = _required_text(
             "payment_coordinator_phone", "Payment coordinator telephone"
         )
-        special_note = _required_text("special_note", "Special note")
+        special_note = (payload.get("special_note") or "").strip()
     except ValueError as error:
         return jsonify({"msg": str(error)}), 400
 

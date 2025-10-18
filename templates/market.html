@@ -375,12 +375,18 @@
             window.location.href = "/";
         }
 
-        userNameEl.textContent = user?.name || "Unknown";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
+        if (userNameEl) {
+            userNameEl.textContent = user?.name || "Unknown";
+        }
+        if (userRoleEl) {
+            userRoleEl.textContent = roleLabels[user?.role] || "";
+        }
 
-        logoutButton.addEventListener("click", () => {
-            handleUnauthorized();
-        });
+        if (logoutButton) {
+            logoutButton.addEventListener("click", () => {
+                handleUnauthorized();
+            });
+        }
 
         const monthNames = [
             "January",

@@ -1,8 +1,9 @@
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
 from models import RoleEnum, TeamMember, TeamMemberStatus
@@ -13,6 +14,55 @@ bp = Blueprint("team", __name__, url_prefix="/api/team")
 
 member_schema = TeamMemberSchema()
 members_schema = TeamMemberSchema(many=True)
+
+
+def _ensure_schema():
+    """Ensure the ``team_member`` table has the expected structure."""
+
+    try:
+        engine = db.engine
+    except RuntimeError:
+        # No application context – nothing we can do here.
+        return
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+
+    if "team_member" not in tables:
+        # Create the table if it has not been provisioned yet.
+        TeamMember.__table__.create(bind=engine, checkfirst=True)
+        inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("team_member")}
+
+    statements: list[str] = []
+
+    if "image_url" not in columns:
+        statements.append("ALTER TABLE team_member ADD COLUMN image_url VARCHAR(500)")
+
+    dialect = engine.dialect.name
+
+    if "created_at" not in columns:
+        statements.append("ALTER TABLE team_member ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        statements.append("UPDATE team_member SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+        if dialect != "sqlite":
+            statements.append("ALTER TABLE team_member ALTER COLUMN created_at SET NOT NULL")
+            statements.append("ALTER TABLE team_member ALTER COLUMN created_at DROP DEFAULT")
+
+    if "updated_at" not in columns:
+        statements.append("ALTER TABLE team_member ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        statements.append("UPDATE team_member SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
+        if dialect != "sqlite":
+            statements.append("ALTER TABLE team_member ALTER COLUMN updated_at SET NOT NULL")
+            statements.append("ALTER TABLE team_member ALTER COLUMN updated_at DROP DEFAULT")
+
+    if statements:
+        with engine.begin() as connection:
+            for statement in statements:
+                try:
+                    connection.execute(text(statement))
+                except (ProgrammingError, OperationalError):
+                    # If another process created the column in the meantime we can ignore the error.
+                    current_app.logger.debug("Schema statement failed (likely already applied): %s", statement)
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
@@ -41,8 +91,16 @@ def _parse_status(value) -> TeamMemberStatus:
 @bp.get("/members")
 @jwt_required()
 def list_members():
-    members = TeamMember.query.order_by(TeamMember.reg_number.asc()).all()
-    return jsonify(members_schema.dump(members))
+    try:
+        _ensure_schema()
+        members = TeamMember.query.order_by(TeamMember.reg_number.asc()).all()
+        return jsonify(members_schema.dump(members))
+    except (ProgrammingError, OperationalError):
+        db.session.rollback()
+        current_app.logger.exception("Failed to list team members due to schema issues.")
+        _ensure_schema()
+        members = TeamMember.query.order_by(TeamMember.reg_number.asc()).all()
+        return jsonify(members_schema.dump(members))
 
 
 @bp.post("/members")
@@ -50,6 +108,8 @@ def list_members():
 def create_member():
     if not require_role(RoleEnum.admin):
         return jsonify({"msg": "Only administrators can register team members."}), 403
+
+    _ensure_schema()
 
     payload = request.get_json() or {}
 
@@ -91,6 +151,12 @@ def create_member():
             jsonify({"msg": f"Registration number {reg_number} already exists."}),
             409,
         )
+    except (ProgrammingError, OperationalError):
+        db.session.rollback()
+        current_app.logger.exception("Failed to create team member due to schema issues.")
+        _ensure_schema()
+        db.session.add(member)
+        db.session.commit()
 
     return jsonify(member_schema.dump(member)), 201
 
@@ -100,6 +166,8 @@ def create_member():
 def update_member(member_id: int):
     if not require_role(RoleEnum.admin):
         return jsonify({"msg": "Only administrators can update team members."}), 403
+
+    _ensure_schema()
 
     member = TeamMember.query.get_or_404(member_id)
     payload = request.get_json() or {}
@@ -135,5 +203,12 @@ def update_member(member_id: int):
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except (ProgrammingError, OperationalError):
+        db.session.rollback()
+        current_app.logger.exception("Failed to update team member due to schema issues.")
+        _ensure_schema()
+        db.session.add(member)
+        db.session.commit()
     return jsonify(member_schema.dump(member))

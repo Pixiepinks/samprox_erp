@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Man | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Man Resource Planning</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link" href="{{ url_for('ui.mind_page') }}">Mind</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.man_page') }}">Man</a>
+            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
+            <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
+            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <h1>People & capability overview</h1>
+            </header>
+            <p class="section__description">
+                Manage the workforce pipeline by tracking available skills, upcoming shifts, and
+                training requirements. Use this page to ensure the right technicians are ready for
+                each maintenance job and production order.
+            </p>
+            <div class="section__grid">
+                <article class="tile">
+                    <h2 class="tile__title">Team roster</h2>
+                    <p class="tile__description">
+                        View key team members, their roles, and certification status. Identify coverage
+                        gaps before they impact production schedules.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Training tracker</h2>
+                    <p class="tile__description">
+                        Monitor mandatory trainings, license renewals, and development plans to keep the
+                        workforce compliant and skilled.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Shift planning</h2>
+                    <p class="tile__description">
+                        Align technician shifts with maintenance demand and active work orders. Balance
+                        workloads to prevent burnout.
+                    </p>
+                </article>
+                <article class="tile">
+                    <h2 class="tile__title">Safety briefings</h2>
+                    <p class="tile__description">
+                        Document toolbox talks and safety observations. Share recurring hazards with the
+                        wider team to improve awareness.
+                    </p>
+                </article>
+            </div>
+            <section class="team-overview" aria-labelledby="team-overview-heading">
+                <div class="team-overview__header">
+                    <div>
+                        <h2 class="team-overview__title" id="team-overview-heading">Team overview</h2>
+                        <p class="team-overview__subtitle">
+                            Search, register, and review key details for every team member to keep the
+                            workforce organised.
+                        </p>
+                    </div>
+                    <div class="team-overview__actions">
+                        <label class="team-overview__search" aria-label="Search team members">
+                            <span class="team-overview__search-icon" aria-hidden="true">🔍</span>
+                            <input
+                                type="search"
+                                id="team-search"
+                                class="team-overview__search-input"
+                                placeholder="Search by name, reg no, or EPF"
+                            />
+                        </label>
+                        <button type="button" class="button" id="register-member">Register member</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="team-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Reg No</th>
+                                <th scope="col">Image</th>
+                                <th scope="col">Name with Initial</th>
+                                <th scope="col">Nick Name</th>
+                                <th scope="col">EPF No</th>
+                                <th scope="col">Position</th>
+                                <th scope="col">Date of Join</th>
+                                <th scope="col">Status</th>
+                                <th scope="col" data-admin-only>Admin controls</th>
+                                <th scope="col">Personal Detail</th>
+                                <th scope="col">Assignments</th>
+                                <th scope="col">Training records</th>
+                                <th scope="col">Employment Log</th>
+                                <th scope="col">Files</th>
+                                <th scope="col">Controlled Assets</th>
+                            </tr>
+                        </thead>
+                        <tbody id="team-table-body">
+                            <tr>
+                                <td data-label="Reg No">EMP-001</td>
+                                <td data-label="Image" class="team-table__avatar">
+                                    <img src="https://i.pravatar.cc/60?img=12" alt="Profile picture of R. Fernando" />
+                                </td>
+                                <td data-label="Name with Initial">R. Fernando</td>
+                                <td data-label="Nick Name">Ravi</td>
+                                <td data-label="EPF No">EPF12345</td>
+                                <td data-label="Position">Senior Technician</td>
+                                <td data-label="Date of Join">2018-03-12</td>
+                                <td data-label="Status"><span class="status-badge status-badge--active">Active</span></td>
+                                <td data-label="Admin controls" data-admin-only>
+                                    <div class="admin-controls">
+                                        <button
+                                            type="button"
+                                            class="button button--secondary button--small"
+                                            data-edit-member
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </td>
+                                <td data-label="Personal Detail">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="personal-rfernando"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Assignments">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="tasks-rfernando"
+                                    >
+                                        Tasks
+                                    </button>
+                                </td>
+                                <td data-label="Training records">
+                                    Electrical Safety (2023), PLC Diagnostics (2024)
+                                </td>
+                                <td data-label="Employment Log">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="employment-rfernando"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Files">ID copy, Contract, NDA</td>
+                                <td data-label="Controlled Assets">
+                                    <a class="link" href="#" title="View in asset register">AST-0042</a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Reg No">EMP-014</td>
+                                <td data-label="Image" class="team-table__avatar">
+                                    <img src="https://i.pravatar.cc/60?img=32" alt="Profile picture of S. Jayasuriya" />
+                                </td>
+                                <td data-label="Name with Initial">S. Jayasuriya</td>
+                                <td data-label="Nick Name">Sashi</td>
+                                <td data-label="EPF No">EPF67890</td>
+                                <td data-label="Position">Maintenance Planner</td>
+                                <td data-label="Date of Join">2020-07-01</td>
+                                <td data-label="Status"><span class="status-badge status-badge--onleave">On Leave</span></td>
+                                <td data-label="Admin controls" data-admin-only>
+                                    <div class="admin-controls">
+                                        <button
+                                            type="button"
+                                            class="button button--secondary button--small"
+                                            data-edit-member
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </td>
+                                <td data-label="Personal Detail">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="personal-sjayasuriya"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Assignments">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="tasks-sjayasuriya"
+                                    >
+                                        Tasks
+                                    </button>
+                                </td>
+                                <td data-label="Training records">
+                                    Lean Maintenance (2022), SAP PM Advanced (2023)
+                                </td>
+                                <td data-label="Employment Log">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="employment-sjayasuriya"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Files">ID copy, Contract</td>
+                                <td data-label="Controlled Assets">
+                                    <a class="link" href="#" title="View in asset register">AST-0113</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="team-overview__hint">More team members can be added from the register workflow.</p>
+            </section>
+        </section>
+    </div>
+    <template id="personal-rfernando">
+        <dl class="detail-list">
+            <div class="detail-list__item">
+                <dt>Full Name</dt>
+                <dd>Ruwan Fernando</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Contact</dt>
+                <dd>+94 77 123 4567</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Email</dt>
+                <dd>ruwan.fernando@example.com</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Emergency Contact</dt>
+                <dd>Nisha Fernando (+94 77 765 4321)</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Address</dt>
+                <dd>25 Industrial Avenue, Colombo</dd>
+            </div>
+        </dl>
+    </template>
+    <template id="tasks-rfernando">
+        <ul class="modal-list">
+            <li>
+                <strong>Job Card JC-1023</strong> – Overhaul of press line hydraulic system (Due: 2024-06-30)
+            </li>
+            <li>
+                <strong>Job Card JC-1044</strong> – Commissioning of new PLC module (Due: 2024-07-05)
+            </li>
+        </ul>
+    </template>
+    <template id="employment-rfernando">
+        <ul class="modal-list">
+            <li>2023-01-15 – Salary increment to Grade 4</li>
+            <li>2022-08-01 – Recognised for zero downtime on critical line</li>
+            <li>2021-05-21 – Promoted to Senior Technician</li>
+        </ul>
+    </template>
+    <template id="personal-sjayasuriya">
+        <dl class="detail-list">
+            <div class="detail-list__item">
+                <dt>Full Name</dt>
+                <dd>Sanduni Jayasuriya</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Contact</dt>
+                <dd>+94 71 555 2980</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Email</dt>
+                <dd>sanduni.jayasuriya@example.com</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Emergency Contact</dt>
+                <dd>Janaka Jayasuriya (+94 71 889 3344)</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Address</dt>
+                <dd>145 Riverside Gardens, Negombo</dd>
+            </div>
+        </dl>
+    </template>
+    <template id="tasks-sjayasuriya">
+        <ul class="modal-list">
+            <li>
+                <strong>Job Card JC-1098</strong> – Plan preventive maintenance for packaging line (Due: 2024-07-10)
+            </li>
+            <li>
+                <strong>Job Card JC-1102</strong> – Coordinate contractor onboarding for chiller overhaul (Due: 2024-07-18)
+            </li>
+        </ul>
+    </template>
+    <template id="employment-sjayasuriya">
+        <ul class="modal-list">
+            <li>2024-02-05 – Acting Maintenance Manager (2-month assignment)</li>
+            <li>2023-09-12 – Salary increment for project delivery excellence</li>
+            <li>2022-03-01 – Joined as Maintenance Planner</li>
+        </ul>
+    </template>
+    <template id="register-member-template">
+        <form class="edit-form" id="register-member-form">
+            <div class="alert alert--error" data-register-error hidden></div>
+            <div class="edit-form__grid">
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-reg-number">Reg No <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-reg-number" name="regNumber" type="text" required autocomplete="off" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-name">Name with Initial <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-name" name="name" type="text" required autocomplete="name" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-nickname">Nick Name</label>
+                    <input class="edit-form__input" id="register-nickname" name="nickname" type="text" autocomplete="nickname" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-epf">EPF No</label>
+                    <input class="edit-form__input" id="register-epf" name="epf" type="text" autocomplete="off" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-position">Position</label>
+                    <input class="edit-form__input" id="register-position" name="position" type="text" autocomplete="organization-title" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-join-date">Date of Join <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-join-date" name="joinDate" type="date" required />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-status">Status</label>
+                    <select class="edit-form__input" id="register-status" name="status">
+                        <option value="Active" selected>Active</option>
+                        <option value="On Leave">On Leave</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-image">Profile image URL</label>
+                    <input class="edit-form__input" id="register-image" name="image" type="url" placeholder="https://" autocomplete="url" />
+                </div>
+            </div>
+            <div class="edit-form__actions">
+                <button type="button" class="button button--secondary" data-cancel-register>Cancel</button>
+                <button type="submit" class="button">Create member</button>
+            </div>
+        </form>
+    </template>
+    <template id="edit-member-template">
+        <form class="edit-form" id="edit-member-form">
+            <div class="edit-form__grid">
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-reg-number">Reg No</label>
+                    <input class="edit-form__input" id="edit-reg-number" name="regNumber" type="text" readonly />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-name">Name with Initial</label>
+                    <input class="edit-form__input" id="edit-name" name="name" type="text" required />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-nickname">Nick Name</label>
+                    <input class="edit-form__input" id="edit-nickname" name="nickname" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-epf">EPF No</label>
+                    <input class="edit-form__input" id="edit-epf" name="epf" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-position">Position</label>
+                    <input class="edit-form__input" id="edit-position" name="position" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-join-date">Date of Join</label>
+                    <input class="edit-form__input" id="edit-join-date" name="joinDate" type="date" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-status">Status</label>
+                    <select class="edit-form__input" id="edit-status" name="status">
+                        <option value="Active">Active</option>
+                        <option value="On Leave">On Leave</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-image">Profile image URL</label>
+                    <input class="edit-form__input" id="edit-image" name="image" type="url" placeholder="https://" />
+                </div>
+            </div>
+            <div class="edit-form__actions">
+                <button type="button" class="button button--secondary" data-cancel-edit>Cancel</button>
+                <button type="submit" class="button">Save changes</button>
+            </div>
+        </form>
+    </template>
+    <div class="modal" id="info-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__dialog">
+            <header class="modal__header">
+                <h3 class="modal__title" id="modal-title"></h3>
+                <button type="button" class="modal__close" data-modal-close aria-label="Close dialog">×</button>
+            </header>
+            <div class="modal__body" id="modal-body"></div>
+        </div>
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            technician: "Technician",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+
+        const tableBody = document.getElementById("team-table-body");
+        const searchInput = document.getElementById("team-search");
+        const modal = document.getElementById("info-modal");
+        const modalBody = document.getElementById("modal-body");
+        const modalTitle = document.getElementById("modal-title");
+        const editTemplate = document.getElementById("edit-member-template");
+        const registerTemplate = document.getElementById("register-member-template");
+        const adminElements = document.querySelectorAll("[data-admin-only]");
+        const isAdmin = user?.role === "admin";
+        const memberIndex = new Map();
+
+        const DATE_DISPLAY_FALLBACK = "—";
+
+        const formatJoinDateForDisplay = (value, fallback = DATE_DISPLAY_FALLBACK) => {
+            let source = "";
+            if (value instanceof Date) {
+                source = value.toISOString().split("T")[0];
+            } else if (typeof value === "string") {
+                source = value;
+            } else if (value != null) {
+                source = String(value);
+            }
+
+            const result = normalizeDateInput(source);
+            if (!result.isValid) {
+                const raw = typeof source === "string" ? source.trim() : "";
+                return {
+                    display: raw || fallback,
+                    iso: "",
+                };
+            }
+
+            const [year, month, day] = result.value.split("-");
+            return {
+                display: `${day}/${month}/${year}`,
+                iso: result.value,
+            };
+        };
+
+        const applyJoinDateToCell = (row, cell, value, fallback = DATE_DISPLAY_FALLBACK) => {
+            if (!cell) {
+                return;
+            }
+
+            const { display, iso } = formatJoinDateForDisplay(value, fallback);
+            cell.textContent = display;
+
+            if (iso) {
+                row.dataset.joinDateIso = iso;
+                cell.dataset.isoDate = iso;
+            } else {
+                delete row.dataset.joinDateIso;
+                delete cell.dataset.isoDate;
+            }
+        };
+
+        const initializeStaticJoinDates = () => {
+            if (!tableBody) return;
+
+            tableBody.querySelectorAll("tr").forEach((row) => {
+                const cell = row.querySelector("td[data-label='Date of Join']");
+                if (!cell) return;
+                applyJoinDateToCell(row, cell, cell.textContent, DATE_DISPLAY_FALLBACK);
+            });
+        };
+
+        initializeStaticJoinDates();
+
+        const statusBadgeClassMap = {
+            Active: "status-badge--active",
+            "On Leave": "status-badge--onleave",
+            Inactive: "status-badge--inactive",
+        };
+        const defaultStatusClass = statusBadgeClassMap.Active;
+
+        async function fetchJson(url, options = {}) {
+            const headers = {
+                Accept: "application/json",
+                ...(options.headers || {}),
+            };
+
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            if (options.body && !(options.body instanceof FormData)) {
+                const hasContentType = Object.keys(headers).some(
+                    (key) => key.toLowerCase() === "content-type"
+                );
+                if (!hasContentType) {
+                    headers["Content-Type"] = "application/json";
+                }
+            }
+
+            const response = await fetch(url, {
+                ...options,
+                headers,
+            });
+
+            if (!response.ok) {
+                let message = `Request failed (${response.status})`;
+                try {
+                    const data = await response.json();
+                    if (data?.msg) {
+                        message = data.msg;
+                    }
+                } catch (_) {
+                    // Ignore JSON parse failures for error responses
+                }
+
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
+            }
+
+            if (response.status === 204) {
+                return null;
+            }
+
+            return response.json();
+        }
+
+        function normalizeDateInput(value) {
+            if (!value) {
+                return { value: "", isValid: false };
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return { value: "", isValid: false };
+            }
+
+            const toIso = (year, month, day) => {
+                if (
+                    !Number.isFinite(year) ||
+                    !Number.isFinite(month) ||
+                    !Number.isFinite(day)
+                ) {
+                    return null;
+                }
+                const candidate = new Date(Date.UTC(year, month - 1, day));
+                if (
+                    candidate.getUTCFullYear() !== year ||
+                    candidate.getUTCMonth() + 1 !== month ||
+                    candidate.getUTCDate() !== day
+                ) {
+                    return null;
+                }
+                return `${year.toString().padStart(4, "0")}-${month
+                    .toString()
+                    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+            };
+
+            const monthLookup = {
+                jan: 1,
+                january: 1,
+                feb: 2,
+                february: 2,
+                mar: 3,
+                march: 3,
+                apr: 4,
+                april: 4,
+                may: 5,
+                jun: 6,
+                june: 6,
+                jul: 7,
+                july: 7,
+                aug: 8,
+                august: 8,
+                sep: 9,
+                sept: 9,
+                september: 9,
+                oct: 10,
+                october: 10,
+                nov: 11,
+                november: 11,
+                dec: 12,
+                december: 12,
+            };
+
+            const monthFromName = (name) => {
+                const cleaned = name.trim().replace(/\.$/, "").toLowerCase();
+                return monthLookup[cleaned] || null;
+            };
+
+            const sanitized = trimmed
+                .replace(/[\u2013\u2014\u2212]/g, "-")
+                .replace(/\\/g, "/")
+                .replace(/,/g, " ")
+                .replace(/(\d)\s*\.\s*(\d)/g, "$1-$2")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const collapsed = sanitized.replace(/\s*([/-])\s*/g, "$1");
+
+            let match = collapsed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (match) {
+                const iso = toIso(Number(match[1]), Number(match[2]), Number(match[3]));
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+                return { value: "", isValid: false };
+            }
+
+            match = collapsed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+            if (match) {
+                const iso = toIso(Number(match[1]), Number(match[2]), Number(match[3]));
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+                return { value: "", isValid: false };
+            }
+
+            match = collapsed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+            if (match) {
+                const first = Number(match[1]);
+                const second = Number(match[2]);
+                const year = Number(match[3]);
+                const candidates = [];
+
+                if (first > 12 && second <= 12) {
+                    candidates.push([second, first]);
+                } else if (second > 12 && first <= 12) {
+                    candidates.push([first, second]);
+                } else {
+                    candidates.push([second, first], [first, second]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{4})\s+(\d{1,2})\s+(\d{1,2})$/);
+            if (match) {
+                const year = Number(match[1]);
+                const month = Number(match[2]);
+                const day = Number(match[3]);
+                const iso = toIso(year, month, day);
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+            }
+
+            match = sanitized.match(/^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/);
+            if (match) {
+                const first = Number(match[1]);
+                const second = Number(match[2]);
+                const year = Number(match[3]);
+                const candidates = [];
+
+                if (first > 12 && second <= 12) {
+                    candidates.push([second, first]);
+                } else if (second > 12 && first <= 12) {
+                    candidates.push([first, second]);
+                } else {
+                    candidates.push([second, first], [first, second]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{1,2})\s+([A-Za-z]+\.?)\s+(\d{4})$/);
+            if (match) {
+                const day = Number(match[1]);
+                const month = monthFromName(match[2]);
+                const year = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^([A-Za-z]+\.?)\s+(\d{1,2}),?\s+(\d{4})$/);
+            if (match) {
+                const month = monthFromName(match[1]);
+                const day = Number(match[2]);
+                const year = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{4})\s+([A-Za-z]+\.?)\s+(\d{1,2})$/);
+            if (match) {
+                const year = Number(match[1]);
+                const month = monthFromName(match[2]);
+                const day = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            const parsed = new Date(sanitized);
+            if (!Number.isNaN(parsed.valueOf())) {
+                const useUTC = /t/i.test(sanitized);
+                const year = useUTC ? parsed.getUTCFullYear() : parsed.getFullYear();
+                const month = (useUTC ? parsed.getUTCMonth() : parsed.getMonth()) + 1;
+                const day = useUTC ? parsed.getUTCDate() : parsed.getDate();
+                const iso = toIso(year, month, day);
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+            }
+
+            return { value: "", isValid: false };
+        }
+
+        // === Added Helper: Ensures <input type="date"> returns ISO YYYY-MM-DD ===
+        function getISOFromDateInput(inputEl) {
+            if (!inputEl) return { value: "", isValid: false };
+
+            // If empty, it's invalid
+            if (!inputEl.value || !inputEl.value.trim()) {
+                return { value: "", isValid: false };
+            }
+
+            // If the browser provides a native Date object, use it (ensure it's valid)
+            if (inputEl.valueAsDate instanceof Date) {
+                const t = inputEl.valueAsDate.getTime();
+                if (!Number.isNaN(t)) {
+                    const y = inputEl.valueAsDate.getFullYear();
+                    const m = String(inputEl.valueAsDate.getMonth() + 1).padStart(2, "0");
+                    const d = String(inputEl.valueAsDate.getDate()).padStart(2, "0");
+                    return { value: `${y}-${m}-${d}`, isValid: true };
+                }
+            }
+
+            // Fallback to robust parser
+            return normalizeDateInput(inputEl.value);
+        }
+
+
+            // Fallback to your existing parser
+            return normalizeDateInput(inputEl.value);
+        }
+
+        const applyStatusBadgeClass = (badge, status) => {
+            if (!badge) return;
+            Object.values(statusBadgeClassMap).forEach((className) => {
+                badge.classList.remove(className);
+            });
+            const className = statusBadgeClassMap[status] || defaultStatusClass;
+            if (!badge.classList.contains("status-badge")) {
+                badge.classList.add("status-badge");
+            }
+            badge.classList.add(className);
+        };
+
+        function updateRowWithMemberData(row, member) {
+            if (!row || !member) return;
+
+            if (member.id != null) {
+                row.dataset.memberId = String(member.id);
+            }
+
+            const setCellText = (label, value, fallback = "—") => {
+                const cell = row.querySelector(`td[data-label='${label}']`);
+                if (!cell) return;
+                const text = typeof value === "string" ? value.trim() : "";
+                if (label === "Date of Join") {
+                    applyJoinDateToCell(row, cell, text || value, fallback);
+                    return;
+                }
+                cell.textContent = text || fallback;
+            };
+
+            setCellText("Reg No", member.regNumber, "Pending");
+            setCellText("Name with Initial", member.name, member.regNumber || "Team member");
+            setCellText("Nick Name", member.nickname);
+            setCellText("EPF No", member.epf);
+            setCellText("Position", member.position);
+            setCellText("Date of Join", member.joinDate);
+
+            const statusCell = row.querySelector("td[data-label='Status']");
+            if (statusCell) {
+                let statusBadge = statusCell.querySelector(".status-badge");
+                if (!statusBadge) {
+                    statusBadge = document.createElement("span");
+                    statusBadge.classList.add("status-badge");
+                    statusCell.textContent = "";
+                    statusCell.appendChild(statusBadge);
+                }
+                const statusText = (member.status || "Active").trim() || "Active";
+                statusBadge.textContent = statusText;
+                applyStatusBadgeClass(statusBadge, statusText);
+            }
+
+            const imageCell = row.querySelector("td[data-label='Image']");
+            if (imageCell) {
+                imageCell.classList.add("team-table__avatar");
+                const displayName = member.name || member.regNumber || "Team member";
+                if (member.image) {
+                    let image = imageCell.querySelector("img");
+                    if (!image) {
+                        imageCell.innerHTML = "";
+                        image = document.createElement("img");
+                        imageCell.appendChild(image);
+                    }
+                    image.src = member.image;
+                    image.alt = `Profile picture of ${displayName}`;
+                } else {
+                    imageCell.innerHTML = "";
+                    const placeholder = document.createElement("span");
+                    placeholder.classList.add("team-table__avatar-placeholder");
+                    placeholder.setAttribute("role", "img");
+                    placeholder.setAttribute("aria-label", "No profile image provided");
+                    const initial = (displayName || "?").charAt(0).toUpperCase() || "?";
+                    placeholder.textContent = initial;
+                    imageCell.appendChild(placeholder);
+                }
+            }
+        }
+
+        function enhanceAdminRow(row) {
+            if (!isAdmin || !row) return;
+            const editButton = row.querySelector("[data-edit-member]");
+            if (!editButton || editButton.dataset.bound === "true") {
+                return;
+            }
+            editButton.dataset.bound = "true";
+            editButton.addEventListener("click", () => {
+                openEditModal(row);
+            });
+        }
+
+        const buildMemberRow = (member) => {
+            if (!tableBody) return null;
+
+            const safeText = (value, fallback = "—") => {
+                if (typeof value !== "string") {
+                    return fallback;
+                }
+                const trimmed = value.trim();
+                return trimmed || fallback;
+            };
+
+            const row = document.createElement("tr");
+
+            const appendTextCell = (label, value, fallback = "—") => {
+                const cell = document.createElement("td");
+                cell.setAttribute("data-label", label);
+                cell.textContent = safeText(value, fallback);
+                row.appendChild(cell);
+                return cell;
+            };
+
+            appendTextCell("Reg No", member.regNumber, "Pending");
+
+            const avatarCell = document.createElement("td");
+            avatarCell.setAttribute("data-label", "Image");
+            avatarCell.classList.add("team-table__avatar");
+            const displayName = safeText(member.name, member.regNumber || "Team member");
+            if (member.image) {
+                const image = document.createElement("img");
+                image.src = member.image;
+                image.alt = `Profile picture of ${displayName}`;
+                avatarCell.appendChild(image);
+            } else {
+                const placeholder = document.createElement("span");
+                placeholder.classList.add("team-table__avatar-placeholder");
+                placeholder.setAttribute("role", "img");
+                placeholder.setAttribute("aria-label", "No profile image provided");
+                const initial = (displayName || "?").charAt(0).toUpperCase() || "?";
+                placeholder.textContent = initial;
+                avatarCell.appendChild(placeholder);
+            }
+            row.appendChild(avatarCell);
+
+            appendTextCell("Name with Initial", member.name, member.regNumber || "Team member");
+            appendTextCell("Nick Name", member.nickname);
+            appendTextCell("EPF No", member.epf);
+            appendTextCell("Position", member.position);
+
+            const joinDateCell = document.createElement("td");
+            joinDateCell.setAttribute("data-label", "Date of Join");
+            row.appendChild(joinDateCell);
+            applyJoinDateToCell(row, joinDateCell, member.joinDate);
+
+            const statusCell = appendTextCell("Status", "", "Active");
+            const statusBadge = document.createElement("span");
+            statusBadge.classList.add("status-badge");
+            const statusText = safeText(member.status, "Active");
+            statusBadge.textContent = statusText;
+            statusCell.textContent = "";
+            statusCell.appendChild(statusBadge);
+            applyStatusBadgeClass(statusBadge, statusText);
+
+            if (isAdmin) {
+                const adminCell = document.createElement("td");
+                adminCell.setAttribute("data-label", "Admin controls");
+                adminCell.setAttribute("data-admin-only", "");
+                const controls = document.createElement("div");
+                controls.classList.add("admin-controls");
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "button button--secondary button--small";
+                editButton.setAttribute("data-edit-member", "");
+                editButton.textContent = "Edit";
+                controls.appendChild(editButton);
+                adminCell.appendChild(controls);
+                row.appendChild(adminCell);
+            }
+
+            appendTextCell("Personal Detail", member.personalDetail ?? "Not provided");
+            appendTextCell("Assignments", member.assignments ?? "Not assigned");
+            appendTextCell("Training records", member.trainingRecords ?? "Not provided");
+            appendTextCell("Employment Log", member.employmentLog ?? "Not provided");
+            appendTextCell("Files", member.files ?? "Not provided");
+            appendTextCell("Controlled Assets", member.assets ?? "None");
+
+            if (member.id != null) {
+                row.dataset.memberId = String(member.id);
+            }
+
+            return row;
+        };
+
+        async function loadTeamMembers() {
+            if (!tableBody) return;
+
+            try {
+                const members = await fetchJson("/api/team/members");
+                if (!Array.isArray(members)) {
+                    return;
+                }
+                memberIndex.clear();
+                const existingRows = Array.from(tableBody.querySelectorAll("tr"));
+                const matchedRows = new Set();
+
+                const findRowByRegNumber = (regNumber) => {
+                    if (!regNumber) return null;
+                    const normalized = regNumber.trim().toLowerCase();
+                    return existingRows.find((row) => {
+                        if (matchedRows.has(row)) return false;
+                        const cell = row.querySelector("td[data-label='Reg No']");
+                        const value = cell?.textContent?.trim().toLowerCase();
+                        return value === normalized;
+                    });
+                };
+
+                members.forEach((member) => {
+                    if (member?.regNumber) {
+                        memberIndex.set(member.regNumber.trim().toLowerCase(), member);
+                    }
+
+                    const matchingRow = findRowByRegNumber(member?.regNumber || "");
+                    if (matchingRow) {
+                        updateRowWithMemberData(matchingRow, member);
+                        matchedRows.add(matchingRow);
+                        enhanceAdminRow(matchingRow);
+                        return;
+                    }
+
+                    const row = buildMemberRow(member);
+                    if (row) {
+                        tableBody.appendChild(row);
+                        enhanceAdminRow(row);
+                    }
+                });
+
+                existingRows.forEach((row) => {
+                    if (!matchedRows.has(row)) {
+                        row.remove();
+                    }
+                });
+            } catch (error) {
+                console.error("Failed to load team members", error);
+            }
+        }
+
+        const openEditModal = (row) => {
+            if (!row || !editTemplate || !modalBody || !modalTitle) return;
+
+            const regNumberCell = row.querySelector("td[data-label='Reg No']");
+            const regNumberText = regNumberCell?.textContent?.trim() || "";
+            let memberId = row.dataset.memberId;
+
+            if (!memberId && regNumberText) {
+                const lookup = memberIndex.get(regNumberText.toLowerCase());
+                if (lookup?.id != null) {
+                    memberId = String(lookup.id);
+                    row.dataset.memberId = memberId;
+                    updateRowWithMemberData(row, lookup);
+                }
+            }
+
+            if (!memberId) {
+                alert("This team member cannot be edited yet. Please refresh the page and try again.");
+                return;
+            }
+
+            const joinDateCell = row.querySelector("td[data-label='Date of Join']");
+            const current = {
+                regNumber: regNumberText,
+                name: row.querySelector("td[data-label='Name with Initial']")?.textContent?.trim() || "",
+                nickname: row.querySelector("td[data-label='Nick Name']")?.textContent?.trim() || "",
+                epf: row.querySelector("td[data-label='EPF No']")?.textContent?.trim() || "",
+                position: row.querySelector("td[data-label='Position']")?.textContent?.trim() || "",
+                joinDate:
+                    row.dataset.joinDateIso ||
+                    joinDateCell?.dataset.isoDate ||
+                    joinDateCell?.textContent?.trim() ||
+                    "",
+                status: row.querySelector("td[data-label='Status'] .status-badge")?.textContent?.trim() || "Active",
+                image: row.querySelector("td[data-label='Image'] img")?.getAttribute("src") || "",
+            };
+
+            const clone = editTemplate.content.cloneNode(true);
+            const form = clone.querySelector("form");
+            if (!form) return;
+
+            const setValue = (selector, value) => {
+                const field = form.querySelector(selector);
+                if (field) {
+                    field.value = value ?? "";
+                }
+            };
+
+            setValue("[name='regNumber']", current.regNumber);
+            setValue("[name='name']", current.name);
+            setValue("[name='nickname']", current.nickname);
+            setValue("[name='epf']", current.epf);
+            setValue("[name='position']", current.position);
+            const normalizedCurrentJoinDate = normalizeDateInput(current.joinDate);
+            setValue(
+                "[name='joinDate']",
+                normalizedCurrentJoinDate.isValid
+                    ? normalizedCurrentJoinDate.value
+                    : current.joinDate
+            );
+            // Auto-format date when user changes it in Edit form
+            const editJoinDateField = form.querySelector("[name='joinDate']");
+            editJoinDateField?.addEventListener("change", () => {
+                const n = getISOFromDateInput(editJoinDateField);
+                if (n.isValid) editJoinDateField.value = n.value;
+            });
+            setValue("[name='status']", current.status);
+            setValue("[name='image']", current.image);
+
+            const cancelButton = form.querySelector("[data-cancel-edit]");
+            cancelButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                toggleModal(false);
+            });
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const formData = new FormData(form);
+                const getValue = (field, fallback = "") => {
+                    const raw = formData.get(field);
+                    return typeof raw === "string" ? raw.trim() : fallback;
+                };
+
+                const joinDateFieldEl = form.querySelector("[name='joinDate']");
+                const joinDateResult = getISOFromDateInput(joinDateFieldEl);
+
+                if (!joinDateResult.isValid) {
+                    alert("Please select a valid join date.");
+                    return;
+                }
+
+                const payload = {
+                    name: getValue("name", current.name) || current.name,
+                    nickname: getValue("nickname", ""),
+                    epf: getValue("epf", ""),
+                    position: getValue("position", ""),
+                    joinDate: joinDateResult.value,
+                    status: getValue("status", current.status) || current.status,
+                    image: getValue("image", current.image),
+                };
+
+                try {
+                    const updatedMember = await fetchJson(`/api/team/members/${memberId}`, {
+                        method: "PATCH",
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (updatedMember?.regNumber) {
+                        memberIndex.set(
+                            updatedMember.regNumber.trim().toLowerCase(),
+                            updatedMember
+                        );
+                    }
+
+                    updateRowWithMemberData(row, updatedMember || payload);
+                    enhanceAdminRow(row);
+                    toggleModal(false);
+                } catch (error) {
+                    alert(error.message || "Unable to save changes.");
+                }
+            });
+
+            modalBody.innerHTML = "";
+            modalBody.appendChild(clone);
+            const displayName = current.name || current.regNumber || "Team member";
+            modalTitle.textContent = `Edit member – ${displayName}`;
+            toggleModal(true);
+        };
+
+        const toggleModal = (isOpen) => {
+            if (!modal) return;
+            if (isOpen) {
+                modal.removeAttribute("hidden");
+                modal.classList.add("modal--open");
+                document.body.classList.add("no-scroll");
+            } else {
+                modal.classList.remove("modal--open");
+                modal.setAttribute("hidden", "");
+                document.body.classList.remove("no-scroll");
+                modalBody.innerHTML = "";
+            }
+        };
+
+        modal?.addEventListener("click", (event) => {
+            if (event.target.matches("[data-modal-close]")) {
+                toggleModal(false);
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && modal?.classList.contains("modal--open")) {
+                toggleModal(false);
+            }
+        });
+
+        document.querySelectorAll("[data-modal-trigger]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const templateId = button.getAttribute("data-template");
+                const template = templateId ? document.getElementById(templateId) : null;
+                if (!template) return;
+
+                const content = template.content.cloneNode(true);
+                const column = button.closest("td")?.dataset.label || "Details";
+                const rowName = button.closest("tr")?.querySelector("td[data-label='Name with Initial']")?.textContent?.trim();
+                modalTitle.textContent = `${column} – ${rowName ?? "Team member"}`;
+                modalBody.appendChild(content);
+                toggleModal(true);
+            });
+        });
+
+        searchInput?.addEventListener("input", (event) => {
+            const query = event.target.value.toLowerCase();
+            const rows = tableBody?.querySelectorAll("tr") || [];
+
+            rows.forEach((row) => {
+                const text = row.textContent?.toLowerCase() || "";
+                const isMatch = text.includes(query);
+                row.style.display = isMatch ? "table-row" : "none";
+            });
+        });
+
+        const registerButton = document.getElementById("register-member");
+        registerButton?.addEventListener("click", () => {
+            if (!registerTemplate || !modalBody || !modalTitle) {
+                alert("Registration form unavailable. Please try again later.");
+                return;
+            }
+
+            const clone = registerTemplate.content.cloneNode(true);
+            const form = clone.querySelector("form");
+            const errorBox = clone.querySelector("[data-register-error]");
+            if (!form) return;
+
+            const joinDateField = form.querySelector("[name='joinDate']");
+            if (joinDateField && !joinDateField.value) {
+                const today = new Date().toISOString().split("T")[0];
+                joinDateField.value = today;
+            }
+
+            // Auto-format join date to ISO when changed
+            joinDateField?.addEventListener("change", () => {
+                const n = getISOFromDateInput(joinDateField);
+                if (n.isValid) joinDateField.value = n.value;
+            });
+
+            const cancelButton = form.querySelector("[data-cancel-register]");
+            cancelButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                toggleModal(false);
+            });
+
+            form.addEventListener("input", () => {
+                if (errorBox) {
+                    errorBox.hidden = true;
+                    errorBox.textContent = "";
+                }
+            });
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (!tableBody) return;
+
+                const formData = new FormData(form);
+                const getValue = (field) => {
+                    const raw = formData.get(field);
+                    return typeof raw === "string" ? raw.trim() : "";
+                };
+
+                const regNumber = getValue("regNumber");
+                const name = getValue("name");
+
+                if (!regNumber || !name) {
+                    if (errorBox) {
+                        errorBox.textContent = "Registration number and name are required.";
+                        errorBox.hidden = false;
+                    } else {
+                        alert("Registration number and name are required.");
+                    }
+                    return;
+                }
+
+                const duplicate = Array.from(
+                    tableBody.querySelectorAll("td[data-label='Reg No']")
+                ).some((cell) => cell.textContent?.trim().toLowerCase() === regNumber.toLowerCase());
+
+                if (duplicate) {
+                    if (errorBox) {
+                        errorBox.textContent = `Registration number ${regNumber} is already in use.`;
+                        errorBox.hidden = false;
+                    } else {
+                        alert(`Registration number ${regNumber} is already in use.`);
+                    }
+                    form.querySelector("[name='regNumber']")?.focus();
+                    return;
+                }
+
+                // Normalize join date safely
+                const joinDateFieldEl = form.querySelector("[name='joinDate']");
+                const joinDateResult = getISOFromDateInput(joinDateFieldEl);
+                if (!joinDateResult.isValid) {
+                    const message = "Please select a valid join date.";
+                    if (errorBox) {
+                        errorBox.textContent = message;
+                        errorBox.hidden = false;
+                    } else {
+                        alert(message);
+                    }
+                    form.querySelector("[name='joinDate']")?.focus();
+                    return;
+                }
+
+                const payload = {
+                    regNumber,
+                    name,
+                    nickname: getValue("nickname"),
+                    epf: getValue("epf"),
+                    position: getValue("position"),
+                    joinDate: joinDateResult.value,
+                    status: getValue("status") || "Active",
+                    image: getValue("image"),
+                };
+
+                try {
+                    const createdMember = await fetchJson("/api/team/members", {
+                        method: "POST",
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (createdMember?.regNumber) {
+                        memberIndex.set(createdMember.regNumber.trim().toLowerCase(), createdMember);
+                    }
+
+                    const row = buildMemberRow(createdMember || payload);
+                    if (row) {
+                        tableBody.prepend(row);
+                        enhanceAdminRow(row);
+                    }
+
+                    toggleModal(false);
+                } catch (error) {
+                    if (errorBox) {
+                        errorBox.textContent = error.message || "Unable to register member.";
+                        errorBox.hidden = false;
+                    } else {
+                        alert(error.message || "Unable to register member.");
+                    }
+                }
+            });
+
+            modalBody.innerHTML = "";
+            modalBody.appendChild(clone);
+            modalTitle.textContent = "Register new team member";
+            toggleModal(true);
+
+            form.querySelector("[name='regNumber']")?.focus();
+        });
+
+        loadTeamMembers();
+
+        if (!isAdmin) {
+            adminElements.forEach((element) => {
+                element.remove();
+            });
+        } else {
+            document.querySelectorAll("[data-edit-member]").forEach((button) => {
+                const row = button.closest("tr");
+                enhanceAdminRow(row);
+            });
+        }
+    </script>
+</body>
+</html>

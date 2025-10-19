@@ -110,6 +110,7 @@
                                 <th scope="col">Position</th>
                                 <th scope="col">Date of Join</th>
                                 <th scope="col">Status</th>
+                                <th scope="col" data-admin-only>Admin controls</th>
                                 <th scope="col">Personal Detail</th>
                                 <th scope="col">Assignments</th>
                                 <th scope="col">Training records</th>
@@ -130,6 +131,17 @@
                                 <td data-label="Position">Senior Technician</td>
                                 <td data-label="Date of Join">2018-03-12</td>
                                 <td data-label="Status"><span class="status-badge status-badge--active">Active</span></td>
+                                <td data-label="Admin controls" data-admin-only>
+                                    <div class="admin-controls">
+                                        <button
+                                            type="button"
+                                            class="button button--secondary button--small"
+                                            data-edit-member
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </td>
                                 <td data-label="Personal Detail">
                                     <button
                                         type="button"
@@ -179,6 +191,17 @@
                                 <td data-label="Position">Maintenance Planner</td>
                                 <td data-label="Date of Join">2020-07-01</td>
                                 <td data-label="Status"><span class="status-badge status-badge--onleave">On Leave</span></td>
+                                <td data-label="Admin controls" data-admin-only>
+                                    <div class="admin-controls">
+                                        <button
+                                            type="button"
+                                            class="button button--secondary button--small"
+                                            data-edit-member
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </td>
                                 <td data-label="Personal Detail">
                                     <button
                                         type="button"
@@ -306,6 +329,52 @@
             <li>2022-03-01 – Joined as Maintenance Planner</li>
         </ul>
     </template>
+    <template id="edit-member-template">
+        <form class="edit-form" id="edit-member-form">
+            <div class="edit-form__grid">
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-reg-number">Reg No</label>
+                    <input class="edit-form__input" id="edit-reg-number" name="regNumber" type="text" readonly />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-name">Name with Initial</label>
+                    <input class="edit-form__input" id="edit-name" name="name" type="text" required />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-nickname">Nick Name</label>
+                    <input class="edit-form__input" id="edit-nickname" name="nickname" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-epf">EPF No</label>
+                    <input class="edit-form__input" id="edit-epf" name="epf" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-position">Position</label>
+                    <input class="edit-form__input" id="edit-position" name="position" type="text" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-join-date">Date of Join</label>
+                    <input class="edit-form__input" id="edit-join-date" name="joinDate" type="date" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-status">Status</label>
+                    <select class="edit-form__input" id="edit-status" name="status">
+                        <option value="Active">Active</option>
+                        <option value="On Leave">On Leave</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="edit-image">Profile image URL</label>
+                    <input class="edit-form__input" id="edit-image" name="image" type="url" placeholder="https://" />
+                </div>
+            </div>
+            <div class="edit-form__actions">
+                <button type="button" class="button button--secondary" data-cancel-edit>Cancel</button>
+                <button type="submit" class="button">Save changes</button>
+            </div>
+        </form>
+    </template>
     <div class="modal" id="info-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
         <div class="modal__backdrop" data-modal-close></div>
         <div class="modal__dialog">
@@ -356,6 +425,140 @@
         const modal = document.getElementById("info-modal");
         const modalBody = document.getElementById("modal-body");
         const modalTitle = document.getElementById("modal-title");
+        const editTemplate = document.getElementById("edit-member-template");
+        const adminElements = document.querySelectorAll("[data-admin-only]");
+        const isAdmin = user?.role === "admin";
+
+        const statusBadgeClassMap = {
+            Active: "status-badge--active",
+            "On Leave": "status-badge--onleave",
+            Inactive: "status-badge--inactive",
+        };
+        const defaultStatusClass = statusBadgeClassMap.Active;
+
+        const applyStatusBadgeClass = (badge, status) => {
+            if (!badge) return;
+            Object.values(statusBadgeClassMap).forEach((className) => {
+                badge.classList.remove(className);
+            });
+            const className = statusBadgeClassMap[status] || defaultStatusClass;
+            if (!badge.classList.contains("status-badge")) {
+                badge.classList.add("status-badge");
+            }
+            badge.classList.add(className);
+        };
+
+        const openEditModal = (row) => {
+            if (!row || !editTemplate || !modalBody || !modalTitle) return;
+
+            const current = {
+                regNumber: row.querySelector("td[data-label='Reg No']")?.textContent?.trim() || "",
+                name: row.querySelector("td[data-label='Name with Initial']")?.textContent?.trim() || "",
+                nickname: row.querySelector("td[data-label='Nick Name']")?.textContent?.trim() || "",
+                epf: row.querySelector("td[data-label='EPF No']")?.textContent?.trim() || "",
+                position: row.querySelector("td[data-label='Position']")?.textContent?.trim() || "",
+                joinDate: row.querySelector("td[data-label='Date of Join']")?.textContent?.trim() || "",
+                status: row.querySelector("td[data-label='Status'] .status-badge")?.textContent?.trim() || "Active",
+                image: row.querySelector("td[data-label='Image'] img")?.getAttribute("src") || "",
+            };
+
+            const clone = editTemplate.content.cloneNode(true);
+            const form = clone.querySelector("form");
+            if (!form) return;
+
+            const setValue = (selector, value) => {
+                const field = form.querySelector(selector);
+                if (field) {
+                    field.value = value ?? "";
+                }
+            };
+
+            setValue("[name='regNumber']", current.regNumber);
+            setValue("[name='name']", current.name);
+            setValue("[name='nickname']", current.nickname);
+            setValue("[name='epf']", current.epf);
+            setValue("[name='position']", current.position);
+            setValue("[name='joinDate']", current.joinDate);
+            setValue("[name='status']", current.status);
+            setValue("[name='image']", current.image);
+
+            const cancelButton = form.querySelector("[data-cancel-edit]");
+            cancelButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                toggleModal(false);
+            });
+
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                const formData = new FormData(form);
+                const getValue = (field, fallback = "") => {
+                    const raw = formData.get(field);
+                    return typeof raw === "string" ? raw.trim() : fallback;
+                };
+
+                const updated = {
+                    name: getValue("name", current.name) || current.name,
+                    nickname: getValue("nickname", ""),
+                    epf: getValue("epf", ""),
+                    position: getValue("position", ""),
+                    joinDate: getValue("joinDate", current.joinDate) || current.joinDate,
+                    status: getValue("status", current.status) || current.status,
+                    image: getValue("image", current.image),
+                };
+
+                const nameCell = row.querySelector("td[data-label='Name with Initial']");
+                if (nameCell) {
+                    nameCell.textContent = updated.name;
+                }
+
+                const nicknameCell = row.querySelector("td[data-label='Nick Name']");
+                if (nicknameCell) {
+                    nicknameCell.textContent = updated.nickname;
+                }
+
+                const epfCell = row.querySelector("td[data-label='EPF No']");
+                if (epfCell) {
+                    epfCell.textContent = updated.epf;
+                }
+
+                const positionCell = row.querySelector("td[data-label='Position']");
+                if (positionCell) {
+                    positionCell.textContent = updated.position;
+                }
+
+                const joinDateCell = row.querySelector("td[data-label='Date of Join']");
+                if (joinDateCell) {
+                    joinDateCell.textContent = updated.joinDate;
+                }
+
+                const statusCell = row.querySelector("td[data-label='Status']");
+                if (statusCell) {
+                    let statusBadge = statusCell.querySelector(".status-badge");
+                    if (!statusBadge) {
+                        statusBadge = document.createElement("span");
+                        statusBadge.classList.add("status-badge");
+                        statusCell.appendChild(statusBadge);
+                    }
+                    statusBadge.textContent = updated.status;
+                    applyStatusBadgeClass(statusBadge, updated.status);
+                }
+
+                const imageEl = row.querySelector("td[data-label='Image'] img");
+                if (imageEl) {
+                    imageEl.src = updated.image || current.image;
+                    const displayName = updated.name || current.name || current.regNumber;
+                    imageEl.alt = displayName ? `Profile picture of ${displayName}` : "Profile picture";
+                }
+
+                toggleModal(false);
+            });
+
+            modalBody.innerHTML = "";
+            modalBody.appendChild(clone);
+            const displayName = current.name || current.regNumber || "Team member";
+            modalTitle.textContent = `Edit member – ${displayName}`;
+            toggleModal(true);
+        };
 
         const toggleModal = (isOpen) => {
             if (!modal) return;
@@ -413,6 +616,19 @@
         registerButton?.addEventListener("click", () => {
             alert("Redirect to member registration flow (to be implemented).");
         });
+
+        if (!isAdmin) {
+            adminElements.forEach((element) => {
+                element.remove();
+            });
+        } else {
+            document.querySelectorAll("[data-edit-member]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const row = button.closest("tr");
+                    openEditModal(row);
+                });
+            });
+        }
     </script>
 </body>
 </html>

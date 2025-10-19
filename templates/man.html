@@ -791,6 +791,22 @@
             return { value: "", isValid: false };
         }
 
+        // === Added Helper: Ensures <input type="date"> returns ISO YYYY-MM-DD ===
+        function getISOFromDateInput(inputEl) {
+            if (!inputEl) return { value: "", isValid: false };
+
+            // If the browser provides a native Date object, use it
+            if (inputEl.valueAsDate instanceof Date && !Number.isNaN(inputEl.valueAsDate)) {
+                const y = inputEl.valueAsDate.getFullYear();
+                const m = String(inputEl.valueAsDate.getMonth() + 1).padStart(2, "0");
+                const d = String(inputEl.valueAsDate.getDate()).padStart(2, "0");
+                return { value: `${y}-${m}-${d}`, isValid: true };
+            }
+
+            // Fallback to your existing parser
+            return normalizeDateInput(inputEl.value);
+        }
+
         const applyStatusBadgeClass = (badge, status) => {
             if (!badge) return;
             Object.values(statusBadgeClassMap).forEach((className) => {
@@ -1085,6 +1101,12 @@
                     ? normalizedCurrentJoinDate.value
                     : current.joinDate
             );
+            // Auto-format date when user changes it in Edit form
+            const editJoinDateField = form.querySelector("[name='joinDate']");
+            editJoinDateField?.addEventListener("change", () => {
+                const n = getISOFromDateInput(editJoinDateField);
+                if (n.isValid) editJoinDateField.value = n.value;
+            });
             setValue("[name='status']", current.status);
             setValue("[name='image']", current.image);
 
@@ -1102,11 +1124,11 @@
                     return typeof raw === "string" ? raw.trim() : fallback;
                 };
 
-                const joinDateValue = getValue("joinDate", current.joinDate) || current.joinDate;
-                const joinDateResult = normalizeDateInput(joinDateValue);
+                const joinDateFieldEl = form.querySelector("[name='joinDate']");
+                const joinDateResult = getISOFromDateInput(joinDateFieldEl);
 
                 if (!joinDateResult.isValid) {
-                    alert("Please enter a valid date in YYYY-MM-DD format.");
+                    alert("Please select a valid join date.");
                     return;
                 }
 
@@ -1218,6 +1240,12 @@
                 joinDateField.value = today;
             }
 
+            // Auto-format join date to ISO when changed
+            joinDateField?.addEventListener("change", () => {
+                const n = getISOFromDateInput(joinDateField);
+                if (n.isValid) joinDateField.value = n.value;
+            });
+
             const cancelButton = form.querySelector("[data-cancel-register]");
             cancelButton?.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -1269,9 +1297,11 @@
                     return;
                 }
 
-                const joinDateResult = normalizeDateInput(getValue("joinDate"));
+                // Normalize join date safely
+                const joinDateFieldEl = form.querySelector("[name='joinDate']");
+                const joinDateResult = getISOFromDateInput(joinDateFieldEl);
                 if (!joinDateResult.isValid) {
-                    const message = "Please enter a valid date in YYYY-MM-DD format.";
+                    const message = "Please select a valid join date.";
                     if (errorBox) {
                         errorBox.textContent = message;
                         errorBox.hidden = false;

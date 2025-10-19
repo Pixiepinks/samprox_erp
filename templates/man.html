@@ -543,7 +543,15 @@
             if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
                 return { value: trimmed, isValid: true };
             }
-            const parsed = new Date(trimmed);
+
+            const sanitized = trimmed.replace(/\\/g, "/");
+
+            if (/^\d{4}\/\d{2}\/\d{2}$/.test(sanitized)) {
+                const [year, month, day] = sanitized.split("/");
+                return { value: `${year}-${month}-${day}`, isValid: true };
+            }
+
+            const parsed = new Date(sanitized);
             if (Number.isNaN(parsed.valueOf())) {
                 return { value: "", isValid: false };
             }

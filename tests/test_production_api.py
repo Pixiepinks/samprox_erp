@@ -271,11 +271,23 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertEqual(data["days"], 31)
         self.assertEqual(len(data["daily_totals"]), data["days"])
 
-        totals_by_day = {item["day"]: item["total_tons"] for item in data["daily_totals"]}
-        self.assertAlmostEqual(totals_by_day[1], 7.0)
-        self.assertAlmostEqual(totals_by_day[2], 5.0)
-        self.assertAlmostEqual(totals_by_day[15], 1.25)
-        self.assertAlmostEqual(totals_by_day.get(3, 0.0), 0.0)
+        totals_by_day = {item["day"]: item for item in data["daily_totals"]}
+        may_first = totals_by_day[1]
+        self.assertAlmostEqual(may_first["MCH1"], 5.0)
+        self.assertAlmostEqual(may_first["MCH2"], 2.0)
+        self.assertAlmostEqual(may_first["total_tons"], 7.0)
+
+        may_second = totals_by_day[2]
+        self.assertAlmostEqual(may_second["MCH1"], 5.0)
+        self.assertAlmostEqual(may_second["MCH2"], 0.0)
+        self.assertAlmostEqual(may_second["total_tons"], 5.0)
+
+        may_fifteenth = totals_by_day[15]
+        self.assertAlmostEqual(may_fifteenth["MCH1"], 0.0)
+        self.assertAlmostEqual(may_fifteenth["MCH2"], 1.25)
+        self.assertAlmostEqual(may_fifteenth["total_tons"], 1.25)
+
+        self.assertAlmostEqual(totals_by_day.get(3, {"total_tons": 0.0})["total_tons"], 0.0)
 
         self.assertAlmostEqual(data["total_production"], 13.25)
         self.assertAlmostEqual(data["average_day_production"], round(13.25 / 31, 3))

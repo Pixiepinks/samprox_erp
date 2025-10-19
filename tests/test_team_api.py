@@ -94,6 +94,31 @@ class TeamApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_register_member_accepts_common_date_formats(self):
+        examples = [
+            ("TM-010", "02/01/2015", "2015-01-02"),
+            ("TM-011", "02-01-2015", "2015-01-02"),
+            ("TM-012", "2015/01/02", "2015-01-02"),
+            ("TM-013", "2 Jan 2015", "2015-01-02"),
+            ("TM-014", "2015-Jan-02", "2015-01-02"),
+        ]
+
+        for reg_number, provided, expected in examples:
+            with self.subTest(provided=provided):
+                response = self.client.post(
+                    "/api/team/members",
+                    headers=self._auth_headers(self.admin_token),
+                    json={
+                        "regNumber": reg_number,
+                        "name": f"Example {reg_number}",
+                        "joinDate": provided,
+                    },
+                )
+
+                self.assertEqual(response.status_code, 201)
+                body = response.get_json()
+                self.assertEqual(body["joinDate"], expected)
+
     def test_register_member_rejects_overlong_fields(self):
         payload = {
             "regNumber": "T" * 41,

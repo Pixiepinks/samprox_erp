@@ -132,6 +132,8 @@ class TeamApiTestCase(unittest.TestCase):
             ("TM-013", "2 Jan 2015", "2015-01-02"),
             ("TM-014", "2015-Jan-02", "2015-01-02"),
             ("TM-015", "10\\10\\2025", "2025-10-10"),
+            ("TM-016", "10 / 18 / 2025", "2025-10-18"),
+            ("TM-017", "18 Oct. 2025", "2025-10-18"),
         ]
 
         for reg_number, provided, expected in examples:

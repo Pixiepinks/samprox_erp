@@ -9,6 +9,13 @@ from alembic import op
 import sqlalchemy as sa
 
 
+# revision identifiers, used by Alembic.
+revision = "e5b93beef9b1"
+down_revision = "b2b3c026bbf0"
+branch_labels = None
+depends_on = None
+
+
 t_team_member_status = sa.Enum(
     "Active",
     "On Leave",

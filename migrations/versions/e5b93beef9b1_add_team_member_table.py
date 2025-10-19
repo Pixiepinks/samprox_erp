@@ -26,7 +26,17 @@ t_team_member_status = sa.Enum(
 
 def upgrade():
     bind = op.get_bind()
-    t_team_member_status.create(bind, checkfirst=True)
+
+    if bind.dialect.name == "postgresql":
+        enum_exists = bind.execute(
+            sa.text(
+                "SELECT 1 FROM pg_type WHERE typname = 'team_member_status'"
+            )
+        ).scalar()
+        if not enum_exists:
+            t_team_member_status.create(bind, checkfirst=False)
+    else:
+        t_team_member_status.create(bind, checkfirst=True)
 
     op.create_table(
         "team_member",

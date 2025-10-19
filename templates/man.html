@@ -599,6 +599,7 @@
                 .replace(/[\u2013\u2014\u2212]/g, "-")
                 .replace(/\\/g, "/")
                 .replace(/,/g, " ")
+                .replace(/(\d)\s*\.\s*(\d)/g, "$1-$2")
                 .replace(/\s+/g, " ")
                 .trim();
 
@@ -623,6 +624,40 @@
             }
 
             match = collapsed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+            if (match) {
+                const first = Number(match[1]);
+                const second = Number(match[2]);
+                const year = Number(match[3]);
+                const candidates = [];
+
+                if (first > 12 && second <= 12) {
+                    candidates.push([second, first]);
+                } else if (second > 12 && first <= 12) {
+                    candidates.push([first, second]);
+                } else {
+                    candidates.push([second, first], [first, second]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{4})\s+(\d{1,2})\s+(\d{1,2})$/);
+            if (match) {
+                const year = Number(match[1]);
+                const month = Number(match[2]);
+                const day = Number(match[3]);
+                const iso = toIso(year, month, day);
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+            }
+
+            match = sanitized.match(/^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/);
             if (match) {
                 const first = Number(match[1]);
                 const second = Number(match[2]);

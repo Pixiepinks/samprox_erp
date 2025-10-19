@@ -773,6 +773,12 @@
                         enhanceAdminRow(row);
                     }
                 });
+
+                existingRows.forEach((row) => {
+                    if (!matchedRows.has(row)) {
+                        row.remove();
+                    }
+                });
             } catch (error) {
                 console.error("Failed to load team members", error);
             }

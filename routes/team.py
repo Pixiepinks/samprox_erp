@@ -195,8 +195,8 @@ def list_members():
 @bp.post("/members")
 @jwt_required()
 def create_member():
-    if not require_role(RoleEnum.admin):
-        return jsonify({"msg": "Only administrators can register team members."}), 403
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return jsonify({"msg": "Only administrators or production managers can register team members."}), 403
 
     _ensure_schema()
 

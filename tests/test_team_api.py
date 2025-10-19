@@ -23,17 +23,28 @@ class TeamApiTestCase(unittest.TestCase):
 
         self.admin_user = User(name="Admin", email="admin@example.com", role=RoleEnum.admin)
         self.admin_user.set_password("Password!1")
-        self.viewer_user = User(
-            name="Viewer",
-            email="viewer@example.com",
+        self.production_user = User(
+            name="Production Manager",
+            email="pm@example.com",
             role=RoleEnum.production_manager,
         )
-        self.viewer_user.set_password("Password!1")
-        self.app_module.db.session.add_all([self.admin_user, self.viewer_user])
+        self.production_user.set_password("Password!1")
+        self.maintenance_user = User(
+            name="Maintenance Manager",
+            email="maint@example.com",
+            role=RoleEnum.maintenance_manager,
+        )
+        self.maintenance_user.set_password("Password!1")
+        self.app_module.db.session.add_all([
+            self.admin_user,
+            self.production_user,
+            self.maintenance_user,
+        ])
         self.app_module.db.session.commit()
 
         self.admin_token = self._login("admin@example.com")
-        self.viewer_token = self._login("viewer@example.com")
+        self.production_token = self._login("pm@example.com")
+        self.maintenance_token = self._login("maint@example.com")
 
     def tearDown(self):
         self.app_module.db.session.remove()
@@ -80,7 +91,26 @@ class TeamApiTestCase(unittest.TestCase):
         members = list_response.get_json()
         self.assertTrue(any(m["regNumber"] == payload["regNumber"] for m in members))
 
-    def test_non_admin_cannot_register_member(self):
+    def test_production_manager_can_register_member(self):
+        payload = {
+            "regNumber": "TM-020",
+            "name": "Production Manager Member",
+            "joinDate": "2024-07-08",
+            "status": "Active",
+        }
+
+        response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(self.production_token),
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.get_json()
+        self.assertEqual(body["regNumber"], payload["regNumber"])
+        self.assertEqual(body["name"], payload["name"])
+
+    def test_non_privileged_roles_cannot_register_member(self):
         payload = {
             "regNumber": "TM-002",
             "name": "John Smith",
@@ -89,7 +119,7 @@ class TeamApiTestCase(unittest.TestCase):
 
         response = self.client.post(
             "/api/team/members",
-            headers=self._auth_headers(self.viewer_token),
+            headers=self._auth_headers(self.maintenance_token),
             json=payload,
         )
         self.assertEqual(response.status_code, 403)

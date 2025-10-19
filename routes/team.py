@@ -336,9 +336,12 @@ def create_member():
         return jsonify({"msg": str(exc)}), 400
 
     try:
-        join_date = _parse_join_date(payload.get("joinDate"), required=True)
+        join_date = _parse_join_date(payload.get("joinDate"), required=False)
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
+
+    if join_date is None:
+        join_date = date.today()
 
     try:
         status = _parse_status(payload.get("status"))

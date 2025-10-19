@@ -354,10 +354,6 @@
                     <input class="edit-form__input" id="register-position" name="position" type="text" autocomplete="organization-title" />
                 </div>
                 <div class="edit-form__field">
-                    <label class="edit-form__label" for="register-join-date">Date of Join <span class="required" aria-hidden="true">*</span></label>
-                    <input class="edit-form__input" id="register-join-date" name="joinDate" type="date" required />
-                </div>
-                <div class="edit-form__field">
                     <label class="edit-form__label" for="register-status">Status</label>
                     <select class="edit-form__input" id="register-status" name="status">
                         <option value="Active" selected>Active</option>
@@ -1247,18 +1243,6 @@
             const errorBox = clone.querySelector("[data-register-error]");
             if (!form) return;
 
-            const joinDateField = form.querySelector("[name='joinDate']");
-            if (joinDateField && !joinDateField.value) {
-                const today = new Date().toISOString().split("T")[0];
-                joinDateField.value = today;
-            }
-
-            // Auto-format join date to ISO when changed
-            joinDateField?.addEventListener("change", () => {
-                const n = getISOFromDateInput(joinDateField);
-                if (n.isValid) joinDateField.value = n.value;
-            });
-
             const cancelButton = form.querySelector("[data-cancel-register]");
             cancelButton?.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -1310,28 +1294,12 @@
                     return;
                 }
 
-                // Normalize join date safely
-                const joinDateFieldEl = form.querySelector("[name='joinDate']");
-                const joinDateResult = getISOFromDateInput(joinDateFieldEl);
-                if (!joinDateResult.isValid) {
-                    const message = "Please select a valid join date.";
-                    if (errorBox) {
-                        errorBox.textContent = message;
-                        errorBox.hidden = false;
-                    } else {
-                        alert(message);
-                    }
-                    form.querySelector("[name='joinDate']")?.focus();
-                    return;
-                }
-
                 const payload = {
                     regNumber,
                     name,
                     nickname: getValue("nickname"),
                     epf: getValue("epf"),
                     position: getValue("position"),
-                    joinDate: joinDateResult.value,
                     status: getValue("status") || "Active",
                     image: getValue("image"),
                 };

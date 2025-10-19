@@ -109,6 +109,16 @@ def _parse_join_date(value, *, required: bool) -> date | None:
     except ValueError:
         pass
 
+    # Some browsers/frameworks send an ISO 8601 datetime string instead of a
+    # bare date. Attempt to parse that and return just the date component.
+    iso_value = text
+    if iso_value.endswith("Z"):
+        iso_value = f"{iso_value[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(iso_value).date()
+    except ValueError:
+        pass
+
     # Accept a handful of common human-entered variations so that manual entry
     # in browsers that do not enforce the control format still succeeds.
     accepted_formats = (

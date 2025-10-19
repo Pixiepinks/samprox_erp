@@ -2,10 +2,13 @@ import os
 from typing import Optional, Tuple
 
 import click
+from alembic import command
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from flask import Flask, jsonify
 from sqlalchemy import create_engine, func, text
-from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from config import Config, current_database_url
 from extensions import db, migrate, jwt
@@ -21,6 +24,12 @@ from models import (
     User,
 )
 from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, team, ui
+
+
+if os.name != "nt":  # pragma: no cover - platform dependent import
+    import fcntl  # type: ignore[import-not-found]
+else:  # pragma: no cover - Windows fallback
+    fcntl = None  # type: ignore[assignment]
 
 
 def _ensure_database_exists(database_url: str | None) -> None:
@@ -69,6 +78,63 @@ def _ensure_database_exists(database_url: str | None) -> None:
         admin_engine.dispose()
 
 
+def _run_database_migrations(app: Flask) -> None:
+    """Apply Alembic migrations if the schema is not up-to-date."""
+
+    database_uri = app.config.get("SQLALCHEMY_DATABASE_URI")
+    if not database_uri:
+        return
+
+    if database_uri.startswith("sqlite") and ":memory:" in database_uri:
+        return
+
+    migrations_dir = os.path.join(app.root_path, "migrations")
+    alembic_ini = os.path.join(migrations_dir, "alembic.ini")
+    if not os.path.exists(alembic_ini):
+        return
+
+    config = AlembicConfig(alembic_ini)
+    config.set_main_option("script_location", migrations_dir)
+    config.set_main_option("sqlalchemy.url", database_uri)
+
+    script = ScriptDirectory.from_config(config)
+    head_revision = script.get_current_head()
+    if not head_revision:
+        return
+
+    def _current_revision() -> str | None:
+        try:
+            with db.engine.connect() as connection:
+                return connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        except (OperationalError, ProgrammingError):
+            return None
+
+    with app.app_context():
+        if _current_revision() == head_revision:
+            return
+
+        lock_path = os.path.join(app.instance_path, "alembic.lock")
+        os.makedirs(app.instance_path, exist_ok=True)
+        lock_file = open(lock_path, "w")
+        try:
+            if fcntl is not None:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+
+            if _current_revision() == head_revision:
+                return
+
+            app.logger.info("Applying database migrations…")
+            try:
+                command.upgrade(config, "head")
+            except Exception:
+                if _current_revision() != head_revision:
+                    raise
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+            lock_file.close()
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -77,6 +143,7 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     db.init_app(app)
     migrate.init_app(app, db)
+    _run_database_migrations(app)
     jwt.init_app(app)
 
     @jwt.additional_claims_loader

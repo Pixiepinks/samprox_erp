@@ -200,6 +200,21 @@
             maximumFractionDigits: 1,
         });
 
+        const MACHINE_SERIES = [
+            {
+                field: "MCH1",
+                label: "MCH-0001",
+                backgroundColor: "rgba(37, 99, 235, 0.75)",
+                borderColor: "rgb(37, 99, 235)",
+            },
+            {
+                field: "MCH2",
+                label: "MCH-0002",
+                backgroundColor: "rgba(96, 165, 250, 0.75)",
+                borderColor: "rgb(96, 165, 250)",
+            },
+        ];
+
         const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
             const value = String(index + 1).padStart(2, "0");
             const label = new Date(2000, index, 1).toLocaleString(undefined, {
@@ -419,17 +434,33 @@
             }
 
             const labels = periodData.daily_totals.map((item) => item.day);
-            const values = periodData.daily_totals.map((item) => item.total_tons);
+            const datasets = MACHINE_SERIES.map((series, index, array) => {
+                const data = periodData.daily_totals.map((item) => {
+                    const value = Number(item?.[series.field] ?? 0);
+                    return Number.isFinite(value) ? value : 0;
+                });
 
-            const datasets = [
-                {
-                    label: periodData.label,
-                    data: values,
-                    backgroundColor: "rgba(37, 99, 235, 0.65)",
-                    borderRadius: 6,
+                const isFirst = index === 0;
+                const isLast = index === array.length - 1;
+
+                return {
+                    label: series.label,
+                    data,
+                    backgroundColor: series.backgroundColor,
+                    borderColor: series.borderColor,
+                    borderWidth: 1,
+                    stack: "current",
                     maxBarThickness: 18,
-                },
-            ];
+                    borderSkipped: false,
+                    borderRadius: {
+                        topLeft: isLast ? 6 : 0,
+                        topRight: isLast ? 6 : 0,
+                        bottomLeft: isFirst ? 6 : 0,
+                        bottomRight: isFirst ? 6 : 0,
+                    },
+                    order: 1,
+                };
+            });
 
             let comparisonData = null;
 
@@ -446,11 +477,18 @@
                             return totalsByDay.has(day) ? totalsByDay.get(day) : null;
                         });
                         datasets.push({
-                            label: previousPeriod.label,
+                            label: `${previousPeriod.label} total`,
                             data: comparisonValues,
-                            backgroundColor: "rgba(148, 163, 184, 0.65)",
-                            borderRadius: 6,
-                            maxBarThickness: 18,
+                            type: "line",
+                            borderColor: "rgba(148, 163, 184, 0.9)",
+                            backgroundColor: "rgba(148, 163, 184, 0.35)",
+                            borderWidth: 2,
+                            tension: 0.3,
+                            spanGaps: true,
+                            fill: false,
+                            pointRadius: 0,
+                            showInLegend: false,
+                            order: 99,
                         });
                     }
                 }
@@ -492,6 +530,7 @@
                         maintainAspectRatio: false,
                         scales: {
                             x: {
+                                stacked: true,
                                 title: {
                                     display: true,
                                     text: "Day of month",
@@ -506,6 +545,7 @@
                                 },
                             },
                             y: {
+                                stacked: true,
                                 beginAtZero: true,
                                 title: {
                                     display: true,
@@ -516,19 +556,46 @@
                                 },
                             },
                         },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
                         plugins: {
                             legend: {
                                 display: true,
                                 labels: {
                                     usePointStyle: true,
+                                    filter: (legendItem, chart) => {
+                                        const dataset = chart?.data?.datasets?.[legendItem.datasetIndex];
+                                        if (dataset && Object.prototype.hasOwnProperty.call(dataset, "showInLegend")) {
+                                            return dataset.showInLegend !== false;
+                                        }
+                                        return true;
+                                    },
                                 },
                             },
                             tooltip: {
                                 callbacks: {
                                     label: (context) => {
                                         const label = context.dataset.label || "";
-                                        const value = context.parsed.y;
+                                        const value = Number(context.parsed.y ?? 0);
                                         return `${label}: ${formatTons(value)} tons`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const stackContexts = contexts.filter(
+                                            (item) => item.dataset?.stack === "current",
+                                        );
+                                        if (stackContexts.length === 0) {
+                                            return "";
+                                        }
+                                        const total = stackContexts.reduce(
+                                            (sum, item) => sum + Number(item.parsed.y ?? 0),
+                                            0,
+                                        );
+                                        return `Total: ${formatTons(total)} tons`;
                                     },
                                 },
                             },

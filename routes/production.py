@@ -439,6 +439,7 @@ def get_monthly_production_summary():
     totals_query = (
         db.session.query(
             DailyProductionEntry.date,
+            func.lower(MachineAsset.code),
             func.coalesce(func.sum(DailyProductionEntry.quantity_tons), 0.0),
         )
         .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
@@ -447,32 +448,50 @@ def get_monthly_production_summary():
             DailyProductionEntry.date <= month_end,
             func.lower(MachineAsset.code).in_(machine_filters),
         )
-        .group_by(DailyProductionEntry.date)
+        .group_by(DailyProductionEntry.date, func.lower(MachineAsset.code))
         .order_by(DailyProductionEntry.date.asc())
     )
 
     totals_by_date = {}
-    for date_value, total_value in totals_query.all():
+    for date_value, code_value, total_value in totals_query.all():
         if not isinstance(date_value, dt_date):
             continue
+        day_totals = totals_by_date.setdefault(date_value, {})
         try:
-            totals_by_date[date_value] = float(total_value or 0.0)
+            day_totals[code_value] = float(total_value or 0.0)
         except (TypeError, ValueError):
-            totals_by_date[date_value] = 0.0
+            day_totals[code_value] = 0.0
 
     daily_totals = []
+    total_production = 0.0
+
+    machine_field_map = {
+        code: code.replace("MCH-000", "MCH") if code.startswith("MCH-000") else code.replace("-", "")
+        for code in machine_codes
+    }
+
     for day in range(1, month_days + 1):
         current_date = dt_date(anchor.year, anchor.month, day)
-        total_value = round(totals_by_date.get(current_date, 0.0), 3)
-        daily_totals.append(
-            {
-                "day": day,
-                "date": current_date.isoformat(),
-                "total_tons": total_value,
-            }
-        )
+        machine_values = totals_by_date.get(current_date, {})
 
-    total_production = round(sum(item["total_tons"] for item in daily_totals), 3)
+        payload = {
+            "day": day,
+            "date": current_date.isoformat(),
+        }
+
+        day_total = 0.0
+        for machine_filter, canonical_code in canonical_codes.items():
+            value = round(machine_values.get(machine_filter, 0.0), 3)
+            field_name = machine_field_map.get(canonical_code, canonical_code)
+            payload[field_name] = value
+            day_total += value
+
+        day_total = round(day_total, 3)
+        payload["total_tons"] = day_total
+        total_production += day_total
+        daily_totals.append(payload)
+
+    total_production = round(total_production, 3)
     average_day_production = round(
         total_production / month_days if month_days else 0.0,
         3,

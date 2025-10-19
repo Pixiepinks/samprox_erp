@@ -3,7 +3,7 @@ from datetime import date
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
 from models import RoleEnum, TeamMember, TeamMemberStatus
@@ -65,7 +65,34 @@ def _ensure_schema():
                     current_app.logger.debug("Schema statement failed (likely already applied): %s", statement)
 
 
+def _clean_string(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _extract_string(
+    value,
+    *,
+    label: str,
+    required: bool = False,
+    max_length: int | None = None,
+) -> str | None:
+    text = _clean_string(value)
+    if not text:
+        if required:
+            raise ValueError(f"{label} is required.")
+        return None
+    if max_length is not None and len(text) > max_length:
+        raise ValueError(f"{label} must be at most {max_length} characters.")
+    return text
+
+
 def _parse_join_date(value, *, required: bool) -> date | None:
+    if isinstance(value, str):
+        value = value.strip()
     if not value:
         if required:
             raise ValueError("Date of Join is required.")
@@ -79,10 +106,13 @@ def _parse_join_date(value, *, required: bool) -> date | None:
 
 
 def _parse_status(value) -> TeamMemberStatus:
-    if not value:
+    if isinstance(value, TeamMemberStatus):
+        return value
+    text = _clean_string(value)
+    if not text:
         return TeamMemberStatus.ACTIVE
     try:
-        return TeamMemberStatus(value)
+        return TeamMemberStatus(text)
     except ValueError as exc:
         valid_values = ", ".join(status.value for status in TeamMemberStatus)
         raise ValueError(f"Status must be one of: {valid_values}.") from exc
@@ -113,13 +143,41 @@ def create_member():
 
     payload = request.get_json() or {}
 
-    reg_number = (payload.get("regNumber") or "").strip()
-    if not reg_number:
-        return jsonify({"msg": "Registration number is required."}), 400
-
-    name = (payload.get("name") or "").strip()
-    if not name:
-        return jsonify({"msg": "Name is required."}), 400
+    try:
+        reg_number = _extract_string(
+            payload.get("regNumber"),
+            label="Registration number",
+            required=True,
+            max_length=40,
+        )
+        name = _extract_string(
+            payload.get("name"),
+            label="Name",
+            required=True,
+            max_length=200,
+        )
+        nickname = _extract_string(
+            payload.get("nickname"),
+            label="Nickname",
+            max_length=120,
+        )
+        epf = _extract_string(
+            payload.get("epf"),
+            label="EPF number",
+            max_length=120,
+        )
+        position = _extract_string(
+            payload.get("position"),
+            label="Position",
+            max_length=120,
+        )
+        image_url = _extract_string(
+            payload.get("image"),
+            label="Profile image URL",
+            max_length=500,
+        )
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
 
     try:
         join_date = _parse_join_date(payload.get("joinDate"), required=True)
@@ -134,12 +192,12 @@ def create_member():
     member = TeamMember(
         reg_number=reg_number,
         name=name,
-        nickname=(payload.get("nickname") or "").strip() or None,
-        epf=(payload.get("epf") or "").strip() or None,
-        position=(payload.get("position") or "").strip() or None,
+        nickname=nickname,
+        epf=epf,
+        position=position,
         join_date=join_date,
         status=status,
-        image_url=(payload.get("image") or "").strip() or None,
+        image_url=image_url,
     )
 
     db.session.add(member)
@@ -150,6 +208,16 @@ def create_member():
         return (
             jsonify({"msg": f"Registration number {reg_number} already exists."}),
             409,
+        )
+    except DataError:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "msg": "Unable to register member. One or more fields exceed the allowed length.",
+                }
+            ),
+            400,
         )
     except (ProgrammingError, OperationalError):
         db.session.rollback()
@@ -173,22 +241,56 @@ def update_member(member_id: int):
     payload = request.get_json() or {}
 
     if "name" in payload:
-        name = (payload.get("name") or "").strip()
-        if not name:
-            return jsonify({"msg": "Name is required."}), 400
+        try:
+            name = _extract_string(
+                payload.get("name"),
+                label="Name",
+                required=True,
+                max_length=200,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
         member.name = name
 
     if "nickname" in payload:
-        member.nickname = (payload.get("nickname") or "").strip() or None
+        try:
+            member.nickname = _extract_string(
+                payload.get("nickname"),
+                label="Nickname",
+                max_length=120,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
 
     if "epf" in payload:
-        member.epf = (payload.get("epf") or "").strip() or None
+        try:
+            member.epf = _extract_string(
+                payload.get("epf"),
+                label="EPF number",
+                max_length=120,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
 
     if "position" in payload:
-        member.position = (payload.get("position") or "").strip() or None
+        try:
+            member.position = _extract_string(
+                payload.get("position"),
+                label="Position",
+                max_length=120,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
 
     if "image" in payload:
-        member.image_url = (payload.get("image") or "").strip() or None
+        try:
+            member.image_url = _extract_string(
+                payload.get("image"),
+                label="Profile image URL",
+                max_length=500,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
 
     if "joinDate" in payload:
         try:
@@ -205,6 +307,16 @@ def update_member(member_id: int):
 
     try:
         db.session.commit()
+    except DataError:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "msg": "Unable to update member. One or more fields exceed the allowed length.",
+                }
+            ),
+            400,
+        )
     except (ProgrammingError, OperationalError):
         db.session.rollback()
         current_app.logger.exception("Failed to update team member due to schema issues.")

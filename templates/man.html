@@ -536,26 +536,202 @@
             if (!value) {
                 return { value: "", isValid: false };
             }
+
             const trimmed = value.trim();
             if (!trimmed) {
                 return { value: "", isValid: false };
             }
-            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-                return { value: trimmed, isValid: true };
+
+            const toIso = (year, month, day) => {
+                if (
+                    !Number.isFinite(year) ||
+                    !Number.isFinite(month) ||
+                    !Number.isFinite(day)
+                ) {
+                    return null;
+                }
+                const candidate = new Date(Date.UTC(year, month - 1, day));
+                if (
+                    candidate.getUTCFullYear() !== year ||
+                    candidate.getUTCMonth() + 1 !== month ||
+                    candidate.getUTCDate() !== day
+                ) {
+                    return null;
+                }
+                return `${year.toString().padStart(4, "0")}-${month
+                    .toString()
+                    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+            };
+
+            const monthLookup = {
+                jan: 1,
+                january: 1,
+                feb: 2,
+                february: 2,
+                mar: 3,
+                march: 3,
+                apr: 4,
+                april: 4,
+                may: 5,
+                jun: 6,
+                june: 6,
+                jul: 7,
+                july: 7,
+                aug: 8,
+                august: 8,
+                sep: 9,
+                sept: 9,
+                september: 9,
+                oct: 10,
+                october: 10,
+                nov: 11,
+                november: 11,
+                dec: 12,
+                december: 12,
+            };
+
+            const monthFromName = (name) => {
+                const cleaned = name.trim().replace(/\.$/, "").toLowerCase();
+                return monthLookup[cleaned] || null;
+            };
+
+            const sanitized = trimmed
+                .replace(/[\u2013\u2014\u2212]/g, "-")
+                .replace(/\\/g, "/")
+                .replace(/,/g, " ")
+                .replace(/(\d)\s*\.\s*(\d)/g, "$1-$2")
+                .replace(/\s+/g, " ")
+                .trim();
+
+            const collapsed = sanitized.replace(/\s*([/-])\s*/g, "$1");
+
+            let match = collapsed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (match) {
+                const iso = toIso(Number(match[1]), Number(match[2]), Number(match[3]));
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+                return { value: "", isValid: false };
             }
 
-            const sanitized = trimmed.replace(/\\/g, "/");
+            match = collapsed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+            if (match) {
+                const iso = toIso(Number(match[1]), Number(match[2]), Number(match[3]));
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+                return { value: "", isValid: false };
+            }
 
-            if (/^\d{4}\/\d{2}\/\d{2}$/.test(sanitized)) {
-                const [year, month, day] = sanitized.split("/");
-                return { value: `${year}-${month}-${day}`, isValid: true };
+            match = collapsed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+            if (match) {
+                const first = Number(match[1]);
+                const second = Number(match[2]);
+                const year = Number(match[3]);
+                const candidates = [];
+
+                if (first > 12 && second <= 12) {
+                    candidates.push([second, first]);
+                } else if (second > 12 && first <= 12) {
+                    candidates.push([first, second]);
+                } else {
+                    candidates.push([second, first], [first, second]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{4})\s+(\d{1,2})\s+(\d{1,2})$/);
+            if (match) {
+                const year = Number(match[1]);
+                const month = Number(match[2]);
+                const day = Number(match[3]);
+                const iso = toIso(year, month, day);
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
+            }
+
+            match = sanitized.match(/^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/);
+            if (match) {
+                const first = Number(match[1]);
+                const second = Number(match[2]);
+                const year = Number(match[3]);
+                const candidates = [];
+
+                if (first > 12 && second <= 12) {
+                    candidates.push([second, first]);
+                } else if (second > 12 && first <= 12) {
+                    candidates.push([first, second]);
+                } else {
+                    candidates.push([second, first], [first, second]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{1,2})\s+([A-Za-z]+\.?)\s+(\d{4})$/);
+            if (match) {
+                const day = Number(match[1]);
+                const month = monthFromName(match[2]);
+                const year = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^([A-Za-z]+\.?)\s+(\d{1,2}),?\s+(\d{4})$/);
+            if (match) {
+                const month = monthFromName(match[1]);
+                const day = Number(match[2]);
+                const year = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
+            match = sanitized.match(/^(\d{4})\s+([A-Za-z]+\.?)\s+(\d{1,2})$/);
+            if (match) {
+                const year = Number(match[1]);
+                const month = monthFromName(match[2]);
+                const day = Number(match[3]);
+                if (month) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
             }
 
             const parsed = new Date(sanitized);
-            if (Number.isNaN(parsed.valueOf())) {
-                return { value: "", isValid: false };
+            if (!Number.isNaN(parsed.valueOf())) {
+                const useUTC = /t/i.test(sanitized);
+                const year = useUTC ? parsed.getUTCFullYear() : parsed.getFullYear();
+                const month = (useUTC ? parsed.getUTCMonth() : parsed.getMonth()) + 1;
+                const day = useUTC ? parsed.getUTCDate() : parsed.getDate();
+                const iso = toIso(year, month, day);
+                if (iso) {
+                    return { value: iso, isValid: true };
+                }
             }
-            return { value: parsed.toISOString().split("T")[0], isValid: true };
+
+            return { value: "", isValid: false };
         }
 
         const applyStatusBadgeClass = (badge, status) => {

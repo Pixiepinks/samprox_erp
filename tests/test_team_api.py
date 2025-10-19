@@ -94,6 +94,23 @@ class TeamApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_register_member_rejects_overlong_fields(self):
+        payload = {
+            "regNumber": "T" * 41,
+            "name": "Valid Name",
+            "joinDate": "2024-07-04",
+        }
+
+        response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        body = response.get_json()
+        self.assertIn("Registration number must be at most 40 characters.", body["msg"])
+
     def test_admin_can_update_member_details(self):
         payload = {
             "regNumber": "TM-003",
@@ -132,6 +149,58 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(stored["status"], "On Leave")
         self.assertEqual(stored["position"], "Shift Lead")
+
+    def test_update_member_validates_field_lengths(self):
+        payload = {
+            "regNumber": "TM-004",
+            "name": "Kamal Perera",
+            "joinDate": "2024-07-05",
+            "status": "Active",
+        }
+
+        response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        member_id = response.get_json()["id"]
+
+        update_response = self.client.patch(
+            f"/api/team/members/{member_id}",
+            headers=self._auth_headers(self.admin_token),
+            json={"nickname": "N" * 130},
+        )
+
+        self.assertEqual(update_response.status_code, 400)
+        body = update_response.get_json()
+        self.assertIn("Nickname must be at most 120 characters.", body["msg"])
+
+    def test_update_member_trims_status_values(self):
+        payload = {
+            "regNumber": "TM-005",
+            "name": "Suresh Wijesinghe",
+            "joinDate": "2024-07-06",
+            "status": "Active",
+        }
+
+        response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        member_id = response.get_json()["id"]
+
+        update_response = self.client.patch(
+            f"/api/team/members/{member_id}",
+            headers=self._auth_headers(self.admin_token),
+            json={"status": " On Leave "},
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        updated = update_response.get_json()
+        self.assertEqual(updated["status"], "On Leave")
 
 
 if __name__ == "__main__":

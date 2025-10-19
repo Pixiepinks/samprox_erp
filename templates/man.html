@@ -329,6 +329,53 @@
             <li>2022-03-01 – Joined as Maintenance Planner</li>
         </ul>
     </template>
+    <template id="register-member-template">
+        <form class="edit-form" id="register-member-form">
+            <div class="alert alert--error" data-register-error hidden></div>
+            <div class="edit-form__grid">
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-reg-number">Reg No <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-reg-number" name="regNumber" type="text" required autocomplete="off" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-name">Name with Initial <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-name" name="name" type="text" required autocomplete="name" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-nickname">Nick Name</label>
+                    <input class="edit-form__input" id="register-nickname" name="nickname" type="text" autocomplete="nickname" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-epf">EPF No</label>
+                    <input class="edit-form__input" id="register-epf" name="epf" type="text" autocomplete="off" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-position">Position</label>
+                    <input class="edit-form__input" id="register-position" name="position" type="text" autocomplete="organization-title" />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-join-date">Date of Join <span class="required" aria-hidden="true">*</span></label>
+                    <input class="edit-form__input" id="register-join-date" name="joinDate" type="date" required />
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-status">Status</label>
+                    <select class="edit-form__input" id="register-status" name="status">
+                        <option value="Active" selected>Active</option>
+                        <option value="On Leave">On Leave</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-image">Profile image URL</label>
+                    <input class="edit-form__input" id="register-image" name="image" type="url" placeholder="https://" autocomplete="url" />
+                </div>
+            </div>
+            <div class="edit-form__actions">
+                <button type="button" class="button button--secondary" data-cancel-register>Cancel</button>
+                <button type="submit" class="button">Create member</button>
+            </div>
+        </form>
+    </template>
     <template id="edit-member-template">
         <form class="edit-form" id="edit-member-form">
             <div class="edit-form__grid">
@@ -426,6 +473,7 @@
         const modalBody = document.getElementById("modal-body");
         const modalTitle = document.getElementById("modal-title");
         const editTemplate = document.getElementById("edit-member-template");
+        const registerTemplate = document.getElementById("register-member-template");
         const adminElements = document.querySelectorAll("[data-admin-only]");
         const isAdmin = user?.role === "admin";
 
@@ -446,6 +494,90 @@
                 badge.classList.add("status-badge");
             }
             badge.classList.add(className);
+        };
+
+        const buildMemberRow = (member) => {
+            if (!tableBody) return null;
+
+            const safeText = (value, fallback = "—") => {
+                if (typeof value !== "string") {
+                    return fallback;
+                }
+                const trimmed = value.trim();
+                return trimmed || fallback;
+            };
+
+            const row = document.createElement("tr");
+
+            const appendTextCell = (label, value, fallback = "—") => {
+                const cell = document.createElement("td");
+                cell.setAttribute("data-label", label);
+                cell.textContent = safeText(value, fallback);
+                row.appendChild(cell);
+                return cell;
+            };
+
+            appendTextCell("Reg No", member.regNumber, "Pending");
+
+            const avatarCell = document.createElement("td");
+            avatarCell.setAttribute("data-label", "Image");
+            avatarCell.classList.add("team-table__avatar");
+            const displayName = safeText(member.name, member.regNumber || "Team member");
+            if (member.image) {
+                const image = document.createElement("img");
+                image.src = member.image;
+                image.alt = `Profile picture of ${displayName}`;
+                avatarCell.appendChild(image);
+            } else {
+                const placeholder = document.createElement("span");
+                placeholder.classList.add("team-table__avatar-placeholder");
+                placeholder.setAttribute("role", "img");
+                placeholder.setAttribute("aria-label", "No profile image provided");
+                const initial = (displayName || "?").charAt(0).toUpperCase() || "?";
+                placeholder.textContent = initial;
+                avatarCell.appendChild(placeholder);
+            }
+            row.appendChild(avatarCell);
+
+            appendTextCell("Name with Initial", member.name, member.regNumber || "Team member");
+            appendTextCell("Nick Name", member.nickname);
+            appendTextCell("EPF No", member.epf);
+            appendTextCell("Position", member.position);
+            appendTextCell("Date of Join", member.joinDate);
+
+            const statusCell = appendTextCell("Status", "", "Active");
+            const statusBadge = document.createElement("span");
+            statusBadge.classList.add("status-badge");
+            const statusText = safeText(member.status, "Active");
+            statusBadge.textContent = statusText;
+            statusCell.textContent = "";
+            statusCell.appendChild(statusBadge);
+            applyStatusBadgeClass(statusBadge, statusText);
+
+            if (isAdmin) {
+                const adminCell = document.createElement("td");
+                adminCell.setAttribute("data-label", "Admin controls");
+                adminCell.setAttribute("data-admin-only", "");
+                const controls = document.createElement("div");
+                controls.classList.add("admin-controls");
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "button button--secondary button--small";
+                editButton.setAttribute("data-edit-member", "");
+                editButton.textContent = "Edit";
+                controls.appendChild(editButton);
+                adminCell.appendChild(controls);
+                row.appendChild(adminCell);
+            }
+
+            appendTextCell("Personal Detail", member.personalDetail ?? "Not provided");
+            appendTextCell("Assignments", member.assignments ?? "Not assigned");
+            appendTextCell("Training records", member.trainingRecords ?? "Not provided");
+            appendTextCell("Employment Log", member.employmentLog ?? "Not provided");
+            appendTextCell("Files", member.files ?? "Not provided");
+            appendTextCell("Controlled Assets", member.assets ?? "None");
+
+            return row;
         };
 
         const openEditModal = (row) => {
@@ -614,7 +746,93 @@
 
         const registerButton = document.getElementById("register-member");
         registerButton?.addEventListener("click", () => {
-            alert("Redirect to member registration flow (to be implemented).");
+            if (!registerTemplate || !modalBody || !modalTitle) {
+                alert("Registration form unavailable. Please try again later.");
+                return;
+            }
+
+            const clone = registerTemplate.content.cloneNode(true);
+            const form = clone.querySelector("form");
+            const errorBox = clone.querySelector("[data-register-error]");
+            if (!form) return;
+
+            const joinDateField = form.querySelector("[name='joinDate']");
+            if (joinDateField && !joinDateField.value) {
+                const today = new Date().toISOString().split("T")[0];
+                joinDateField.value = today;
+            }
+
+            const cancelButton = form.querySelector("[data-cancel-register]");
+            cancelButton?.addEventListener("click", (event) => {
+                event.preventDefault();
+                toggleModal(false);
+            });
+
+            form.addEventListener("input", () => {
+                if (errorBox) {
+                    errorBox.hidden = true;
+                    errorBox.textContent = "";
+                }
+            });
+
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                if (!tableBody) return;
+
+                const formData = new FormData(form);
+                const getValue = (field) => {
+                    const raw = formData.get(field);
+                    return typeof raw === "string" ? raw.trim() : "";
+                };
+
+                const regNumber = getValue("regNumber");
+                const name = getValue("name");
+                const duplicate = Array.from(
+                    tableBody.querySelectorAll("td[data-label='Reg No']")
+                ).some((cell) => cell.textContent?.trim().toLowerCase() === regNumber.toLowerCase());
+
+                if (duplicate) {
+                    if (errorBox) {
+                        errorBox.textContent = `Registration number ${regNumber} is already in use.`;
+                        errorBox.hidden = false;
+                    } else {
+                        alert(`Registration number ${regNumber} is already in use.`);
+                    }
+                    form.querySelector("[name='regNumber']")?.focus();
+                    return;
+                }
+
+                const newMember = {
+                    regNumber,
+                    name,
+                    nickname: getValue("nickname"),
+                    epf: getValue("epf"),
+                    position: getValue("position"),
+                    joinDate: getValue("joinDate"),
+                    status: getValue("status") || "Active",
+                    image: getValue("image"),
+                };
+
+                const row = buildMemberRow(newMember);
+                if (!row) return;
+
+                tableBody.prepend(row);
+
+                if (isAdmin) {
+                    row.querySelector("[data-edit-member]")?.addEventListener("click", () => {
+                        openEditModal(row);
+                    });
+                }
+
+                toggleModal(false);
+            });
+
+            modalBody.innerHTML = "";
+            modalBody.appendChild(clone);
+            modalTitle.textContent = "Register new team member";
+            toggleModal(true);
+
+            form.querySelector("[name='regNumber']")?.focus();
         });
 
         if (!isAdmin) {

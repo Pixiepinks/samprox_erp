@@ -478,6 +478,63 @@
         const isAdmin = user?.role === "admin";
         const memberIndex = new Map();
 
+        const DATE_DISPLAY_FALLBACK = "—";
+
+        const formatJoinDateForDisplay = (value, fallback = DATE_DISPLAY_FALLBACK) => {
+            let source = "";
+            if (value instanceof Date) {
+                source = value.toISOString().split("T")[0];
+            } else if (typeof value === "string") {
+                source = value;
+            } else if (value != null) {
+                source = String(value);
+            }
+
+            const result = normalizeDateInput(source);
+            if (!result.isValid) {
+                const raw = typeof source === "string" ? source.trim() : "";
+                return {
+                    display: raw || fallback,
+                    iso: "",
+                };
+            }
+
+            const [year, month, day] = result.value.split("-");
+            return {
+                display: `${day}/${month}/${year}`,
+                iso: result.value,
+            };
+        };
+
+        const applyJoinDateToCell = (row, cell, value, fallback = DATE_DISPLAY_FALLBACK) => {
+            if (!cell) {
+                return;
+            }
+
+            const { display, iso } = formatJoinDateForDisplay(value, fallback);
+            cell.textContent = display;
+
+            if (iso) {
+                row.dataset.joinDateIso = iso;
+                cell.dataset.isoDate = iso;
+            } else {
+                delete row.dataset.joinDateIso;
+                delete cell.dataset.isoDate;
+            }
+        };
+
+        const initializeStaticJoinDates = () => {
+            if (!tableBody) return;
+
+            tableBody.querySelectorAll("tr").forEach((row) => {
+                const cell = row.querySelector("td[data-label='Date of Join']");
+                if (!cell) return;
+                applyJoinDateToCell(row, cell, cell.textContent, DATE_DISPLAY_FALLBACK);
+            });
+        };
+
+        initializeStaticJoinDates();
+
         const statusBadgeClassMap = {
             Active: "status-badge--active",
             "On Leave": "status-badge--onleave",
@@ -757,6 +814,10 @@
                 const cell = row.querySelector(`td[data-label='${label}']`);
                 if (!cell) return;
                 const text = typeof value === "string" ? value.trim() : "";
+                if (label === "Date of Join") {
+                    applyJoinDateToCell(row, cell, text || value, fallback);
+                    return;
+                }
                 cell.textContent = text || fallback;
             };
 
@@ -866,7 +927,11 @@
             appendTextCell("Nick Name", member.nickname);
             appendTextCell("EPF No", member.epf);
             appendTextCell("Position", member.position);
-            appendTextCell("Date of Join", member.joinDate);
+
+            const joinDateCell = document.createElement("td");
+            joinDateCell.setAttribute("data-label", "Date of Join");
+            row.appendChild(joinDateCell);
+            applyJoinDateToCell(row, joinDateCell, member.joinDate);
 
             const statusCell = appendTextCell("Status", "", "Active");
             const statusBadge = document.createElement("span");
@@ -981,13 +1046,18 @@
                 return;
             }
 
+            const joinDateCell = row.querySelector("td[data-label='Date of Join']");
             const current = {
                 regNumber: regNumberText,
                 name: row.querySelector("td[data-label='Name with Initial']")?.textContent?.trim() || "",
                 nickname: row.querySelector("td[data-label='Nick Name']")?.textContent?.trim() || "",
                 epf: row.querySelector("td[data-label='EPF No']")?.textContent?.trim() || "",
                 position: row.querySelector("td[data-label='Position']")?.textContent?.trim() || "",
-                joinDate: row.querySelector("td[data-label='Date of Join']")?.textContent?.trim() || "",
+                joinDate:
+                    row.dataset.joinDateIso ||
+                    joinDateCell?.dataset.isoDate ||
+                    joinDateCell?.textContent?.trim() ||
+                    "",
                 status: row.querySelector("td[data-label='Status'] .status-badge")?.textContent?.trim() || "Active",
                 image: row.querySelector("td[data-label='Image'] img")?.getAttribute("src") || "",
             };

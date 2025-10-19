@@ -118,6 +118,25 @@ def _parse_status(value) -> TeamMemberStatus:
         raise ValueError(f"Status must be one of: {valid_values}.") from exc
 
 
+def _data_error_message(exc: DataError, *, fallback: str) -> str:
+    detail = ""
+    origin = getattr(exc, "orig", None)
+    if origin is not None:
+        detail = str(origin)
+    elif exc.args:
+        detail = " ".join(str(arg) for arg in exc.args if arg)
+
+    lowered = detail.lower()
+
+    if any(keyword in lowered for keyword in ("invalid", "incorrect", "out of range")) and "date" in lowered:
+        return "Invalid date for joinDate. Please use the YYYY-MM-DD format."
+
+    if "isoformat" in lowered and "date" in lowered:
+        return "Invalid date for joinDate. Please use the YYYY-MM-DD format."
+
+    return fallback
+
+
 @bp.get("/members")
 @jwt_required()
 def list_members():
@@ -209,16 +228,14 @@ def create_member():
             jsonify({"msg": f"Registration number {reg_number} already exists."}),
             409,
         )
-    except DataError:
+    except DataError as exc:
         db.session.rollback()
-        return (
-            jsonify(
-                {
-                    "msg": "Unable to register member. One or more fields exceed the allowed length.",
-                }
-            ),
-            400,
+        message = _data_error_message(
+            exc,
+            fallback="Unable to register member. One or more fields exceed the allowed length.",
         )
+        current_app.logger.warning("Failed to create team member due to data error: %s", exc)
+        return jsonify({"msg": message}), 400
     except (ProgrammingError, OperationalError):
         db.session.rollback()
         current_app.logger.exception("Failed to create team member due to schema issues.")
@@ -307,16 +324,14 @@ def update_member(member_id: int):
 
     try:
         db.session.commit()
-    except DataError:
+    except DataError as exc:
         db.session.rollback()
-        return (
-            jsonify(
-                {
-                    "msg": "Unable to update member. One or more fields exceed the allowed length.",
-                }
-            ),
-            400,
+        message = _data_error_message(
+            exc,
+            fallback="Unable to update member. One or more fields exceed the allowed length.",
         )
+        current_app.logger.warning("Failed to update team member due to data error: %s", exc)
+        return jsonify({"msg": message}), 400
     except (ProgrammingError, OperationalError):
         db.session.rollback()
         current_app.logger.exception("Failed to update team member due to schema issues.")

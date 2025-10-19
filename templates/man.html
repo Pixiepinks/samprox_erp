@@ -76,7 +76,245 @@
                     </p>
                 </article>
             </div>
+            <section class="team-overview" aria-labelledby="team-overview-heading">
+                <div class="team-overview__header">
+                    <div>
+                        <h2 class="team-overview__title" id="team-overview-heading">Team overview</h2>
+                        <p class="team-overview__subtitle">
+                            Search, register, and review key details for every team member to keep the
+                            workforce organised.
+                        </p>
+                    </div>
+                    <div class="team-overview__actions">
+                        <label class="team-overview__search" aria-label="Search team members">
+                            <span class="team-overview__search-icon" aria-hidden="true">🔍</span>
+                            <input
+                                type="search"
+                                id="team-search"
+                                class="team-overview__search-input"
+                                placeholder="Search by name, reg no, or EPF"
+                            />
+                        </label>
+                        <button type="button" class="button" id="register-member">Register member</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="team-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Reg No</th>
+                                <th scope="col">Image</th>
+                                <th scope="col">Name with Initial</th>
+                                <th scope="col">Nick Name</th>
+                                <th scope="col">EPF No</th>
+                                <th scope="col">Position</th>
+                                <th scope="col">Date of Join</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Personal Detail</th>
+                                <th scope="col">Assignments</th>
+                                <th scope="col">Training records</th>
+                                <th scope="col">Employment Log</th>
+                                <th scope="col">Files</th>
+                                <th scope="col">Controlled Assets</th>
+                            </tr>
+                        </thead>
+                        <tbody id="team-table-body">
+                            <tr>
+                                <td data-label="Reg No">EMP-001</td>
+                                <td data-label="Image" class="team-table__avatar">
+                                    <img src="https://i.pravatar.cc/60?img=12" alt="Profile picture of R. Fernando" />
+                                </td>
+                                <td data-label="Name with Initial">R. Fernando</td>
+                                <td data-label="Nick Name">Ravi</td>
+                                <td data-label="EPF No">EPF12345</td>
+                                <td data-label="Position">Senior Technician</td>
+                                <td data-label="Date of Join">2018-03-12</td>
+                                <td data-label="Status"><span class="status-badge status-badge--active">Active</span></td>
+                                <td data-label="Personal Detail">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="personal-rfernando"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Assignments">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="tasks-rfernando"
+                                    >
+                                        Tasks
+                                    </button>
+                                </td>
+                                <td data-label="Training records">
+                                    Electrical Safety (2023), PLC Diagnostics (2024)
+                                </td>
+                                <td data-label="Employment Log">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="employment-rfernando"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Files">ID copy, Contract, NDA</td>
+                                <td data-label="Controlled Assets">
+                                    <a class="link" href="#" title="View in asset register">AST-0042</a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td data-label="Reg No">EMP-014</td>
+                                <td data-label="Image" class="team-table__avatar">
+                                    <img src="https://i.pravatar.cc/60?img=32" alt="Profile picture of S. Jayasuriya" />
+                                </td>
+                                <td data-label="Name with Initial">S. Jayasuriya</td>
+                                <td data-label="Nick Name">Sashi</td>
+                                <td data-label="EPF No">EPF67890</td>
+                                <td data-label="Position">Maintenance Planner</td>
+                                <td data-label="Date of Join">2020-07-01</td>
+                                <td data-label="Status"><span class="status-badge status-badge--onleave">On Leave</span></td>
+                                <td data-label="Personal Detail">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="personal-sjayasuriya"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Assignments">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="tasks-sjayasuriya"
+                                    >
+                                        Tasks
+                                    </button>
+                                </td>
+                                <td data-label="Training records">
+                                    Lean Maintenance (2022), SAP PM Advanced (2023)
+                                </td>
+                                <td data-label="Employment Log">
+                                    <button
+                                        type="button"
+                                        class="button button--secondary button--small"
+                                        data-modal-trigger
+                                        data-template="employment-sjayasuriya"
+                                    >
+                                        Detail
+                                    </button>
+                                </td>
+                                <td data-label="Files">ID copy, Contract</td>
+                                <td data-label="Controlled Assets">
+                                    <a class="link" href="#" title="View in asset register">AST-0113</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="team-overview__hint">More team members can be added from the register workflow.</p>
+            </section>
         </section>
+    </div>
+    <template id="personal-rfernando">
+        <dl class="detail-list">
+            <div class="detail-list__item">
+                <dt>Full Name</dt>
+                <dd>Ruwan Fernando</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Contact</dt>
+                <dd>+94 77 123 4567</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Email</dt>
+                <dd>ruwan.fernando@example.com</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Emergency Contact</dt>
+                <dd>Nisha Fernando (+94 77 765 4321)</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Address</dt>
+                <dd>25 Industrial Avenue, Colombo</dd>
+            </div>
+        </dl>
+    </template>
+    <template id="tasks-rfernando">
+        <ul class="modal-list">
+            <li>
+                <strong>Job Card JC-1023</strong> – Overhaul of press line hydraulic system (Due: 2024-06-30)
+            </li>
+            <li>
+                <strong>Job Card JC-1044</strong> – Commissioning of new PLC module (Due: 2024-07-05)
+            </li>
+        </ul>
+    </template>
+    <template id="employment-rfernando">
+        <ul class="modal-list">
+            <li>2023-01-15 – Salary increment to Grade 4</li>
+            <li>2022-08-01 – Recognised for zero downtime on critical line</li>
+            <li>2021-05-21 – Promoted to Senior Technician</li>
+        </ul>
+    </template>
+    <template id="personal-sjayasuriya">
+        <dl class="detail-list">
+            <div class="detail-list__item">
+                <dt>Full Name</dt>
+                <dd>Sanduni Jayasuriya</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Contact</dt>
+                <dd>+94 71 555 2980</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Email</dt>
+                <dd>sanduni.jayasuriya@example.com</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Emergency Contact</dt>
+                <dd>Janaka Jayasuriya (+94 71 889 3344)</dd>
+            </div>
+            <div class="detail-list__item">
+                <dt>Address</dt>
+                <dd>145 Riverside Gardens, Negombo</dd>
+            </div>
+        </dl>
+    </template>
+    <template id="tasks-sjayasuriya">
+        <ul class="modal-list">
+            <li>
+                <strong>Job Card JC-1098</strong> – Plan preventive maintenance for packaging line (Due: 2024-07-10)
+            </li>
+            <li>
+                <strong>Job Card JC-1102</strong> – Coordinate contractor onboarding for chiller overhaul (Due: 2024-07-18)
+            </li>
+        </ul>
+    </template>
+    <template id="employment-sjayasuriya">
+        <ul class="modal-list">
+            <li>2024-02-05 – Acting Maintenance Manager (2-month assignment)</li>
+            <li>2023-09-12 – Salary increment for project delivery excellence</li>
+            <li>2022-03-01 – Joined as Maintenance Planner</li>
+        </ul>
+    </template>
+    <div class="modal" id="info-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__dialog">
+            <header class="modal__header">
+                <h3 class="modal__title" id="modal-title"></h3>
+                <button type="button" class="modal__close" data-modal-close aria-label="Close dialog">×</button>
+            </header>
+            <div class="modal__body" id="modal-body"></div>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -111,6 +349,69 @@
             localStorage.removeItem("samprox_token");
             localStorage.removeItem("samprox_user");
             window.location.href = "/";
+        });
+
+        const tableBody = document.getElementById("team-table-body");
+        const searchInput = document.getElementById("team-search");
+        const modal = document.getElementById("info-modal");
+        const modalBody = document.getElementById("modal-body");
+        const modalTitle = document.getElementById("modal-title");
+
+        const toggleModal = (isOpen) => {
+            if (!modal) return;
+            if (isOpen) {
+                modal.removeAttribute("hidden");
+                modal.classList.add("modal--open");
+                document.body.classList.add("no-scroll");
+            } else {
+                modal.classList.remove("modal--open");
+                modal.setAttribute("hidden", "");
+                document.body.classList.remove("no-scroll");
+                modalBody.innerHTML = "";
+            }
+        };
+
+        modal?.addEventListener("click", (event) => {
+            if (event.target.matches("[data-modal-close]")) {
+                toggleModal(false);
+            }
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && modal?.classList.contains("modal--open")) {
+                toggleModal(false);
+            }
+        });
+
+        document.querySelectorAll("[data-modal-trigger]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const templateId = button.getAttribute("data-template");
+                const template = templateId ? document.getElementById(templateId) : null;
+                if (!template) return;
+
+                const content = template.content.cloneNode(true);
+                const column = button.closest("td")?.dataset.label || "Details";
+                const rowName = button.closest("tr")?.querySelector("td[data-label='Name with Initial']")?.textContent?.trim();
+                modalTitle.textContent = `${column} – ${rowName ?? "Team member"}`;
+                modalBody.appendChild(content);
+                toggleModal(true);
+            });
+        });
+
+        searchInput?.addEventListener("input", (event) => {
+            const query = event.target.value.toLowerCase();
+            const rows = tableBody?.querySelectorAll("tr") || [];
+
+            rows.forEach((row) => {
+                const text = row.textContent?.toLowerCase() || "";
+                const isMatch = text.includes(query);
+                row.style.display = isMatch ? "table-row" : "none";
+            });
+        });
+
+        const registerButton = document.getElementById("register-member");
+        registerButton?.addEventListener("click", () => {
+            alert("Redirect to member registration flow (to be implemented).");
         });
     </script>
 </body>

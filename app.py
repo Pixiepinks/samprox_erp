@@ -20,7 +20,7 @@ from models import (
     SalesForecastEntry,
     User,
 )
-from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, ui
+from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, team, ui
 
 
 def _ensure_database_exists(database_url: str | None) -> None:
@@ -93,6 +93,7 @@ def create_app():
     app.register_blueprint(production.bp)
     app.register_blueprint(market.bp)
     app.register_blueprint(reports.bp)
+    app.register_blueprint(team.bp)
     app.register_blueprint(ui.bp)
 
     @app.get("/api/health")

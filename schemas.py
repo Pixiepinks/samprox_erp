@@ -6,6 +6,26 @@ class UserSchema(Schema):
     email = fields.Str()
     role = fields.Str()
 
+
+class TeamMemberSchema(Schema):
+    id = fields.Int(dump_only=True)
+    reg_number = fields.Str(data_key="regNumber")
+    name = fields.Str()
+    nickname = fields.Str(allow_none=True)
+    epf = fields.Str(allow_none=True)
+    position = fields.Str(allow_none=True)
+    join_date = fields.Date(data_key="joinDate")
+    status = fields.Method("get_status")
+    image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
+    created_at = fields.DateTime(data_key="createdAt", dump_only=True)
+    updated_at = fields.DateTime(data_key="updatedAt", dump_only=True)
+
+
+    def get_status(self, obj):
+        value = getattr(obj, "status", None)
+        return getattr(value, "value", value)
+
+
 class QuotationSchema(Schema):
     id = fields.Int()
     job_id = fields.Int()

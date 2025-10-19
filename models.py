@@ -187,6 +187,47 @@ class ServiceSupplier(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class TeamMemberStatus(str, Enum):
+    ACTIVE = "Active"
+    ON_LEAVE = "On Leave"
+    INACTIVE = "Inactive"
+
+
+class TeamMember(db.Model):
+    __tablename__ = "team_member"
+
+    id = db.Column(db.Integer, primary_key=True)
+    reg_number = db.Column(db.String(40), unique=True, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    nickname = db.Column(db.String(120))
+    epf = db.Column(db.String(120))
+    position = db.Column(db.String(120))
+    join_date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.Enum(TeamMemberStatus), nullable=False, default=TeamMemberStatus.ACTIVE)
+    image_url = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def update_from_payload(self, data: dict[str, str]):
+        """Update mutable fields based on a payload."""
+
+        name = (data.get("name") or "").strip()
+        if name:
+            self.name = name
+
+        nickname = (data.get("nickname") or "").strip()
+        self.nickname = nickname or None
+
+        epf = (data.get("epf") or "").strip()
+        self.epf = epf or None
+
+        position = (data.get("position") or "").strip()
+        self.position = position or None
+
+        image = (data.get("image") or "").strip()
+        self.image_url = image or None
+
+
 class DailyProductionEntry(db.Model):
     __table_args__ = (
         db.UniqueConstraint("date", "asset_id", "hour_no", name="uq_daily_production_entry_day_asset_hour"),

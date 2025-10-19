@@ -7,6 +7,7 @@ Create Date: 2024-07-04 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -23,20 +24,44 @@ t_team_member_status = sa.Enum(
     name="team_member_status",
 )
 
+postgres_team_member_status = postgresql.ENUM(
+    "Active",
+    "On Leave",
+    "Inactive",
+    name="team_member_status",
+    create_type=False,
+)
+
 
 def upgrade():
     bind = op.get_bind()
 
     if bind.dialect.name == "postgresql":
-        enum_exists = bind.execute(
+        op.execute(
             sa.text(
-                "SELECT 1 FROM pg_type WHERE typname = 'team_member_status'"
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_type
+                        WHERE typname = 'team_member_status'
+                    ) THEN
+                        CREATE TYPE team_member_status AS ENUM (
+                            'Active',
+                            'On Leave',
+                            'Inactive'
+                        );
+                    END IF;
+                END
+                $$;
+                """
             )
-        ).scalar()
-        if not enum_exists:
-            t_team_member_status.create(bind, checkfirst=False)
+        )
+        status_enum = postgres_team_member_status
     else:
         t_team_member_status.create(bind, checkfirst=True)
+        status_enum = t_team_member_status
 
     op.create_table(
         "team_member",
@@ -47,7 +72,7 @@ def upgrade():
         sa.Column("epf", sa.String(length=120), nullable=True),
         sa.Column("position", sa.String(length=120), nullable=True),
         sa.Column("join_date", sa.Date(), nullable=False),
-        sa.Column("status", t_team_member_status, nullable=False),
+        sa.Column("status", status_enum, nullable=False),
         sa.Column("image_url", sa.String(length=500), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
@@ -58,4 +83,8 @@ def upgrade():
 
 def downgrade():
     op.drop_table("team_member")
-    t_team_member_status.drop(op.get_bind(), checkfirst=True)
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(sa.text("DROP TYPE IF EXISTS team_member_status"))
+    else:
+        t_team_member_status.drop(bind, checkfirst=True)

@@ -419,6 +419,13 @@ body {
     color: #64748b;
 }
 
+.team-overview__empty {
+    margin: 0.75rem 0 0;
+    font-size: 0.95rem;
+    color: #94a3b8;
+    text-align: center;
+}
+
 .link {
     color: #2563eb;
     text-decoration: none;

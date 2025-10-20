@@ -119,130 +119,12 @@
                                 <th scope="col">Controlled Assets</th>
                             </tr>
                         </thead>
-                        <tbody id="team-table-body">
-                            <tr>
-                                <td data-label="Reg No">EMP-001</td>
-                                <td data-label="Image" class="team-table__avatar">
-                                    <img src="https://i.pravatar.cc/60?img=12" alt="Profile picture of R. Fernando" />
-                                </td>
-                                <td data-label="Name with Initial">R. Fernando</td>
-                                <td data-label="Nick Name">Ravi</td>
-                                <td data-label="EPF No">EPF12345</td>
-                                <td data-label="Position">Senior Technician</td>
-                                <td data-label="Date of Join">2018-03-12</td>
-                                <td data-label="Status"><span class="status-badge status-badge--active">Active</span></td>
-                                <td data-label="Admin controls" data-admin-only>
-                                    <div class="admin-controls">
-                                        <button
-                                            type="button"
-                                            class="button button--secondary button--small"
-                                            data-edit-member
-                                        >
-                                            Edit
-                                        </button>
-                                    </div>
-                                </td>
-                                <td data-label="Personal Detail">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="personal-rfernando"
-                                    >
-                                        Detail
-                                    </button>
-                                </td>
-                                <td data-label="Assignments">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="tasks-rfernando"
-                                    >
-                                        Tasks
-                                    </button>
-                                </td>
-                                <td data-label="Training records">
-                                    Electrical Safety (2023), PLC Diagnostics (2024)
-                                </td>
-                                <td data-label="Employment Log">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="employment-rfernando"
-                                    >
-                                        Detail
-                                    </button>
-                                </td>
-                                <td data-label="Files">ID copy, Contract, NDA</td>
-                                <td data-label="Controlled Assets">
-                                    <a class="link" href="#" title="View in asset register">AST-0042</a>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td data-label="Reg No">EMP-014</td>
-                                <td data-label="Image" class="team-table__avatar">
-                                    <img src="https://i.pravatar.cc/60?img=32" alt="Profile picture of S. Jayasuriya" />
-                                </td>
-                                <td data-label="Name with Initial">S. Jayasuriya</td>
-                                <td data-label="Nick Name">Sashi</td>
-                                <td data-label="EPF No">EPF67890</td>
-                                <td data-label="Position">Maintenance Planner</td>
-                                <td data-label="Date of Join">2020-07-01</td>
-                                <td data-label="Status"><span class="status-badge status-badge--onleave">On Leave</span></td>
-                                <td data-label="Admin controls" data-admin-only>
-                                    <div class="admin-controls">
-                                        <button
-                                            type="button"
-                                            class="button button--secondary button--small"
-                                            data-edit-member
-                                        >
-                                            Edit
-                                        </button>
-                                    </div>
-                                </td>
-                                <td data-label="Personal Detail">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="personal-sjayasuriya"
-                                    >
-                                        Detail
-                                    </button>
-                                </td>
-                                <td data-label="Assignments">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="tasks-sjayasuriya"
-                                    >
-                                        Tasks
-                                    </button>
-                                </td>
-                                <td data-label="Training records">
-                                    Lean Maintenance (2022), SAP PM Advanced (2023)
-                                </td>
-                                <td data-label="Employment Log">
-                                    <button
-                                        type="button"
-                                        class="button button--secondary button--small"
-                                        data-modal-trigger
-                                        data-template="employment-sjayasuriya"
-                                    >
-                                        Detail
-                                    </button>
-                                </td>
-                                <td data-label="Files">ID copy, Contract</td>
-                                <td data-label="Controlled Assets">
-                                    <a class="link" href="#" title="View in asset register">AST-0113</a>
-                                </td>
-                            </tr>
-                        </tbody>
+                        <tbody id="team-table-body"></tbody>
                     </table>
                 </div>
+                <p class="team-overview__empty" id="team-empty-state" hidden>
+                    No team members available yet. Use “Register member” to add the first record.
+                </p>
                 <p class="team-overview__hint">More team members can be added from the register workflow.</p>
             </section>
         </section>
@@ -475,6 +357,7 @@
         });
 
         const tableBody = document.getElementById("team-table-body");
+        const emptyState = document.getElementById("team-empty-state");
         const searchInput = document.getElementById("team-search");
         const modal = document.getElementById("info-modal");
         const modalBody = document.getElementById("modal-body");
@@ -484,6 +367,14 @@
         const adminElements = document.querySelectorAll("[data-admin-only]");
         const isAdmin = user?.role === "admin";
         const memberIndex = new Map();
+
+        const updateEmptyStateVisibility = () => {
+            if (!emptyState || !tableBody) return;
+            const hasRows = tableBody.querySelector("tr") !== null;
+            emptyState.hidden = hasRows;
+        };
+
+        updateEmptyStateVisibility();
 
         const DATE_DISPLAY_FALLBACK = "—";
 
@@ -1009,6 +900,8 @@
             try {
                 const members = await fetchJson("/api/team/members");
                 if (!Array.isArray(members)) {
+                    tableBody.innerHTML = "";
+                    updateEmptyStateVisibility();
                     return;
                 }
                 memberIndex.clear();
@@ -1054,6 +947,8 @@
             } catch (error) {
                 console.error("Failed to load team members", error);
             }
+
+            updateEmptyStateVisibility();
         }
 
         const openEditModal = (row) => {
@@ -1358,6 +1253,7 @@
                     if (row) {
                         tableBody.prepend(row);
                         enhanceAdminRow(row);
+                        updateEmptyStateVisibility();
                     }
 
                     toggleModal(false);

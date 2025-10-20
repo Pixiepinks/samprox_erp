@@ -354,6 +354,17 @@
                     <input class="edit-form__input" id="register-position" name="position" type="text" autocomplete="organization-title" />
                 </div>
                 <div class="edit-form__field">
+                    <label class="edit-form__label" for="register-join-date">Date of Join <span class="required" aria-hidden="true">*</span></label>
+                    <input
+                        class="edit-form__input"
+                        id="register-join-date"
+                        name="joinDate"
+                        type="date"
+                        required
+                        autocomplete="off"
+                    />
+                </div>
+                <div class="edit-form__field">
                     <label class="edit-form__label" for="register-status">Status</label>
                     <select class="edit-form__input" id="register-status" name="status">
                         <option value="Active" selected>Active</option>
@@ -1238,6 +1249,15 @@
             const errorBox = clone.querySelector("[data-register-error]");
             if (!form) return;
 
+            const joinDateInput = form.querySelector("[name='joinDate']");
+            if (joinDateInput && !joinDateInput.value) {
+                const today = new Date();
+                const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+                    today.getDate()
+                ).padStart(2, "0")}`;
+                joinDateInput.value = isoToday;
+            }
+
             const cancelButton = form.querySelector("[data-cancel-register]");
             cancelButton?.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -1289,6 +1309,27 @@
                     return;
                 }
 
+                let joinDateIso = "";
+                if (joinDateInput) {
+                    const joinDateResult = getISOFromDateInput(joinDateInput);
+                    const rawJoinDate = joinDateInput.value?.trim();
+
+                    if (rawJoinDate && !joinDateResult.isValid) {
+                        if (errorBox) {
+                            errorBox.textContent = "Please select a valid join date.";
+                            errorBox.hidden = false;
+                        } else {
+                            alert("Please select a valid join date.");
+                        }
+                        joinDateInput.focus();
+                        return;
+                    }
+
+                    if (joinDateResult.isValid) {
+                        joinDateIso = joinDateResult.value;
+                    }
+                }
+
                 const payload = {
                     regNumber,
                     name,
@@ -1298,6 +1339,10 @@
                     status: getValue("status") || "Active",
                     image: getValue("image"),
                 };
+
+                if (joinDateIso) {
+                    payload.joinDate = joinDateIso;
+                }
 
                 try {
                     const createdMember = await fetchJson("/api/team/members", {

@@ -397,7 +397,7 @@
                 };
             }
 
-            const [year, month, day] = result.value.split("-");
+            const [day, month, year] = result.value.split("-");
             return {
                 display: `${day}/${month}/${year}`,
                 iso: result.value,

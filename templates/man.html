@@ -1204,25 +1204,17 @@
                     return;
                 }
 
-                let joinDateIso = "";
-                if (joinDateInput) {
-                    const joinDateResult = getISOFromDateInput(joinDateInput);
-                    const rawJoinDate = joinDateInput.value?.trim();
+                const joinDateResult = getISOFromDateInput(joinDateInput);
 
-                    if (rawJoinDate && !joinDateResult.isValid) {
-                        if (errorBox) {
-                            errorBox.textContent = "Please select a valid join date.";
-                            errorBox.hidden = false;
-                        } else {
-                            alert("Please select a valid join date.");
-                        }
-                        joinDateInput.focus();
-                        return;
+                if (!joinDateResult.isValid) {
+                    if (errorBox) {
+                        errorBox.textContent = "Please select a valid join date.";
+                        errorBox.hidden = false;
+                    } else {
+                        alert("Please select a valid join date.");
                     }
-
-                    if (joinDateResult.isValid) {
-                        joinDateIso = joinDateResult.value;
-                    }
+                    joinDateInput?.focus();
+                    return;
                 }
 
                 const payload = {
@@ -1233,11 +1225,8 @@
                     position: getValue("position"),
                     status: getValue("status") || "Active",
                     image: getValue("image"),
+                    joinDate: joinDateResult.value,
                 };
-
-                if (joinDateIso) {
-                    payload.joinDate = joinDateIso;
-                }
 
                 try {
                     const createdMember = await fetchJson("/api/team/members", {

@@ -436,7 +436,7 @@ body {
     text-decoration: underline;
 }
 
-.modal {
+.modal:not(dialog) {
     position: fixed;
     inset: 0;
     display: flex;
@@ -449,7 +449,7 @@ body {
     z-index: 1000;
 }
 
-.modal--open {
+.modal:not(dialog).modal--open {
     opacity: 1;
     pointer-events: auto;
 }
@@ -1566,7 +1566,7 @@ body {
     }
 }
 
-.modal {
+dialog.modal {
     border: none;
     border-radius: 20px;
     padding: 0;
@@ -1576,11 +1576,11 @@ body {
     box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
 }
 
-.modal[data-polyfill] {
+dialog.modal[data-polyfill] {
     display: none;
 }
 
-.modal[data-polyfill][data-polyfill-open="true"] {
+dialog.modal[data-polyfill][data-polyfill-open="true"] {
     display: block;
     position: fixed;
     inset: 50% auto auto 50%;
@@ -1590,7 +1590,7 @@ body {
     z-index: 1001;
 }
 
-.modal::backdrop {
+dialog.modal::backdrop {
     background: rgba(15, 23, 42, 0.45);
     backdrop-filter: blur(4px);
 }

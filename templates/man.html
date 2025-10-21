@@ -532,7 +532,9 @@
                 // Normalize joinDate and status
                 const joinDateRaw = formData.get("joinDate");
                 const normalizedDate = toYyyyMmDd(joinDateRaw);
-                if (joinDateRaw && !normalizedDate) {
+               if (normalizedDate) {
+                  payload.join_date = normalizedDate; // backend expects snake_case
+                    } {
                     showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
                     return;
                 }

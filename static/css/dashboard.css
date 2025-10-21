@@ -200,7 +200,7 @@ body {
     min-width: 260px;
 }
 
-.team-overview {
+.team-directory {
     margin-top: 2.5rem;
     background: rgba(255, 255, 255, 0.95);
     border-radius: 24px;
@@ -211,51 +211,17 @@ body {
     gap: 1.5rem;
 }
 
-.team-overview__header {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1rem 1.5rem;
-    align-items: center;
-}
-
-.team-overview__title {
+.team-directory__title {
     margin: 0;
     font-size: 1.5rem;
     font-weight: 700;
 }
 
-.team-overview__subtitle {
-    margin: 0.35rem 0 0;
-    color: #475569;
-    max-width: 38rem;
-}
-
-.team-overview__actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.team-overview__search {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.05);
-    padding: 0.35rem 0.9rem;
-}
-
-.team-overview__search-icon {
+.team-directory__empty {
+    margin: 0.75rem 0 0;
     font-size: 0.95rem;
-}
-
-.team-overview__search-input {
-    border: none;
-    background: transparent;
-    outline: none;
-    font-size: 0.95rem;
-    min-width: 220px;
+    color: #94a3b8;
+    text-align: center;
 }
 
 .button--small {
@@ -272,7 +238,7 @@ body {
 .team-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 900px;
+    min-width: 320px;
 }
 
 .team-table th,
@@ -413,18 +379,6 @@ body {
     gap: 0.75rem;
 }
 
-.team-overview__hint {
-    margin: 0;
-    font-size: 0.85rem;
-    color: #64748b;
-}
-
-.team-overview__empty {
-    margin: 0.75rem 0 0;
-    font-size: 0.95rem;
-    color: #94a3b8;
-    text-align: center;
-}
 
 .link {
     color: #2563eb;
@@ -536,16 +490,6 @@ body {
 @media (max-width: 768px) {
     body {
         padding: 1.5rem;
-    }
-
-    .team-overview__actions {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .team-overview__search-input {
-        min-width: 0;
-        width: 100%;
     }
 
     .modal__dialog {

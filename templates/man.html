@@ -92,6 +92,161 @@
                 <p class="team-directory__empty" id="team-empty-state" hidden>
                     No team members available yet.
                 </p>
+                <section class="team-form" id="team-form-section">
+                    <h3 class="team-form__title">Register a team member</h3>
+                    <p class="team-form__description">
+                        Keep the roster current by logging new colleagues as soon as they join the team.
+                    </p>
+                    <div class="team-form__feedback">
+                        <p class="alert alert--error" id="team-form-error" hidden></p>
+                        <p class="alert alert--success" id="team-form-success" hidden></p>
+                    </div>
+                    <form class="edit-form" id="team-form">
+                        <div class="edit-form__grid">
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-reg-number">
+                                    Registration number <span class="required">*</span>
+                                </label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-reg-number"
+                                    name="regNumber"
+                                    type="text"
+                                    autocomplete="off"
+                                    required
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-name">
+                                    Name <span class="required">*</span>
+                                </label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-name"
+                                    name="name"
+                                    type="text"
+                                    autocomplete="name"
+                                    required
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-nickname">Nickname</label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-nickname"
+                                    name="nickname"
+                                    type="text"
+                                    autocomplete="off"
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-epf">EPF number</label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-epf"
+                                    name="epf"
+                                    type="text"
+                                    autocomplete="off"
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-position">Position</label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-position"
+                                    name="position"
+                                    type="text"
+                                    autocomplete="organization-title"
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-join-date">Date of join</label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-join-date"
+                                    name="joinDate"
+                                    type="date"
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-status">Status</label>
+                                <select class="edit-form__input" id="team-status" name="status">
+                                    <option value="Active" selected>Active</option>
+                                    <option value="On Leave">On Leave</option>
+                                    <option value="Inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-image">Profile image URL</label>
+                                <input
+                                    class="edit-form__input"
+                                    id="team-image"
+                                    name="image"
+                                    type="url"
+                                    inputmode="url"
+                                    placeholder="https://example.com/profile.jpg"
+                                />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-personal-detail">Personal detail</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-personal-detail"
+                                    name="personalDetail"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-assignments">Assignments</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-assignments"
+                                    name="assignments"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-training">Training records</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-training"
+                                    name="trainingRecords"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-employment-log">Employment log</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-employment-log"
+                                    name="employmentLog"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-files">Files</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-files"
+                                    name="files"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-assets">Controlled assets</label>
+                                <textarea
+                                    class="edit-form__input"
+                                    id="team-assets"
+                                    name="assets"
+                                    rows="3"
+                                ></textarea>
+                            </div>
+                        </div>
+                        <div class="edit-form__actions">
+                            <button type="submit" class="button button--primary">Save member</button>
+                        </div>
+                    </form>
+                </section>
             </section>
         </section>
     </div>
@@ -130,8 +285,23 @@
             window.location.href = "/";
         });
 
+        const authHeaders = {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
         const tableBody = document.getElementById("team-table-body");
         const emptyState = document.getElementById("team-empty-state");
+        const formSection = document.getElementById("team-form-section");
+        const teamForm = document.getElementById("team-form");
+        const teamFormError = document.getElementById("team-form-error");
+        const teamFormSuccess = document.getElementById("team-form-success");
+
+        const canManageMembers = ["admin", "production_manager"].includes(user?.role);
+
+        if (!canManageMembers && formSection) {
+            formSection.hidden = true;
+        }
 
         const sanitizeText = (value, fallback = "—") => {
             if (typeof value === "string") {
@@ -204,11 +374,13 @@
 
             try {
                 const response = await fetch("/api/team/members", {
-                    headers: {
-                        Accept: "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
+                    headers: authHeaders,
                 });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(`Request failed with status ${response.status}`);
@@ -224,6 +396,155 @@
                 renderEmptyState("Unable to load team members.");
             }
         };
+
+        const resetFormFeedback = () => {
+            if (teamFormError) {
+                teamFormError.hidden = true;
+                teamFormError.textContent = "";
+            }
+            if (teamFormSuccess) {
+                teamFormSuccess.hidden = true;
+                teamFormSuccess.textContent = "";
+            }
+        };
+
+        const showFormError = (message) => {
+            if (!teamFormError) {
+                return;
+            }
+            teamFormError.textContent = message;
+            teamFormError.hidden = false;
+            if (teamFormSuccess) {
+                teamFormSuccess.hidden = true;
+                teamFormSuccess.textContent = "";
+            }
+        };
+
+        const showFormSuccess = (message) => {
+            if (!teamFormSuccess) {
+                return;
+            }
+            teamFormSuccess.textContent = message;
+            teamFormSuccess.hidden = false;
+            if (teamFormError) {
+                teamFormError.hidden = true;
+                teamFormError.textContent = "";
+            }
+        };
+
+        const setFormDisabled = (disabled) => {
+            if (!teamForm) {
+                return;
+            }
+            Array.from(teamForm.elements || []).forEach((element) => {
+                element.disabled = disabled;
+            });
+        };
+
+        if (teamForm && canManageMembers) {
+            teamForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                if (!teamForm.checkValidity()) {
+                    teamForm.reportValidity();
+                    return;
+                }
+
+                resetFormFeedback();
+
+                const formData = new FormData(teamForm);
+                const payload = {};
+
+                const requiredFields = ["regNumber", "name"];
+                for (const field of requiredFields) {
+                    const rawValue = formData.get(field);
+                    const value = typeof rawValue === "string" ? rawValue.trim() : "";
+                    if (!value) {
+                        showFormError("Registration number and name are required.");
+                        return;
+                    }
+                    payload[field] = value;
+                }
+
+                const joinDateRaw = formData.get("joinDate");
+                if (typeof joinDateRaw === "string" && joinDateRaw.trim()) {
+                    payload.joinDate = joinDateRaw.trim();
+                }
+
+                const statusRaw = formData.get("status");
+                if (typeof statusRaw === "string" && statusRaw.trim()) {
+                    payload.status = statusRaw.trim();
+                }
+
+                const optionalFields = [
+                    "nickname",
+                    "epf",
+                    "position",
+                    "image",
+                    "personalDetail",
+                    "assignments",
+                    "trainingRecords",
+                    "employmentLog",
+                    "files",
+                    "assets",
+                ];
+
+                optionalFields.forEach((field) => {
+                    const rawValue = formData.get(field);
+                    if (typeof rawValue === "string") {
+                        const trimmed = rawValue.trim();
+                        if (trimmed) {
+                            payload[field] = trimmed;
+                        }
+                    }
+                });
+
+                setFormDisabled(true);
+
+                try {
+                    const response = await fetch("/api/team/members", {
+                        method: "POST",
+                        headers: {
+                            ...authHeaders,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (response.status === 401) {
+                        logoutButton.click();
+                        return;
+                    }
+
+                    const body = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        const message = body?.msg || "Unable to register team member.";
+                        showFormError(message);
+                        return;
+                    }
+
+                    showFormSuccess("Team member registered successfully.");
+                    teamForm.reset();
+                    await loadTeamMembers();
+                } catch (error) {
+                    showFormError(error.message || "Unable to register team member.");
+                } finally {
+                    setFormDisabled(false);
+                }
+            });
+
+            teamForm.addEventListener("input", () => {
+                if (teamFormError && !teamFormError.hidden) {
+                    teamFormError.hidden = true;
+                    teamFormError.textContent = "";
+                }
+                if (teamFormSuccess && !teamFormSuccess.hidden) {
+                    teamFormSuccess.hidden = true;
+                    teamFormSuccess.textContent = "";
+                }
+            });
+        }
 
         loadTeamMembers();
     </script>

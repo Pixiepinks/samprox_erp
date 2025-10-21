@@ -550,15 +550,17 @@
                 return monthLookup[cleaned] || null;
             };
 
-            const sanitized = trimmed
+            let sanitized = trimmed
                 .replace(/[\u2013\u2014\u2212]/g, "-")
                 .replace(/\\/g, "/")
                 .replace(/,/g, " ")
                 .replace(/(\d)\s*\.\s*(\d)/g, "$1-$2")
                 .replace(/\s+/g, " ")
                 .trim();
+            sanitized = sanitized.replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, "");
 
-            const collapsed = sanitized.replace(/\s*([/-])\s*/g, "$1");
+            let collapsed = sanitized.replace(/\s*([/-])\s*/g, "$1");
+            collapsed = collapsed.replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, "");
 
             let match = collapsed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
             if (match) {

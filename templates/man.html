@@ -293,6 +293,38 @@
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
 
+        // =====================
+        // Helpers: normalize date & status for API
+        // =====================
+        function toYyyyMmDd(input) {
+            if (!input) return null;
+            const d = new Date(input);
+            if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+            const mdy = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/.exec(String(input).trim());
+            if (mdy) {
+                const [, m, dd, y] = mdy;
+                return `${y}-${String(m).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+            }
+            const ymd = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/.exec(String(input).trim());
+            if (ymd) {
+                const [, y, m, dd] = ymd;
+                return `${y}-${String(m).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+            }
+            return null;
+        }
+
+        function normalizeStatus(value) {
+            if (!value) return "Active";
+            const map = {
+                "active": "Active",
+                "inactive": "Inactive",
+                "on leave": "On Leave",
+                "on_leave": "On Leave",
+                "on-leave": "On Leave",
+            };
+            return map[String(value).trim().toLowerCase()] ?? "Active";
+        }
+
         const tableBody = document.getElementById("team-table-body");
         const emptyState = document.getElementById("team-empty-state");
         const formSection = document.getElementById("team-form-section");
@@ -497,15 +529,17 @@
                     payload[field] = value;
                 }
 
+                // Normalize joinDate and status
                 const joinDateRaw = formData.get("joinDate");
-                if (typeof joinDateRaw === "string" && joinDateRaw.trim()) {
-                    payload.joinDate = joinDateRaw.trim();
+                const normalizedDate = toYyyyMmDd(joinDateRaw);
+                if (joinDateRaw && !normalizedDate) {
+                    showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
+                    return;
                 }
+                if (normalizedDate) payload.joinDate = normalizedDate;
 
                 const statusRaw = formData.get("status");
-                if (typeof statusRaw === "string" && statusRaw.trim()) {
-                    payload.status = statusRaw.trim();
-                }
+                if (statusRaw) payload.status = normalizeStatus(statusRaw);
 
                 const optionalFields = [
                     "nickname",
@@ -581,3 +615,4 @@
     </script>
 </body>
 </html>
+

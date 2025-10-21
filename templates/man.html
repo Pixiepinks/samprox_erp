@@ -84,6 +84,9 @@
                             <tr>
                                 <th scope="col">Reg No</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Position</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Join date</th>
                             </tr>
                         </thead>
                         <tbody id="team-table-body"></tbody>
@@ -317,6 +320,28 @@
             return stringValue || fallback;
         };
 
+        const formatJoinDate = (value) => {
+            if (!value) {
+                return "—";
+            }
+
+            try {
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) {
+                    return sanitizeText(value);
+                }
+
+                return parsed.toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                });
+            } catch (error) {
+                console.warn("Unable to format join date", error);
+                return sanitizeText(value);
+            }
+        };
+
         const renderEmptyState = (message) => {
             if (!emptyState) {
                 return;
@@ -360,9 +385,15 @@
                 const row = document.createElement("tr");
                 const regNo = sanitizeText(member?.regNumber);
                 const name = sanitizeText(member?.name);
+                const position = sanitizeText(member?.position);
+                const status = sanitizeText(member?.status);
+                const joinDate = formatJoinDate(member?.joinDate);
 
                 row.appendChild(createCell("Reg No", regNo));
                 row.appendChild(createCell("Name", name));
+                row.appendChild(createCell("Position", position));
+                row.appendChild(createCell("Status", status));
+                row.appendChild(createCell("Join date", joinDate));
                 tableBody.appendChild(row);
             });
         };

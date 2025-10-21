@@ -17,6 +17,18 @@ class TeamMemberSchema(Schema):
     join_date = fields.Date(data_key="joinDate")
     status = fields.Method("get_status")
     image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
+    personal_detail = fields.Str(
+        attribute="personal_detail", data_key="personalDetail", allow_none=True
+    )
+    assignments = fields.Str(allow_none=True)
+    training_records = fields.Str(
+        attribute="training_records", data_key="trainingRecords", allow_none=True
+    )
+    employment_log = fields.Str(
+        attribute="employment_log", data_key="employmentLog", allow_none=True
+    )
+    files = fields.Str(allow_none=True)
+    assets = fields.Str(allow_none=True)
     created_at = fields.DateTime(data_key="createdAt", dump_only=True)
     updated_at = fields.DateTime(data_key="updatedAt", dump_only=True)
 

@@ -205,6 +205,12 @@ class TeamMember(db.Model):
     join_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.Enum(TeamMemberStatus), nullable=False, default=TeamMemberStatus.ACTIVE)
     image_url = db.Column(db.String(500))
+    personal_detail = db.Column(db.Text)
+    assignments = db.Column(db.Text)
+    training_records = db.Column(db.Text)
+    employment_log = db.Column(db.Text)
+    files = db.Column(db.Text)
+    assets = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -226,6 +232,24 @@ class TeamMember(db.Model):
 
         image = (data.get("image") or "").strip()
         self.image_url = image or None
+
+        personal_detail = (data.get("personalDetail") or "").strip()
+        self.personal_detail = personal_detail or None
+
+        assignments = (data.get("assignments") or "").strip()
+        self.assignments = assignments or None
+
+        training_records = (data.get("trainingRecords") or "").strip()
+        self.training_records = training_records or None
+
+        employment_log = (data.get("employmentLog") or "").strip()
+        self.employment_log = employment_log or None
+
+        files = (data.get("files") or "").strip()
+        self.files = files or None
+
+        assets = (data.get("assets") or "").strip()
+        self.assets = assets or None
 
 
 class DailyProductionEntry(db.Model):

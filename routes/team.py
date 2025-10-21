@@ -56,6 +56,19 @@ def _ensure_schema():
             statements.append("ALTER TABLE team_member ALTER COLUMN updated_at SET NOT NULL")
             statements.append("ALTER TABLE team_member ALTER COLUMN updated_at DROP DEFAULT")
 
+    optional_text_columns = {
+        "personal_detail": "TEXT",
+        "assignments": "TEXT",
+        "training_records": "TEXT",
+        "employment_log": "TEXT",
+        "files": "TEXT",
+        "assets": "TEXT",
+    }
+
+    for column_name, column_type in optional_text_columns.items():
+        if column_name not in columns:
+            statements.append(f"ALTER TABLE team_member ADD COLUMN {column_name} {column_type}")
+
     if statements:
         with engine.begin() as connection:
             for statement in statements:
@@ -333,6 +346,30 @@ def create_member():
             label="Profile image URL",
             max_length=500,
         )
+        personal_detail = _extract_string(
+            payload.get("personalDetail"),
+            label="Personal detail",
+        )
+        assignments = _extract_string(
+            payload.get("assignments"),
+            label="Assignments",
+        )
+        training_records = _extract_string(
+            payload.get("trainingRecords"),
+            label="Training records",
+        )
+        employment_log = _extract_string(
+            payload.get("employmentLog"),
+            label="Employment log",
+        )
+        files_value = _extract_string(
+            payload.get("files"),
+            label="Files",
+        )
+        assets_value = _extract_string(
+            payload.get("assets"),
+            label="Controlled assets",
+        )
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
@@ -358,6 +395,12 @@ def create_member():
         join_date=join_date,
         status=status,
         image_url=image_url,
+        personal_detail=personal_detail,
+        assignments=assignments,
+        training_records=training_records,
+        employment_log=employment_log,
+        files=files_value,
+        assets=assets_value,
     )
 
     db.session.add(member)
@@ -446,6 +489,60 @@ def update_member(member_id: int):
                 payload.get("image"),
                 label="Profile image URL",
                 max_length=500,
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "personalDetail" in payload:
+        try:
+            member.personal_detail = _extract_string(
+                payload.get("personalDetail"),
+                label="Personal detail",
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "assignments" in payload:
+        try:
+            member.assignments = _extract_string(
+                payload.get("assignments"),
+                label="Assignments",
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "trainingRecords" in payload:
+        try:
+            member.training_records = _extract_string(
+                payload.get("trainingRecords"),
+                label="Training records",
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "employmentLog" in payload:
+        try:
+            member.employment_log = _extract_string(
+                payload.get("employmentLog"),
+                label="Employment log",
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "files" in payload:
+        try:
+            member.files = _extract_string(
+                payload.get("files"),
+                label="Files",
+            )
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+    if "assets" in payload:
+        try:
+            member.assets = _extract_string(
+                payload.get("assets"),
+                label="Controlled assets",
             )
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400

@@ -536,7 +536,9 @@
                     showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
                     return;
                 }
-                if (normalizedDate) payload.joinDate = normalizedDate;
+               if (normalizedDate) {
+                  payload.join_date = normalizedDate; // backend expects snake_case
+               }
 
                 const statusRaw = formData.get("status");
                 if (statusRaw) payload.status = normalizeStatus(statusRaw);

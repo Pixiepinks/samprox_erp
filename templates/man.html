@@ -397,9 +397,16 @@
                 };
             }
 
-            const [day, month, year] = result.value.split("-");
+            const [year, month, day] = result.value.split("-");
+            if (!year || !month || !day) {
+                return {
+                    display: result.value || fallback,
+                    iso: result.value,
+                };
+            }
+
             return {
-                display: `${day}/${month}/${year}`,
+                display: `${year}/${month}/${day}`,
                 iso: result.value,
             };
         };

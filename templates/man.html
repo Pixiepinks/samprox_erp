@@ -749,6 +749,12 @@
             setCellText("EPF No", member.epf);
             setCellText("Position", member.position);
             setCellText("Date of Join", member.joinDate);
+            setCellText("Personal Detail", member.personalDetail, "Not provided");
+            setCellText("Assignments", member.assignments, "Not assigned");
+            setCellText("Training records", member.trainingRecords, "Not provided");
+            setCellText("Employment Log", member.employmentLog, "Not provided");
+            setCellText("Files", member.files, "Not provided");
+            setCellText("Controlled Assets", member.assets, "None");
 
             const statusCell = row.querySelector("td[data-label='Status']");
             if (statusCell) {

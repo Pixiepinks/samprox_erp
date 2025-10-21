@@ -555,6 +555,8 @@
                 .replace(/\\/g, "/")
                 .replace(/,/g, " ")
                 .replace(/(\d)\s*\.\s*(\d)/g, "$1-$2")
+                .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, "$1")
+                .replace(/\b(of|the)\b/gi, " ")
                 .replace(/\s+/g, " ")
                 .trim();
             sanitized = sanitized.replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, "");

@@ -121,6 +121,7 @@ def _parse_join_date(value, *, required: bool) -> date | None:
     normalized = re.sub(r",", " ", normalized)
     normalized = re.sub(r"(\d)\s*\.\s*(\d)", r"\1-\2", normalized)
     normalized = re.sub(r"(?<=\d)(st|nd|rd|th)(?=\b)", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b(of|the)\b", " ", normalized, flags=re.IGNORECASE)
     normalized = re.sub(r"\s+", " ", normalized).strip()
     normalized = re.sub(r"^[^0-9A-Za-z]+|[^0-9A-Za-z]+$", "", normalized)
     collapsed = re.sub(r"\s*([/\-])\s*", r"\1", normalized)

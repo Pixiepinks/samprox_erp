@@ -243,7 +243,6 @@
                         name="joinDate"
                         type="text"
                         required
-                        inputmode="numeric"
                         placeholder="YYYY/MM/DD"
                         autocomplete="off"
                     />
@@ -297,7 +296,6 @@
                         id="edit-join-date"
                         name="joinDate"
                         type="text"
-                        inputmode="numeric"
                         placeholder="YYYY/MM/DD"
                     />
                 </div>
@@ -456,7 +454,6 @@
 
             inputEl.setAttribute("placeholder", DATE_INPUT_PLACEHOLDER);
             inputEl.setAttribute("autocomplete", "off");
-            inputEl.setAttribute("inputmode", "numeric");
             inputEl.removeAttribute("maxlength");
             inputEl.removeAttribute("pattern");
 
@@ -648,6 +645,38 @@
                     return { value: iso, isValid: true };
                 }
                 return { value: "", isValid: false };
+            }
+
+            const digitsOnly = collapsed.replace(/\D/g, "");
+            if (digitsOnly.length === 8) {
+                const yearFirstIso = toIso(
+                    Number(digitsOnly.slice(0, 4)),
+                    Number(digitsOnly.slice(4, 6)),
+                    Number(digitsOnly.slice(6, 8))
+                );
+                if (yearFirstIso) {
+                    return { value: yearFirstIso, isValid: true };
+                }
+
+                const firstPair = Number(digitsOnly.slice(0, 2));
+                const secondPair = Number(digitsOnly.slice(2, 4));
+                const year = Number(digitsOnly.slice(4, 8));
+                const candidates = [];
+
+                if (firstPair > 12 && secondPair <= 12) {
+                    candidates.push([secondPair, firstPair]);
+                } else if (secondPair > 12 && firstPair <= 12) {
+                    candidates.push([firstPair, secondPair]);
+                } else {
+                    candidates.push([secondPair, firstPair], [firstPair, secondPair]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
             }
 
             match = collapsed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);

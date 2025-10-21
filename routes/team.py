@@ -147,6 +147,31 @@ def _parse_join_date(value, *, required: bool) -> date | None:
         if candidate:
             return candidate
 
+    digits_only = re.sub(r"\D", "", collapsed)
+    if len(digits_only) == 8 and digits_only.isdigit():
+        year_first_candidate = _attempt(
+            int(digits_only[:4]), int(digits_only[4:6]), int(digits_only[6:])
+        )
+        if year_first_candidate:
+            return year_first_candidate
+
+        first_pair = int(digits_only[:2])
+        second_pair = int(digits_only[2:4])
+        year = int(digits_only[4:])
+        candidates: list[tuple[int, int]] = []
+
+        if first_pair > 12 and second_pair <= 12:
+            candidates.append((second_pair, first_pair))
+        elif second_pair > 12 and first_pair <= 12:
+            candidates.append((first_pair, second_pair))
+        else:
+            candidates.extend(((second_pair, first_pair), (first_pair, second_pair)))
+
+        for month, day in candidates:
+            candidate = _attempt(year, month, day)
+            if candidate:
+                return candidate
+
     iso_datetime_candidate = collapsed.replace("/", "-")
     if iso_datetime_candidate.endswith("Z"):
         iso_datetime_candidate = f"{iso_datetime_candidate[:-1]}+00:00"

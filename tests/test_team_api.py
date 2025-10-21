@@ -71,6 +71,12 @@ class TeamApiTestCase(unittest.TestCase):
             "name": "Jane Doe",
             "joinDate": "2024-07-01",
             "status": "Active",
+            "personalDetail": "Jane's personal detail",
+            "assignments": "Line A",
+            "trainingRecords": "Forklift certified",
+            "employmentLog": "Joined 2020",
+            "files": "ID copy",
+            "assets": "Safety kit",
         }
 
         response = self.client.post(
@@ -82,6 +88,12 @@ class TeamApiTestCase(unittest.TestCase):
         member = response.get_json()
         self.assertEqual(member["regNumber"], payload["regNumber"])
         self.assertEqual(member["status"], "Active")
+        self.assertEqual(member["personalDetail"], payload["personalDetail"])
+        self.assertEqual(member["assignments"], payload["assignments"])
+        self.assertEqual(member["trainingRecords"], payload["trainingRecords"])
+        self.assertEqual(member["employmentLog"], payload["employmentLog"])
+        self.assertEqual(member["files"], payload["files"])
+        self.assertEqual(member["assets"], payload["assets"])
 
         list_response = self.client.get(
             "/api/team/members",
@@ -89,7 +101,9 @@ class TeamApiTestCase(unittest.TestCase):
         )
         self.assertEqual(list_response.status_code, 200)
         members = list_response.get_json()
-        self.assertTrue(any(m["regNumber"] == payload["regNumber"] for m in members))
+        stored = next((m for m in members if m["regNumber"] == payload["regNumber"]), None)
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored["personalDetail"], payload["personalDetail"])
 
     def test_production_manager_can_register_member(self):
         payload = {
@@ -195,12 +209,19 @@ class TeamApiTestCase(unittest.TestCase):
         update_response = self.client.patch(
             f"/api/team/members/{member_id}",
             headers=self._auth_headers(self.admin_token),
-            json={"status": "On Leave", "position": "Shift Lead"},
+            json={
+                "status": "On Leave",
+                "position": "Shift Lead",
+                "assignments": "Updated assignment",
+                "personalDetail": "Updated detail",
+            },
         )
         self.assertEqual(update_response.status_code, 200)
         updated = update_response.get_json()
         self.assertEqual(updated["status"], "On Leave")
         self.assertEqual(updated["position"], "Shift Lead")
+        self.assertEqual(updated["assignments"], "Updated assignment")
+        self.assertEqual(updated["personalDetail"], "Updated detail")
 
         # Fetch list to ensure persistence
         list_response = self.client.get(
@@ -213,6 +234,8 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(stored["status"], "On Leave")
         self.assertEqual(stored["position"], "Shift Lead")
+        self.assertEqual(stored["assignments"], "Updated assignment")
+        self.assertEqual(stored["personalDetail"], "Updated detail")
 
     def test_update_member_validates_field_lengths(self):
         payload = {

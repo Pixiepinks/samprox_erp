@@ -241,8 +241,9 @@
                         class="edit-form__input"
                         id="register-join-date"
                         name="joinDate"
-                        type="date"
+                        type="text"
                         required
+                        placeholder="YYYY/MM/DD"
                         autocomplete="off"
                     />
                 </div>
@@ -290,7 +291,13 @@
                 </div>
                 <div class="edit-form__field">
                     <label class="edit-form__label" for="edit-join-date">Date of Join</label>
-                    <input class="edit-form__input" id="edit-join-date" name="joinDate" type="date" />
+                    <input
+                        class="edit-form__input"
+                        id="edit-join-date"
+                        name="joinDate"
+                        type="text"
+                        placeholder="YYYY/MM/DD"
+                    />
                 </div>
                 <div class="edit-form__field">
                     <label class="edit-form__label" for="edit-status">Status</label>
@@ -377,6 +384,7 @@
         updateEmptyStateVisibility();
 
         const DATE_DISPLAY_FALLBACK = "—";
+        const DATE_INPUT_PLACEHOLDER = "YYYY/MM/DD";
 
         const formatJoinDateForDisplay = (value, fallback = DATE_DISPLAY_FALLBACK) => {
             let source = "";
@@ -397,9 +405,16 @@
                 };
             }
 
-            const [day, month, year] = result.value.split("-");
+            const [year, month, day] = result.value.split("-");
+            if (!year || !month || !day) {
+                return {
+                    display: result.value || fallback,
+                    iso: result.value,
+                };
+            }
+
             return {
-                display: `${day}/${month}/${year}`,
+                display: `${year}/${month}/${day}`,
                 iso: result.value,
             };
         };
@@ -419,6 +434,56 @@
                 delete row.dataset.joinDateIso;
                 delete cell.dataset.isoDate;
             }
+        };
+
+        const applyJoinDateInputFormatting = (inputEl, value) => {
+            if (!inputEl) return;
+
+            const { display, iso } = formatJoinDateForDisplay(value, "");
+            inputEl.value = display;
+
+            if (iso) {
+                inputEl.dataset.isoValue = iso;
+            } else {
+                delete inputEl.dataset.isoValue;
+            }
+        };
+
+        const enhanceJoinDateInput = (inputEl) => {
+            if (!inputEl) return;
+
+            inputEl.setAttribute("placeholder", DATE_INPUT_PLACEHOLDER);
+            inputEl.setAttribute("autocomplete", "off");
+            inputEl.removeAttribute("maxlength");
+            inputEl.removeAttribute("pattern");
+
+            const clearCachedIso = () => {
+                delete inputEl.dataset.isoValue;
+            };
+
+            const normalizeAndFormat = () => {
+                const raw = typeof inputEl.value === "string" ? inputEl.value.trim() : "";
+                if (!raw) {
+                    clearCachedIso();
+                    return;
+                }
+
+                const normalized = normalizeDateInput(raw);
+                if (normalized.isValid) {
+                    applyJoinDateInputFormatting(inputEl, normalized.value);
+                } else {
+                    clearCachedIso();
+                }
+            };
+
+            inputEl.addEventListener("input", clearCachedIso);
+            inputEl.addEventListener("blur", normalizeAndFormat);
+            inputEl.addEventListener("change", normalizeAndFormat);
+            inputEl.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    normalizeAndFormat();
+                }
+            });
         };
 
         const initializeStaticJoinDates = () => {
@@ -582,6 +647,38 @@
                 return { value: "", isValid: false };
             }
 
+            const digitsOnly = collapsed.replace(/\D/g, "");
+            if (digitsOnly.length === 8) {
+                const yearFirstIso = toIso(
+                    Number(digitsOnly.slice(0, 4)),
+                    Number(digitsOnly.slice(4, 6)),
+                    Number(digitsOnly.slice(6, 8))
+                );
+                if (yearFirstIso) {
+                    return { value: yearFirstIso, isValid: true };
+                }
+
+                const firstPair = Number(digitsOnly.slice(0, 2));
+                const secondPair = Number(digitsOnly.slice(2, 4));
+                const year = Number(digitsOnly.slice(4, 8));
+                const candidates = [];
+
+                if (firstPair > 12 && secondPair <= 12) {
+                    candidates.push([secondPair, firstPair]);
+                } else if (secondPair > 12 && firstPair <= 12) {
+                    candidates.push([firstPair, secondPair]);
+                } else {
+                    candidates.push([secondPair, firstPair], [firstPair, secondPair]);
+                }
+
+                for (const [month, day] of candidates) {
+                    const iso = toIso(year, month, day);
+                    if (iso) {
+                        return { value: iso, isValid: true };
+                    }
+                }
+            }
+
             match = collapsed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
             if (match) {
                 const first = Number(match[1]);
@@ -695,26 +792,40 @@
 
         // === Added Helper: Ensures <input type="date"> returns ISO YYYY-MM-DD ===
         function getISOFromDateInput(inputEl) {
-            if (!inputEl) return { value: "", isValid: false };
-
-            // If empty, it's invalid
-            if (!inputEl.value || !inputEl.value.trim()) {
+            if (!inputEl) {
                 return { value: "", isValid: false };
             }
 
-            // If the browser provides a native Date object, use it (ensure it's valid)
-            if (inputEl.valueAsDate instanceof Date) {
+            const raw = typeof inputEl.value === "string" ? inputEl.value.trim() : "";
+            if (!raw) {
+                return { value: "", isValid: false };
+            }
+
+            const cachedIso = inputEl.dataset.isoValue;
+            if (cachedIso) {
+                const formatted = formatJoinDateForDisplay(cachedIso, "");
+                if (formatted.display === raw) {
+                    return { value: cachedIso, isValid: true };
+                }
+            }
+
+            if (inputEl.type === "date" && inputEl.valueAsDate instanceof Date) {
                 const t = inputEl.valueAsDate.getTime();
                 if (!Number.isNaN(t)) {
                     const y = inputEl.valueAsDate.getFullYear();
                     const m = String(inputEl.valueAsDate.getMonth() + 1).padStart(2, "0");
                     const d = String(inputEl.valueAsDate.getDate()).padStart(2, "0");
-                    return { value: `${y}-${m}-${d}`, isValid: true };
+                    const value = `${y}-${m}-${d}`;
+                    inputEl.dataset.isoValue = value;
+                    return { value, isValid: true };
                 }
             }
 
-            // Fallback to robust parser
-            return normalizeDateInput(inputEl.value);
+            const normalized = normalizeDateInput(raw);
+            if (normalized.isValid) {
+                inputEl.dataset.isoValue = normalized.value;
+            }
+            return normalized;
         }
 
         const applyStatusBadgeClass = (badge, status) => {
@@ -1014,19 +1125,16 @@
             setValue("[name='nickname']", current.nickname);
             setValue("[name='epf']", current.epf);
             setValue("[name='position']", current.position);
-            const normalizedCurrentJoinDate = normalizeDateInput(current.joinDate);
-            setValue(
-                "[name='joinDate']",
-                normalizedCurrentJoinDate.isValid
-                    ? normalizedCurrentJoinDate.value
-                    : current.joinDate
-            );
-            // Auto-format date when user changes it in Edit form
             const editJoinDateField = form.querySelector("[name='joinDate']");
-            editJoinDateField?.addEventListener("change", () => {
-                const n = getISOFromDateInput(editJoinDateField);
-                if (n.isValid) editJoinDateField.value = n.value;
-            });
+            if (editJoinDateField) {
+                enhanceJoinDateInput(editJoinDateField);
+                const normalizedCurrentJoinDate = normalizeDateInput(current.joinDate);
+                if (normalizedCurrentJoinDate.isValid) {
+                    applyJoinDateInputFormatting(editJoinDateField, normalizedCurrentJoinDate.value);
+                } else {
+                    applyJoinDateInputFormatting(editJoinDateField, current.joinDate);
+                }
+            }
             setValue("[name='status']", current.status);
             setValue("[name='image']", current.image);
 
@@ -1155,12 +1263,14 @@
             if (!form) return;
 
             const joinDateInput = form.querySelector("[name='joinDate']");
-            if (joinDateInput && !joinDateInput.value) {
-                const today = new Date();
-                const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
-                    today.getDate()
-                ).padStart(2, "0")}`;
-                joinDateInput.value = isoToday;
+            if (joinDateInput) {
+                enhanceJoinDateInput(joinDateInput);
+                const rawValue = typeof joinDateInput.value === "string" ? joinDateInput.value.trim() : "";
+                if (rawValue) {
+                    applyJoinDateInputFormatting(joinDateInput, rawValue);
+                } else {
+                    applyJoinDateInputFormatting(joinDateInput, new Date());
+                }
             }
 
             const cancelButton = form.querySelector("[data-cancel-register]");

@@ -7,35 +7,135 @@ class UserSchema(Schema):
     role = fields.Str()
 
 
+# schemas.py
+from datetime import datetime, date
+from marshmallow import Schema, fields, validates, ValidationError, pre_load
+
+# --- helpers ---------------------------------------------------------------
+
+VALID_STATUSES = {
+    "active": "Active",
+    "inactive": "Inactive",
+    "on leave": "On Leave",
+    "on_leave": "On Leave",
+    "on-leave": "On Leave",
+}
+
+def _parse_flexible_date(v):
+    """Return a date object from either YYYY-MM-DD or MM/DD/YYYY; None if empty."""
+    if not v:
+        return None
+    if isinstance(v, date):
+        return v
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, str):
+        v = v.strip()
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(v, fmt).date()
+            except ValueError:
+                continue
+    raise ValidationError("Invalid date for joinDate. Please use YYYY-MM-DD.")
+
+def _normalize_status(s):
+    if not s:
+        return "Active"
+    return VALID_STATUSES.get(str(s).strip().lower(), "Active")
+
+# --- READ schema (what you send back to the UI) ---------------------------
+
 class TeamMemberSchema(Schema):
+    """Serialize DB model -> JSON for the UI."""
     id = fields.Int(dump_only=True)
+
+    # JSON uses camelCase; map to model attrs using data_key / attribute
     reg_number = fields.Str(data_key="regNumber")
     name = fields.Str()
     nickname = fields.Str(allow_none=True)
     epf = fields.Str(allow_none=True)
     position = fields.Str(allow_none=True)
+
     join_date = fields.Date(data_key="joinDate")
+
+    # status is an Enum on the model; we just expose the value
     status = fields.Method("get_status")
+
     image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
-    personal_detail = fields.Str(
-        attribute="personal_detail", data_key="personalDetail", allow_none=True
-    )
-    assignments = fields.Str(allow_none=True)
-    training_records = fields.Str(
-        attribute="training_records", data_key="trainingRecords", allow_none=True
-    )
-    employment_log = fields.Str(
-        attribute="employment_log", data_key="employmentLog", allow_none=True
-    )
-    files = fields.Str(allow_none=True)
-    assets = fields.Str(allow_none=True)
+
+    personal_detail  = fields.Str(attribute="personal_detail",  data_key="personalDetail",  allow_none=True)
+    assignments      = fields.Str(allow_none=True)
+    training_records = fields.Str(attribute="training_records", data_key="trainingRecords", allow_none=True)
+    employment_log   = fields.Str(attribute="employment_log",   data_key="employmentLog",   allow_none=True)
+    files            = fields.Str(allow_none=True)
+    assets           = fields.Str(allow_none=True)
+
     created_at = fields.DateTime(data_key="createdAt", dump_only=True)
     updated_at = fields.DateTime(data_key="updatedAt", dump_only=True)
 
+    class Meta:
+        ordered = True
 
+    # Expose enum value (e.g., "Active")
     def get_status(self, obj):
         value = getattr(obj, "status", None)
         return getattr(value, "value", value)
+
+# --- CREATE/UPDATE schema (what you accept from the UI) -------------------
+
+class TeamMemberCreateSchema(Schema):
+    """Validate JSON -> Python for creates/updates from the UI."""
+    # Required
+    reg_number = fields.Str(required=True, data_key="regNumber")
+    name       = fields.Str(required=True)
+
+    # Optional
+    nickname = fields.Str(allow_none=True)
+    epf      = fields.Str(allow_none=True)
+    position = fields.Str(allow_none=True)
+
+    # Accept from UI as "joinDate" (string), then we coerce to date in pre_load
+    join_date = fields.Date(allow_none=True, data_key="joinDate")
+
+    status = fields.Str(allow_none=True)  # normalized in pre_load
+
+    image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
+
+    personal_detail  = fields.Str(attribute="personal_detail",  data_key="personalDetail",  allow_none=True)
+    assignments      = fields.Str(allow_none=True)
+    training_records = fields.Str(attribute="training_records", data_key="trainingRecords", allow_none=True)
+    employment_log   = fields.Str(attribute="employment_log",   data_key="employmentLog",   allow_none=True)
+    files            = fields.Str(allow_none=True)
+    assets           = fields.Str(allow_none=True)
+
+    class Meta:
+        ordered = True
+
+    @pre_load
+    def normalize_inputs(self, in_data, **kwargs):
+        """
+        - Map/normalize status to DB enum casing.
+        - Convert joinDate (string) into ISO 'YYYY-MM-DD' that fields.Date can load.
+        """
+        data = dict(in_data or {})
+
+        # normalize status
+        if "status" in data:
+            data["status"] = _normalize_status(data.get("status"))
+
+        # normalize join date: accept 'YYYY-MM-DD' or 'MM/DD/YYYY'
+        jd = data.get("joinDate")
+        if jd:
+            parsed = _parse_flexible_date(jd)  # raises ValidationError if bad
+            data["joinDate"] = parsed.isoformat()
+
+        return data
+
+    @validates("status")
+    def validate_status_member(self, value):
+        if value not in {"Active", "Inactive", "On Leave"}:
+            raise ValidationError("Status must be one of: Active, On Leave, Inactive.")
+
 
 
 class QuotationSchema(Schema):

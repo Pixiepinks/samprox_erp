@@ -530,17 +530,17 @@
                 }
 
                 // Normalize joinDate and status
-                const joinDateRaw = formData.get("joinDate");
-                const normalizedDate = toYyyyMmDd(joinDateRaw);
-               if (normalizedDate) {
-                  payload.join_date = normalizedDate; // backend expects snake_case
-                    } {
-                    showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
-                    return;
-                }
-               if (normalizedDate) {
-                  payload.joindate = normalizedDate; // backend expects snake_case
-               }
+                  const joinDateRaw = formData.get("joinDate");
+                  const normalizedDate = toYyyyMmDd(joinDateRaw);
+
+                    if (joinDateRaw && !normalizedDate) {
+              showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
+                  return;
+                    }
+
+                if (normalizedDate) {
+              payload.joinDate = normalizedDate; // ✅ correct for your backend schema
+                    }
 
                 const statusRaw = formData.get("status");
                 if (statusRaw) payload.status = normalizeStatus(statusRaw);

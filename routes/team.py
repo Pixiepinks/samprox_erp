@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import RoleEnum, TeamMember
+from models import RoleEnum, TeamMember, TeamMemberStatus  # keep import; not strictly required now
 from routes.jobs import require_role
 from schemas import TeamMemberSchema
 
@@ -97,7 +97,39 @@ def _extract_string(value, *, label: str, required: bool = False, max_length: in
     return text_value
 
 
-# ---- Date parsing ----------------------------------------------------------
+# ---- Date & status parsing -------------------------------------------------
+
+_STATUS_MAP = {
+    "active": TeamMemberStatus.ACTIVE,
+    "inactive": TeamMemberStatus.INACTIVE,
+    "on leave": TeamMemberStatus.ON_LEAVE,
+    "on_leave": TeamMemberStatus.ON_LEAVE,
+    "on-leave": TeamMemberStatus.ON_LEAVE,
+}
+
+
+def _normalize_status(value) -> TeamMemberStatus:
+    """Return the TeamMemberStatus enum that matches the provided value."""
+
+    if isinstance(value, TeamMemberStatus):
+        return value
+
+    if value is None:
+        return TeamMemberStatus.ACTIVE
+
+    text_value = str(value).strip()
+    if not text_value:
+        return TeamMemberStatus.ACTIVE
+
+    normalized = _STATUS_MAP.get(text_value.lower())
+    if normalized is not None:
+        return normalized
+
+    try:
+        # Allow exact enum values such as "Active"
+        return TeamMemberStatus(text_value)
+    except ValueError:
+        return TeamMemberStatus.ACTIVE
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
@@ -246,13 +278,16 @@ def create_member():
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
-    # --- Parse date ---
+    # --- Parse date & status ---
     try:
         join_date = _parse_join_date(payload.get("joinDate"), required=False)
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
     if join_date is None:
         join_date = date.today()
+
+    # ✅ IMPORTANT: normalize to the TeamMemberStatus enum so the DB receives a valid value
+    status_value = _normalize_status(payload.get("status"))
 
     # --- Create model ---
     member = TeamMember(
@@ -262,6 +297,7 @@ def create_member():
         epf=epf,
         position=position,
         join_date=join_date,
+        status=status_value,
         image_url=image_url,
         personal_detail=personal_detail,
         assignments=assignments,
@@ -337,6 +373,10 @@ def update_member(member_id: int):
             member.join_date = _parse_join_date(payload.get("joinDate"), required=True)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
+
+    if "status" in payload:
+        # ✅ normalize to the enum value directly
+        member.status = _normalize_status(payload.get("status"))
 
     try:
         db.session.commit()

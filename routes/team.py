@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import RoleEnum, TeamMember, TeamMemberStatus
+from models import RoleEnum, TeamMember  # TeamMemberStatus not needed when storing strings
 from routes.jobs import require_role
 from schemas import TeamMemberSchema
 
@@ -120,18 +120,14 @@ _STATUS_MAP = {
 
 
 def _normalize_status(value) -> str:
+    """Return the exact DB enum label ('Active', 'On Leave', 'Inactive')."""
     if value is None:
         return "Active"
     return _STATUS_MAP.get(str(value).strip().lower(), "Active")
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
-    """Accept YYYY-MM-DD or MM/DD/YYYY (and a few common variations).
-
-    This is intentionally simpler and stricter than the previous version to
-    avoid false negatives. When a string is provided, we try the two most
-    common formats first, then fall back to a couple of tolerant attempts.
-    """
+    """Accept YYYY-MM-DD or MM/DD/YYYY (and a few common variations)."""
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -170,16 +166,6 @@ def _parse_join_date(value, *, required: bool) -> date | None:
         pass
 
     raise ValueError("Invalid date for joinDate. Please use the YYYY-MM-DD format.")
-
-
-def _parse_status(value) -> TeamMemberStatus:
-    # Normalize text first, then map to Enum values
-    normalized = _normalize_status(value)
-    try:
-        return TeamMemberStatus(normalized)
-    except ValueError as exc:
-        valid_values = ", ".join(status.value for status in TeamMemberStatus)
-        raise ValueError(f"Status must be one of: {valid_values}.") from exc
 
 
 def _data_error_message(exc: DataError, *, fallback: str) -> str:
@@ -258,10 +244,10 @@ def create_member():
     if join_date is None:
         join_date = date.today()
 
-    try:
-        status = _parse_status(payload.get("status"))
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
+    # IMPORTANT: store the exact DB label as a STRING (not Enum) to avoid 'ACTIVE' vs 'Active' issues
+    status = _normalize_status(payload.get("status"))
+    if status not in {"Active", "Inactive", "On Leave"}:
+        return jsonify({"msg": "Status must be one of: Active, On Leave, Inactive."}), 400
 
     # --- Create model ---
     member = TeamMember(
@@ -271,7 +257,7 @@ def create_member():
         epf=epf,
         position=position,
         join_date=join_date,
-        status=status,
+        status=status,  # pass normalized string, not Enum
         image_url=image_url,
         personal_detail=personal_detail,
         assignments=assignments,
@@ -391,10 +377,10 @@ def update_member(member_id: int):
         member.join_date = join_date
 
     if "status" in payload:
-        try:
-            member.status = _parse_status(payload.get("status"))
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+        s = _normalize_status(payload.get("status"))
+        if s not in {"Active", "Inactive", "On Leave"}:
+            return jsonify({"msg": "Status must be one of: Active, On Leave, Inactive."}), 400
+        member.status = s  # store DB label string
 
     try:
         db.session.commit()

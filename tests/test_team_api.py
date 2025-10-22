@@ -70,7 +70,6 @@ class TeamApiTestCase(unittest.TestCase):
             "regNumber": "TM-001",
             "name": "Jane Doe",
             "joinDate": "2024-07-01",
-            "status": "Active",
             "personalDetail": "Jane's personal detail",
             "assignments": "Line A",
             "trainingRecords": "Forklift certified",
@@ -87,7 +86,7 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         member = response.get_json()
         self.assertEqual(member["regNumber"], payload["regNumber"])
-        self.assertEqual(member["status"], "Active")
+        self.assertNotIn("status", member)
         self.assertEqual(member["personalDetail"], payload["personalDetail"])
         self.assertEqual(member["assignments"], payload["assignments"])
         self.assertEqual(member["trainingRecords"], payload["trainingRecords"])
@@ -104,13 +103,13 @@ class TeamApiTestCase(unittest.TestCase):
         stored = next((m for m in members if m["regNumber"] == payload["regNumber"]), None)
         self.assertIsNotNone(stored)
         self.assertEqual(stored["personalDetail"], payload["personalDetail"])
+        self.assertNotIn("status", stored)
 
     def test_production_manager_can_register_member(self):
         payload = {
             "regNumber": "TM-020",
             "name": "Production Manager Member",
             "joinDate": "2024-07-08",
-            "status": "Active",
         }
 
         response = self.client.post(
@@ -198,7 +197,6 @@ class TeamApiTestCase(unittest.TestCase):
             "regNumber": "TM-003",
             "name": "Priya Silva",
             "joinDate": "2024-07-03",
-            "status": "Active",
         }
 
         response = self.client.post(
@@ -214,7 +212,6 @@ class TeamApiTestCase(unittest.TestCase):
             f"/api/team/members/{member_id}",
             headers=self._auth_headers(self.admin_token),
             json={
-                "status": "On Leave",
                 "position": "Shift Lead",
                 "assignments": "Updated assignment",
                 "personalDetail": "Updated detail",
@@ -222,7 +219,7 @@ class TeamApiTestCase(unittest.TestCase):
         )
         self.assertEqual(update_response.status_code, 200)
         updated = update_response.get_json()
-        self.assertEqual(updated["status"], "On Leave")
+        self.assertNotIn("status", updated)
         self.assertEqual(updated["position"], "Shift Lead")
         self.assertEqual(updated["assignments"], "Updated assignment")
         self.assertEqual(updated["personalDetail"], "Updated detail")
@@ -236,7 +233,7 @@ class TeamApiTestCase(unittest.TestCase):
         members = list_response.get_json()
         stored = next((m for m in members if m["id"] == member_id), None)
         self.assertIsNotNone(stored)
-        self.assertEqual(stored["status"], "On Leave")
+        self.assertNotIn("status", stored)
         self.assertEqual(stored["position"], "Shift Lead")
         self.assertEqual(stored["assignments"], "Updated assignment")
         self.assertEqual(stored["personalDetail"], "Updated detail")
@@ -246,7 +243,6 @@ class TeamApiTestCase(unittest.TestCase):
             "regNumber": "TM-004",
             "name": "Kamal Perera",
             "joinDate": "2024-07-05",
-            "status": "Active",
         }
 
         response = self.client.post(
@@ -266,33 +262,6 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(update_response.status_code, 400)
         body = update_response.get_json()
         self.assertIn("Nickname must be at most 120 characters.", body["msg"])
-
-    def test_update_member_trims_status_values(self):
-        payload = {
-            "regNumber": "TM-005",
-            "name": "Suresh Wijesinghe",
-            "joinDate": "2024-07-06",
-            "status": "Active",
-        }
-
-        response = self.client.post(
-            "/api/team/members",
-            headers=self._auth_headers(self.admin_token),
-            json=payload,
-        )
-        self.assertEqual(response.status_code, 201)
-        member_id = response.get_json()["id"]
-
-        update_response = self.client.patch(
-            f"/api/team/members/{member_id}",
-            headers=self._auth_headers(self.admin_token),
-            json={"status": " On Leave "},
-        )
-
-        self.assertEqual(update_response.status_code, 200)
-        updated = update_response.get_json()
-        self.assertEqual(updated["status"], "On Leave")
-
 
 if __name__ == "__main__":
     unittest.main()

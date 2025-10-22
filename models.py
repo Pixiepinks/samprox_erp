@@ -187,12 +187,6 @@ class ServiceSupplier(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-class TeamMemberStatus(str, Enum):
-    ACTIVE = "Active"
-    ON_LEAVE = "On Leave"
-    INACTIVE = "Inactive"
-
-
 class TeamMember(db.Model):
     __tablename__ = "team_member"
 
@@ -203,7 +197,6 @@ class TeamMember(db.Model):
     epf = db.Column(db.String(120))
     position = db.Column(db.String(120))
     join_date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.Enum(TeamMemberStatus), nullable=False, default=TeamMemberStatus.ACTIVE)
     image_url = db.Column(db.String(500))
     personal_detail = db.Column(db.Text)
     assignments = db.Column(db.Text)

@@ -9,17 +9,9 @@ class UserSchema(Schema):
 
 # schemas.py
 from datetime import datetime, date
-from marshmallow import Schema, fields, validates, ValidationError, pre_load
+from marshmallow import Schema, fields, ValidationError, pre_load
 
 # --- helpers ---------------------------------------------------------------
-
-VALID_STATUSES = {
-    "active": "Active",
-    "inactive": "Inactive",
-    "on leave": "On Leave",
-    "on_leave": "On Leave",
-    "on-leave": "On Leave",
-}
 
 def _parse_flexible_date(v):
     """Return a date object from either YYYY-MM-DD or MM/DD/YYYY; None if empty."""
@@ -38,11 +30,6 @@ def _parse_flexible_date(v):
                 continue
     raise ValidationError("Invalid date for joinDate. Please use YYYY-MM-DD.")
 
-def _normalize_status(s):
-    if not s:
-        return "Active"
-    return VALID_STATUSES.get(str(s).strip().lower(), "Active")
-
 # --- READ schema (what you send back to the UI) ---------------------------
 
 class TeamMemberSchema(Schema):
@@ -58,9 +45,6 @@ class TeamMemberSchema(Schema):
 
     join_date = fields.Date(data_key="joinDate")
 
-    # status is an Enum on the model; we just expose the value
-    status = fields.Method("get_status")
-
     image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
 
     personal_detail  = fields.Str(attribute="personal_detail",  data_key="personalDetail",  allow_none=True)
@@ -75,11 +59,6 @@ class TeamMemberSchema(Schema):
 
     class Meta:
         ordered = True
-
-    # Expose enum value (e.g., "Active")
-    def get_status(self, obj):
-        value = getattr(obj, "status", None)
-        return getattr(value, "value", value)
 
 # --- CREATE/UPDATE schema (what you accept from the UI) -------------------
 
@@ -97,8 +76,6 @@ class TeamMemberCreateSchema(Schema):
     # Accept from UI as "joinDate" (string), then we coerce to date in pre_load
     join_date = fields.Date(allow_none=True, data_key="joinDate")
 
-    status = fields.Str(allow_none=True)  # normalized in pre_load
-
     image = fields.Str(attribute="image_url", data_key="image", allow_none=True)
 
     personal_detail  = fields.Str(attribute="personal_detail",  data_key="personalDetail",  allow_none=True)
@@ -114,14 +91,9 @@ class TeamMemberCreateSchema(Schema):
     @pre_load
     def normalize_inputs(self, in_data, **kwargs):
         """
-        - Map/normalize status to DB enum casing.
-        - Convert joinDate (string) into ISO 'YYYY-MM-DD' that fields.Date can load.
+        Normalize the join date into ISO 'YYYY-MM-DD' so ``fields.Date`` can load it.
         """
         data = dict(in_data or {})
-
-        # normalize status
-        if "status" in data:
-            data["status"] = _normalize_status(data.get("status"))
 
         # normalize join date: accept 'YYYY-MM-DD' or 'MM/DD/YYYY'
         jd = data.get("joinDate")
@@ -130,11 +102,6 @@ class TeamMemberCreateSchema(Schema):
             data["joinDate"] = parsed.isoformat()
 
         return data
-
-    @validates("status")
-    def validate_status_member(self, value):
-        if value not in {"Active", "Inactive", "On Leave"}:
-            raise ValidationError("Status must be one of: Active, On Leave, Inactive.")
 
 
 

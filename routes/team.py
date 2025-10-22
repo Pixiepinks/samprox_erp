@@ -100,22 +100,41 @@ def _extract_string(value, *, label: str, required: bool = False, max_length: in
 # ---- Date & status parsing -------------------------------------------------
 
 _STATUS_MAP = {
-    "active": "Active",
-    "inactive": "Inactive",
-    "on leave": "On Leave",
-    "on_leave": "On Leave",
-    "on-leave": "On Leave",
+    "active": TeamMemberStatus.ACTIVE,
+    "inactive": TeamMemberStatus.INACTIVE,
+    "on leave": TeamMemberStatus.ON_LEAVE,
+    "on_leave": TeamMemberStatus.ON_LEAVE,
+    "on-leave": TeamMemberStatus.ON_LEAVE,
 }
 
-def _normalize_status(value) -> str:
-    """Return the desired label string ('Active', 'On Leave', 'Inactive')."""
+
+def _normalize_status(value) -> TeamMemberStatus:
+    """Return the TeamMemberStatus enum that matches the provided value."""
+
+    if isinstance(value, TeamMemberStatus):
+        return value
+
     if value is None:
-        return "Active"
-    return _STATUS_MAP.get(str(value).strip().lower(), "Active")
+        return TeamMemberStatus.ACTIVE
+
+    text_value = str(value).strip()
+    if not text_value:
+        return TeamMemberStatus.ACTIVE
+
+    normalized = _STATUS_MAP.get(text_value.lower())
+    if normalized is not None:
+        return normalized
+
+    try:
+        # Allow exact enum values such as "Active"
+        return TeamMemberStatus(text_value)
+    except ValueError:
+        return TeamMemberStatus.ACTIVE
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
-    """Accept YYYY-MM-DD or MM/DD/YYYY (and several common variants)."""
+    """Parse a variety of human-friendly date formats used by the UI."""
+
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -127,27 +146,76 @@ def _parse_join_date(value, *, required: bool) -> date | None:
             raise ValueError("Date of join is required.")
         return None
 
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(s, fmt).date()
-        except ValueError:
-            pass
+    normalized = re.sub(r"(?<=\b[A-Za-z]{3})\.", "", s)
+    normalized = re.sub(r"(?<=\d)(st|nd|rd|th)", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"\b(the|of)\b", " ", normalized, flags=re.IGNORECASE)
+    normalized = normalized.replace(",", " ")
+    normalized = normalized.replace("\\", "/")
+    normalized = normalized.strip().rstrip(".")
 
-    s2 = re.sub(r"\s+", " ", s.replace("\\", "/").replace(".", "-").replace("/", "/")).strip()
-    for cand in {s, s2, s2.replace("/", "-")}:
-        for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m-%d-%Y"):
+    candidates: set[str] = set()
+
+    def _add_candidate(text: str) -> None:
+        text = _clean_string(text)
+        if text:
+            candidates.add(text)
+
+    _add_candidate(s)
+    _add_candidate(s.rstrip("."))
+    _add_candidate(normalized)
+    _add_candidate(normalized.replace(".", "/"))
+    _add_candidate(normalized.replace(".", "-"))
+
+    compact = re.sub(r"\s*(/|-)\s*", r"\\1", normalized)
+    _add_candidate(compact)
+    _add_candidate(compact.replace("/", "-"))
+
+    spaced = re.sub(r"[/\\-]", " ", normalized)
+    _add_candidate(spaced)
+    _add_candidate(spaced.title())
+
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    iso_like = normalized.replace("/", "-")
+    _add_candidate(iso_like)
+
+    patterns = [
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y %m %d",
+        "%Y-%b-%d",
+        "%Y-%B-%d",
+        "%Y %b %d",
+        "%Y %B %d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%d %m %Y",
+        "%d.%m.%Y",
+        "%d %b %Y",
+        "%d %B %Y",
+        "%b %d %Y",
+        "%B %d %Y",
+        "%m/%d/%Y",
+        "%m-%d-%Y",
+        "%m %d %Y",
+    ]
+
+    for cand in candidates:
+        for fmt in patterns:
             try:
                 return datetime.strptime(cand, fmt).date()
             except ValueError:
                 continue
 
-    iso_cand = s.replace("/", "-")
-    if iso_cand.endswith("Z"):
-        iso_cand = f"{iso_cand[:-1]}+00:00"
-    try:
-        return datetime.fromisoformat(iso_cand).date()
-    except ValueError:
-        raise ValueError("Invalid date for joinDate. Please use the YYYY-MM-DD format.")
+    for cand in candidates:
+        cleaned = cand
+        if cleaned.endswith("Z"):
+            cleaned = f"{cleaned[:-1]}+00:00"
+        try:
+            return datetime.fromisoformat(cleaned).date()
+        except ValueError:
+            continue
+
+    raise ValueError("Invalid date for joinDate. Please use the YYYY-MM-DD format.")
 
 
 def _data_error_message(exc: DataError, *, fallback: str) -> str:
@@ -218,8 +286,8 @@ def create_member():
     if join_date is None:
         join_date = date.today()
 
-    # ✅ IMPORTANT: use the *label string* that matches DB enum values
-    status_label = _normalize_status(payload.get("status"))
+    # ✅ IMPORTANT: normalize to the TeamMemberStatus enum so the DB receives a valid value
+    status_value = _normalize_status(payload.get("status"))
 
     # --- Create model ---
     member = TeamMember(
@@ -229,7 +297,7 @@ def create_member():
         epf=epf,
         position=position,
         join_date=join_date,
-        status=status_label,  # <- pass label string ("Active" / "On Leave" / "Inactive")
+        status=status_value,
         image_url=image_url,
         personal_detail=personal_detail,
         assignments=assignments,
@@ -307,7 +375,7 @@ def update_member(member_id: int):
             return jsonify({"msg": str(exc)}), 400
 
     if "status" in payload:
-        # ✅ set the label string directly
+        # ✅ normalize to the enum value directly
         member.status = _normalize_status(payload.get("status"))
 
     try:

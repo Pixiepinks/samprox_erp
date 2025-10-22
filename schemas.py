@@ -1,5 +1,7 @@
 from marshmallow import Schema, fields
 
+from models import TeamMemberStatus
+
 class UserSchema(Schema):
     id = fields.Int()
     name = fields.Str()
@@ -79,7 +81,17 @@ class TeamMemberSchema(Schema):
     # Expose enum value (e.g., "Active")
     def get_status(self, obj):
         value = getattr(obj, "status", None)
-        return getattr(value, "value", value)
+        if isinstance(value, str):
+            # Handle legacy raw strings that may still be present
+            try:
+                value = TeamMemberStatus(value)
+            except Exception:
+                return value
+
+        if isinstance(value, TeamMemberStatus):
+            return value.label
+
+        return value
 
 # --- CREATE/UPDATE schema (what you accept from the UI) -------------------
 

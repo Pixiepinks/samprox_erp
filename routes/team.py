@@ -41,6 +41,16 @@ def _ensure_schema():
     if "image_url" not in columns:
         statements.append("ALTER TABLE team_member ADD COLUMN image_url VARCHAR(500)")
 
+    # Normalize legacy enum casing so SQLAlchemy can read the values safely.
+    if "status" in columns:
+        status_fixes = [
+            "UPDATE team_member SET status = 'Active' WHERE status = 'ACTIVE'",
+            "UPDATE team_member SET status = 'Inactive' WHERE status = 'INACTIVE'",
+            "UPDATE team_member SET status = 'On Leave' WHERE status IN ('ON_LEAVE', 'ON LEAVE')",
+        ]
+    else:
+        status_fixes = []
+
     dialect = engine.dialect.name
 
     if "created_at" not in columns:
@@ -69,8 +79,13 @@ def _ensure_schema():
         if name not in columns:
             statements.append(f"ALTER TABLE team_member ADD COLUMN {name} {typ}")
 
-    if statements:
+    if statements or status_fixes:
         with engine.begin() as conn:
+            for stmt in status_fixes:
+                try:
+                    conn.execute(text(stmt))
+                except (ProgrammingError, OperationalError):
+                    current_app.logger.debug("Status normalization statement failed or already applied: %s", stmt)
             for stmt in statements:
                 try:
                     conn.execute(text(stmt))
@@ -129,7 +144,11 @@ def _normalize_status(value) -> TeamMemberStatus:
         # Allow exact enum values such as "Active"
         return TeamMemberStatus(text_value)
     except ValueError:
-        return TeamMemberStatus.ACTIVE
+        canonical = re.sub(r"[\s_-]+", " ", text_value).strip().title()
+        try:
+            return TeamMemberStatus(canonical)
+        except ValueError:
+            return TeamMemberStatus.ACTIVE
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:

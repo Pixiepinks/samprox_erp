@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import RoleEnum, TeamMember, TeamMemberStatus  # <-- import the enum
+from models import RoleEnum, TeamMember, TeamMemberStatus  # keep import; not strictly required now
 from routes.jobs import require_role
 from schemas import TeamMemberSchema
 
@@ -114,14 +114,6 @@ def _normalize_status(value) -> str:
     return _STATUS_MAP.get(str(value).strip().lower(), "Active")
 
 
-def _label_to_enum(label: str) -> TeamMemberStatus:
-    """Convert 'Active'/'On Leave'/'Inactive' to the enum member (ACTIVE/ON_LEAVE/INACTIVE)."""
-    for member in TeamMemberStatus:
-        if member.value == label:
-            return member
-    return TeamMemberStatus.ACTIVE
-
-
 def _parse_join_date(value, *, required: bool) -> date | None:
     """Accept YYYY-MM-DD or MM/DD/YYYY (and several common variants)."""
     if isinstance(value, datetime):
@@ -226,9 +218,8 @@ def create_member():
     if join_date is None:
         join_date = date.today()
 
-    # convert normalized label -> enum member (so DB enum accepts it)
+    # ✅ IMPORTANT: use the *label string* that matches DB enum values
     status_label = _normalize_status(payload.get("status"))
-    status_member = _label_to_enum(status_label)
 
     # --- Create model ---
     member = TeamMember(
@@ -238,7 +229,7 @@ def create_member():
         epf=epf,
         position=position,
         join_date=join_date,
-        status=status_member,  # <-- store the enum member, not a bare string
+        status=status_label,  # <- pass label string ("Active" / "On Leave" / "Inactive")
         image_url=image_url,
         personal_detail=personal_detail,
         assignments=assignments,
@@ -316,8 +307,8 @@ def update_member(member_id: int):
             return jsonify({"msg": str(exc)}), 400
 
     if "status" in payload:
-        status_label = _normalize_status(payload.get("status"))
-        member.status = _label_to_enum(status_label)
+        # ✅ set the label string directly
+        member.status = _normalize_status(payload.get("status"))
 
     try:
         db.session.commit()

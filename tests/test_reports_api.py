@@ -305,3 +305,111 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(top_customer["quantity_tons"], 200.0)
         self.assertAlmostEqual(top_customer["sales_value"], 2000.0)
 
+    def test_monthly_sales_summary_groups_top_customers(self):
+        Customer = self.app_module.Customer
+        CustomerCategory = self.app_module.CustomerCategory
+        CustomerCreditTerm = self.app_module.CustomerCreditTerm
+        CustomerTransportMode = self.app_module.CustomerTransportMode
+        CustomerType = self.app_module.CustomerType
+        SalesActualEntry = self.app_module.SalesActualEntry
+
+        customer_kwargs = dict(
+            category=CustomerCategory.plantation,
+            credit_term=CustomerCreditTerm.cash,
+            transport_mode=CustomerTransportMode.samprox_lorry,
+            customer_type=CustomerType.regular,
+            sales_coordinator_name="Alex",
+            sales_coordinator_phone="0710000000",
+            store_keeper_name="Sam",
+            store_keeper_phone="0711111111",
+            payment_coordinator_name="Chris",
+            payment_coordinator_phone="0712222222",
+            special_note="Key account",
+        )
+
+        customers = [
+            Customer(name=f"Customer {index + 1}", **customer_kwargs)
+            for index in range(6)
+        ]
+        self.app_module.db.session.add_all(customers)
+        self.app_module.db.session.commit()
+
+        daily_inputs = [
+            (1, [100.0, 150.0, 80.0, 60.0, 40.0, 25.0]),
+            (2, [120.0, 160.0, 90.0, 50.0, 70.0, 30.0]),
+            (3, [130.0, 0.0, 95.0, 85.0, 50.0, 20.0]),
+        ]
+
+        entries = []
+        for day, values in daily_inputs:
+            for index, amount in enumerate(values):
+                if amount <= 0:
+                    continue
+                entries.append(
+                    SalesActualEntry(
+                        customer_id=customers[index].id,
+                        date=date(2024, 5, day),
+                        amount=amount,
+                        unit_price=10.0,
+                        quantity_tons=amount / 10.0,
+                    )
+                )
+
+        self.app_module.db.session.add_all(entries)
+        self.app_module.db.session.commit()
+
+        response = self.client.get(
+            "/api/reports/sales/monthly-summary",
+            headers=self._auth_headers(),
+            query_string={"period": "2024-05"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertEqual(len(data["daily_totals"]), 31)
+
+        self.assertEqual(len(data["customers"]), 6)
+        customers_by_name = {item["name"]: item for item in data["customers"]}
+        self.assertIn("Other customers", customers_by_name)
+        other_field = customers_by_name["Other customers"]["field"]
+        self.assertAlmostEqual(customers_by_name["Other customers"]["total_sales"], 75.0)
+
+        fields_by_name = {
+            name: meta["field"] for name, meta in customers_by_name.items()
+        }
+
+        day1 = next(item for item in data["daily_totals"] if item["day"] == 1)
+        self.assertAlmostEqual(day1[fields_by_name["Customer 1"]], 100.0)
+        self.assertAlmostEqual(day1[fields_by_name["Customer 2"]], 150.0)
+        self.assertAlmostEqual(day1[fields_by_name["Customer 3"]], 80.0)
+        self.assertAlmostEqual(day1[fields_by_name["Customer 4"]], 60.0)
+        self.assertAlmostEqual(day1[fields_by_name["Customer 5"]], 40.0)
+        self.assertAlmostEqual(day1[other_field], 25.0)
+        self.assertAlmostEqual(day1["total_value"], 455.0)
+
+        day3 = next(item for item in data["daily_totals"] if item["day"] == 3)
+        self.assertAlmostEqual(day3[fields_by_name["Customer 1"]], 130.0)
+        self.assertAlmostEqual(day3[fields_by_name["Customer 4"]], 85.0)
+        self.assertAlmostEqual(day3[other_field], 20.0)
+
+        day4 = next(item for item in data["daily_totals"] if item["day"] == 4)
+        self.assertAlmostEqual(day4["total_value"], 0.0)
+        self.assertAlmostEqual(day4.get(fields_by_name["Customer 1"], 0.0), 0.0)
+
+        total_expected = 455.0 + 520.0 + 380.0
+        self.assertAlmostEqual(data["total_sales"], total_expected)
+        self.assertAlmostEqual(
+            data["average_day_sales"], round(total_expected / 31, 2)
+        )
+
+        peak = data["peak"]
+        self.assertEqual(peak["day"], 2)
+        self.assertAlmostEqual(peak["total_value"], 520.0)
+
+        top_customer = data["top_customer"]
+        self.assertIsNotNone(top_customer)
+        self.assertEqual(top_customer["name"], "Customer 1")
+        self.assertAlmostEqual(top_customer["sales_value"], 350.0)

@@ -3,6 +3,8 @@ import os
 import sys
 import unittest
 
+from sqlalchemy import text
+
 
 class TeamApiTestCase(unittest.TestCase):
     def setUp(self):
@@ -123,6 +125,39 @@ class TeamApiTestCase(unittest.TestCase):
         body = response.get_json()
         self.assertEqual(body["regNumber"], payload["regNumber"])
         self.assertEqual(body["name"], payload["name"])
+
+    def test_list_members_recovers_from_legacy_status_values(self):
+        payload = {
+            "regNumber": "TM-030",
+            "name": "Legacy Status",
+            "joinDate": "2024-07-10",
+            "status": "Active",
+        }
+
+        create_response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+        self.assertEqual(create_response.status_code, 201)
+        member = create_response.get_json()
+
+        # Simulate legacy data that stored the status in a non-standard format.
+        self.app_module.db.session.execute(
+            text("UPDATE team_member SET status = :status WHERE id = :id"),
+            {"status": "on leave", "id": member["id"]},
+        )
+        self.app_module.db.session.commit()
+
+        list_response = self.client.get(
+            "/api/team/members",
+            headers=self._auth_headers(self.admin_token),
+        )
+        self.assertEqual(list_response.status_code, 200)
+        items = list_response.get_json()
+        stored = next((item for item in items if item["id"] == member["id"]), None)
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored["status"], "On Leave")
 
     def test_non_privileged_roles_cannot_register_member(self):
         payload = {

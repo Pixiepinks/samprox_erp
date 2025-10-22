@@ -17,6 +17,10 @@ member_schema = TeamMemberSchema()
 members_schema = TeamMemberSchema(many=True)
 
 
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
 def _ensure_schema():
     """Ensure the ``team_member`` table has the expected structure."""
 
@@ -94,204 +98,85 @@ def _extract_string(
     required: bool = False,
     max_length: int | None = None,
 ) -> str | None:
-    text = _clean_string(value)
-    if not text:
+    text_value = _clean_string(value)
+    if not text_value:
         if required:
             raise ValueError(f"{label} is required.")
         return None
-    if max_length is not None and len(text) > max_length:
+    if max_length is not None and len(text_value) > max_length:
         raise ValueError(f"{label} must be at most {max_length} characters.")
-    return text
+    return text_value
+
+
+# ---- Date & status parsing -------------------------------------------------
+
+_STATUS_MAP = {
+    "active": "Active",
+    "inactive": "Inactive",
+    "on leave": "On Leave",
+    "on_leave": "On Leave",
+    "on-leave": "On Leave",
+}
+
+
+def _normalize_status(value) -> str:
+    if value is None:
+        return "Active"
+    return _STATUS_MAP.get(str(value).strip().lower(), "Active")
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
+    """Accept YYYY-MM-DD or MM/DD/YYYY (and a few common variations).
+
+    This is intentionally simpler and stricter than the previous version to
+    avoid false negatives. When a string is provided, we try the two most
+    common formats first, then fall back to a couple of tolerant attempts.
+    """
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
 
-    text = _clean_string(value)
-    if not text:
+    s = _clean_string(value)
+    if not s:
         if required:
             raise ValueError("Date of Join is required.")
         return None
 
-    normalized = text.replace("\\", "/")
-    normalized = re.sub(r"[\u2013\u2014\u2212]", "-", normalized)
-    normalized = re.sub(r",", " ", normalized)
-    normalized = re.sub(r"(\d)\s*\.\s*(\d)", r"\1-\2", normalized)
-    normalized = re.sub(r"(?<=\d)(st|nd|rd|th)(?=\b)", "", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\b(of|the)\b", " ", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    normalized = re.sub(r"^[^0-9A-Za-z]+|[^0-9A-Za-z]+$", "", normalized)
-    collapsed = re.sub(r"\s*([/\-])\s*", r"\1", normalized)
-    collapsed = re.sub(r"^[^0-9A-Za-z]+|[^0-9A-Za-z]+$", "", collapsed)
-
-    def _attempt(year: int, month: int, day: int) -> date | None:
+    # Fast paths first
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
         try:
-            return date(year, month, day)
+            return datetime.strptime(s, fmt).date()
         except ValueError:
-            return None
+            pass
 
-    iso_match = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", collapsed)
-    if iso_match:
-        year, month, day = map(int, iso_match.groups())
-        candidate = _attempt(year, month, day)
-        if candidate:
-            return candidate
+    # Common separators swapped or extra spaces
+    s2 = re.sub(r"\s+", " ", s.replace("\\", "/").replace(".", "-").replace("/", "/")).strip()
 
-    slash_iso_match = re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})", collapsed)
-    if slash_iso_match:
-        year, month, day = map(int, slash_iso_match.groups())
-        candidate = _attempt(year, month, day)
-        if candidate:
-            return candidate
-
-    digits_only = re.sub(r"\D", "", collapsed)
-    if len(digits_only) == 8 and digits_only.isdigit():
-        year_first_candidate = _attempt(
-            int(digits_only[:4]), int(digits_only[4:6]), int(digits_only[6:])
-        )
-        if year_first_candidate:
-            return year_first_candidate
-
-        first_pair = int(digits_only[:2])
-        second_pair = int(digits_only[2:4])
-        year = int(digits_only[4:])
-        candidates: list[tuple[int, int]] = []
-
-        if first_pair > 12 and second_pair <= 12:
-            candidates.append((second_pair, first_pair))
-        elif second_pair > 12 and first_pair <= 12:
-            candidates.append((first_pair, second_pair))
-        else:
-            candidates.extend(((second_pair, first_pair), (first_pair, second_pair)))
-
-        for month, day in candidates:
-            candidate = _attempt(year, month, day)
-            if candidate:
-                return candidate
-
-    iso_datetime_candidate = collapsed.replace("/", "-")
-    if iso_datetime_candidate.endswith("Z"):
-        iso_datetime_candidate = f"{iso_datetime_candidate[:-1]}+00:00"
-    try:
-        return datetime.fromisoformat(iso_datetime_candidate).date()
-    except ValueError:
-        pass
-
-    year_last_match = re.fullmatch(r"(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})", collapsed)
-    if year_last_match:
-        first, second, year_str = year_last_match.groups()
-        year = int(year_str)
-        first_num = int(first)
-        second_num = int(second)
-        candidates: list[tuple[int, int]] = []
-
-        if first_num > 12 and second_num <= 12:
-            candidates.append((second_num, first_num))
-        elif second_num > 12 and first_num <= 12:
-            candidates.append((first_num, second_num))
-        else:
-            candidates.extend(((second_num, first_num), (first_num, second_num)))
-
-        for month, day in candidates:
-            candidate = _attempt(year, month, day)
-            if candidate:
-                return candidate
-
-    month_lookup = {
-        "jan": 1,
-        "january": 1,
-        "feb": 2,
-        "february": 2,
-        "mar": 3,
-        "march": 3,
-        "apr": 4,
-        "april": 4,
-        "may": 5,
-        "jun": 6,
-        "june": 6,
-        "jul": 7,
-        "july": 7,
-        "aug": 8,
-        "august": 8,
-        "sep": 9,
-        "sept": 9,
-        "september": 9,
-        "oct": 10,
-        "october": 10,
-        "nov": 11,
-        "november": 11,
-        "dec": 12,
-        "december": 12,
-    }
-
-    def _month_from_name(name: str) -> int | None:
-        cleaned = name.strip().rstrip(".")
-        return month_lookup.get(cleaned.lower())
-
-    day_month_year = re.fullmatch(r"(\d{1,2})\s+([A-Za-z]+\.?)\s+(\d{4})", normalized)
-    if day_month_year:
-        day_str, month_name, year_str = day_month_year.groups()
-        month = _month_from_name(month_name)
-        if month:
-            candidate = _attempt(int(year_str), month, int(day_str))
-            if candidate:
-                return candidate
-
-    month_day_year = re.fullmatch(r"([A-Za-z]+\.?)\s+(\d{1,2}),?\s+(\d{4})", normalized)
-    if month_day_year:
-        month_name, day_str, year_str = month_day_year.groups()
-        month = _month_from_name(month_name)
-        if month:
-            candidate = _attempt(int(year_str), month, int(day_str))
-            if candidate:
-                return candidate
-
-    year_month_day = re.fullmatch(r"(\d{4})\s+([A-Za-z]+\.?)\s+(\d{1,2})", normalized)
-    if year_month_day:
-        year_str, month_name, day_str = year_month_day.groups()
-        month = _month_from_name(month_name)
-        if month:
-            candidate = _attempt(int(year_str), month, int(day_str))
-            if candidate:
-                return candidate
-
-    accepted_formats = (
-        "%d/%m/%Y",
-        "%m/%d/%Y",
-        "%d-%m-%Y",
-        "%m-%d-%Y",
-        "%Y/%m/%d",
-        "%Y-%m-%d",
-        "%d %m %Y",
-        "%m %d %Y",
-        "%Y %m %d",
-        "%d %b %Y",
-        "%d %B %Y",
-        "%Y-%b-%d",
-        "%Y-%B-%d",
-    )
-
-    for candidate_text in {collapsed, normalized, text}:
-        for fmt in accepted_formats:
+    for candidate in {s, s2, s2.replace("/", "-")}:  # try 2025/10/23 or 2025-10-23
+        for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m-%d-%Y"):
             try:
-                return datetime.strptime(candidate_text, fmt).date()
+                return datetime.strptime(candidate, fmt).date()
             except ValueError:
                 continue
+
+    # Last resort: ISO parser (handles timestamps like 2025-10-23T00:00:00Z)
+    iso_candidate = s.replace("/", "-")
+    if iso_candidate.endswith("Z"):
+        iso_candidate = f"{iso_candidate[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(iso_candidate).date()
+    except ValueError:
+        pass
 
     raise ValueError("Invalid date for joinDate. Please use the YYYY-MM-DD format.")
 
 
 def _parse_status(value) -> TeamMemberStatus:
-    if isinstance(value, TeamMemberStatus):
-        return value
-    text = _clean_string(value)
-    if not text:
-        return TeamMemberStatus.ACTIVE
+    # Normalize text first, then map to Enum values
+    normalized = _normalize_status(value)
     try:
-        return TeamMemberStatus(text)
+        return TeamMemberStatus(normalized)
     except ValueError as exc:
         valid_values = ", ".join(status.value for status in TeamMemberStatus)
         raise ValueError(f"Status must be one of: {valid_values}.") from exc
@@ -315,6 +200,10 @@ def _data_error_message(exc: DataError, *, fallback: str) -> str:
 
     return fallback
 
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 @bp.get("/members")
 @jwt_required()
@@ -341,66 +230,26 @@ def create_member():
 
     payload = request.get_json() or {}
 
+    # --- Extract text fields ---
     try:
         reg_number = _extract_string(
-            payload.get("regNumber"),
-            label="Registration number",
-            required=True,
-            max_length=40,
+            payload.get("regNumber"), label="Registration number", required=True, max_length=40
         )
-        name = _extract_string(
-            payload.get("name"),
-            label="Name",
-            required=True,
-            max_length=200,
-        )
-        nickname = _extract_string(
-            payload.get("nickname"),
-            label="Nickname",
-            max_length=120,
-        )
-        epf = _extract_string(
-            payload.get("epf"),
-            label="EPF number",
-            max_length=120,
-        )
-        position = _extract_string(
-            payload.get("position"),
-            label="Position",
-            max_length=120,
-        )
-        image_url = _extract_string(
-            payload.get("image"),
-            label="Profile image URL",
-            max_length=500,
-        )
-        personal_detail = _extract_string(
-            payload.get("personalDetail"),
-            label="Personal detail",
-        )
-        assignments = _extract_string(
-            payload.get("assignments"),
-            label="Assignments",
-        )
-        training_records = _extract_string(
-            payload.get("trainingRecords"),
-            label="Training records",
-        )
-        employment_log = _extract_string(
-            payload.get("employmentLog"),
-            label="Employment log",
-        )
-        files_value = _extract_string(
-            payload.get("files"),
-            label="Files",
-        )
-        assets_value = _extract_string(
-            payload.get("assets"),
-            label="Controlled assets",
-        )
+        name = _extract_string(payload.get("name"), label="Name", required=True, max_length=200)
+        nickname = _extract_string(payload.get("nickname"), label="Nickname", max_length=120)
+        epf = _extract_string(payload.get("epf"), label="EPF number", max_length=120)
+        position = _extract_string(payload.get("position"), label="Position", max_length=120)
+        image_url = _extract_string(payload.get("image"), label="Profile image URL", max_length=500)
+        personal_detail = _extract_string(payload.get("personalDetail"), label="Personal detail")
+        assignments = _extract_string(payload.get("assignments"), label="Assignments")
+        training_records = _extract_string(payload.get("trainingRecords"), label="Training records")
+        employment_log = _extract_string(payload.get("employmentLog"), label="Employment log")
+        files_value = _extract_string(payload.get("files"), label="Files")
+        assets_value = _extract_string(payload.get("assets"), label="Controlled assets")
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
+    # --- Parse date & status ---
     try:
         join_date = _parse_join_date(payload.get("joinDate"), required=False)
     except ValueError as exc:
@@ -414,6 +263,7 @@ def create_member():
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
+    # --- Create model ---
     member = TeamMember(
         reg_number=reg_number,
         name=name,
@@ -436,10 +286,7 @@ def create_member():
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        return (
-            jsonify({"msg": f"Registration number {reg_number} already exists."}),
-            409,
-        )
+        return jsonify({"msg": f"Registration number {reg_number} already exists."}), 409
     except DataError as exc:
         db.session.rollback()
         message = _data_error_message(
@@ -471,107 +318,68 @@ def update_member(member_id: int):
 
     if "name" in payload:
         try:
-            name = _extract_string(
-                payload.get("name"),
-                label="Name",
-                required=True,
-                max_length=200,
-            )
+            name = _extract_string(payload.get("name"), label="Name", required=True, max_length=200)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
         member.name = name
 
     if "nickname" in payload:
         try:
-            member.nickname = _extract_string(
-                payload.get("nickname"),
-                label="Nickname",
-                max_length=120,
-            )
+            member.nickname = _extract_string(payload.get("nickname"), label="Nickname", max_length=120)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "epf" in payload:
         try:
-            member.epf = _extract_string(
-                payload.get("epf"),
-                label="EPF number",
-                max_length=120,
-            )
+            member.epf = _extract_string(payload.get("epf"), label="EPF number", max_length=120)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "position" in payload:
         try:
-            member.position = _extract_string(
-                payload.get("position"),
-                label="Position",
-                max_length=120,
-            )
+            member.position = _extract_string(payload.get("position"), label="Position", max_length=120)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "image" in payload:
         try:
-            member.image_url = _extract_string(
-                payload.get("image"),
-                label="Profile image URL",
-                max_length=500,
-            )
+            member.image_url = _extract_string(payload.get("image"), label="Profile image URL", max_length=500)
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "personalDetail" in payload:
         try:
-            member.personal_detail = _extract_string(
-                payload.get("personalDetail"),
-                label="Personal detail",
-            )
+            member.personal_detail = _extract_string(payload.get("personalDetail"), label="Personal detail")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "assignments" in payload:
         try:
-            member.assignments = _extract_string(
-                payload.get("assignments"),
-                label="Assignments",
-            )
+            member.assignments = _extract_string(payload.get("assignments"), label="Assignments")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "trainingRecords" in payload:
         try:
-            member.training_records = _extract_string(
-                payload.get("trainingRecords"),
-                label="Training records",
-            )
+            member.training_records = _extract_string(payload.get("trainingRecords"), label="Training records")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "employmentLog" in payload:
         try:
-            member.employment_log = _extract_string(
-                payload.get("employmentLog"),
-                label="Employment log",
-            )
+            member.employment_log = _extract_string(payload.get("employmentLog"), label="Employment log")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "files" in payload:
         try:
-            member.files = _extract_string(
-                payload.get("files"),
-                label="Files",
-            )
+            member.files = _extract_string(payload.get("files"), label="Files")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
     if "assets" in payload:
         try:
-            member.assets = _extract_string(
-                payload.get("assets"),
-                label="Controlled assets",
-            )
+            member.assets = _extract_string(payload.get("assets"), label="Controlled assets")
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 

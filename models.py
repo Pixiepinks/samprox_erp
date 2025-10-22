@@ -192,6 +192,12 @@ class TeamMemberStatus(str, Enum):
     ON_LEAVE = "On Leave"
     INACTIVE = "Inactive"
 
+    @property
+    def label(self) -> str:
+        """Return a UI friendly label for the enum value."""
+
+        return self.value
+
 
 class TeamMember(db.Model):
     __tablename__ = "team_member"
@@ -203,7 +209,16 @@ class TeamMember(db.Model):
     epf = db.Column(db.String(120))
     position = db.Column(db.String(120))
     join_date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.Enum(TeamMemberStatus), nullable=False, default=TeamMemberStatus.ACTIVE)
+    status = db.Column(
+        db.Enum(
+            TeamMemberStatus,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            name="teammemberstatus",
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=TeamMemberStatus.ACTIVE,
+    )
     image_url = db.Column(db.String(500))
     personal_detail = db.Column(db.Text)
     assignments = db.Column(db.Text)

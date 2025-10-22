@@ -279,6 +279,10 @@ body {
     border-bottom: 1px solid rgba(148, 163, 184, 0.35);
 }
 
+.team-table td {
+    white-space: pre-wrap;
+}
+
 .team-table th {
     font-size: 0.8rem;
     text-transform: uppercase;

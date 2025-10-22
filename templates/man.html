@@ -82,11 +82,23 @@
                     <table class="team-table team-table--simple">
                         <thead>
                             <tr>
+                                <th scope="col">ID</th>
                                 <th scope="col">Reg No</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Nickname</th>
+                                <th scope="col">EPF</th>
                                 <th scope="col">Position</th>
-                                <th scope="col">Status</th>
                                 <th scope="col">Join date</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Image URL</th>
+                                <th scope="col">Created at</th>
+                                <th scope="col">Updated at</th>
+                                <th scope="col">Personal detail</th>
+                                <th scope="col">Assignments</th>
+                                <th scope="col">Training records</th>
+                                <th scope="col">Employment log</th>
+                                <th scope="col">Files</th>
+                                <th scope="col">Assets</th>
                             </tr>
                         </thead>
                         <tbody id="team-table-body"></tbody>
@@ -374,6 +386,30 @@
             }
         };
 
+        const formatDateTime = (value) => {
+            if (!value) {
+                return "—";
+            }
+
+            try {
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) {
+                    return sanitizeText(value);
+                }
+
+                return parsed.toLocaleString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+            } catch (error) {
+                console.warn("Unable to format date/time", error);
+                return sanitizeText(value);
+            }
+        };
+
         const renderEmptyState = (message) => {
             if (!emptyState) {
                 return;
@@ -415,17 +451,31 @@
 
             members.forEach((member) => {
                 const row = document.createElement("tr");
-                const regNo = sanitizeText(member?.regNumber);
-                const name = sanitizeText(member?.name);
-                const position = sanitizeText(member?.position);
-                const status = sanitizeText(member?.status);
-                const joinDate = formatJoinDate(member?.joinDate);
 
-                row.appendChild(createCell("Reg No", regNo));
-                row.appendChild(createCell("Name", name));
-                row.appendChild(createCell("Position", position));
-                row.appendChild(createCell("Status", status));
-                row.appendChild(createCell("Join date", joinDate));
+                const cells = [
+                    ["ID", sanitizeText(member?.id)],
+                    ["Reg No", sanitizeText(member?.regNumber)],
+                    ["Name", sanitizeText(member?.name)],
+                    ["Nickname", sanitizeText(member?.nickname)],
+                    ["EPF", sanitizeText(member?.epf)],
+                    ["Position", sanitizeText(member?.position)],
+                    ["Join date", formatJoinDate(member?.joinDate)],
+                    ["Status", sanitizeText(member?.status)],
+                    ["Image URL", sanitizeText(member?.image)],
+                    ["Created at", formatDateTime(member?.createdAt)],
+                    ["Updated at", formatDateTime(member?.updatedAt)],
+                    ["Personal detail", sanitizeText(member?.personalDetail)],
+                    ["Assignments", sanitizeText(member?.assignments)],
+                    ["Training records", sanitizeText(member?.trainingRecords)],
+                    ["Employment log", sanitizeText(member?.employmentLog)],
+                    ["Files", sanitizeText(member?.files)],
+                    ["Assets", sanitizeText(member?.assets)],
+                ];
+
+                cells.forEach(([label, value]) => {
+                    row.appendChild(createCell(label, value));
+                });
+
                 tableBody.appendChild(row);
             });
         };

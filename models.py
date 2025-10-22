@@ -1,401 +1,373 @@
-from datetime import date, datetime
 import re
-
-from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import jwt_required
-from sqlalchemy import inspect, text
-from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
-
+from datetime import datetime, date
+from enum import Enum
 from extensions import db
-from models import RoleEnum, TeamMember  # TeamMemberStatus not needed when storing strings
-from routes.jobs import require_role
-from schemas import TeamMemberSchema
+from werkzeug.security import generate_password_hash, check_password_hash
 
-bp = Blueprint("team", __name__, url_prefix="/api/team")
+class RoleEnum(str, Enum):
+    admin = "admin"
+    production_manager = "production_manager"
+    maintenance_manager = "maintenance_manager"
 
-member_schema = TeamMemberSchema()
-members_schema = TeamMemberSchema(many=True)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.Enum(RoleEnum), nullable=False, default=RoleEnum.production_manager)
+    active = db.Column(db.Boolean, default=True)
 
+    def set_password(self, pw): self.password_hash = generate_password_hash(pw)
+    def check_password(self, pw): return check_password_hash(self.password_hash, pw)
 
-# ---------------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------------
+class JobStatus(str, Enum):
+    NEW = "NEW"
+    ACCEPTED = "ACCEPTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
 
-def _ensure_schema():
-    """Ensure the ``team_member`` table has the expected structure."""
+class Job(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(40), unique=True, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    status = db.Column(db.Enum(JobStatus), default=JobStatus.NEW, index=True)
+    priority = db.Column(db.String(20), default="Normal")
+    location = db.Column(db.String(120))
+    expected_completion_date = db.Column(db.Date)
+    completed_date = db.Column(db.Date)
+    progress_pct_manual = db.Column(db.Integer)  # nullable
 
-    try:
-        engine = db.engine
-    except RuntimeError:
-        # No application context – nothing we can do here.
-        return
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
 
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
 
-    if "team_member" not in tables:
-        # Create the table if it has not been provisioned yet.
-        TeamMember.__table__.create(bind=engine, checkfirst=True)
-        inspector = inspect(engine)
-    columns = {column["name"] for column in inspector.get_columns("team_member")}
+    quotation = db.relationship("Quotation", backref="job", uselist=False, cascade="all,delete-orphan")
 
-    statements: list[str] = []
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    if "image_url" not in columns:
-        statements.append("ALTER TABLE team_member ADD COLUMN image_url VARCHAR(500)")
+    def progress_pct_auto(self):
+        # compute based on labor estimate vs actual
+        if not self.quotation or not self.quotation.labor_estimate_hours:
+            return 0
+        total_hours = sum(le.hours for le in self.labor_entries)
+        pct = int(min(round((total_hours / self.quotation.labor_estimate_hours) * 100), 100))
+        return pct
 
-    dialect = engine.dialect.name
+    @property
+    def progress_pct(self):
+        return self.progress_pct_manual if self.progress_pct_manual is not None else self.progress_pct_auto()
 
-    if "created_at" not in columns:
-        statements.append("ALTER TABLE team_member ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-        statements.append("UPDATE team_member SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
-        if dialect != "sqlite":
-            statements.append("ALTER TABLE team_member ALTER COLUMN created_at SET NOT NULL")
-            statements.append("ALTER TABLE team_member ALTER COLUMN created_at DROP DEFAULT")
+class Quotation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.id"), unique=True, nullable=False)
+    labor_estimate_hours = db.Column(db.Float, default=0)
+    labor_rate = db.Column(db.Float, default=0)  # per hour
+    material_estimate_cost = db.Column(db.Float, default=0)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    if "updated_at" not in columns:
-        statements.append("ALTER TABLE team_member ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-        statements.append("UPDATE team_member SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL")
-        if dialect != "sqlite":
-            statements.append("ALTER TABLE team_member ALTER COLUMN updated_at SET NOT NULL")
-            statements.append("ALTER TABLE team_member ALTER COLUMN updated_at DROP DEFAULT")
+class LaborEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    hours = db.Column(db.Float, nullable=False)
+    rate = db.Column(db.Float, nullable=False)
+    note = db.Column(db.String(255))
+    job = db.relationship("Job", backref=db.backref("labor_entries", cascade="all,delete-orphan"))
+    user = db.relationship("User")
 
-    optional_text_columns = {
-        "personal_detail": "TEXT",
-        "assignments": "TEXT",
-        "training_records": "TEXT",
-        "employment_log": "TEXT",
-        "files": "TEXT",
-        "assets": "TEXT",
-    }
-
-    for column_name, column_type in optional_text_columns.items():
-        if column_name not in columns:
-            statements.append(f"ALTER TABLE team_member ADD COLUMN {column_name} {column_type}")
-
-    if statements:
-        with engine.begin() as connection:
-            for statement in statements:
-                try:
-                    connection.execute(text(statement))
-                except (ProgrammingError, OperationalError):
-                    # If another process created the column in the meantime we can ignore the error.
-                    current_app.logger.debug("Schema statement failed (likely already applied): %s", statement)
-
-
-def _clean_string(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value.strip()
-    return str(value).strip()
-
-
-def _extract_string(
-    value,
-    *,
-    label: str,
-    required: bool = False,
-    max_length: int | None = None,
-) -> str | None:
-    text_value = _clean_string(value)
-    if not text_value:
-        if required:
-            raise ValueError(f"{label} is required.")
-        return None
-    if max_length is not None and len(text_value) > max_length:
-        raise ValueError(f"{label} must be at most {max_length} characters.")
-    return text_value
+class MaterialEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.id"), nullable=False, index=True)
+    item_name = db.Column(db.String(120), nullable=False)
+    qty = db.Column(db.Float, nullable=False)
+    unit_cost = db.Column(db.Float, nullable=False)
+    note = db.Column(db.String(255))
+    job = db.relationship("Job", backref=db.backref("material_entries", cascade="all,delete-orphan"))
 
 
-# ---- Date & status parsing -------------------------------------------------
-
-_STATUS_MAP = {
-    "active": "Active",
-    "inactive": "Inactive",
-    "on leave": "On Leave",
-    "on_leave": "On Leave",
-    "on-leave": "On Leave",
-}
-
-
-def _normalize_status(value) -> str:
-    """Return the exact DB enum label ('Active', 'On Leave', 'Inactive')."""
-    if value is None:
-        return "Active"
-    return _STATUS_MAP.get(str(value).strip().lower(), "Active")
+class MachineAsset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(60), unique=True, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(120))
+    location = db.Column(db.String(120))
+    manufacturer = db.Column(db.String(120))
+    model_number = db.Column(db.String(120))
+    serial_number = db.Column(db.String(120))
+    installed_on = db.Column(db.Date)
+    status = db.Column(db.String(40))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-def _parse_join_date(value, *, required: bool) -> date | None:
-    """Accept YYYY-MM-DD or MM/DD/YYYY (and a few common variations)."""
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-
-    s = _clean_string(value)
-    if not s:
-        if required:
-            raise ValueError("Date of Join is required.")
-        return None
-
-    # Fast paths first
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(s, fmt).date()
-        except ValueError:
-            pass
-
-    # Common separators swapped or extra spaces
-    s2 = re.sub(r"\s+", " ", s.replace("\\", "/").replace(".", "-").replace("/", "/")).strip()
-
-    for candidate in {s, s2, s2.replace("/", "-")}:  # try 2025/10/23 or 2025-10-23
-        for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m-%d-%Y"):
-            try:
-                return datetime.strptime(candidate, fmt).date()
-            except ValueError:
-                continue
-
-    # Last resort: ISO parser (handles timestamps like 2025-10-23T00:00:00Z)
-    iso_candidate = s.replace("/", "-")
-    if iso_candidate.endswith("Z"):
-        iso_candidate = f"{iso_candidate[:-1]}+00:00"
-    try:
-        return datetime.fromisoformat(iso_candidate).date()
-    except ValueError:
-        pass
-
-    raise ValueError("Invalid date for joinDate. Please use the YYYY-MM-DD format.")
-
-
-def _data_error_message(exc: DataError, *, fallback: str) -> str:
-    detail = ""
-    origin = getattr(exc, "orig", None)
-    if origin is not None:
-        detail = str(origin)
-    elif exc.args:
-        detail = " ".join(str(arg) for arg in exc.args if arg)
-
-    lowered = detail.lower()
-
-    if any(keyword in lowered for keyword in ("invalid", "incorrect", "out of range")) and "date" in lowered:
-        return "Invalid date for joinDate. Please use the YYYY-MM-DD format."
-
-    if "isoformat" in lowered and "date" in lowered:
-        return "Invalid date for joinDate. Please use the YYYY-MM-DD format."
-
-    return fallback
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-@bp.get("/members")
-@jwt_required()
-def list_members():
-    try:
-        _ensure_schema()
-        members = TeamMember.query.order_by(TeamMember.reg_number.asc()).all()
-        return jsonify(members_schema.dump(members))
-    except (ProgrammingError, OperationalError):
-        db.session.rollback()
-        current_app.logger.exception("Failed to list team members due to schema issues.")
-        _ensure_schema()
-        members = TeamMember.query.order_by(TeamMember.reg_number.asc()).all()
-        return jsonify(members_schema.dump(members))
-
-
-@bp.post("/members")
-@jwt_required()
-def create_member():
-    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
-        return jsonify({"msg": "Only administrators or production managers can register team members."}), 403
-
-    _ensure_schema()
-
-    payload = request.get_json() or {}
-
-    # --- Extract text fields ---
-    try:
-        reg_number = _extract_string(
-            payload.get("regNumber"), label="Registration number", required=True, max_length=40
-        )
-        name = _extract_string(payload.get("name"), label="Name", required=True, max_length=200)
-        nickname = _extract_string(payload.get("nickname"), label="Nickname", max_length=120)
-        epf = _extract_string(payload.get("epf"), label="EPF number", max_length=120)
-        position = _extract_string(payload.get("position"), label="Position", max_length=120)
-        image_url = _extract_string(payload.get("image"), label="Profile image URL", max_length=500)
-        personal_detail = _extract_string(payload.get("personalDetail"), label="Personal detail")
-        assignments = _extract_string(payload.get("assignments"), label="Assignments")
-        training_records = _extract_string(payload.get("trainingRecords"), label="Training records")
-        employment_log = _extract_string(payload.get("employmentLog"), label="Employment log")
-        files_value = _extract_string(payload.get("files"), label="Files")
-        assets_value = _extract_string(payload.get("assets"), label="Controlled assets")
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
-
-    # --- Parse date & status ---
-    try:
-        join_date = _parse_join_date(payload.get("joinDate"), required=False)
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
-
-    if join_date is None:
-        join_date = date.today()
-
-    # IMPORTANT: store the exact DB label as a STRING (not Enum) to avoid 'ACTIVE' vs 'Active' issues
-    status = _normalize_status(payload.get("status"))
-    if status not in {"Active", "Inactive", "On Leave"}:
-        return jsonify({"msg": "Status must be one of: Active, On Leave, Inactive."}), 400
-
-    # --- Create model ---
-    member = TeamMember(
-        reg_number=reg_number,
-        name=name,
-        nickname=nickname,
-        epf=epf,
-        position=position,
-        join_date=join_date,
-        status=status,  # pass normalized string, not Enum
-        image_url=image_url,
-        personal_detail=personal_detail,
-        assignments=assignments,
-        training_records=training_records,
-        employment_log=employment_log,
-        files=files_value,
-        assets=assets_value,
+class MachinePart(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("machine_asset.id"), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    part_number = db.Column(db.String(120))
+    description = db.Column(db.Text)
+    expected_life_hours = db.Column(db.Integer)
+    notes = db.Column(db.Text)
+    asset = db.relationship(
+        "MachineAsset",
+        backref=db.backref("parts", cascade="all,delete-orphan", order_by="MachinePart.name"),
     )
 
-    db.session.add(member)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"msg": f"Registration number {reg_number} already exists."}), 409
-    except DataError as exc:
-        db.session.rollback()
-        message = _data_error_message(
-            exc,
-            fallback="Unable to register member. One or more fields exceed the allowed length.",
+    @classmethod
+    def generate_part_number(cls):
+        prefix = "P-"
+        max_number = 0
+        numbers = (
+            db.session.query(cls.part_number)
+            .filter(cls.part_number.isnot(None))
+            .filter(cls.part_number.ilike(f"{prefix}%"))
+            .all()
         )
-        current_app.logger.warning("Failed to create team member due to data error: %s", exc)
-        return jsonify({"msg": message}), 400
-    except (ProgrammingError, OperationalError):
-        db.session.rollback()
-        current_app.logger.exception("Failed to create team member due to schema issues.")
-        _ensure_schema()
-        db.session.add(member)
-        db.session.commit()
-
-    return jsonify(member_schema.dump(member)), 201
+        for (value,) in numbers:
+            if not value:
+                continue
+            match = re.match(r"^P-(\d+)$", value.strip(), re.IGNORECASE)
+            if match:
+                max_number = max(max_number, int(match.group(1)))
+        return f"{prefix}{max_number + 1:03d}"
 
 
-@bp.patch("/members/<int:member_id>")
-@jwt_required()
-def update_member(member_id: int):
-    if not require_role(RoleEnum.admin):
-        return jsonify({"msg": "Only administrators can update team members."}), 403
+class MachinePartReplacement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    part_id = db.Column(db.Integer, db.ForeignKey("machine_part.id"), nullable=False, index=True)
+    replaced_on = db.Column(db.Date, nullable=False)
+    replaced_by = db.Column(db.String(120))
+    reason = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    part = db.relationship(
+        "MachinePart",
+        backref=db.backref(
+            "replacement_history",
+            cascade="all,delete-orphan",
+            order_by="MachinePartReplacement.replaced_on.desc()",
+        ),
+    )
 
-    _ensure_schema()
 
-    member = TeamMember.query.get_or_404(member_id)
-    payload = request.get_json() or {}
+class MachineIdleEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("machine_asset.id"), nullable=False, index=True)
+    started_at = db.Column(db.DateTime, nullable=False)
+    ended_at = db.Column(db.DateTime)
+    reason = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    asset = db.relationship("MachineAsset", backref=db.backref("idle_events", cascade="all,delete-orphan"))
 
-    if "name" in payload:
-        try:
-            name = _extract_string(payload.get("name"), label="Name", required=True, max_length=200)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
-        member.name = name
+    @property
+    def duration_minutes(self):
+        if not self.started_at:
+            return None
+        end_time = self.ended_at or datetime.utcnow()
+        delta = end_time - self.started_at
+        return int(delta.total_seconds() // 60)
 
-    if "nickname" in payload:
-        try:
-            member.nickname = _extract_string(payload.get("nickname"), label="Nickname", max_length=120)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
 
-    if "epf" in payload:
-        try:
-            member.epf = _extract_string(payload.get("epf"), label="EPF number", max_length=120)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+class ServiceSupplier(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    contact_person = db.Column(db.String(120))
+    phone = db.Column(db.String(60))
+    email = db.Column(db.String(120))
+    services_offered = db.Column(db.String(255))
+    preferred_assets = db.Column(db.String(255))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    if "position" in payload:
-        try:
-            member.position = _extract_string(payload.get("position"), label="Position", max_length=120)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
 
-    if "image" in payload:
-        try:
-            member.image_url = _extract_string(payload.get("image"), label="Profile image URL", max_length=500)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+class TeamMemberStatus(str, Enum):
+    ACTIVE = "Active"
+    ON_LEAVE = "On Leave"
+    INACTIVE = "Inactive"
 
-    if "personalDetail" in payload:
-        try:
-            member.personal_detail = _extract_string(payload.get("personalDetail"), label="Personal detail")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
 
-    if "assignments" in payload:
-        try:
-            member.assignments = _extract_string(payload.get("assignments"), label="Assignments")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+class TeamMember(db.Model):
+    __tablename__ = "team_member"
 
-    if "trainingRecords" in payload:
-        try:
-            member.training_records = _extract_string(payload.get("trainingRecords"), label="Training records")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+    id = db.Column(db.Integer, primary_key=True)
+    reg_number = db.Column(db.String(40), unique=True, nullable=False)
+    name = db.Column(db.String(200), nullable=False)
+    nickname = db.Column(db.String(120))
+    epf = db.Column(db.String(120))
+    position = db.Column(db.String(120))
+    join_date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.Enum(TeamMemberStatus), nullable=False, default=TeamMemberStatus.ACTIVE)
+    image_url = db.Column(db.String(500))
+    personal_detail = db.Column(db.Text)
+    assignments = db.Column(db.Text)
+    training_records = db.Column(db.Text)
+    employment_log = db.Column(db.Text)
+    files = db.Column(db.Text)
+    assets = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    if "employmentLog" in payload:
-        try:
-            member.employment_log = _extract_string(payload.get("employmentLog"), label="Employment log")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+    def update_from_payload(self, data: dict[str, str]):
+        """Update mutable fields based on a payload."""
 
-    if "files" in payload:
-        try:
-            member.files = _extract_string(payload.get("files"), label="Files")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+        name = (data.get("name") or "").strip()
+        if name:
+            self.name = name
 
-    if "assets" in payload:
-        try:
-            member.assets = _extract_string(payload.get("assets"), label="Controlled assets")
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
+        nickname = (data.get("nickname") or "").strip()
+        self.nickname = nickname or None
 
-    if "joinDate" in payload:
-        try:
-            join_date = _parse_join_date(payload.get("joinDate"), required=True)
-        except ValueError as exc:
-            return jsonify({"msg": str(exc)}), 400
-        member.join_date = join_date
+        epf = (data.get("epf") or "").strip()
+        self.epf = epf or None
 
-    if "status" in payload:
-        s = _normalize_status(payload.get("status"))
-        if s not in {"Active", "Inactive", "On Leave"}:
-            return jsonify({"msg": "Status must be one of: Active, On Leave, Inactive."}), 400
-        member.status = s  # store DB label string
+        position = (data.get("position") or "").strip()
+        self.position = position or None
 
-    try:
-        db.session.commit()
-    except DataError as exc:
-        db.session.rollback()
-        message = _data_error_message(
-            exc,
-            fallback="Unable to update member. One or more fields exceed the allowed length.",
+        image = (data.get("image") or "").strip()
+        self.image_url = image or None
+
+        personal_detail = (data.get("personalDetail") or "").strip()
+        self.personal_detail = personal_detail or None
+
+        assignments = (data.get("assignments") or "").strip()
+        self.assignments = assignments or None
+
+        training_records = (data.get("trainingRecords") or "").strip()
+        self.training_records = training_records or None
+
+        employment_log = (data.get("employmentLog") or "").strip()
+        self.employment_log = employment_log or None
+
+        files = (data.get("files") or "").strip()
+        self.files = files or None
+
+        assets = (data.get("assets") or "").strip()
+        self.assets = assets or None
+
+
+class DailyProductionEntry(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint("date", "asset_id", "hour_no", name="uq_daily_production_entry_day_asset_hour"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    asset_id = db.Column(db.Integer, db.ForeignKey("machine_asset.id"), nullable=False, index=True)
+    hour_no = db.Column(db.Integer, nullable=False)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    asset = db.relationship(
+        "MachineAsset",
+        backref=db.backref(
+            "daily_production_entries",
+            cascade="all,delete-orphan",
+            order_by="DailyProductionEntry.hour_no",
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<DailyProductionEntry date={self.date} asset_id={self.asset_id} "
+            f"hour={self.hour_no} qty={self.quantity_tons}>"
         )
-        current_app.logger.warning("Failed to update team member due to data error: %s", exc)
-        return jsonify({"msg": message}), 400
-    except (ProgrammingError, OperationalError):
-        db.session.rollback()
-        current_app.logger.exception("Failed to update team member due to schema issues.")
-        _ensure_schema()
-        db.session.add(member)
-        db.session.commit()
-    return jsonify(member_schema.dump(member))
+
+
+class CustomerCategory(str, Enum):
+    plantation = "plantation"
+    industrial = "industrial"
+
+
+class CustomerCreditTerm(str, Enum):
+    cash = "cash"
+    days14 = "14_days"
+    days30 = "30_days"
+    days45 = "45_days"
+    days60 = "60_days"
+
+
+class CustomerTransportMode(str, Enum):
+    samprox_lorry = "samprox_lorry"
+    customer_lorry = "customer_lorry"
+
+
+class CustomerType(str, Enum):
+    regular = "regular"
+    seasonal = "seasonal"
+
+
+def _enum_values(enum_cls):
+    return [member.value for member in enum_cls]
+
+
+class Customer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
+    category = db.Column(db.Enum(CustomerCategory), nullable=False)
+    credit_term = db.Column(
+        db.Enum(
+            CustomerCreditTerm,
+            values_callable=_enum_values,
+            name="customer_credit_term",
+        ),
+        nullable=False,
+    )
+    transport_mode = db.Column(db.Enum(CustomerTransportMode), nullable=False)
+    customer_type = db.Column(db.Enum(CustomerType), nullable=False)
+    sales_coordinator_name = db.Column(db.String(120), nullable=False)
+    sales_coordinator_phone = db.Column(db.String(50), nullable=False)
+    store_keeper_name = db.Column(db.String(120), nullable=False)
+    store_keeper_phone = db.Column(db.String(50), nullable=False)
+    payment_coordinator_name = db.Column(db.String(120), nullable=False)
+    payment_coordinator_phone = db.Column(db.String(50), nullable=False)
+    special_note = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def code(self):
+        if self.id is None:
+            return None
+        return f"{self.id:05d}"
+
+
+class SalesForecastEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0.0)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0.0)
+    note = db.Column(db.String(255))
+    customer = db.relationship("Customer", backref=db.backref("sales_forecasts", cascade="all,delete-orphan"))
+
+    @classmethod
+    def for_month(cls, customer_id: int, target_date: date):
+        first_day = target_date.replace(day=1)
+        if first_day.month == 12:
+            next_month = date(first_day.year + 1, 1, 1)
+        else:
+            next_month = date(first_day.year, first_day.month + 1, 1)
+        return (
+            cls.query.filter_by(customer_id=customer_id)
+            .filter(cls.date >= first_day, cls.date < next_month)
+            .order_by(cls.date.asc())
+        )
+
+
+class SalesActualEntry(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    amount = db.Column(db.Float, nullable=False)
+    unit_price = db.Column(db.Float, nullable=False, default=0.0)
+    quantity_tons = db.Column(db.Float, nullable=False, default=0.0)
+    reference = db.Column(db.String(120))
+    customer = db.relationship("Customer", backref=db.backref("sales_actuals", cascade="all,delete-orphan"))

@@ -172,6 +172,14 @@
                                 />
                             </div>
                             <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-status">Status</label>
+                                <select class="edit-form__input" id="team-status" name="status">
+                                    <option value="Active" selected>Active</option>
+                                    <option value="On Leave">On Leave</option>
+                                    <option value="Inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <div class="edit-form__field">
                                 <label class="edit-form__label" for="team-image">Profile image URL</label>
                                 <input
                                     class="edit-form__input"
@@ -286,7 +294,7 @@
         };
 
         // =====================
-        // Helpers: normalize date for API
+        // Helpers: normalize date & status for API
         // =====================
         function toYyyyMmDd(input) {
             if (!input) return null;
@@ -303,6 +311,18 @@
                 return `${y}-${String(m).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
             }
             return null;
+        }
+
+        function normalizeStatus(value) {
+            if (!value) return "Active";
+            const map = {
+                "active": "Active",
+                "inactive": "Inactive",
+                "on leave": "On Leave",
+                "on_leave": "On Leave",
+                "on-leave": "On Leave",
+            };
+            return map[String(value).trim().toLowerCase()] ?? "Active";
         }
 
         const tableBody = document.getElementById("team-table-body");
@@ -398,11 +418,13 @@
                 const regNo = sanitizeText(member?.regNumber);
                 const name = sanitizeText(member?.name);
                 const position = sanitizeText(member?.position);
+                const status = sanitizeText(member?.status);
                 const joinDate = formatJoinDate(member?.joinDate);
 
                 row.appendChild(createCell("Reg No", regNo));
                 row.appendChild(createCell("Name", name));
                 row.appendChild(createCell("Position", position));
+                row.appendChild(createCell("Status", status));
                 row.appendChild(createCell("Join date", joinDate));
                 tableBody.appendChild(row);
             });
@@ -507,18 +529,21 @@
                     payload[field] = value;
                 }
 
-                // Normalize joinDate
-                const joinDateRaw = formData.get("joinDate");
-                const normalizedDate = toYyyyMmDd(joinDateRaw);
+                // Normalize joinDate and status
+                  const joinDateRaw = formData.get("joinDate");
+                  const normalizedDate = toYyyyMmDd(joinDateRaw);
 
-                if (joinDateRaw && !normalizedDate) {
-                    showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
-                    return;
-                }
+                    if (joinDateRaw && !normalizedDate) {
+              showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
+                  return;
+                    }
 
                 if (normalizedDate) {
-                    payload.joinDate = normalizedDate;
-                }
+              payload.joinDate = normalizedDate; // ✅ correct for your backend schema
+                    }
+
+                const statusRaw = formData.get("status");
+                if (statusRaw) payload.status = normalizeStatus(statusRaw);
 
                 const optionalFields = [
                     "nickname",

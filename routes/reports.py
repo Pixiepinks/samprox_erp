@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -278,3 +278,165 @@ def sales_summary():
     }
 
     return jsonify(payload)
+
+
+@bp.get("/sales/monthly-summary")
+@jwt_required()
+def monthly_sales_summary():
+    period_param = request.args.get("period")
+    if period_param:
+        try:
+            anchor = datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+    else:
+        anchor = date.today().replace(day=1)
+
+    days_in_month = monthrange(anchor.year, anchor.month)[1]
+    month_start = date(anchor.year, anchor.month, 1)
+    month_end = date(anchor.year, anchor.month, days_in_month)
+
+    totals_query = (
+        db.session.query(
+            SalesActualEntry.date,
+            SalesActualEntry.customer_id,
+            func.coalesce(func.sum(SalesActualEntry.amount), 0.0),
+        )
+        .filter(
+            SalesActualEntry.date >= month_start,
+            SalesActualEntry.date <= month_end,
+        )
+        .group_by(SalesActualEntry.date, SalesActualEntry.customer_id)
+        .order_by(SalesActualEntry.date.asc())
+    )
+
+    totals_by_date = {}
+    customer_totals = {}
+
+    for entry_date, customer_id, total_amount in totals_query.all():
+        if not isinstance(entry_date, date):
+            continue
+
+        amount_value = float(total_amount or 0.0)
+        day_totals = totals_by_date.setdefault(entry_date, {})
+        day_totals[customer_id] = day_totals.get(customer_id, 0.0) + amount_value
+        customer_totals[customer_id] = customer_totals.get(customer_id, 0.0) + amount_value
+
+    customer_ids = [customer_id for customer_id in customer_totals.keys() if customer_id is not None]
+    customer_names = {}
+    if customer_ids:
+        for customer_id, name in (
+            db.session.query(Customer.id, Customer.name)
+            .filter(Customer.id.in_(customer_ids))
+            .all()
+        ):
+            customer_names[customer_id] = name
+
+    customer_names[None] = "Unassigned sales"
+
+    sorted_totals = sorted(
+        customer_totals.items(), key=lambda item: (item[1] or 0.0), reverse=True
+    )
+
+    max_customers = 5
+    customer_metadata = []
+    selected_ids = set()
+
+    for customer_id, total in sorted_totals[:max_customers]:
+        field_name = "customer_unassigned" if customer_id is None else f"customer_{customer_id}"
+        selected_ids.add(customer_id)
+        customer_metadata.append(
+            {
+                "id": customer_id,
+                "name": customer_names.get(customer_id)
+                or ("Customer" if customer_id is None else f"Customer {customer_id}"),
+                "field": field_name,
+                "total_sales": round(float(total or 0.0), 2),
+                "is_other": False,
+            }
+        )
+
+    include_other_bucket = len(sorted_totals) > len(customer_metadata)
+    other_total_value = 0.0
+    if include_other_bucket:
+        for customer_id, total in sorted_totals:
+            if customer_id not in selected_ids:
+                other_total_value += float(total or 0.0)
+
+        customer_metadata.append(
+            {
+                "id": "other",
+                "name": "Other customers",
+                "field": "customer_other",
+                "total_sales": round(other_total_value, 2),
+                "is_other": True,
+            }
+        )
+
+    daily_totals = []
+    total_sales_value = 0.0
+
+    non_other_ids = {item["id"] for item in customer_metadata if not item.get("is_other")}
+
+    for day in range(1, days_in_month + 1):
+        current_date = date(anchor.year, anchor.month, day)
+        day_totals = totals_by_date.get(current_date, {})
+        payload = {"day": day, "date": current_date.isoformat()}
+
+        day_total_value = 0.0
+        for metadata in customer_metadata:
+            if metadata.get("is_other"):
+                value = sum(
+                    float(amount or 0.0)
+                    for customer_id, amount in day_totals.items()
+                    if customer_id not in non_other_ids
+                )
+            else:
+                value = float(day_totals.get(metadata["id"], 0.0))
+
+            value = round(value, 2)
+            payload[metadata["field"]] = value
+            day_total_value += value
+
+        day_total_value = round(day_total_value, 2)
+        payload["total_value"] = day_total_value
+        total_sales_value += day_total_value
+        daily_totals.append(payload)
+
+    total_sales_value = round(total_sales_value, 2)
+    average_day_sales = round(total_sales_value / days_in_month if days_in_month else 0.0, 2)
+
+    peak_day_payload = max(daily_totals, key=lambda item: item["total_value"], default=None)
+    if peak_day_payload:
+        peak = {
+            "day": peak_day_payload["day"],
+            "total_value": peak_day_payload["total_value"],
+        }
+    else:
+        peak = {"day": None, "total_value": 0.0}
+
+    top_customer = None
+    if sorted_totals:
+        top_customer_id, top_customer_total = sorted_totals[0]
+        top_customer = {
+            "id": top_customer_id,
+            "name": customer_names.get(top_customer_id)
+            or ("Customer" if top_customer_id is None else f"Customer {top_customer_id}"),
+            "sales_value": round(float(top_customer_total or 0.0), 2),
+        }
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": days_in_month,
+        "customers": customer_metadata,
+        "daily_totals": daily_totals,
+        "total_sales": total_sales_value,
+        "average_day_sales": average_day_sales,
+        "peak": peak,
+        "top_customer": top_customer,
+    }
+
+    return jsonify(response)

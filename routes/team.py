@@ -53,6 +53,21 @@ def _ensure_schema():
 
     dialect = engine.dialect.name
 
+    if "status" in columns:
+        status_expression = "status::text" if dialect == "postgresql" else "status"
+        trimmed_status = f"TRIM({status_expression})"
+        lowered_trimmed_status = f"LOWER({trimmed_status})"
+        normalized_status = f"REPLACE(REPLACE({lowered_trimmed_status}, '_', ' '), '-', ' ')"
+
+        status_fixes.extend(
+            [
+                f"UPDATE team_member SET status = 'Active' WHERE {lowered_trimmed_status} = 'active' AND status <> 'Active'",
+                f"UPDATE team_member SET status = 'Inactive' WHERE {lowered_trimmed_status} = 'inactive' AND status <> 'Inactive'",
+                f"UPDATE team_member SET status = 'On Leave' WHERE {normalized_status} = 'on leave' AND status <> 'On Leave'",
+                f"UPDATE team_member SET status = 'Active' WHERE status IS NULL OR {trimmed_status} = ''",
+            ]
+        )
+
     if "created_at" not in columns:
         statements.append("ALTER TABLE team_member ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         statements.append("UPDATE team_member SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")

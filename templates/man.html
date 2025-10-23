@@ -364,6 +364,42 @@
             return stringValue || fallback;
         };
 
+        const resolveImageUrl = (value) => {
+            if (typeof value !== "string") {
+                return "";
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return "";
+            }
+
+            if (/^https?:\/\//i.test(trimmed)) {
+                try {
+                    const parsed = new URL(trimmed);
+                    if (parsed.hostname === "github.com") {
+                        const segments = parsed.pathname.split("/").filter(Boolean);
+                        const pivotIndex = segments.findIndex((segment) =>
+                            ["blob", "raw"].includes(segment.toLowerCase())
+                        );
+                        if (pivotIndex !== -1 && pivotIndex + 1 < segments.length) {
+                            const rawSegments = [
+                                ...segments.slice(0, pivotIndex),
+                                ...segments.slice(pivotIndex + 1),
+                            ];
+                            return `https://raw.githubusercontent.com/${rawSegments.join("/")}`;
+                        }
+                    }
+
+                    return parsed.toString();
+                } catch (_error) {
+                    return trimmed;
+                }
+            }
+
+            return trimmed;
+        };
+
         const formatJoinDate = (value) => {
             if (!value) {
                 return "—";
@@ -461,8 +497,9 @@
             wrapper.className = "team-table__avatar";
 
             const displayName = getMemberDisplayName(member);
-            const imageUrl =
-                typeof member?.image === "string" ? member.image.trim() : "";
+            const imageUrl = resolveImageUrl(
+                typeof member?.image === "string" ? member.image : ""
+            );
 
             const setPlaceholder = () => {
                 wrapper.innerHTML = "";
@@ -488,6 +525,7 @@
                 img.alt = `${displayName} profile photo`;
                 img.loading = "lazy";
                 img.decoding = "async";
+                img.referrerPolicy = "no-referrer";
                 img.addEventListener("error", () => {
                     setPlaceholder();
                 });

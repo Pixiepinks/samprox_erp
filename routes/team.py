@@ -50,16 +50,17 @@ def _ensure_schema():
     if "status" in columns:
         status_type = column_types.get("status")
         if isinstance(status_type, (sqltypes.Enum, sqltypes.String)):
+            status_expression = "status::text" if dialect == "postgresql" else "status"
+
             # Normalize legacy enum casing so SQLAlchemy can read the values safely.
             status_fixes.extend(
                 [
-                    "UPDATE team_member SET status = 'Active' WHERE status = 'ACTIVE'",
-                    "UPDATE team_member SET status = 'Inactive' WHERE status = 'INACTIVE'",
-                    "UPDATE team_member SET status = 'On Leave' WHERE status IN ('ON_LEAVE', 'ON LEAVE')",
+                    f"UPDATE team_member SET status = 'Active' WHERE {status_expression} = 'ACTIVE'",
+                    f"UPDATE team_member SET status = 'Inactive' WHERE {status_expression} = 'INACTIVE'",
+                    f"UPDATE team_member SET status = 'On Leave' WHERE {status_expression} IN ('ON_LEAVE', 'ON LEAVE')",
                 ]
             )
 
-            status_expression = "status::text" if dialect == "postgresql" else "status"
             trimmed_status = f"TRIM({status_expression})"
             lowered_trimmed_status = f"LOWER({trimmed_status})"
             normalized_status = f"REPLACE(REPLACE({lowered_trimmed_status}, '_', ' '), '-', ' ')"

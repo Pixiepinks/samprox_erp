@@ -370,6 +370,63 @@
             total: 0,
         };
 
+        function getActiveMachineCodes() {
+            if (!Array.isArray(machinesCache)) {
+                return [];
+            }
+            return machinesCache
+                .map((machine) => machine?.code)
+                .filter((code) => typeof code === "string" && code.trim().length > 0);
+        }
+
+        function normalizeMachineCodeForClass(code) {
+            return (code || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        }
+
+        function ensureForecastEntry(dateIso) {
+            if (!dateIso) {
+                return null;
+            }
+            if (!forecastState.entries.has(dateIso)) {
+                forecastState.entries.set(dateIso, { machines: {}, total: 0 });
+            }
+            const entry = forecastState.entries.get(dateIso);
+            if (entry && !entry.machines) {
+                entry.machines = {};
+            }
+            return entry;
+        }
+
+        function getMachineForecastValue(dateIso, machineCode) {
+            if (!dateIso || !machineCode) {
+                return 0;
+            }
+            const entry = forecastState.entries.get(dateIso);
+            if (!entry || !entry.machines) {
+                return 0;
+            }
+            const value = Number(entry.machines[machineCode]);
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        function updateEntryTotal(entry, machineCodes) {
+            if (!entry) {
+                return;
+            }
+            const codes = Array.isArray(machineCodes) && machineCodes.length > 0
+                ? machineCodes
+                : getActiveMachineCodes();
+            let total = 0;
+            entry.machines = entry.machines || {};
+            codes.forEach((code) => {
+                const number = Number(entry.machines[code]);
+                const normalized = Number.isFinite(number) ? number : 0;
+                entry.machines[code] = normalized;
+                total += normalized;
+            });
+            entry.total = Number.isFinite(total) ? Number(total.toFixed(3)) : 0;
+        }
+
         function showMessage(element, message = "") {
             if (!element) return;
             if (message) {
@@ -542,8 +599,8 @@
 
         function recalculateForecastTotal() {
             let total = 0;
-            forecastState.entries.forEach((value) => {
-                const number = Number(value || 0);
+            forecastState.entries.forEach((entry) => {
+                const number = Number(entry?.total ?? 0);
                 if (Number.isFinite(number)) {
                     total += number;
                 }
@@ -601,9 +658,13 @@
                 }
             }
 
-            const forecastValue = iso ? forecastState.entries.get(iso) ?? 0 : null;
+            const selectedMachineCode = forecastState.machineCode;
+            const hasSelection = Boolean(iso && selectedMachineCode);
+            const forecastValue = hasSelection
+                ? getMachineForecastValue(iso, selectedMachineCode)
+                : 0;
             if (forecastQtyInput) {
-                if (forecastValue === null) {
+                if (!hasSelection) {
                     forecastQtyInput.value = "";
                 } else {
                     forecastQtyInput.value = formatQuantity(forecastValue || 0);
@@ -642,9 +703,9 @@
                 return;
             }
 
-            const machineCode = forecastState.machineCode;
-            if (!machineCode) {
-                renderForecastEmptyState("Select a machine to manage forecasts.");
+            const machineCodes = getActiveMachineCodes();
+            if (machineCodes.length === 0) {
+                renderForecastEmptyState("Add a machine to begin forecasting.");
                 return;
             }
 
@@ -675,20 +736,28 @@
                     const currentDate = new Date(year, month, dayCounter);
                     const iso = formatDateISO(currentDate);
 
+                    const entry = ensureForecastEntry(iso);
+                    updateEntryTotal(entry, machineCodes);
+
                     const button = document.createElement("button");
                     button.type = "button";
                     button.className = "forecast-calendar__day";
                     button.dataset.date = iso;
-                    button.setAttribute(
-                        "aria-label",
-                        `${currentDate.toLocaleDateString(undefined, {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                        })} forecast ${formatQuantity(
-                            forecastState.entries.get(iso) || 0,
-                        )} tons`,
-                    );
+
+                    const dateLabel = currentDate.toLocaleDateString(undefined, {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                    });
+                    const machineSummaries = machineCodes.map((code) => {
+                        const value = Number(entry?.machines?.[code] ?? 0);
+                        return `${code} ${formatQuantity(value)} tons`;
+                    });
+                    const summaryText = machineSummaries.join(", ");
+                    const ariaLabel = `${dateLabel} forecast ${
+                        summaryText ? `${summaryText}, ` : ""
+                    }total ${formatQuantity(entry?.total ?? 0)} tons`;
+                    button.setAttribute("aria-label", ariaLabel);
                     button.setAttribute("aria-pressed", "false");
 
                     const weekdayValue = currentDate.getDay();
@@ -707,14 +776,44 @@
                     dayNumber.textContent = String(dayCounter);
                     button.appendChild(dayNumber);
 
-                    const valueSpan = document.createElement("span");
-                    const rawValue = forecastState.entries.get(iso) || 0;
-                    valueSpan.className = "forecast-calendar__value";
-                    valueSpan.textContent = formatQuantity(rawValue);
-                    if (!rawValue) {
-                        valueSpan.classList.add("forecast-calendar__value--empty");
-                    }
-                    button.appendChild(valueSpan);
+                    const entriesContainer = document.createElement("div");
+                    entriesContainer.className = "forecast-calendar__entries";
+
+                    machineCodes.forEach((code) => {
+                        const entryRow = document.createElement("div");
+                        entryRow.className = "forecast-calendar__entry";
+
+                        const labelSpan = document.createElement("span");
+                        labelSpan.className = "forecast-calendar__entry-label";
+                        labelSpan.textContent = code;
+                        entryRow.appendChild(labelSpan);
+
+                        const valueSpan = document.createElement("span");
+                        const machineClass = normalizeMachineCodeForClass(code);
+                        valueSpan.className = `forecast-calendar__entry-value forecast-calendar__entry-value--machine-${machineClass}`;
+                        const rawValue = Number(entry?.machines?.[code] ?? 0);
+                        valueSpan.textContent = `${formatQuantity(rawValue)} Ton`;
+                        entryRow.appendChild(valueSpan);
+
+                        entriesContainer.appendChild(entryRow);
+                    });
+
+                    const totalRow = document.createElement("div");
+                    totalRow.className = "forecast-calendar__entry forecast-calendar__entry--total";
+
+                    const totalLabel = document.createElement("span");
+                    totalLabel.className = "forecast-calendar__entry-label forecast-calendar__entry-label--total";
+                    totalLabel.textContent = "Total";
+                    totalRow.appendChild(totalLabel);
+
+                    const totalValue = document.createElement("span");
+                    totalValue.className = "forecast-calendar__entry-value forecast-calendar__entry-value--total";
+                    totalValue.textContent = `${formatQuantity(entry?.total ?? 0)} Ton`;
+                    totalRow.appendChild(totalValue);
+
+                    entriesContainer.appendChild(totalRow);
+
+                    button.appendChild(entriesContainer);
 
                     if (holidayName) {
                         const holidayBadge = document.createElement("span");
@@ -979,7 +1078,7 @@
                 ensureForecastNavState();
                 ensureForecastFormState();
                 renderForecastEmptyState("Add a machine to begin forecasting.");
-                forecastState.entries.clear();
+                forecastState.entries = new Map();
                 forecastState.total = 0;
                 updateForecastTotalElement();
                 return;
@@ -1036,13 +1135,13 @@
             updateForecastMonthLabel();
             ensureForecastNavState();
 
-            const machineCode = forecastState.machineCode;
-            if (!machineCode) {
-                forecastState.entries.clear();
+            const machineCodes = getActiveMachineCodes();
+            if (machineCodes.length === 0) {
+                forecastState.entries = new Map();
                 forecastState.total = 0;
                 forecastState.selectedDate = null;
                 updateForecastTotalElement();
-                renderForecastCalendar();
+                renderForecastEmptyState("Add a machine to begin forecasting.");
                 ensureForecastFormState();
                 return;
             }
@@ -1053,44 +1152,49 @@
             const period = `${forecastState.anchorDate.getFullYear()}-${String(
                 forecastState.anchorDate.getMonth() + 1,
             ).padStart(2, "0")}`;
-
-            const params = new URLSearchParams();
-            params.set("period", period);
-            params.set("machine_code", machineCode);
+            const monthDays = new Date(year, forecastState.anchorDate.getMonth() + 1, 0).getDate();
 
             try {
-                const response = await fetch(`/api/production/forecast?${params.toString()}`, {
-                    headers: authHeaders,
-                });
-                if (response.status === 401) {
-                    logoutButton.click();
-                    return;
-                }
-                if (!response.ok) {
-                    throw new Error("Unable to load production forecast.");
-                }
-
-                const data = await response.json();
-                const entriesList = Array.isArray(data?.entries) ? data.entries : [];
                 const entriesMap = new Map();
-                entriesList.forEach((entry) => {
-                    if (!entry || !entry.date) {
+
+                for (const code of machineCodes) {
+                    const params = new URLSearchParams();
+                    params.set("period", period);
+                    params.set("machine_code", code);
+
+                    const response = await fetch(
+                        `/api/production/forecast?${params.toString()}`,
+                        {
+                            headers: authHeaders,
+                        },
+                    );
+                    if (response.status === 401) {
+                        logoutButton.click();
                         return;
                     }
-                    const value = Number(entry.forecast_tons ?? 0);
-                    entriesMap.set(
-                        entry.date,
-                        Number.isFinite(value) ? Number(value.toFixed(3)) : 0,
-                    );
-                });
+                    if (!response.ok) {
+                        throw new Error("Unable to load production forecast.");
+                    }
 
-                const monthDays = Number.isFinite(Number(data?.days))
-                    ? Number(data.days)
-                    : new Date(
-                          forecastState.anchorDate.getFullYear(),
-                          forecastState.anchorDate.getMonth() + 1,
-                          0,
-                      ).getDate();
+                    const data = await response.json();
+                    const entriesList = Array.isArray(data?.entries) ? data.entries : [];
+                    entriesList.forEach((entry) => {
+                        if (!entry || !entry.date) {
+                            return;
+                        }
+                        const value = Number(entry.forecast_tons ?? 0);
+                        const normalized = Number.isFinite(value)
+                            ? Number(value.toFixed(3))
+                            : 0;
+
+                        let target = entriesMap.get(entry.date);
+                        if (!target) {
+                            target = { machines: {}, total: 0 };
+                            entriesMap.set(entry.date, target);
+                        }
+                        target.machines[code] = normalized;
+                    });
+                }
 
                 for (let day = 1; day <= monthDays; day += 1) {
                     const iso = formatDateISO(
@@ -1100,9 +1204,12 @@
                             day,
                         ),
                     );
-                    if (!entriesMap.has(iso)) {
-                        entriesMap.set(iso, 0);
+                    let target = entriesMap.get(iso);
+                    if (!target) {
+                        target = { machines: {}, total: 0 };
+                        entriesMap.set(iso, target);
                     }
+                    updateEntryTotal(target, machineCodes);
                 }
 
                 forecastState.entries = entriesMap;
@@ -1110,8 +1217,9 @@
                 ensureSelectedDateInAnchorMonth();
                 renderForecastCalendar();
                 updateForecastTotalElement();
+                ensureForecastFormState();
             } catch (error) {
-                forecastState.entries.clear();
+                forecastState.entries = new Map();
                 forecastState.total = 0;
                 forecastState.selectedDate = null;
                 renderForecastEmptyState(error.message || "Unable to load production forecast.");
@@ -1254,7 +1362,12 @@
                     const savedValue = Number(payload?.forecast_tons ?? forecastValue);
                     if (Number.isFinite(savedValue)) {
                         const normalized = Number(savedValue.toFixed(3));
-                        forecastState.entries.set(dateValue, normalized);
+                        const entry = ensureForecastEntry(dateValue);
+                        if (entry) {
+                            entry.machines = entry.machines || {};
+                            entry.machines[machineCode] = normalized;
+                            updateEntryTotal(entry);
+                        }
                         recalculateForecastTotal();
                         updateForecastTotalElement();
                     }

@@ -810,7 +810,7 @@ body {
     flex-direction: column;
     gap: 0.4rem;
     align-items: flex-start;
-    min-height: 96px;
+    min-height: 140px;
     color: #0f172a;
     font-weight: 600;
     cursor: pointer;
@@ -861,6 +861,75 @@ body {
 
 .forecast-calendar__day--selected .forecast-calendar__value--empty {
     color: rgba(255, 255, 255, 0.75);
+}
+
+.forecast-calendar__entries {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 100%;
+}
+
+.forecast-calendar__entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: inherit;
+}
+
+.forecast-calendar__entry--total {
+    margin-top: 0.4rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.forecast-calendar__day--selected .forecast-calendar__entry--total {
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.forecast-calendar__entry-label {
+    font-weight: 600;
+}
+
+.forecast-calendar__entry-label--total {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.forecast-calendar__entry-value {
+    font-weight: 600;
+}
+
+.forecast-calendar__entry-value::before {
+    content: ": ";
+    font-weight: 600;
+}
+
+.forecast-calendar__entry-value--machine-mch-0001 {
+    color: #15803d;
+}
+
+.forecast-calendar__day--selected .forecast-calendar__entry-value--machine-mch-0001 {
+    color: #bbf7d0;
+}
+
+.forecast-calendar__entry-value--machine-mch-0002 {
+    color: #2563eb;
+}
+
+.forecast-calendar__day--selected .forecast-calendar__entry-value--machine-mch-0002 {
+    color: #bfdbfe;
+}
+
+.forecast-calendar__entry-value--total {
+    color: #dc2626;
+}
+
+.forecast-calendar__day--selected .forecast-calendar__entry-value--total {
+    color: #fecaca;
 }
 
 .forecast-calendar__holiday {

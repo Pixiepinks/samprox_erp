@@ -655,6 +655,325 @@ body {
     color: #475569;
 }
 
+.forecast-card__header {
+    align-items: flex-start;
+}
+
+.forecast-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+    min-width: 160px;
+}
+
+.forecast-summary__label {
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #64748b;
+}
+
+.forecast-summary__value {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1.9rem;
+    color: #0f172a;
+}
+
+.forecast-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+.forecast-control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 220px;
+}
+
+.forecast-control select {
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.forecast-month-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(37, 99, 235, 0.12);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+}
+
+.forecast-month-nav__button {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(37, 99, 235, 0.2);
+    color: #1d4ed8;
+    font-size: 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.forecast-month-nav__button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 18px rgba(37, 99, 235, 0.22);
+    background: rgba(37, 99, 235, 0.28);
+}
+
+.forecast-month-nav__button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.forecast-month-nav__label {
+    font-weight: 600;
+    color: #1e293b;
+    min-width: 150px;
+    text-align: center;
+}
+
+.forecast-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.forecast-calendar__table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0.75rem 0.85rem;
+}
+
+.forecast-calendar__head th {
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.forecast-calendar__cell {
+    padding: 0;
+}
+
+.forecast-calendar__cell--muted::before {
+    content: "";
+    display: block;
+    padding-bottom: 100%;
+}
+
+.forecast-calendar__day {
+    width: 100%;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: flex-start;
+    min-height: 96px;
+    color: #0f172a;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    position: relative;
+    text-align: left;
+}
+
+.forecast-calendar__day:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.15);
+}
+
+.forecast-calendar__day:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.55);
+    outline-offset: 2px;
+}
+
+.forecast-calendar__day--selected {
+    background: linear-gradient(135deg, #2563eb, #38bdf8);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 20px 36px rgba(37, 99, 235, 0.35);
+}
+
+.forecast-calendar__day--weekend:not(.forecast-calendar__day--selected) {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.2);
+}
+
+.forecast-calendar__day--holiday:not(.forecast-calendar__day--selected) {
+    border-color: rgba(220, 38, 38, 0.45);
+    box-shadow: 0 12px 22px rgba(220, 38, 38, 0.18);
+}
+
+.forecast-calendar__date {
+    font-size: 1rem;
+}
+
+.forecast-calendar__value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.forecast-calendar__value--empty {
+    color: #94a3b8;
+}
+
+.forecast-calendar__day--selected .forecast-calendar__value--empty {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.forecast-calendar__holiday {
+    margin-top: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.12);
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.forecast-calendar__day--selected .forecast-calendar__holiday {
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.forecast-calendar__empty {
+    text-align: center;
+    padding: 2.4rem 1rem;
+    color: #64748b;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 18px;
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+}
+
+.forecast-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 20px;
+    padding: 1.25rem;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+}
+
+.forecast-form__row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.forecast-form__label {
+    margin: 0;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.forecast-form__value {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.forecast-form input[type="number"] {
+    padding: 0.65rem 0.75rem;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.55);
+    background: rgba(248, 250, 252, 0.9);
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.forecast-form input[type="number"]:disabled,
+.forecast-control select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.forecast-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.forecast-feedback {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.forecast-feedback--success {
+    color: #047857;
+}
+
+.forecast-feedback--error {
+    color: #b91c1c;
+}
+
+.forecast-holiday {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+@media (max-width: 960px) {
+    .forecast-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .forecast-summary {
+        align-items: flex-start;
+    }
+
+    .forecast-month-nav {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 600px) {
+    .forecast-calendar__table {
+        border-spacing: 0.5rem 0.6rem;
+    }
+
+    .forecast-calendar__day {
+        min-height: 88px;
+        padding: 0.65rem;
+    }
+}
+
 .sales-summary__header {
     align-items: flex-start;
 }

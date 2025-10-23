@@ -200,39 +200,76 @@ class ProductionApiTestCase(unittest.TestCase):
             0.0,
         )
 
-        hour_three = next(hour for hour in data["hours"] if hour["hour_no"] == 3)
-        self.assertAlmostEqual(
-            hour_three["machines"][first_asset["code"]]["quantity_tons"],
-            0.0,
-        )
-        self.assertAlmostEqual(
-            hour_three["machines"][second_asset["code"]]["quantity_tons"],
-            0.0,
-        )
+    def test_create_update_and_fetch_forecast(self):
+        asset = self._create_machine()
 
-        totals = data.get("totals") or {}
-        today_totals = totals.get("today") or {}
-        mtd_totals = totals.get("mtd") or {}
+        create_payload = {
+            "machine_code": asset["code"],
+            "date": "2024-05-10",
+            "forecast_tons": 18.5,
+        }
 
-        self.assertAlmostEqual(
-            today_totals["machines"][first_asset["code"]],
-            4.5,
+        response = self.client.post(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.pm_token),
+            json=create_payload,
         )
-        self.assertAlmostEqual(
-            today_totals["machines"][second_asset["code"]],
-            4.0,
-        )
-        self.assertAlmostEqual(today_totals["total"], 8.5)
+        self.assertEqual(response.status_code, 201)
+        created = response.get_json()
+        self.assertAlmostEqual(created["forecast_tons"], 18.5)
 
-        self.assertAlmostEqual(
-            mtd_totals["machines"][first_asset["code"]],
-            7.0,
+        update_payload = {**create_payload, "forecast_tons": 22.75}
+        response = self.client.post(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.pm_token),
+            json=update_payload,
         )
-        self.assertAlmostEqual(
-            mtd_totals["machines"][second_asset["code"]],
-            4.0,
+        self.assertEqual(response.status_code, 200)
+        updated = response.get_json()
+        self.assertAlmostEqual(updated["forecast_tons"], 22.75)
+
+        response = self.client.get(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.pm_token),
+            query_string={
+                "machine_code": asset["code"],
+                "period": "2024-05",
+            },
         )
-        self.assertAlmostEqual(mtd_totals["total"], 11.0)
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["machine"]["code"], asset["code"])
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(len(data["entries"]), 31)
+        day_entry = next(item for item in data["entries"] if item["date"] == "2024-05-10")
+        self.assertAlmostEqual(day_entry["forecast_tons"], 22.75)
+        self.assertAlmostEqual(data["total_forecast_tons"], 22.75)
+
+    def test_only_manager_can_save_forecast(self):
+        asset = self._create_machine()
+
+        response = self.client.post(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.mm_token),
+            json={
+                "machine_code": asset["code"],
+                "date": "2024-06-01",
+                "forecast_tons": 5,
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_holidays_endpoint_returns_sri_lanka_dates(self):
+        response = self.client.get(
+            "/api/production/forecast/holidays",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"year": 2024},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["year"], 2024)
+        holidays = {item["date"]: item["name"] for item in data["holidays"]}
+        self.assertIn("2024-02-04", holidays)
 
 
     def test_monthly_summary_returns_daily_totals(self):

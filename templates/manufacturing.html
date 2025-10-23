@@ -205,6 +205,85 @@
                     </div>
                 </div>
             </div>
+            <div class="production-card forecast-card" id="forecast-card" aria-live="polite">
+                <header class="production-card__header forecast-card__header">
+                    <div>
+                        <h2>Monthly production forecast</h2>
+                        <p>Plan daily tons by machine while staying aware of Sri Lankan holidays.</p>
+                    </div>
+                    <div class="forecast-summary">
+                        <span class="forecast-summary__label">Month total (tons)</span>
+                        <span class="forecast-summary__value" id="forecast-total">0.00</span>
+                    </div>
+                </header>
+                <div class="forecast-controls">
+                    <div class="forecast-control">
+                        <label for="forecast-machine">Machine ID <span class="required">*</span></label>
+                        <select id="forecast-machine" name="forecast_machine" required disabled>
+                            <option value="" disabled selected>Loading machines…</option>
+                        </select>
+                    </div>
+                    <div class="forecast-month-nav" role="group" aria-label="Change month">
+                        <button type="button" class="forecast-month-nav__button" id="forecast-prev-month" aria-label="Previous month" disabled>
+                            &lsaquo;
+                        </button>
+                        <span class="forecast-month-nav__label" id="forecast-month-label"></span>
+                        <button type="button" class="forecast-month-nav__button" id="forecast-next-month" aria-label="Next month" disabled>
+                            &rsaquo;
+                        </button>
+                    </div>
+                </div>
+                <div class="forecast-layout">
+                    <div class="forecast-calendar">
+                        <table class="forecast-calendar__table">
+                            <thead class="forecast-calendar__head">
+                                <tr>
+                                    <th scope="col">Mon</th>
+                                    <th scope="col">Tue</th>
+                                    <th scope="col">Wed</th>
+                                    <th scope="col">Thu</th>
+                                    <th scope="col">Fri</th>
+                                    <th scope="col">Sat</th>
+                                    <th scope="col">Sun</th>
+                                </tr>
+                            </thead>
+                            <tbody class="forecast-calendar__body" id="forecast-calendar-body">
+                                <tr>
+                                    <td colspan="7" class="forecast-calendar__empty">Select a machine to manage forecasts.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <form class="forecast-form" id="forecast-form" novalidate>
+                        <input type="hidden" id="forecast-date" name="date" />
+                        <div class="forecast-form__row">
+                            <p class="forecast-form__label">Selected day</p>
+                            <p class="forecast-form__value" id="forecast-date-display">—</p>
+                        </div>
+                        <div class="forecast-form__row">
+                            <label for="forecast-qty">Forecast qty (tons) <span class="required">*</span></label>
+                            <input
+                                id="forecast-qty"
+                                name="forecast_tons"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                required
+                                disabled
+                            />
+                        </div>
+                        <p class="forecast-holiday" id="forecast-holiday-note" hidden></p>
+                        <div class="forecast-actions">
+                            <button type="submit" class="button" id="forecast-submit" disabled>Save forecast</button>
+                        </div>
+                        <p class="forecast-feedback forecast-feedback--success" id="forecast-success" hidden>
+                            Forecast updated successfully.
+                        </p>
+                        <p class="forecast-feedback forecast-feedback--error" id="forecast-error" hidden></p>
+                    </form>
+                </div>
+            </div>
         </section>
     </div>
     <script>
@@ -254,6 +333,21 @@
         const productionTotal = document.getElementById("production-total");
         const productionSubmit = document.getElementById("production-submit");
 
+        const forecastMachineSelect = document.getElementById("forecast-machine");
+        const forecastMonthLabel = document.getElementById("forecast-month-label");
+        const forecastPrevMonth = document.getElementById("forecast-prev-month");
+        const forecastNextMonth = document.getElementById("forecast-next-month");
+        const forecastCalendarBody = document.getElementById("forecast-calendar-body");
+        const forecastForm = document.getElementById("forecast-form");
+        const forecastDateInput = document.getElementById("forecast-date");
+        const forecastDateDisplay = document.getElementById("forecast-date-display");
+        const forecastQtyInput = document.getElementById("forecast-qty");
+        const forecastSubmit = document.getElementById("forecast-submit");
+        const forecastSuccess = document.getElementById("forecast-success");
+        const forecastError = document.getElementById("forecast-error");
+        const forecastHolidayNote = document.getElementById("forecast-holiday-note");
+        const forecastTotal = document.getElementById("forecast-total");
+
         const today = new Date();
         const yyyy = today.getFullYear();
         const mm = String(today.getMonth() + 1).padStart(2, "0");
@@ -262,6 +356,18 @@
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
+        };
+
+        let machinesCache = [];
+
+        const forecastState = {
+            anchorDate: new Date(today.getFullYear(), today.getMonth(), 1),
+            selectedDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+            preferredDay: today.getDate(),
+            machineCode: "",
+            entries: new Map(),
+            holidaysByYear: new Map(),
+            total: 0,
         };
 
         function showMessage(element, message = "") {
@@ -285,6 +391,312 @@
             machineSelect.disabled = disabled;
             hourSelect.disabled = disabled;
             quantityInput.disabled = disabled;
+        }
+
+        function clearForecastFeedback() {
+            showMessage(forecastSuccess);
+            showMessage(forecastError);
+        }
+
+        function updateForecastMonthLabel() {
+            if (!forecastMonthLabel) {
+                return;
+            }
+            const localeLabel = forecastState.anchorDate.toLocaleDateString(undefined, {
+                month: "long",
+                year: "numeric",
+            });
+            forecastMonthLabel.textContent = localeLabel;
+        }
+
+        function ensureForecastNavState() {
+            const disabled = !forecastState.machineCode;
+            if (forecastPrevMonth) {
+                forecastPrevMonth.disabled = disabled;
+            }
+            if (forecastNextMonth) {
+                forecastNextMonth.disabled = disabled;
+            }
+        }
+
+        function ensureForecastFormState() {
+            const hasMachine = Boolean(forecastState.machineCode);
+            const hasDate = Boolean(forecastState.selectedDate);
+            if (forecastQtyInput) {
+                forecastQtyInput.disabled = !hasMachine || !hasDate;
+            }
+            if (forecastSubmit) {
+                forecastSubmit.disabled = !hasMachine || !hasDate;
+            }
+        }
+
+        function setForecastFormDisabled(disabled) {
+            if (forecastQtyInput) {
+                forecastQtyInput.disabled = disabled;
+            }
+            if (forecastSubmit) {
+                forecastSubmit.disabled = disabled;
+            }
+        }
+
+        function renderForecastEmptyState(message) {
+            if (!forecastCalendarBody) {
+                return;
+            }
+            forecastCalendarBody.innerHTML = "";
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 7;
+            td.className = "forecast-calendar__empty";
+            td.textContent = message;
+            tr.appendChild(td);
+            forecastCalendarBody.appendChild(tr);
+        }
+
+        function getHolidayForDate(dateIso) {
+            if (!dateIso) {
+                return null;
+            }
+            const year = Number(dateIso.slice(0, 4));
+            if (!Number.isFinite(year)) {
+                return null;
+            }
+            const yearMap = forecastState.holidaysByYear.get(year);
+            return yearMap ? yearMap.get(dateIso) : null;
+        }
+
+        async function ensureHolidaysForYear(year) {
+            if (!Number.isFinite(year)) {
+                return;
+            }
+            if (forecastState.holidaysByYear.has(year)) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/production/forecast/holidays?year=${year}`, {
+                    headers: authHeaders,
+                });
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Unable to load Sri Lanka holidays for this year.");
+                }
+                const data = await response.json();
+                const list = Array.isArray(data?.holidays) ? data.holidays : [];
+                const map = new Map();
+                list.forEach((item) => {
+                    if (item?.date && item?.name) {
+                        map.set(item.date, item.name);
+                    }
+                });
+                forecastState.holidaysByYear.set(year, map);
+            } catch (error) {
+                forecastState.holidaysByYear.set(year, new Map());
+                showMessage(
+                    forecastError,
+                    error?.message || "Unable to load Sri Lanka holidays for this year.",
+                );
+            }
+        }
+
+        function recalculateForecastTotal() {
+            let total = 0;
+            forecastState.entries.forEach((value) => {
+                const number = Number(value || 0);
+                if (Number.isFinite(number)) {
+                    total += number;
+                }
+            });
+            forecastState.total = Number.isFinite(total) ? Number(total.toFixed(3)) : 0;
+        }
+
+        function updateForecastTotalElement() {
+            if (forecastTotal) {
+                updateTotalElement(forecastTotal, forecastState.total);
+            }
+        }
+
+        function ensureSelectedDateInAnchorMonth() {
+            const year = forecastState.anchorDate.getFullYear();
+            const month = forecastState.anchorDate.getMonth();
+            const monthDays = new Date(year, month + 1, 0).getDate();
+            let candidate = forecastState.selectedDate;
+            if (!(candidate instanceof Date) || Number.isNaN(candidate.valueOf())) {
+                candidate = new Date(year, month, Math.min(forecastState.preferredDay, monthDays));
+            }
+            if (candidate.getFullYear() !== year || candidate.getMonth() !== month) {
+                const day = Math.min(forecastState.preferredDay, monthDays);
+                candidate = new Date(year, month, day);
+            }
+            forecastState.selectedDate = candidate;
+            forecastState.preferredDay = candidate.getDate();
+        }
+
+        function updateForecastSelectionUI() {
+            const selectedDate = forecastState.selectedDate;
+            const iso = selectedDate && selectedDate instanceof Date && !Number.isNaN(selectedDate.valueOf())
+                ? selectedDate.toISOString().slice(0, 10)
+                : "";
+
+            if (forecastDateInput) {
+                forecastDateInput.value = iso;
+            }
+            if (forecastDateDisplay) {
+                forecastDateDisplay.textContent = iso
+                    ? new Date(iso).toLocaleDateString(undefined, {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                      })
+                    : "—";
+            }
+
+            const forecastValue = iso ? forecastState.entries.get(iso) ?? 0 : null;
+            if (forecastQtyInput) {
+                if (forecastValue === null) {
+                    forecastQtyInput.value = "";
+                } else {
+                    forecastQtyInput.value = formatQuantity(forecastValue || 0);
+                }
+            }
+
+            if (forecastHolidayNote) {
+                const holidayName = getHolidayForDate(iso);
+                if (holidayName) {
+                    forecastHolidayNote.hidden = false;
+                    forecastHolidayNote.textContent = `${holidayName} · Sri Lanka holiday`;
+                } else {
+                    forecastHolidayNote.hidden = true;
+                    forecastHolidayNote.textContent = "";
+                }
+            }
+
+            if (forecastCalendarBody) {
+                const buttons = forecastCalendarBody.querySelectorAll(".forecast-calendar__day");
+                buttons.forEach((button) => {
+                    if (button.dataset.date === iso) {
+                        button.classList.add("forecast-calendar__day--selected");
+                        button.setAttribute("aria-pressed", "true");
+                    } else {
+                        button.classList.remove("forecast-calendar__day--selected");
+                        button.setAttribute("aria-pressed", "false");
+                    }
+                });
+            }
+
+            ensureForecastFormState();
+        }
+
+        function renderForecastCalendar() {
+            if (!forecastCalendarBody) {
+                return;
+            }
+
+            const machineCode = forecastState.machineCode;
+            if (!machineCode) {
+                renderForecastEmptyState("Select a machine to manage forecasts.");
+                return;
+            }
+
+            forecastCalendarBody.innerHTML = "";
+
+            const year = forecastState.anchorDate.getFullYear();
+            const month = forecastState.anchorDate.getMonth();
+            const monthDays = new Date(year, month + 1, 0).getDate();
+            const firstDay = new Date(year, month, 1);
+            const firstWeekday = (firstDay.getDay() + 6) % 7; // Monday as first column
+
+            let dayCounter = 1 - firstWeekday;
+
+            for (let week = 0; week < 6; week += 1) {
+                const tr = document.createElement("tr");
+                tr.className = "forecast-calendar__row";
+
+                for (let weekday = 0; weekday < 7; weekday += 1, dayCounter += 1) {
+                    const td = document.createElement("td");
+                    td.className = "forecast-calendar__cell";
+
+                    if (dayCounter < 1 || dayCounter > monthDays) {
+                        td.classList.add("forecast-calendar__cell--muted");
+                        tr.appendChild(td);
+                        continue;
+                    }
+
+                    const currentDate = new Date(year, month, dayCounter);
+                    const iso = currentDate.toISOString().slice(0, 10);
+
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "forecast-calendar__day";
+                    button.dataset.date = iso;
+                    button.setAttribute(
+                        "aria-label",
+                        `${currentDate.toLocaleDateString(undefined, {
+                            weekday: "long",
+                            month: "long",
+                            day: "numeric",
+                        })} forecast ${formatQuantity(
+                            forecastState.entries.get(iso) || 0,
+                        )} tons`,
+                    );
+                    button.setAttribute("aria-pressed", "false");
+
+                    const weekdayValue = currentDate.getDay();
+                    if (weekdayValue === 0 || weekdayValue === 6) {
+                        button.classList.add("forecast-calendar__day--weekend");
+                    }
+
+                    const holidayName = getHolidayForDate(iso);
+                    if (holidayName) {
+                        button.classList.add("forecast-calendar__day--holiday");
+                        button.title = `${holidayName} (Sri Lanka holiday)`;
+                    }
+
+                    const dayNumber = document.createElement("span");
+                    dayNumber.className = "forecast-calendar__date";
+                    dayNumber.textContent = String(dayCounter);
+                    button.appendChild(dayNumber);
+
+                    const valueSpan = document.createElement("span");
+                    const rawValue = forecastState.entries.get(iso) || 0;
+                    valueSpan.className = "forecast-calendar__value";
+                    valueSpan.textContent = formatQuantity(rawValue);
+                    if (!rawValue) {
+                        valueSpan.classList.add("forecast-calendar__value--empty");
+                    }
+                    button.appendChild(valueSpan);
+
+                    if (holidayName) {
+                        const holidayBadge = document.createElement("span");
+                        holidayBadge.className = "forecast-calendar__holiday";
+                        holidayBadge.textContent = holidayName;
+                        button.appendChild(holidayBadge);
+                    }
+
+                    td.appendChild(button);
+                    tr.appendChild(td);
+                }
+
+                forecastCalendarBody.appendChild(tr);
+            }
+
+            updateForecastSelectionUI();
+        }
+
+        function setSelectedForecastDate(dateIso) {
+            if (!dateIso) {
+                return;
+            }
+            const candidate = new Date(dateIso);
+            if (Number.isNaN(candidate.valueOf())) {
+                return;
+            }
+            forecastState.selectedDate = candidate;
+            forecastState.preferredDay = candidate.getDate();
+            updateForecastSelectionUI();
         }
 
         const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
@@ -479,6 +891,76 @@
             }
         }
 
+        function populateProductionMachineSelect(machines) {
+            machineSelect.innerHTML = "";
+            if (!Array.isArray(machines) || machines.length === 0) {
+                const option = document.createElement("option");
+                option.textContent = "No machines available";
+                option.value = "";
+                machineSelect.appendChild(option);
+                machineSelect.disabled = true;
+                return;
+            }
+
+            machines.forEach((machine, index) => {
+                const option = document.createElement("option");
+                option.value = machine.code;
+                option.textContent = `${machine.code} — ${machine.name}`;
+                if (index === 0) {
+                    option.selected = true;
+                }
+                machineSelect.appendChild(option);
+            });
+            machineSelect.disabled = false;
+        }
+
+        function populateForecastMachineSelect(machines) {
+            if (!forecastMachineSelect) {
+                return;
+            }
+
+            const previousSelection = forecastMachineSelect.value;
+            forecastMachineSelect.innerHTML = "";
+
+            if (!Array.isArray(machines) || machines.length === 0) {
+                const option = document.createElement("option");
+                option.textContent = "No machines available";
+                option.value = "";
+                forecastMachineSelect.appendChild(option);
+                forecastMachineSelect.disabled = true;
+                forecastState.machineCode = "";
+                ensureForecastNavState();
+                ensureForecastFormState();
+                renderForecastEmptyState("Add a machine to begin forecasting.");
+                forecastState.entries.clear();
+                forecastState.total = 0;
+                updateForecastTotalElement();
+                return;
+            }
+
+            let selection = previousSelection;
+            const options = machines.map((machine) => {
+                const option = document.createElement("option");
+                option.value = machine.code;
+                option.textContent = `${machine.code} — ${machine.name}`;
+                return option;
+            });
+
+            options.forEach((option) => {
+                forecastMachineSelect.appendChild(option);
+            });
+
+            if (!selection || !machines.some((machine) => machine.code === selection)) {
+                selection = machines[0]?.code || "";
+            }
+
+            forecastMachineSelect.value = selection || "";
+            forecastMachineSelect.disabled = false;
+            forecastState.machineCode = selection || "";
+            ensureForecastNavState();
+            ensureForecastFormState();
+        }
+
         async function fetchMachines() {
             try {
                 const response = await fetch("/api/machines/assets", { headers: authHeaders });
@@ -491,31 +973,123 @@
                 }
 
                 const machines = await response.json();
-                machineSelect.innerHTML = "";
-                if (!Array.isArray(machines) || machines.length === 0) {
-                    const option = document.createElement("option");
-                    option.textContent = "No machines available";
-                    option.value = "";
-                    machineSelect.appendChild(option);
-                    machineSelect.disabled = true;
-                } else {
-                    machines.forEach((machine, index) => {
-                        const option = document.createElement("option");
-                        option.value = machine.code;
-                        option.textContent = `${machine.code} — ${machine.name}`;
-                        if (index === 0) {
-                            option.selected = true;
-                        }
-                        machineSelect.appendChild(option);
-                    });
-                    machineSelect.disabled = false;
-                }
-
+                machinesCache = Array.isArray(machines) ? machines : [];
+                populateProductionMachineSelect(machinesCache);
+                populateForecastMachineSelect(machinesCache);
                 await loadProductionSummary();
+                await loadForecastData();
             } catch (error) {
                 renderTotals(null);
                 showMessage(productionError, error.message || "Unable to load machines");
+                populateForecastMachineSelect([]);
             }
+        }
+
+        async function loadForecastData() {
+            updateForecastMonthLabel();
+            ensureForecastNavState();
+
+            const machineCode = forecastState.machineCode;
+            if (!machineCode) {
+                forecastState.entries.clear();
+                forecastState.total = 0;
+                forecastState.selectedDate = null;
+                updateForecastTotalElement();
+                renderForecastCalendar();
+                ensureForecastFormState();
+                return;
+            }
+
+            const year = forecastState.anchorDate.getFullYear();
+            await ensureHolidaysForYear(year);
+
+            const period = `${forecastState.anchorDate.getFullYear()}-${String(
+                forecastState.anchorDate.getMonth() + 1,
+            ).padStart(2, "0")}`;
+
+            const params = new URLSearchParams();
+            params.set("period", period);
+            params.set("machine_code", machineCode);
+
+            try {
+                const response = await fetch(`/api/production/forecast?${params.toString()}`, {
+                    headers: authHeaders,
+                });
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Unable to load production forecast.");
+                }
+
+                const data = await response.json();
+                const entriesList = Array.isArray(data?.entries) ? data.entries : [];
+                const entriesMap = new Map();
+                entriesList.forEach((entry) => {
+                    if (!entry || !entry.date) {
+                        return;
+                    }
+                    const value = Number(entry.forecast_tons ?? 0);
+                    entriesMap.set(
+                        entry.date,
+                        Number.isFinite(value) ? Number(value.toFixed(3)) : 0,
+                    );
+                });
+
+                const monthDays = Number.isFinite(Number(data?.days))
+                    ? Number(data.days)
+                    : new Date(
+                          forecastState.anchorDate.getFullYear(),
+                          forecastState.anchorDate.getMonth() + 1,
+                          0,
+                      ).getDate();
+
+                for (let day = 1; day <= monthDays; day += 1) {
+                    const iso = new Date(
+                        forecastState.anchorDate.getFullYear(),
+                        forecastState.anchorDate.getMonth(),
+                        day,
+                    )
+                        .toISOString()
+                        .slice(0, 10);
+                    if (!entriesMap.has(iso)) {
+                        entriesMap.set(iso, 0);
+                    }
+                }
+
+                forecastState.entries = entriesMap;
+                recalculateForecastTotal();
+                ensureSelectedDateInAnchorMonth();
+                renderForecastCalendar();
+                updateForecastTotalElement();
+            } catch (error) {
+                forecastState.entries.clear();
+                forecastState.total = 0;
+                forecastState.selectedDate = null;
+                renderForecastEmptyState(error.message || "Unable to load production forecast.");
+                updateForecastTotalElement();
+                ensureForecastFormState();
+                showMessage(
+                    forecastError,
+                    error.message || "Unable to load production forecast.",
+                );
+            }
+        }
+
+        function changeForecastMonth(step) {
+            if (!Number.isFinite(step) || step === 0) {
+                return;
+            }
+            const anchor = forecastState.anchorDate;
+            forecastState.anchorDate = new Date(
+                anchor.getFullYear(),
+                anchor.getMonth() + step,
+                1,
+            );
+            ensureSelectedDateInAnchorMonth();
+            clearForecastFeedback();
+            loadForecastData();
         }
 
         productionForm.addEventListener("submit", async (event) => {
@@ -571,6 +1145,84 @@
             }
         });
 
+        if (forecastForm) {
+            forecastForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                clearForecastFeedback();
+
+                const machineCode = forecastState.machineCode;
+                const dateValue = forecastDateInput?.value;
+                const quantityValue = forecastQtyInput?.value ?? "";
+
+                if (!machineCode || !dateValue) {
+                    showMessage(
+                        forecastError,
+                        "Select a machine and day before saving a forecast.",
+                    );
+                    return;
+                }
+
+                let forecastValue = quantityValue ? Number(quantityValue) : 0;
+                if (!Number.isFinite(forecastValue)) {
+                    showMessage(forecastError, "Enter a valid forecast quantity.");
+                    return;
+                }
+
+                if (forecastValue < 0) {
+                    showMessage(
+                        forecastError,
+                        "Forecast quantity cannot be negative.",
+                    );
+                    return;
+                }
+
+                setForecastFormDisabled(true);
+
+                try {
+                    const response = await fetch("/api/production/forecast", {
+                        method: "POST",
+                        headers: {
+                            ...authHeaders,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            machine_code: machineCode,
+                            date: dateValue,
+                            forecast_tons: forecastValue,
+                        }),
+                    });
+
+                    if (response.status === 401) {
+                        logoutButton.click();
+                        return;
+                    }
+
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const message = payload?.msg || "Unable to save forecast.";
+                        showMessage(forecastError, message);
+                        return;
+                    }
+
+                    const savedValue = Number(payload?.forecast_tons ?? forecastValue);
+                    if (Number.isFinite(savedValue)) {
+                        const normalized = Number(savedValue.toFixed(3));
+                        forecastState.entries.set(dateValue, normalized);
+                        recalculateForecastTotal();
+                        updateForecastTotalElement();
+                    }
+
+                    showMessage(forecastSuccess, "Forecast updated successfully.");
+                    renderForecastCalendar();
+                } catch (error) {
+                    showMessage(forecastError, error.message || "Unable to save forecast.");
+                } finally {
+                    setForecastFormDisabled(false);
+                    ensureForecastFormState();
+                }
+            });
+        }
+
         machineSelect.addEventListener("change", () => {
             clearFeedback();
             updateQuantityFieldFromSummary();
@@ -618,6 +1270,54 @@
             clearFeedback();
         });
 
+        if (forecastMachineSelect) {
+            forecastMachineSelect.addEventListener("change", () => {
+                clearForecastFeedback();
+                forecastState.machineCode = forecastMachineSelect.value || "";
+                ensureSelectedDateInAnchorMonth();
+                loadForecastData();
+            });
+        }
+
+        if (forecastPrevMonth) {
+            forecastPrevMonth.addEventListener("click", () => {
+                changeForecastMonth(-1);
+            });
+        }
+
+        if (forecastNextMonth) {
+            forecastNextMonth.addEventListener("click", () => {
+                changeForecastMonth(1);
+            });
+        }
+
+        if (forecastCalendarBody) {
+            forecastCalendarBody.addEventListener("click", (event) => {
+                const button = event.target.closest(".forecast-calendar__day");
+                if (!button || !button.dataset.date) {
+                    return;
+                }
+                event.preventDefault();
+                clearForecastFeedback();
+                setSelectedForecastDate(button.dataset.date);
+            });
+
+            forecastCalendarBody.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                }
+                const button = event.target.closest(".forecast-calendar__day");
+                if (!button || !button.dataset.date) {
+                    return;
+                }
+                event.preventDefault();
+                clearForecastFeedback();
+                setSelectedForecastDate(button.dataset.date);
+            });
+        }
+
+        updateForecastMonthLabel();
+        renderForecastEmptyState("Select a machine to manage forecasts.");
         fetchMachines();
     </script>
 </body>

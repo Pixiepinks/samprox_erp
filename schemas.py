@@ -281,3 +281,26 @@ class DailyProductionEntrySchema(Schema):
             return obj.asset.name
         except AttributeError:
             return None
+
+
+class ProductionForecastEntrySchema(Schema):
+    id = fields.Int()
+    date = fields.Date()
+    forecast_tons = fields.Float()
+    asset_id = fields.Int()
+    machine_code = fields.Method("get_machine_code")
+    machine_name = fields.Method("get_machine_name")
+    created_at = fields.DateTime(allow_none=True)
+    updated_at = fields.DateTime(allow_none=True)
+
+    def get_machine_code(self, obj):
+        try:
+            return obj.asset.code
+        except AttributeError:
+            return None
+
+    def get_machine_name(self, obj):
+        try:
+            return obj.asset.name
+        except AttributeError:
+            return None

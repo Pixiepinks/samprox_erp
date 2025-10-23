@@ -7,17 +7,50 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 
 from extensions import db
-from models import DailyProductionEntry, MachineAsset, RoleEnum
+from models import (
+    DailyProductionEntry,
+    MachineAsset,
+    ProductionForecastEntry,
+    RoleEnum,
+)
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from schemas import DailyProductionEntrySchema
+from schemas import DailyProductionEntrySchema, ProductionForecastEntrySchema
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
 
 entry_schema = DailyProductionEntrySchema()
+forecast_entry_schema = ProductionForecastEntrySchema()
 
 SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
+
+SRI_LANKA_FALLBACK_HOLIDAYS = {
+    2024: [
+        (1, 15, "Tamil Thai Pongal Day"),
+        (2, 4, "Independence Day"),
+        (4, 13, "Sinhala & Tamil New Year Festival"),
+        (4, 14, "Sinhala & Tamil New Year"),
+        (5, 1, "May Day"),
+        (5, 23, "Vesak Full Moon Poya Day"),
+        (5, 24, "Day after Vesak Full Moon Poya"),
+        (6, 21, "Poson Full Moon Poya Day"),
+        (11, 1, "Deepavali Festival Day"),
+        (12, 25, "Christmas Day"),
+    ],
+    2025: [
+        (1, 14, "Tamil Thai Pongal Day"),
+        (2, 4, "Independence Day"),
+        (4, 13, "Sinhala & Tamil New Year Festival"),
+        (4, 14, "Sinhala & Tamil New Year"),
+        (5, 1, "May Day"),
+        (5, 12, "Vesak Full Moon Poya Day"),
+        (5, 13, "Day after Vesak Full Moon Poya"),
+        (6, 10, "Poson Full Moon Poya Day"),
+        (10, 20, "Deepavali Festival Day"),
+        (12, 25, "Christmas Day"),
+    ],
+}
 
 
 def require_role(*roles: RoleEnum) -> bool:
@@ -89,6 +122,23 @@ def _get_asset(payload):
         raise LookupError("Machine asset not found")
 
     return asset
+
+
+def _parse_period_param(period_param):
+    if not period_param:
+        return dt_date.today().replace(day=1)
+
+    try:
+        return datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError("Invalid period. Use YYYY-MM.") from exc
+
+
+def _month_range(anchor: dt_date):
+    month_days = calendar.monthrange(anchor.year, anchor.month)[1]
+    start = anchor
+    end = dt_date(anchor.year, anchor.month, month_days)
+    return start, end, month_days
 
 
 @bp.post("/daily")
@@ -411,6 +461,186 @@ def get_daily_production_summary():
     return jsonify(response)
 
 
+@bp.post("/forecast")
+@jwt_required()
+def upsert_production_forecast():
+    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+        return jsonify({"msg": "You do not have permission to record forecasts."}), 403
+
+    payload = request.get_json() or {}
+
+    try:
+        forecast_date = _parse_date(payload.get("date"), field_name="date") or dt_date.today()
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    try:
+        asset = _get_asset(payload)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({"msg": str(exc)}), 404
+
+    try:
+        forecast_value = float(payload.get("forecast_tons", payload.get("quantity_tons", 0)))
+    except (TypeError, ValueError):
+        return jsonify({"msg": "forecast_tons must be a number."}), 400
+
+    if forecast_value < 0:
+        return jsonify({"msg": "forecast_tons cannot be negative."}), 400
+
+    entry = ProductionForecastEntry.query.filter_by(
+        date=forecast_date,
+        asset_id=asset.id,
+    ).first()
+
+    status_code = 200
+    if entry:
+        entry.forecast_tons = forecast_value
+    else:
+        entry = ProductionForecastEntry(
+            date=forecast_date,
+            asset=asset,
+            forecast_tons=forecast_value,
+        )
+        db.session.add(entry)
+        status_code = 201
+
+    db.session.commit()
+
+    return jsonify(forecast_entry_schema.dump(entry)), status_code
+
+
+@bp.get("/forecast")
+@jwt_required()
+def get_production_forecast():
+    if not require_role(
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    try:
+        anchor = _parse_period_param(request.args.get("period"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    asset_payload = {
+        "asset_id": request.args.get("asset_id"),
+        "machine_code": request.args.get("machine_code"),
+    }
+
+    try:
+        asset = _get_asset(asset_payload)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({"msg": str(exc)}), 404
+
+    month_start, month_end, month_days = _month_range(anchor)
+
+    entries = (
+        ProductionForecastEntry.query.filter_by(asset_id=asset.id)
+        .filter(
+            ProductionForecastEntry.date >= month_start,
+            ProductionForecastEntry.date <= month_end,
+        )
+        .order_by(ProductionForecastEntry.date.asc())
+        .all()
+    )
+
+    entries_by_date = {entry.date: entry for entry in entries if isinstance(entry.date, dt_date)}
+
+    forecast_entries = []
+    total_forecast = 0.0
+
+    for day in range(1, month_days + 1):
+        current_date = dt_date(anchor.year, anchor.month, day)
+        entry = entries_by_date.get(current_date)
+
+        forecast_value = 0.0
+        entry_id = None
+        updated_at_value = None
+
+        if entry:
+            entry_id = entry.id
+            updated_at_value = entry.updated_at
+            try:
+                forecast_value = float(entry.forecast_tons or 0.0)
+            except (TypeError, ValueError):
+                forecast_value = 0.0
+
+        forecast_value = round(forecast_value, 3)
+        total_forecast += forecast_value
+
+        forecast_entries.append(
+            {
+                "day": day,
+                "date": current_date.isoformat(),
+                "forecast_tons": forecast_value,
+                "entry_id": entry_id,
+                "updated_at": updated_at_value.isoformat() if updated_at_value else None,
+            }
+        )
+
+    total_forecast = round(total_forecast, 3)
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "machine": {
+            "id": asset.id,
+            "code": asset.code,
+            "name": asset.name,
+        },
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": month_days,
+        "entries": forecast_entries,
+        "total_forecast_tons": total_forecast,
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/forecast/holidays")
+@jwt_required()
+def get_production_forecast_holidays():
+    if not require_role(
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    year_param = request.args.get("year")
+    if year_param:
+        try:
+            year = int(year_param)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "Invalid year. Use a four digit year."}), 400
+    else:
+        year = dt_date.today().year
+
+    if year < 1900 or year > 2100:
+        return jsonify({"msg": "Year must be between 1900 and 2100."}), 400
+
+    fallback = SRI_LANKA_FALLBACK_HOLIDAYS.get(year, [])
+    holidays_payload = []
+
+    for month, day, name in fallback:
+        try:
+            holiday_date = dt_date(year, month, day)
+        except ValueError:
+            continue
+        holidays_payload.append({"date": holiday_date.isoformat(), "name": name})
+
+    holidays_payload.sort(key=lambda item: item["date"])
+
+    return jsonify({"year": year, "holidays": holidays_payload})
+
+
 @bp.get("/monthly/summary")
 @jwt_required()
 def get_monthly_production_summary():
@@ -419,22 +649,16 @@ def get_monthly_production_summary():
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
-    period_param = request.args.get("period")
-    if period_param:
-        try:
-            anchor = datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
-        except ValueError:
-            return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
-    else:
-        anchor = dt_date.today().replace(day=1)
+    try:
+        anchor = _parse_period_param(request.args.get("period"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
 
     machine_codes, canonical_codes, machine_filters = _parse_machine_codes_param(
         request.args.get("machine_codes")
     )
 
-    month_days = calendar.monthrange(anchor.year, anchor.month)[1]
-    month_start = anchor
-    month_end = dt_date(anchor.year, anchor.month, month_days)
+    month_start, month_end, month_days = _month_range(anchor)
 
     totals_query = (
         db.session.query(

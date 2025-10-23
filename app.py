@@ -21,6 +21,7 @@ from models import (
     RoleEnum,
     SalesActualEntry,
     SalesForecastEntry,
+    ProductionForecastEntry,
     User,
 )
 from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, team, ui

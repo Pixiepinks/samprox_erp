@@ -296,6 +296,43 @@ class DailyProductionEntry(db.Model):
         )
 
 
+class ProductionForecastEntry(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint(
+            "date",
+            "asset_id",
+            name="uq_production_forecast_entry_day_asset",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("machine_asset.id"),
+        nullable=False,
+        index=True,
+    )
+    forecast_tons = db.Column(db.Float, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    asset = db.relationship(
+        "MachineAsset",
+        backref=db.backref(
+            "production_forecast_entries",
+            cascade="all,delete-orphan",
+            order_by="ProductionForecastEntry.date",
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<ProductionForecastEntry date={self.date} asset_id={self.asset_id} "
+            f"forecast={self.forecast_tons}>"
+        )
+
+
 class CustomerCategory(str, Enum):
     plantation = "plantation"
     industrial = "industrial"

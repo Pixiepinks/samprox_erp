@@ -360,6 +360,11 @@
 
         let machinesCache = [];
 
+        const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
+        const SUMMARY_MACHINE_CODE_SET = new Set(
+            SUMMARY_MACHINE_CODES.map((code) => code.toUpperCase()),
+        );
+
         const forecastState = {
             anchorDate: new Date(today.getFullYear(), today.getMonth(), 1),
             selectedDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
@@ -422,7 +427,9 @@
                 const number = Number(entry.machines[code]);
                 const normalized = Number.isFinite(number) ? number : 0;
                 entry.machines[code] = normalized;
-                total += normalized;
+                if (SUMMARY_MACHINE_CODE_SET.has(String(code || "").toUpperCase())) {
+                    total += normalized;
+                }
             });
             entry.total = Number.isFinite(total) ? Number(total.toFixed(3)) : 0;
         }
@@ -845,7 +852,6 @@
             updateForecastSelectionUI();
         }
 
-        const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
         const totalsTodayTotal = document.getElementById("production-today-total");
         const totalsMtdTotal = document.getElementById("production-mtd-total");
         const totalsTodayMachineElements = {};
@@ -866,6 +872,17 @@
         function formatQuantity(value) {
             const number = Number(value);
             return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+        }
+
+        function sumMachineTotals(machines) {
+            if (!machines || typeof machines !== "object") {
+                return 0;
+            }
+
+            return SUMMARY_MACHINE_CODES.reduce((accumulator, code) => {
+                const value = Number(machines?.[code] ?? 0);
+                return Number.isFinite(value) ? accumulator + value : accumulator;
+            }, 0);
         }
 
         function updateTotalElement(element, value) {
@@ -892,10 +909,11 @@
                 );
             });
 
-            const fallbackTodayTotal =
-                todayTotals.total ?? data?.total_quantity_tons ?? 0;
-            updateTotalElement(totalsTodayTotal, fallbackTodayTotal);
-            updateTotalElement(totalsMtdTotal, mtdTotals.total);
+            const todayTotal = sumMachineTotals(todayMachines);
+            const mtdTotal = sumMachineTotals(mtdMachines);
+
+            updateTotalElement(totalsTodayTotal, todayTotal);
+            updateTotalElement(totalsMtdTotal, mtdTotal);
         }
 
         function renderSummary(data) {
@@ -916,6 +934,8 @@
                 });
             }
 
+            let fallbackSummaryTotal = 0;
+
             for (let hour = 1; hour <= 24; hour += 1) {
                 const hourData = hoursMap.get(hour) || {};
                 const machinesMap = hourData.machines || {};
@@ -935,6 +955,9 @@
                     const quantity = Number(machineData?.quantity_tons ?? 0);
                     machineCell.textContent = formatQuantity(quantity);
                     machineCell.dataset.quantity = Number.isFinite(quantity) ? quantity : 0;
+                    if (Number.isFinite(quantity)) {
+                        fallbackSummaryTotal += quantity;
+                    }
                     tr.appendChild(machineCell);
                 });
 
@@ -963,10 +986,17 @@
                 productionTableBody.appendChild(tr);
             }
 
-            const total = Number(
-                data?.totals?.today?.total ?? data?.total_quantity_tons ?? 0,
-            );
-            productionTotal.textContent = formatQuantity(total);
+            const todayMachinesTotals = data?.totals?.today?.machines || {};
+            const hasTodayTotals =
+                todayMachinesTotals &&
+                typeof todayMachinesTotals === "object" &&
+                Object.keys(todayMachinesTotals).length > 0;
+
+            const summaryTotal = hasTodayTotals
+                ? sumMachineTotals(todayMachinesTotals)
+                : fallbackSummaryTotal;
+
+            productionTotal.textContent = formatQuantity(summaryTotal);
             renderTotals(data);
         }
 

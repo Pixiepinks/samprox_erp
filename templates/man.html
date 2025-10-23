@@ -84,13 +84,13 @@
                             <tr>
                                 <th scope="col">ID</th>
                                 <th scope="col">Reg No</th>
+                                <th scope="col">Image</th>
                                 <th scope="col">Name</th>
                                 <th scope="col">Nickname</th>
                                 <th scope="col">EPF</th>
                                 <th scope="col">Position</th>
                                 <th scope="col">Join date</th>
                                 <th scope="col">Status</th>
-                                <th scope="col">Image</th>
                                 <th scope="col">Created at</th>
                                 <th scope="col">Updated at</th>
                                 <th scope="col">Personal detail</th>
@@ -561,13 +561,13 @@
                 const cells = [
                     ["ID", sanitizeText(member?.id)],
                     ["Reg No", sanitizeText(member?.regNumber)],
+                    ["Image", avatarElement],
                     ["Name", sanitizeText(member?.name)],
                     ["Nickname", sanitizeText(member?.nickname)],
                     ["EPF", sanitizeText(member?.epf)],
                     ["Position", sanitizeText(member?.position)],
                     ["Join date", formatJoinDate(member?.joinDate)],
                     ["Status", sanitizeText(member?.status)],
-                    ["Image", avatarElement],
                     ["Created at", formatDateTime(member?.createdAt)],
                     ["Updated at", formatDateTime(member?.updatedAt)],
                     ["Personal detail", sanitizeText(member?.personalDetail)],

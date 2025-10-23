@@ -481,13 +481,49 @@ def upsert_production_forecast():
     except LookupError as exc:
         return jsonify({"msg": str(exc)}), 404
 
-    try:
-        forecast_value = float(payload.get("forecast_tons", payload.get("quantity_tons", 0)))
-    except (TypeError, ValueError):
-        return jsonify({"msg": "forecast_tons must be a number."}), 400
+    uses_hours_payload = (
+        "forecast_hours" in payload or "average_hourly_production" in payload
+    )
 
-    if forecast_value < 0:
-        return jsonify({"msg": "forecast_tons cannot be negative."}), 400
+    forecast_hours_value = 0.0
+    average_hourly_value = 0.0
+
+    if uses_hours_payload:
+        try:
+            raw_hours = payload.get("forecast_hours", 0)
+            forecast_hours_value = float(raw_hours or 0)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "forecast_hours must be a number."}), 400
+
+        try:
+            raw_average = payload.get("average_hourly_production", 0)
+            average_hourly_value = float(raw_average or 0)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "average_hourly_production must be a number."}), 400
+
+        if forecast_hours_value < 0:
+            return jsonify({"msg": "forecast_hours cannot be negative."}), 400
+        if average_hourly_value < 0:
+            return jsonify({"msg": "average_hourly_production cannot be negative."}), 400
+
+        forecast_value = forecast_hours_value * average_hourly_value
+    else:
+        try:
+            forecast_value = float(
+                payload.get("forecast_tons", payload.get("quantity_tons", 0))
+            )
+        except (TypeError, ValueError):
+            return jsonify({"msg": "forecast_tons must be a number."}), 400
+
+        if forecast_value < 0:
+            return jsonify({"msg": "forecast_tons cannot be negative."}), 400
+
+        forecast_hours_value = 0.0
+        average_hourly_value = 0.0
+
+    forecast_value = round(forecast_value, 3)
+    forecast_hours_value = round(forecast_hours_value, 3)
+    average_hourly_value = round(average_hourly_value, 3)
 
     entry = ProductionForecastEntry.query.filter_by(
         date=forecast_date,
@@ -497,11 +533,15 @@ def upsert_production_forecast():
     status_code = 200
     if entry:
         entry.forecast_tons = forecast_value
+        entry.forecast_hours = forecast_hours_value
+        entry.average_hourly_production = average_hourly_value
     else:
         entry = ProductionForecastEntry(
             date=forecast_date,
             asset=asset,
             forecast_tons=forecast_value,
+            forecast_hours=forecast_hours_value,
+            average_hourly_production=average_hourly_value,
         )
         db.session.add(entry)
         status_code = 201
@@ -560,6 +600,8 @@ def get_production_forecast():
         entry = entries_by_date.get(current_date)
 
         forecast_value = 0.0
+        forecast_hours_value = 0.0
+        average_hourly_value = 0.0
         entry_id = None
         updated_at_value = None
 
@@ -570,8 +612,20 @@ def get_production_forecast():
                 forecast_value = float(entry.forecast_tons or 0.0)
             except (TypeError, ValueError):
                 forecast_value = 0.0
+            try:
+                forecast_hours_value = float(entry.forecast_hours or 0.0)
+            except (TypeError, ValueError):
+                forecast_hours_value = 0.0
+            try:
+                average_hourly_value = float(
+                    entry.average_hourly_production or 0.0
+                )
+            except (TypeError, ValueError):
+                average_hourly_value = 0.0
 
         forecast_value = round(forecast_value, 3)
+        forecast_hours_value = round(forecast_hours_value, 3)
+        average_hourly_value = round(average_hourly_value, 3)
         total_forecast += forecast_value
 
         forecast_entries.append(
@@ -579,6 +633,8 @@ def get_production_forecast():
                 "day": day,
                 "date": current_date.isoformat(),
                 "forecast_tons": forecast_value,
+                "forecast_hours": forecast_hours_value,
+                "average_hourly_production": average_hourly_value,
                 "entry_id": entry_id,
                 "updated_at": updated_at_value.isoformat() if updated_at_value else None,
             }

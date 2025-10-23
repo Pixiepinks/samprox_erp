@@ -254,60 +254,121 @@
                             </tbody>
                         </table>
                     </div>
-                    <form class="forecast-form" id="forecast-form" novalidate>
-                        <input type="hidden" id="forecast-date" name="date" />
-                        <div class="forecast-form__row">
-                            <p class="forecast-form__label">Selected day</p>
-                            <p class="forecast-form__value" id="forecast-date-display">—</p>
-                        </div>
-                        <div class="forecast-form__row">
-                            <label for="forecast-hours">Forecasted production hours <span class="required">*</span></label>
-                            <input
-                                id="forecast-hours"
-                                name="forecast_hours"
-                                type="number"
-                                min="0"
-                                step="0.25"
-                                placeholder="0.00"
-                                required
-                                disabled
-                            />
-                        </div>
-                        <div class="forecast-form__row">
-                            <label for="forecast-average">Average hourly production (tons) <span class="required">*</span></label>
-                            <input
-                                id="forecast-average"
-                                name="average_hourly_production"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="0.00"
-                                required
-                                disabled
-                            />
-                        </div>
-                        <div class="forecast-form__row">
-                            <label for="forecast-qty">Forecast qty (tons)</label>
-                            <input
-                                id="forecast-qty"
-                                name="forecast_tons"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="0.00"
-                                disabled
-                                readonly
-                            />
-                        </div>
-                        <p class="forecast-holiday" id="forecast-holiday-note" hidden></p>
-                        <div class="forecast-actions">
-                            <button type="submit" class="button" id="forecast-submit" disabled>Save forecast</button>
-                        </div>
-                        <p class="forecast-feedback forecast-feedback--success" id="forecast-success" hidden>
-                            Forecast updated successfully.
-                        </p>
-                        <p class="forecast-feedback forecast-feedback--error" id="forecast-error" hidden></p>
-                    </form>
+                    <div class="forecast-detail">
+                        <form class="forecast-form" id="forecast-form" novalidate>
+                            <input type="hidden" id="forecast-date" name="date" />
+                            <div class="forecast-form__row">
+                                <p class="forecast-form__label">Selected day</p>
+                                <p class="forecast-form__value" id="forecast-date-display">—</p>
+                            </div>
+                            <div class="forecast-form__row">
+                                <label for="forecast-hours">Forecasted production hours <span class="required">*</span></label>
+                                <input
+                                    id="forecast-hours"
+                                    name="forecast_hours"
+                                    type="number"
+                                    min="0"
+                                    step="0.25"
+                                    placeholder="0.00"
+                                    required
+                                    disabled
+                                />
+                            </div>
+                            <div class="forecast-form__row">
+                                <label for="forecast-average">Average hourly production (tons) <span class="required">*</span></label>
+                                <input
+                                    id="forecast-average"
+                                    name="average_hourly_production"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    required
+                                    disabled
+                                />
+                            </div>
+                            <div class="forecast-form__row">
+                                <label for="forecast-qty">Forecast qty (tons)</label>
+                                <input
+                                    id="forecast-qty"
+                                    name="forecast_tons"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    disabled
+                                    readonly
+                                />
+                            </div>
+                            <p class="forecast-holiday" id="forecast-holiday-note" hidden></p>
+                            <div class="forecast-actions">
+                                <button type="submit" class="button" id="forecast-submit" disabled>Save forecast</button>
+                            </div>
+                            <p class="forecast-feedback forecast-feedback--success" id="forecast-success" hidden>
+                                Forecast updated successfully.
+                            </p>
+                            <p class="forecast-feedback forecast-feedback--error" id="forecast-error" hidden></p>
+                        </form>
+                        <section
+                            class="forecast-overview"
+                            id="forecast-overview"
+                            aria-labelledby="forecast-overview-title"
+                            aria-live="polite"
+                        >
+                            <h3 class="forecast-overview__title" id="forecast-overview-title">
+                                Forecast summary
+                            </h3>
+                            <p class="forecast-overview__subtitle">
+                                Track monthly output at a glance and compare productivity windows.
+                            </p>
+                            <div class="forecast-overview__grid">
+                                <article class="forecast-overview-card forecast-overview-card--total">
+                                    <h4 class="forecast-overview-card__heading">Monthly total</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-month-total">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--first">
+                                    <h4 class="forecast-overview-card__heading">First 10 days</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-first-ten">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--middle">
+                                    <h4 class="forecast-overview-card__heading">Middle 10 days</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-middle-ten">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--last">
+                                    <h4 class="forecast-overview-card__heading">Last days</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-last-days">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                    <p class="forecast-overview-card__hint">21st to month end</p>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--briquette">
+                                    <h4 class="forecast-overview-card__heading">Briquette production</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-briquette">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                    <p class="forecast-overview-card__hint">MCH-0001 + MCH-0002 only</p>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--hourly">
+                                    <h4 class="forecast-overview-card__heading">Hourly output</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-hourly-output">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons/hr</span>
+                                    </p>
+                                </article>
+                            </div>
+                        </section>
+                    </div>
                 </div>
             </div>
         </section>
@@ -375,6 +436,14 @@
         const forecastError = document.getElementById("forecast-error");
         const forecastHolidayNote = document.getElementById("forecast-holiday-note");
         const forecastTotal = document.getElementById("forecast-total");
+        const forecastSummaryElements = {
+            monthTotal: document.getElementById("forecast-summary-month-total"),
+            firstTen: document.getElementById("forecast-summary-first-ten"),
+            middleTen: document.getElementById("forecast-summary-middle-ten"),
+            lastDays: document.getElementById("forecast-summary-last-days"),
+            briquette: document.getElementById("forecast-summary-briquette"),
+            hourlyOutput: document.getElementById("forecast-summary-hourly-output"),
+        };
 
         const today = new Date();
         const yyyy = today.getFullYear();
@@ -388,9 +457,27 @@
 
         let machinesCache = [];
 
+        function normalizeMachineCodeKey(code) {
+            if (typeof code !== "string") {
+                return "";
+            }
+
+            const trimmed = code.trim().toUpperCase();
+            const match = trimmed.match(/^([A-Z]+)-0*(\d+)$/);
+            if (!match) {
+                return trimmed;
+            }
+
+            return `${match[1]}-${Number(match[2])}`;
+        }
+
         const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
         const SUMMARY_MACHINE_CODE_SET = new Set(
-            SUMMARY_MACHINE_CODES.map((code) => code.toUpperCase()),
+            SUMMARY_MACHINE_CODES.map((code) => normalizeMachineCodeKey(code)),
+        );
+        const BRIQUETTE_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
+        const BRIQUETTE_MACHINE_CODE_SET = new Set(
+            BRIQUETTE_MACHINE_CODES.map((code) => normalizeMachineCodeKey(code)),
         );
 
         const forecastState = {
@@ -401,6 +488,7 @@
             entries: new Map(),
             holidaysByYear: new Map(),
             total: 0,
+            overview: createEmptyForecastOverview(),
         };
 
         function getActiveMachineCodes() {
@@ -420,26 +508,26 @@
             if (!dateIso) {
                 return null;
             }
-        if (!forecastState.entries.has(dateIso)) {
-            forecastState.entries.set(dateIso, {
-                machines: {},
-                hours: {},
-                averageHourlyProduction: {},
-                total: 0,
-            });
+            if (!forecastState.entries.has(dateIso)) {
+                forecastState.entries.set(dateIso, {
+                    machines: {},
+                    hours: {},
+                    averageHourlyProduction: {},
+                    total: 0,
+                });
+            }
+            const entry = forecastState.entries.get(dateIso);
+            if (entry && !entry.machines) {
+                entry.machines = {};
+            }
+            if (entry && !entry.hours) {
+                entry.hours = {};
+            }
+            if (entry && !entry.averageHourlyProduction) {
+                entry.averageHourlyProduction = {};
+            }
+            return entry;
         }
-        const entry = forecastState.entries.get(dateIso);
-        if (entry && !entry.machines) {
-            entry.machines = {};
-        }
-        if (entry && !entry.hours) {
-            entry.hours = {};
-        }
-        if (entry && !entry.averageHourlyProduction) {
-            entry.averageHourlyProduction = {};
-        }
-        return entry;
-    }
 
         function getMachineForecastValue(dateIso, machineCode) {
             if (!dateIso || !machineCode) {
@@ -484,17 +572,189 @@
             const codes = Array.isArray(machineCodes) && machineCodes.length > 0
                 ? machineCodes
                 : getActiveMachineCodes();
-            let total = 0;
+
+            const normalizedActiveCodes = Array.isArray(codes)
+                ? codes
+                      .map((code) => normalizeMachineCodeKey(code))
+                      .filter((value) => value.length > 0)
+                : [];
+            const activeCodeSet = new Set(normalizedActiveCodes);
+
             entry.machines = entry.machines || {};
-            codes.forEach((code) => {
+
+            Object.keys(entry.machines).forEach((code) => {
                 const number = Number(entry.machines[code]);
-                const normalized = Number.isFinite(number) ? number : 0;
-                entry.machines[code] = normalized;
-                if (SUMMARY_MACHINE_CODE_SET.has(String(code || "").toUpperCase())) {
-                    total += normalized;
+                entry.machines[code] = Number.isFinite(number)
+                    ? Number(number.toFixed(3))
+                    : 0;
+            });
+
+            if (activeCodeSet.size > 0) {
+                codes.forEach((code) => {
+                    if (!Object.prototype.hasOwnProperty.call(entry.machines, code)) {
+                        entry.machines[code] = 0;
+                    }
+                });
+            }
+
+            const limitToActive = activeCodeSet.size > 0;
+
+            let total = 0;
+            Object.entries(entry.machines).forEach(([code, value]) => {
+                const normalizedCode = normalizeMachineCodeKey(code);
+                if (limitToActive && !activeCodeSet.has(normalizedCode)) {
+                    return;
+                }
+                const number = Number(value);
+                if (Number.isFinite(number)) {
+                    total += number;
                 }
             });
+
             entry.total = Number.isFinite(total) ? Number(total.toFixed(3)) : 0;
+        }
+
+        function createEmptyForecastOverview() {
+            return {
+                monthTotal: 0,
+                firstTen: 0,
+                middleTen: 0,
+                lastDays: 0,
+                briquette: 0,
+                totalHours: 0,
+                hourlyOutput: 0,
+            };
+        }
+
+        function roundToThree(value) {
+            const number = Number(value);
+            return Number.isFinite(number) ? Number(number.toFixed(3)) : 0;
+        }
+
+        function sumForecastMachineValues(machines, { limitSet = null, predicate = null } = {}) {
+            if (!machines || typeof machines !== "object") {
+                return 0;
+            }
+
+            const hasLimit = limitSet instanceof Set && limitSet.size > 0;
+            const hasPredicate = typeof predicate === "function";
+
+            return Object.entries(machines).reduce((accumulator, [code, rawValue]) => {
+                const normalizedCode = normalizeMachineCodeKey(code);
+                if (hasLimit && !limitSet.has(normalizedCode)) {
+                    return accumulator;
+                }
+
+                const number = Number(rawValue);
+                if (!Number.isFinite(number)) {
+                    return accumulator;
+                }
+
+                if (hasPredicate && !predicate(normalizedCode, number)) {
+                    return accumulator;
+                }
+
+                return accumulator + number;
+            }, 0);
+        }
+
+        function sumForecastHours(hours, limitSet) {
+            if (!hours || typeof hours !== "object") {
+                return 0;
+            }
+
+            const hasLimit = limitSet instanceof Set && limitSet.size > 0;
+
+            return Object.entries(hours).reduce((accumulator, [code, rawValue]) => {
+                const normalizedCode = normalizeMachineCodeKey(code);
+                if (hasLimit && !limitSet.has(normalizedCode)) {
+                    return accumulator;
+                }
+
+                const number = Number(rawValue);
+                return Number.isFinite(number) ? accumulator + number : accumulator;
+            }, 0);
+        }
+
+        function calculateForecastOverview() {
+            const overview = createEmptyForecastOverview();
+
+            if (!(forecastState.entries instanceof Map) || forecastState.entries.size === 0) {
+                return overview;
+            }
+
+            const anchorYear = forecastState.anchorDate.getFullYear();
+            const anchorMonth = forecastState.anchorDate.getMonth();
+
+            const activeCodes = getActiveMachineCodes();
+            const normalizedActiveCodes = Array.isArray(activeCodes)
+                ? activeCodes
+                      .map((code) => normalizeMachineCodeKey(code))
+                      .filter((value) => value.length > 0)
+                : [];
+            const limitSet = normalizedActiveCodes.length > 0
+                ? new Set(normalizedActiveCodes)
+                : null;
+
+            let monthTotal = 0;
+            let firstTen = 0;
+            let middleTen = 0;
+            let lastDays = 0;
+            let briquetteTotal = 0;
+            let totalHours = 0;
+
+            forecastState.entries.forEach((entry, dateIso) => {
+                const date = parseISODate(dateIso);
+                if (!date || date.getFullYear() !== anchorYear || date.getMonth() !== anchorMonth) {
+                    return;
+                }
+
+                const machines = entry?.machines || {};
+                const hours = entry?.hours || {};
+
+                const dayTotal = sumForecastMachineValues(machines, { limitSet });
+                monthTotal += dayTotal;
+
+                const day = date.getDate();
+                if (day <= 10) {
+                    firstTen += dayTotal;
+                } else if (day <= 20) {
+                    middleTen += dayTotal;
+                } else {
+                    lastDays += dayTotal;
+                }
+
+                const briquetteDayTotal = sumForecastMachineValues(machines, {
+                    limitSet,
+                    predicate: (code) => BRIQUETTE_MACHINE_CODE_SET.has(code),
+                });
+                briquetteTotal += briquetteDayTotal;
+
+                totalHours += sumForecastHours(hours, limitSet);
+            });
+
+            const hourlyOutput = totalHours > 0 ? monthTotal / totalHours : 0;
+
+            overview.monthTotal = roundToThree(monthTotal);
+            overview.firstTen = roundToThree(firstTen);
+            overview.middleTen = roundToThree(middleTen);
+            overview.lastDays = roundToThree(lastDays);
+            overview.briquette = roundToThree(briquetteTotal);
+            overview.totalHours = roundToThree(totalHours);
+            overview.hourlyOutput = roundToThree(hourlyOutput);
+
+            return overview;
+        }
+
+        function updateForecastOverviewUI() {
+            const overview = forecastState.overview || createEmptyForecastOverview();
+
+            updateTotalElement(forecastSummaryElements.monthTotal, overview.monthTotal);
+            updateTotalElement(forecastSummaryElements.firstTen, overview.firstTen);
+            updateTotalElement(forecastSummaryElements.middleTen, overview.middleTen);
+            updateTotalElement(forecastSummaryElements.lastDays, overview.lastDays);
+            updateTotalElement(forecastSummaryElements.briquette, overview.briquette);
+            updateTotalElement(forecastSummaryElements.hourlyOutput, overview.hourlyOutput);
         }
 
         function showMessage(element, message = "") {
@@ -680,20 +940,19 @@
         }
 
         function recalculateForecastTotal() {
-            let total = 0;
-            forecastState.entries.forEach((entry) => {
-                const number = Number(entry?.total ?? 0);
-                if (Number.isFinite(number)) {
-                    total += number;
-                }
-            });
-            forecastState.total = Number.isFinite(total) ? Number(total.toFixed(3)) : 0;
+            const overview = calculateForecastOverview();
+            forecastState.overview = overview;
+            const monthTotal = overview?.monthTotal ?? 0;
+            forecastState.total = Number.isFinite(monthTotal)
+                ? Number(monthTotal.toFixed(3))
+                : 0;
         }
 
         function updateForecastTotalElement() {
             if (forecastTotal) {
                 updateTotalElement(forecastTotal, forecastState.total);
             }
+            updateForecastOverviewUI();
         }
 
         function ensureSelectedDateInAnchorMonth() {
@@ -1243,6 +1502,7 @@
                 renderForecastEmptyState("Add a machine to begin forecasting.");
                 forecastState.entries = new Map();
                 forecastState.total = 0;
+                forecastState.overview = createEmptyForecastOverview();
                 updateForecastTotalElement();
                 return;
             }
@@ -1303,6 +1563,7 @@
                 forecastState.entries = new Map();
                 forecastState.total = 0;
                 forecastState.selectedDate = null;
+                forecastState.overview = createEmptyForecastOverview();
                 updateForecastTotalElement();
                 renderForecastEmptyState("Add a machine to begin forecasting.");
                 ensureForecastFormState();
@@ -1417,6 +1678,7 @@
                 forecastState.entries = new Map();
                 forecastState.total = 0;
                 forecastState.selectedDate = null;
+                forecastState.overview = createEmptyForecastOverview();
                 renderForecastEmptyState(error.message || "Unable to load production forecast.");
                 updateForecastTotalElement();
                 ensureForecastFormState();
@@ -1748,6 +2010,7 @@
         }
 
         updateForecastMonthLabel();
+        updateForecastTotalElement();
         renderForecastEmptyState("Select a machine to manage forecasts.");
         fetchMachines();
     </script>

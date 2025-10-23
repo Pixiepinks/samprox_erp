@@ -770,9 +770,105 @@ body {
 
 .forecast-layout {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
-    gap: 1.5rem;
+    grid-template-columns: minmax(0, 2.25fr) minmax(300px, 1fr);
+    gap: 1.75rem;
     align-items: flex-start;
+}
+
+.forecast-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.forecast-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.forecast-overview__title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.forecast-overview__subtitle {
+    margin: 0;
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+.forecast-overview__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.forecast-overview-card {
+    position: relative;
+    padding: 1.2rem 1.25rem;
+    border-radius: 20px;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+}
+
+.forecast-overview-card__heading {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.9;
+}
+
+.forecast-overview-card__value {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.forecast-overview-card__unit {
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+
+.forecast-overview-card__hint {
+    margin: 0;
+    font-size: 0.75rem;
+    opacity: 0.9;
+}
+
+.forecast-overview-card--total {
+    background: linear-gradient(135deg, #0284c7, #38bdf8);
+}
+
+.forecast-overview-card--first {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.forecast-overview-card--middle {
+    background: linear-gradient(135deg, #7c3aed, #c084fc);
+}
+
+.forecast-overview-card--last {
+    background: linear-gradient(135deg, #f97316, #f59e0b);
+}
+
+.forecast-overview-card--briquette {
+    background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
+
+.forecast-overview-card--hourly {
+    background: linear-gradient(135deg, #be123c, #f43f5e);
 }
 
 .forecast-calendar__table {
@@ -1042,9 +1138,20 @@ body {
     font-weight: 600;
 }
 
+@media (max-width: 1200px) {
+    .forecast-layout {
+        grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+        gap: 1.5rem;
+    }
+}
+
 @media (max-width: 960px) {
     .forecast-layout {
         grid-template-columns: 1fr;
+    }
+
+    .forecast-detail {
+        gap: 1.25rem;
     }
 
     .forecast-summary {

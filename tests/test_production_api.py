@@ -206,7 +206,8 @@ class ProductionApiTestCase(unittest.TestCase):
         create_payload = {
             "machine_code": asset["code"],
             "date": "2024-05-10",
-            "forecast_tons": 18.5,
+            "forecast_hours": 10.0,
+            "average_hourly_production": 1.85,
         }
 
         response = self.client.post(
@@ -217,8 +218,14 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         created = response.get_json()
         self.assertAlmostEqual(created["forecast_tons"], 18.5)
+        self.assertAlmostEqual(created["forecast_hours"], 10.0)
+        self.assertAlmostEqual(created["average_hourly_production"], 1.85)
 
-        update_payload = {**create_payload, "forecast_tons": 22.75}
+        update_payload = {
+            **create_payload,
+            "forecast_hours": 9.1,
+            "average_hourly_production": 2.5,
+        }
         response = self.client.post(
             "/api/production/forecast",
             headers=self._auth_headers(self.pm_token),
@@ -227,6 +234,8 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         updated = response.get_json()
         self.assertAlmostEqual(updated["forecast_tons"], 22.75)
+        self.assertAlmostEqual(updated["forecast_hours"], 9.1)
+        self.assertAlmostEqual(updated["average_hourly_production"], 2.5)
 
         response = self.client.get(
             "/api/production/forecast",
@@ -243,7 +252,29 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertEqual(len(data["entries"]), 31)
         day_entry = next(item for item in data["entries"] if item["date"] == "2024-05-10")
         self.assertAlmostEqual(day_entry["forecast_tons"], 22.75)
+        self.assertAlmostEqual(day_entry["forecast_hours"], 9.1)
+        self.assertAlmostEqual(day_entry["average_hourly_production"], 2.5)
         self.assertAlmostEqual(data["total_forecast_tons"], 22.75)
+
+    def test_forecast_accepts_legacy_payload(self):
+        asset = self._create_machine()
+
+        payload = {
+            "machine_code": asset["code"],
+            "date": "2024-07-01",
+            "forecast_tons": 12.5,
+        }
+
+        response = self.client.post(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.pm_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        created = response.get_json()
+        self.assertAlmostEqual(created["forecast_tons"], 12.5)
+        self.assertAlmostEqual(created["forecast_hours"], 0.0)
+        self.assertAlmostEqual(created["average_hourly_production"], 0.0)
 
     def test_only_manager_can_save_forecast(self):
         asset = self._create_machine()

@@ -287,6 +287,8 @@ class ProductionForecastEntrySchema(Schema):
     id = fields.Int()
     date = fields.Date()
     forecast_tons = fields.Float()
+    forecast_hours = fields.Float()
+    average_hourly_production = fields.Float()
     asset_id = fields.Int()
     machine_code = fields.Method("get_machine_code")
     machine_name = fields.Method("get_machine_name")

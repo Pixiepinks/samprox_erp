@@ -314,6 +314,8 @@ class ProductionForecastEntry(db.Model):
         index=True,
     )
     forecast_tons = db.Column(db.Float, nullable=False, default=0)
+    forecast_hours = db.Column(db.Float, nullable=False, default=0)
+    average_hourly_production = db.Column(db.Float, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -329,7 +331,8 @@ class ProductionForecastEntry(db.Model):
     def __repr__(self):
         return (
             f"<ProductionForecastEntry date={self.date} asset_id={self.asset_id} "
-            f"forecast={self.forecast_tons}>"
+            f"forecast={self.forecast_tons} hours={self.forecast_hours} "
+            f"average={self.average_hourly_production}>"
         )
 
 

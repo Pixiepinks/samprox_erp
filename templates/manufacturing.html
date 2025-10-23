@@ -261,7 +261,33 @@
                             <p class="forecast-form__value" id="forecast-date-display">—</p>
                         </div>
                         <div class="forecast-form__row">
-                            <label for="forecast-qty">Forecast qty (tons) <span class="required">*</span></label>
+                            <label for="forecast-hours">Forecasted production hours <span class="required">*</span></label>
+                            <input
+                                id="forecast-hours"
+                                name="forecast_hours"
+                                type="number"
+                                min="0"
+                                step="0.25"
+                                placeholder="0.00"
+                                required
+                                disabled
+                            />
+                        </div>
+                        <div class="forecast-form__row">
+                            <label for="forecast-average">Average hourly production (tons) <span class="required">*</span></label>
+                            <input
+                                id="forecast-average"
+                                name="average_hourly_production"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                required
+                                disabled
+                            />
+                        </div>
+                        <div class="forecast-form__row">
+                            <label for="forecast-qty">Forecast qty (tons)</label>
                             <input
                                 id="forecast-qty"
                                 name="forecast_tons"
@@ -269,8 +295,8 @@
                                 min="0"
                                 step="0.01"
                                 placeholder="0.00"
-                                required
                                 disabled
+                                readonly
                             />
                         </div>
                         <p class="forecast-holiday" id="forecast-holiday-note" hidden></p>
@@ -341,6 +367,8 @@
         const forecastForm = document.getElementById("forecast-form");
         const forecastDateInput = document.getElementById("forecast-date");
         const forecastDateDisplay = document.getElementById("forecast-date-display");
+        const forecastHoursInput = document.getElementById("forecast-hours");
+        const forecastAverageInput = document.getElementById("forecast-average");
         const forecastQtyInput = document.getElementById("forecast-qty");
         const forecastSubmit = document.getElementById("forecast-submit");
         const forecastSuccess = document.getElementById("forecast-success");
@@ -392,15 +420,26 @@
             if (!dateIso) {
                 return null;
             }
-            if (!forecastState.entries.has(dateIso)) {
-                forecastState.entries.set(dateIso, { machines: {}, total: 0 });
-            }
-            const entry = forecastState.entries.get(dateIso);
-            if (entry && !entry.machines) {
-                entry.machines = {};
-            }
-            return entry;
+        if (!forecastState.entries.has(dateIso)) {
+            forecastState.entries.set(dateIso, {
+                machines: {},
+                hours: {},
+                averageHourlyProduction: {},
+                total: 0,
+            });
         }
+        const entry = forecastState.entries.get(dateIso);
+        if (entry && !entry.machines) {
+            entry.machines = {};
+        }
+        if (entry && !entry.hours) {
+            entry.hours = {};
+        }
+        if (entry && !entry.averageHourlyProduction) {
+            entry.averageHourlyProduction = {};
+        }
+        return entry;
+    }
 
         function getMachineForecastValue(dateIso, machineCode) {
             if (!dateIso || !machineCode) {
@@ -411,6 +450,30 @@
                 return 0;
             }
             const value = Number(entry.machines[machineCode]);
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        function getMachineForecastHours(dateIso, machineCode) {
+            if (!dateIso || !machineCode) {
+                return 0;
+            }
+            const entry = forecastState.entries.get(dateIso);
+            if (!entry || !entry.hours) {
+                return 0;
+            }
+            const value = Number(entry.hours[machineCode]);
+            return Number.isFinite(value) ? value : 0;
+        }
+
+        function getMachineAverageHourlyProduction(dateIso, machineCode) {
+            if (!dateIso || !machineCode) {
+                return 0;
+            }
+            const entry = forecastState.entries.get(dateIso);
+            if (!entry || !entry.averageHourlyProduction) {
+                return 0;
+            }
+            const value = Number(entry.averageHourlyProduction[machineCode]);
             return Number.isFinite(value) ? value : 0;
         }
 
@@ -525,6 +588,12 @@
         function ensureForecastFormState() {
             const hasMachine = Boolean(forecastState.machineCode);
             const hasDate = Boolean(forecastState.selectedDate);
+            if (forecastHoursInput) {
+                forecastHoursInput.disabled = !hasMachine || !hasDate;
+            }
+            if (forecastAverageInput) {
+                forecastAverageInput.disabled = !hasMachine || !hasDate;
+            }
             if (forecastQtyInput) {
                 forecastQtyInput.disabled = !hasMachine || !hasDate;
             }
@@ -534,6 +603,12 @@
         }
 
         function setForecastFormDisabled(disabled) {
+            if (forecastHoursInput) {
+                forecastHoursInput.disabled = disabled;
+            }
+            if (forecastAverageInput) {
+                forecastAverageInput.disabled = disabled;
+            }
             if (forecastQtyInput) {
                 forecastQtyInput.disabled = disabled;
             }
@@ -670,12 +745,39 @@
             const forecastValue = hasSelection
                 ? getMachineForecastValue(iso, selectedMachineCode)
                 : 0;
+            const forecastHours = hasSelection
+                ? getMachineForecastHours(iso, selectedMachineCode)
+                : 0;
+            const forecastAverage = hasSelection
+                ? getMachineAverageHourlyProduction(iso, selectedMachineCode)
+                : 0;
+
+            if (forecastHoursInput) {
+                if (!hasSelection) {
+                    forecastHoursInput.value = "";
+                } else {
+                    forecastHoursInput.value = formatQuantity(forecastHours || 0);
+                }
+            }
+
+            if (forecastAverageInput) {
+                if (!hasSelection) {
+                    forecastAverageInput.value = "";
+                } else {
+                    forecastAverageInput.value = formatQuantity(forecastAverage || 0);
+                }
+            }
+
             if (forecastQtyInput) {
                 if (!hasSelection) {
                     forecastQtyInput.value = "";
                 } else {
                     forecastQtyInput.value = formatQuantity(forecastValue || 0);
                 }
+            }
+
+            if (hasSelection) {
+                updateComputedForecastQuantity();
             }
 
             if (forecastHolidayNote) {
@@ -872,6 +974,37 @@
         function formatQuantity(value) {
             const number = Number(value);
             return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+        }
+
+        function parseNumberInputValue(input) {
+            if (!input) {
+                return null;
+            }
+            const rawValue = String(input.value ?? "").trim();
+            if (rawValue.length === 0) {
+                return null;
+            }
+            const number = Number(rawValue);
+            return Number.isFinite(number) ? number : null;
+        }
+
+        function updateComputedForecastQuantity() {
+            if (!forecastQtyInput) {
+                return;
+            }
+
+            const hoursValue = parseNumberInputValue(forecastHoursInput);
+            const averageValue = parseNumberInputValue(forecastAverageInput);
+
+            if (hoursValue === null || averageValue === null) {
+                forecastQtyInput.value = "";
+                return;
+            }
+
+            const quantity = hoursValue * averageValue;
+            if (Number.isFinite(quantity)) {
+                forecastQtyInput.value = formatQuantity(quantity);
+            }
         }
 
         function sumMachineTotals(machines) {
@@ -1216,13 +1349,35 @@
                         const normalized = Number.isFinite(value)
                             ? Number(value.toFixed(3))
                             : 0;
+                        const hoursValue = Number(entry.forecast_hours ?? 0);
+                        const normalizedHours = Number.isFinite(hoursValue)
+                            ? Number(hoursValue.toFixed(3))
+                            : 0;
+                        const averageValue = Number(
+                            entry.average_hourly_production ?? 0,
+                        );
+                        const normalizedAverage = Number.isFinite(averageValue)
+                            ? Number(averageValue.toFixed(3))
+                            : 0;
 
                         let target = entriesMap.get(entry.date);
                         if (!target) {
-                            target = { machines: {}, total: 0 };
+                            target = {
+                                machines: {},
+                                hours: {},
+                                averageHourlyProduction: {},
+                                total: 0,
+                            };
                             entriesMap.set(entry.date, target);
+                        } else {
+                            target.machines = target.machines || {};
+                            target.hours = target.hours || {};
+                            target.averageHourlyProduction =
+                                target.averageHourlyProduction || {};
                         }
                         target.machines[code] = normalized;
+                        target.hours[code] = normalizedHours;
+                        target.averageHourlyProduction[code] = normalizedAverage;
                     });
                 }
 
@@ -1236,8 +1391,18 @@
                     );
                     let target = entriesMap.get(iso);
                     if (!target) {
-                        target = { machines: {}, total: 0 };
+                        target = {
+                            machines: {},
+                            hours: {},
+                            averageHourlyProduction: {},
+                            total: 0,
+                        };
                         entriesMap.set(iso, target);
+                    } else {
+                        target.machines = target.machines || {};
+                        target.hours = target.hours || {};
+                        target.averageHourlyProduction =
+                            target.averageHourlyProduction || {};
                     }
                     updateEntryTotal(target, machineCodes);
                 }
@@ -1337,7 +1502,6 @@
 
                 const machineCode = forecastState.machineCode;
                 const dateValue = forecastDateInput?.value;
-                const quantityValue = forecastQtyInput?.value ?? "";
 
                 if (!machineCode || !dateValue) {
                     showMessage(
@@ -1347,18 +1511,55 @@
                     return;
                 }
 
-                let forecastValue = quantityValue ? Number(quantityValue) : 0;
-                if (!Number.isFinite(forecastValue)) {
-                    showMessage(forecastError, "Enter a valid forecast quantity.");
+                const hoursValue = parseNumberInputValue(forecastHoursInput);
+                if (hoursValue === null) {
+                    showMessage(
+                        forecastError,
+                        "Enter forecasted production hours.",
+                    );
                     return;
                 }
 
-                if (forecastValue < 0) {
+                if (hoursValue < 0) {
                     showMessage(
                         forecastError,
-                        "Forecast quantity cannot be negative.",
+                        "Forecasted production hours cannot be negative.",
                     );
                     return;
+                }
+
+                const averageValue = parseNumberInputValue(forecastAverageInput);
+                if (averageValue === null) {
+                    showMessage(
+                        forecastError,
+                        "Enter average hourly production.",
+                    );
+                    return;
+                }
+
+                if (averageValue < 0) {
+                    showMessage(
+                        forecastError,
+                        "Average hourly production cannot be negative.",
+                    );
+                    return;
+                }
+
+                const computedForecast = hoursValue * averageValue;
+                if (!Number.isFinite(computedForecast)) {
+                    showMessage(
+                        forecastError,
+                        "Enter valid numbers for hours and production.",
+                    );
+                    return;
+                }
+
+                const normalizedHours = Number(hoursValue.toFixed(3));
+                const normalizedAverage = Number(averageValue.toFixed(3));
+                const normalizedForecast = Number(computedForecast.toFixed(3));
+
+                if (forecastQtyInput) {
+                    forecastQtyInput.value = formatQuantity(normalizedForecast);
                 }
 
                 setForecastFormDisabled(true);
@@ -1373,7 +1574,9 @@
                         body: JSON.stringify({
                             machine_code: machineCode,
                             date: dateValue,
-                            forecast_tons: forecastValue,
+                            forecast_hours: normalizedHours,
+                            average_hourly_production: normalizedAverage,
+                            forecast_tons: normalizedForecast,
                         }),
                     });
 
@@ -1389,13 +1592,37 @@
                         return;
                     }
 
-                    const savedValue = Number(payload?.forecast_tons ?? forecastValue);
+                    const savedValue = Number(
+                        payload?.forecast_tons ?? normalizedForecast,
+                    );
+                    const savedHoursValue = Number(
+                        payload?.forecast_hours ?? normalizedHours,
+                    );
+                    const savedAverageValue = Number(
+                        payload?.average_hourly_production ?? normalizedAverage,
+                    );
+
                     if (Number.isFinite(savedValue)) {
-                        const normalized = Number(savedValue.toFixed(3));
+                        const normalizedQuantity = Number(savedValue.toFixed(3));
+                        const normalizedSavedHours = Number.isFinite(savedHoursValue)
+                            ? Number(savedHoursValue.toFixed(3))
+                            : 0;
+                        const normalizedSavedAverage = Number.isFinite(
+                            savedAverageValue,
+                        )
+                            ? Number(savedAverageValue.toFixed(3))
+                            : 0;
+
                         const entry = ensureForecastEntry(dateValue);
                         if (entry) {
                             entry.machines = entry.machines || {};
-                            entry.machines[machineCode] = normalized;
+                            entry.hours = entry.hours || {};
+                            entry.averageHourlyProduction =
+                                entry.averageHourlyProduction || {};
+                            entry.machines[machineCode] = normalizedQuantity;
+                            entry.hours[machineCode] = normalizedSavedHours;
+                            entry.averageHourlyProduction[machineCode] =
+                                normalizedSavedAverage;
                             updateEntryTotal(entry);
                         }
                         recalculateForecastTotal();
@@ -1410,6 +1637,20 @@
                     setForecastFormDisabled(false);
                     ensureForecastFormState();
                 }
+            });
+        }
+
+        if (forecastHoursInput) {
+            forecastHoursInput.addEventListener("input", () => {
+                clearForecastFeedback();
+                updateComputedForecastQuantity();
+            });
+        }
+
+        if (forecastAverageInput) {
+            forecastAverageInput.addEventListener("input", () => {
+                clearForecastFeedback();
+                updateComputedForecastQuantity();
             });
         }
 

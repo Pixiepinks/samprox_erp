@@ -779,6 +779,7 @@ body {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0.75rem 0.85rem;
+    table-layout: fixed;
 }
 
 .forecast-calendar__head th {
@@ -875,6 +876,8 @@ body {
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
     font-size: 0.82rem;
     font-weight: 500;
     color: inherit;
@@ -901,6 +904,10 @@ body {
 
 .forecast-calendar__entry-value {
     font-weight: 600;
+    margin-left: auto;
+    text-align: right;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .forecast-calendar__entry-value::before {

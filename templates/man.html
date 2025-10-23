@@ -90,7 +90,7 @@
                                 <th scope="col">Position</th>
                                 <th scope="col">Join date</th>
                                 <th scope="col">Status</th>
-                                <th scope="col">Image URL</th>
+                                <th scope="col">Image</th>
                                 <th scope="col">Created at</th>
                                 <th scope="col">Updated at</th>
                                 <th scope="col">Personal detail</th>
@@ -431,8 +431,74 @@
         const createCell = (label, value) => {
             const cell = document.createElement("td");
             cell.setAttribute("data-label", label);
-            cell.textContent = value;
+
+            if (value instanceof Node) {
+                cell.appendChild(value);
+            } else {
+                cell.textContent = value;
+            }
+
             return cell;
+        };
+
+        const getMemberDisplayName = (member) => {
+            const candidates = [member?.name, member?.nickname, member?.regNumber];
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "Team member";
+        };
+
+        const createAvatarElement = (member) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "team-table__avatar";
+
+            const displayName = getMemberDisplayName(member);
+            const imageUrl =
+                typeof member?.image === "string" ? member.image.trim() : "";
+
+            const setPlaceholder = () => {
+                wrapper.innerHTML = "";
+                wrapper.setAttribute("role", "img");
+                wrapper.setAttribute(
+                    "aria-label",
+                    `${displayName} profile placeholder`
+                );
+
+                const placeholder = document.createElement("div");
+                placeholder.className = "team-table__avatar-placeholder";
+                const [firstChar] = Array.from(displayName);
+                placeholder.textContent = firstChar
+                    ? firstChar.toUpperCase()
+                    : "?";
+                placeholder.setAttribute("aria-hidden", "true");
+                wrapper.appendChild(placeholder);
+            };
+
+            if (imageUrl) {
+                const img = document.createElement("img");
+                img.src = imageUrl;
+                img.alt = `${displayName} profile photo`;
+                img.loading = "lazy";
+                img.decoding = "async";
+                img.addEventListener("error", () => {
+                    setPlaceholder();
+                });
+                wrapper.appendChild(img);
+            } else {
+                setPlaceholder();
+            }
+
+            wrapper.title = `${displayName}'s profile`;
+
+            return wrapper;
         };
 
         const renderMembers = (members) => {
@@ -452,6 +518,8 @@
             members.forEach((member) => {
                 const row = document.createElement("tr");
 
+                const avatarElement = createAvatarElement(member);
+
                 const cells = [
                     ["ID", sanitizeText(member?.id)],
                     ["Reg No", sanitizeText(member?.regNumber)],
@@ -461,7 +529,7 @@
                     ["Position", sanitizeText(member?.position)],
                     ["Join date", formatJoinDate(member?.joinDate)],
                     ["Status", sanitizeText(member?.status)],
-                    ["Image URL", sanitizeText(member?.image)],
+                    ["Image", avatarElement],
                     ["Created at", formatDateTime(member?.createdAt)],
                     ["Updated at", formatDateTime(member?.updatedAt)],
                     ["Personal detail", sanitizeText(member?.personalDetail)],
@@ -473,7 +541,13 @@
                 ];
 
                 cells.forEach(([label, value]) => {
-                    row.appendChild(createCell(label, value));
+                    const cell = createCell(label, value);
+
+                    if (label === "Image") {
+                        cell.classList.add("team-table__cell--avatar");
+                    }
+
+                    row.appendChild(cell);
                 });
 
                 tableBody.appendChild(row);

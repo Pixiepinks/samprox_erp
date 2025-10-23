@@ -291,12 +291,21 @@ body {
     background: rgba(226, 232, 240, 0.4);
 }
 
+.team-table__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+}
+
 .team-table__avatar img {
     width: 48px;
     height: 48px;
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid rgba(37, 99, 235, 0.2);
+    display: block;
 }
 
 .team-table__avatar-placeholder {
@@ -310,6 +319,15 @@ body {
     font-weight: 600;
     font-size: 1rem;
     border: 2px dashed rgba(148, 163, 184, 0.5);
+}
+
+.team-table__cell--avatar {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.team-table__cell--avatar .team-table__avatar {
+    margin: 0 auto;
 }
 
 .status-badge {

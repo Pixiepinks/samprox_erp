@@ -398,6 +398,45 @@
             showMessage(forecastError);
         }
 
+        function formatDateISO(date) {
+            if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
+                return "";
+            }
+
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
+
+        function parseISODate(dateIso) {
+            if (typeof dateIso !== "string") {
+                return null;
+            }
+
+            const [yearStr, monthStr, dayStr] = dateIso.split("-");
+            const year = Number(yearStr);
+            const month = Number(monthStr);
+            const day = Number(dayStr);
+
+            if (
+                !Number.isFinite(year) ||
+                !Number.isFinite(month) ||
+                !Number.isFinite(day)
+            ) {
+                return null;
+            }
+
+            const parsed = new Date(year, month - 1, day);
+
+            if (Number.isNaN(parsed.valueOf())) {
+                return null;
+            }
+
+            return parsed;
+        }
+
         function updateForecastMonthLabel() {
             if (!forecastMonthLabel) {
                 return;
@@ -536,22 +575,30 @@
 
         function updateForecastSelectionUI() {
             const selectedDate = forecastState.selectedDate;
-            const iso = selectedDate && selectedDate instanceof Date && !Number.isNaN(selectedDate.valueOf())
-                ? selectedDate.toISOString().slice(0, 10)
-                : "";
+            const iso =
+                selectedDate &&
+                selectedDate instanceof Date &&
+                !Number.isNaN(selectedDate.valueOf())
+                    ? formatDateISO(selectedDate)
+                    : "";
 
             if (forecastDateInput) {
                 forecastDateInput.value = iso;
             }
             if (forecastDateDisplay) {
-                forecastDateDisplay.textContent = iso
-                    ? new Date(iso).toLocaleDateString(undefined, {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                      })
-                    : "—";
+                if (iso) {
+                    const displayDate = parseISODate(iso);
+                    forecastDateDisplay.textContent = displayDate
+                        ? displayDate.toLocaleDateString(undefined, {
+                              weekday: "long",
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                          })
+                        : "—";
+                } else {
+                    forecastDateDisplay.textContent = "—";
+                }
             }
 
             const forecastValue = iso ? forecastState.entries.get(iso) ?? 0 : null;
@@ -626,7 +673,7 @@
                     }
 
                     const currentDate = new Date(year, month, dayCounter);
-                    const iso = currentDate.toISOString().slice(0, 10);
+                    const iso = formatDateISO(currentDate);
 
                     const button = document.createElement("button");
                     button.type = "button";
@@ -690,8 +737,8 @@
             if (!dateIso) {
                 return;
             }
-            const candidate = new Date(dateIso);
-            if (Number.isNaN(candidate.valueOf())) {
+            const candidate = parseISODate(dateIso);
+            if (!(candidate instanceof Date) || Number.isNaN(candidate.valueOf())) {
                 return;
             }
             forecastState.selectedDate = candidate;
@@ -1046,13 +1093,13 @@
                       ).getDate();
 
                 for (let day = 1; day <= monthDays; day += 1) {
-                    const iso = new Date(
-                        forecastState.anchorDate.getFullYear(),
-                        forecastState.anchorDate.getMonth(),
-                        day,
-                    )
-                        .toISOString()
-                        .slice(0, 10);
+                    const iso = formatDateISO(
+                        new Date(
+                            forecastState.anchorDate.getFullYear(),
+                            forecastState.anchorDate.getMonth(),
+                            day,
+                        ),
+                    );
                     if (!entriesMap.has(iso)) {
                         entriesMap.set(iso, 0);
                     }

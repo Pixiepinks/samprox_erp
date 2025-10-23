@@ -4,6 +4,7 @@ import re
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
 from sqlalchemy import inspect, text
+from sqlalchemy import types as sqltypes
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
@@ -35,38 +36,46 @@ def _ensure_schema():
         TeamMember.__table__.create(bind=engine, checkfirst=True)
         inspector = inspect(engine)
 
-    columns = {c["name"] for c in inspector.get_columns("team_member")}
+    column_info = inspector.get_columns("team_member")
+    columns = {c["name"] for c in column_info}
+    column_types = {c["name"]: c.get("type") for c in column_info}
     statements: list[str] = []
+    status_fixes: list[str] = []
 
     if "image_url" not in columns:
         statements.append("ALTER TABLE team_member ADD COLUMN image_url VARCHAR(500)")
 
-    # Normalize legacy enum casing so SQLAlchemy can read the values safely.
-    if "status" in columns:
-        status_fixes = [
-            "UPDATE team_member SET status = 'Active' WHERE status = 'ACTIVE'",
-            "UPDATE team_member SET status = 'Inactive' WHERE status = 'INACTIVE'",
-            "UPDATE team_member SET status = 'On Leave' WHERE status IN ('ON_LEAVE', 'ON LEAVE')",
-        ]
-    else:
-        status_fixes = []
-
     dialect = engine.dialect.name
 
     if "status" in columns:
-        status_expression = "status::text" if dialect == "postgresql" else "status"
-        trimmed_status = f"TRIM({status_expression})"
-        lowered_trimmed_status = f"LOWER({trimmed_status})"
-        normalized_status = f"REPLACE(REPLACE({lowered_trimmed_status}, '_', ' '), '-', ' ')"
+        status_type = column_types.get("status")
+        if isinstance(status_type, (sqltypes.Enum, sqltypes.String)):
+            # Normalize legacy enum casing so SQLAlchemy can read the values safely.
+            status_fixes.extend(
+                [
+                    "UPDATE team_member SET status = 'Active' WHERE status = 'ACTIVE'",
+                    "UPDATE team_member SET status = 'Inactive' WHERE status = 'INACTIVE'",
+                    "UPDATE team_member SET status = 'On Leave' WHERE status IN ('ON_LEAVE', 'ON LEAVE')",
+                ]
+            )
 
-        status_fixes.extend(
-            [
-                f"UPDATE team_member SET status = 'Active' WHERE {lowered_trimmed_status} = 'active' AND status <> 'Active'",
-                f"UPDATE team_member SET status = 'Inactive' WHERE {lowered_trimmed_status} = 'inactive' AND status <> 'Inactive'",
-                f"UPDATE team_member SET status = 'On Leave' WHERE {normalized_status} = 'on leave' AND status <> 'On Leave'",
-                f"UPDATE team_member SET status = 'Active' WHERE status IS NULL OR {trimmed_status} = ''",
-            ]
-        )
+            status_expression = "status::text" if dialect == "postgresql" else "status"
+            trimmed_status = f"TRIM({status_expression})"
+            lowered_trimmed_status = f"LOWER({trimmed_status})"
+            normalized_status = f"REPLACE(REPLACE({lowered_trimmed_status}, '_', ' '), '-', ' ')"
+
+            status_fixes.extend(
+                [
+                    f"UPDATE team_member SET status = 'Active' WHERE {lowered_trimmed_status} = 'active' AND status <> 'Active'",
+                    f"UPDATE team_member SET status = 'Inactive' WHERE {lowered_trimmed_status} = 'inactive' AND status <> 'Inactive'",
+                    f"UPDATE team_member SET status = 'On Leave' WHERE {normalized_status} = 'on leave' AND status <> 'On Leave'",
+                    f"UPDATE team_member SET status = 'Active' WHERE status IS NULL OR {trimmed_status} = ''",
+                ]
+            )
+        else:
+            current_app.logger.warning(
+                "Skipping team_member status normalization; unexpected column type %s", status_type
+            )
 
     if "created_at" not in columns:
         statements.append("ALTER TABLE team_member ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -99,12 +108,12 @@ def _ensure_schema():
             for stmt in status_fixes:
                 try:
                     conn.execute(text(stmt))
-                except (ProgrammingError, OperationalError):
+                except (ProgrammingError, OperationalError, DataError):
                     current_app.logger.debug("Status normalization statement failed or already applied: %s", stmt)
             for stmt in statements:
                 try:
                     conn.execute(text(stmt))
-                except (ProgrammingError, OperationalError):
+                except (ProgrammingError, OperationalError, DataError):
                     current_app.logger.debug("Schema statement likely already applied: %s", stmt)
 
 

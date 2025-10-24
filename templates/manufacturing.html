@@ -234,25 +234,65 @@
                     </div>
                 </div>
                 <div class="forecast-layout">
-                    <div class="forecast-calendar">
-                        <table class="forecast-calendar__table">
-                            <thead class="forecast-calendar__head">
-                                <tr>
-                                    <th scope="col">Mon</th>
-                                    <th scope="col">Tue</th>
-                                    <th scope="col">Wed</th>
-                                    <th scope="col">Thu</th>
-                                    <th scope="col">Fri</th>
-                                    <th scope="col">Sat</th>
-                                    <th scope="col">Sun</th>
-                                </tr>
-                            </thead>
-                            <tbody class="forecast-calendar__body" id="forecast-calendar-body">
-                                <tr>
-                                    <td colspan="7" class="forecast-calendar__empty">Select a machine to manage forecasts.</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="forecast-left-panel">
+                        <div class="forecast-calendar">
+                            <table class="forecast-calendar__table">
+                                <thead class="forecast-calendar__head">
+                                    <tr>
+                                        <th scope="col">Mon</th>
+                                        <th scope="col">Tue</th>
+                                        <th scope="col">Wed</th>
+                                        <th scope="col">Thu</th>
+                                        <th scope="col">Fri</th>
+                                        <th scope="col">Sat</th>
+                                        <th scope="col">Sun</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="forecast-calendar__body" id="forecast-calendar-body">
+                                    <tr>
+                                        <td colspan="7" class="forecast-calendar__empty">Select a machine to manage forecasts.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <article class="forecast-overview-card forecast-overview-card--idle">
+                            <h4 class="forecast-overview-card__heading">Idle hours tracker</h4>
+                            <p class="forecast-overview-card__note">
+                                Target runtime
+                                <span class="forecast-overview-card__note-value" id="idle-summary-target-hours">11.00</span>
+                                <span class="forecast-overview-card__note-unit">hrs/day</span>
+                            </p>
+                            <div class="idle-summary__header">
+                                <p class="idle-summary__period" id="idle-summary-period">—</p>
+                                <p class="idle-summary__hint">Values show idle hours per machine.</p>
+                            </div>
+                            <div class="idle-summary__table-wrapper">
+                                <table class="idle-summary__table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Day</th>
+                                            <th scope="col">MCH-0001</th>
+                                            <th scope="col">MCH-0002</th>
+                                            <th scope="col">MCH-0003</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="idle-summary-body">
+                                        <tr id="idle-summary-empty">
+                                            <td colspan="4">Idle summary will appear here.</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="idle-summary__totals">
+                                            <th scope="row">Total idle</th>
+                                            <td id="idle-summary-total-mch-0001">0.00</td>
+                                            <td id="idle-summary-total-mch-0002">0.00</td>
+                                            <td id="idle-summary-total-mch-0003">0.00</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <p class="idle-summary__error" id="idle-summary-error" hidden></p>
+                        </article>
                     </div>
                     <div class="forecast-detail">
                         <form class="forecast-form" id="forecast-form" novalidate>
@@ -495,44 +535,6 @@
                                         </li>
                                     </ul>
                                     <p class="forecast-overview-card__note">Total scheduled hours captured per machine.</p>
-                                </article>
-                                <article class="forecast-overview-card forecast-overview-card--idle">
-                                    <h4 class="forecast-overview-card__heading">Idle hours tracker</h4>
-                                    <p class="forecast-overview-card__note">
-                                        Target runtime
-                                        <span class="forecast-overview-card__note-value" id="idle-summary-target-hours">11.00</span>
-                                        <span class="forecast-overview-card__note-unit">hrs/day</span>
-                                    </p>
-                                    <div class="idle-summary__header">
-                                        <p class="idle-summary__period" id="idle-summary-period">—</p>
-                                        <p class="idle-summary__hint">Values show idle hours per machine.</p>
-                                    </div>
-                                    <div class="idle-summary__table-wrapper">
-                                        <table class="idle-summary__table">
-                                            <thead>
-                                                <tr>
-                                                    <th scope="col">Day</th>
-                                                    <th scope="col">MCH-0001</th>
-                                                    <th scope="col">MCH-0002</th>
-                                                    <th scope="col">MCH-0003</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="idle-summary-body">
-                                                <tr id="idle-summary-empty">
-                                                    <td colspan="4">Idle summary will appear here.</td>
-                                                </tr>
-                                            </tbody>
-                                            <tfoot>
-                                                <tr class="idle-summary__totals">
-                                                    <th scope="row">Total idle</th>
-                                                    <td id="idle-summary-total-mch-0001">0.00</td>
-                                                    <td id="idle-summary-total-mch-0002">0.00</td>
-                                                    <td id="idle-summary-total-mch-0003">0.00</td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                    <p class="idle-summary__error" id="idle-summary-error" hidden></p>
                                 </article>
                             </div>
                         </section>

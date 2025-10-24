@@ -964,8 +964,12 @@
             panels.forEach((panel) => {
                 const isActive = panel.dataset.tabPanel === target;
                 panel.classList.toggle("is-active", isActive);
-                if (panel.hidden !== undefined) {
-                    panel.hidden = !isActive;
+                if (typeof panel.toggleAttribute === "function") {
+                    panel.toggleAttribute("hidden", !isActive);
+                } else if (isActive) {
+                    panel.removeAttribute("hidden");
+                } else {
+                    panel.setAttribute("hidden", "");
                 }
             });
 

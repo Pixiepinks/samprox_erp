@@ -1055,6 +1055,7 @@
             } else if (target === "assets") {
                 populateAssetSelects();
             } else if (target === "idle") {
+                idleSummaryCache.clear();
                 Promise.resolve(refreshIdleAnalytics()).catch(() => {});
             }
         }
@@ -1151,6 +1152,30 @@
         let idleInitialized = false;
         let idleEvents = [];
         const idleSummaryCache = new Map();
+
+        function buildIdleSummaryCacheKey(monthKey, machineCodes) {
+            const month = typeof monthKey === "string" ? monthKey.slice(0, 7) : "";
+            if (!month) {
+                return null;
+            }
+            const codes = normalizeMachineCodes(machineCodes || []);
+            codes.sort((a, b) => a.localeCompare(b));
+            return `${month}|${codes.join(",")}`;
+        }
+
+        function invalidateIdleSummaryCache(monthKey, machineCodes) {
+            if (!(idleSummaryCache instanceof Map)) {
+                return;
+            }
+            if (!monthKey) {
+                idleSummaryCache.clear();
+                return;
+            }
+            const cacheKey = buildIdleSummaryCacheKey(monthKey, machineCodes);
+            if (cacheKey) {
+                idleSummaryCache.delete(cacheKey);
+            }
+        }
 
         const IDLE_SHIFT_START = "07:00";
 
@@ -1440,6 +1465,7 @@
                 renderAssets();
                 populateAssetSelects();
                 renderMachineCards();
+                idleSummaryCache.clear();
                 if (idleInitialized) {
                     Promise.resolve(refreshIdleAnalytics()).catch(() => {});
                 }
@@ -1452,6 +1478,7 @@
                 renderAssets();
                 populateAssetSelects();
                 renderMachineCards();
+                idleSummaryCache.clear();
                 if (idleInitialized) {
                     Promise.resolve(refreshIdleAnalytics()).catch(() => {});
                 }
@@ -2036,6 +2063,9 @@
             if (idleDateInput) {
                 idleDateInput.addEventListener("change", () => {
                     hideIdleMessages();
+                    const monthKey = (idleDateInput.value || "").slice(0, 7);
+                    const machineCodes = getTrackedMachineCodes();
+                    invalidateIdleSummaryCache(monthKey, machineCodes);
                     refreshIdleAnalytics();
                 });
             }
@@ -2199,8 +2229,8 @@
             if (!monthKey) {
                 return null;
             }
-            const cacheKey = `${monthKey}|${machineCodes.slice().sort().join(",")}`;
-            if (idleSummaryCache.has(cacheKey)) {
+            const cacheKey = buildIdleSummaryCacheKey(monthKey, machineCodes);
+            if (cacheKey && idleSummaryCache.has(cacheKey)) {
                 return idleSummaryCache.get(cacheKey);
             }
 
@@ -2209,7 +2239,9 @@
                 params.set("machine_codes", machineCodes.join(","));
             }
             const summary = await fetchJson(`/api/production/monthly/idle-summary?${params.toString()}`);
-            idleSummaryCache.set(cacheKey, summary);
+            if (cacheKey) {
+                idleSummaryCache.set(cacheKey, summary);
+            }
             return summary;
         }
 
@@ -2567,6 +2599,9 @@
                     idleEntrySuccess.textContent = `Recorded idle window ${startLabel} – ${endLabel} for ${machineCode}.`;
                     idleEntrySuccess.hidden = false;
                 }
+                const trackedCodes = getTrackedMachineCodes();
+                const monthKey = (dateValue || "").slice(0, 7);
+                invalidateIdleSummaryCache(monthKey, trackedCodes);
                 await refreshIdleAnalytics();
             } catch (error) {
                 if (idleEntryError) {

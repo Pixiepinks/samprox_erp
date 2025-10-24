@@ -1,9 +1,11 @@
 """REST endpoints for machine assets, parts, idle events and suppliers."""
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from extensions import db
 from models import (
@@ -281,7 +283,12 @@ def list_replacements(part_id: int):
 @bp.get("/idle-events")
 @jwt_required()
 def list_idle_events():
-    query = MachineIdleEvent.query.join(MachineAsset)
+    """Return idle events filtered by asset, machine code or date range."""
+
+    query = MachineIdleEvent.query.options(joinedload(MachineIdleEvent.asset)).join(
+        MachineAsset
+    )
+
     asset_id = request.args.get("asset_id")
     if asset_id:
         try:
@@ -289,6 +296,50 @@ def list_idle_events():
         except (TypeError, ValueError):
             return jsonify({"msg": "Invalid asset_id"}), 400
         query = query.filter(MachineIdleEvent.asset_id == asset_id)
+
+    machine_codes = request.args.get("machine_codes")
+    if machine_codes:
+        codes = [code.strip() for code in machine_codes.split(",") if code.strip()]
+        if codes:
+            lowered = [code.lower() for code in codes]
+            query = query.filter(func.lower(MachineAsset.code).in_(lowered))
+
+    start_param = request.args.get("start_date")
+    end_param = request.args.get("end_date")
+    start_dt = None
+    end_dt = None
+
+    if start_param:
+        try:
+            start_dt = _parse_datetime(start_param, field_name="start_date")
+        except ValueError:
+            try:
+                parsed_date = _parse_date(start_param, field_name="start_date")
+            except ValueError as exc:
+                return jsonify({"msg": str(exc)}), 400
+            start_dt = datetime.combine(parsed_date, time.min)
+
+    if end_param:
+        try:
+            end_dt = _parse_datetime(end_param, field_name="end_date")
+        except ValueError:
+            try:
+                parsed_date = _parse_date(end_param, field_name="end_date")
+            except ValueError as exc:
+                return jsonify({"msg": str(exc)}), 400
+            end_dt = datetime.combine(parsed_date, time.max)
+
+    if start_dt and end_dt and end_dt < start_dt:
+        return jsonify({"msg": "end_date must be after start_date"}), 400
+
+    if start_dt:
+        query = query.filter(
+            func.coalesce(MachineIdleEvent.ended_at, datetime.utcnow()) >= start_dt
+        )
+
+    if end_dt:
+        query = query.filter(MachineIdleEvent.started_at <= end_dt)
+
     events = query.order_by(MachineIdleEvent.started_at.desc()).all()
     return jsonify(idle_events_schema.dump(events))
 

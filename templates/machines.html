@@ -2316,7 +2316,7 @@
 
             trackedCodes.forEach((code) => {
                 const normalizedCode = code.toUpperCase();
-                const machineEntry = dayEntry?.machines?.[code] || {};
+                const machineEntry = dayEntry?.machines?.[normalizedCode] || {};
                 const machineEvents = eventsByMachine.get(normalizedCode) || [];
                 const prominentEvent = machineEvents
                     .slice()

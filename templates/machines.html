@@ -272,77 +272,217 @@
                     </div>
                 </section>
                 <section id="tab-idle" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-idle" data-tab-panel="idle" hidden>
-                    <div class="panel-grid">
-                        <section class="panel panel--form">
+                    <section class="idle-hero">
+                        <div class="idle-hero__content">
+                            <p class="idle-hero__eyebrow">Intelligent downtime radar</p>
+                            <h2>Daily machine utilisation pulse</h2>
+                            <p>Capture hour meter readings, quantify idle time instantly and surface the reason behind every lull.</p>
+                        </div>
+                        <div class="idle-hero__controls">
+                            <label for="idle-date">Analysis date</label>
+                            <input id="idle-date" type="date" name="analysis_date" />
+                        </div>
+                        <div class="idle-hero__stats">
+                            <div class="idle-stat">
+                                <span class="idle-stat__label">Total runtime</span>
+                                <span class="idle-stat__value" data-total-runtime>0 h</span>
+                                <span class="idle-stat__hint">Including overtime</span>
+                            </div>
+                            <div class="idle-stat">
+                                <span class="idle-stat__label">Idle within shift</span>
+                                <span class="idle-stat__value" data-total-idle>0 h</span>
+                                <span class="idle-stat__hint">07:00 &ndash; 19:00 window</span>
+                            </div>
+                            <div class="idle-stat">
+                                <span class="idle-stat__label">Captured overtime</span>
+                                <span class="idle-stat__value" data-total-extended>0 h</span>
+                                <span class="idle-stat__hint">Beyond 19:00</span>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="panel-grid idle-grid">
+                        <section class="panel idle-panel idle-panel--form">
                             <header class="panel__header">
                                 <div>
-                                    <h2>Log idle time</h2>
-                                    <p class="panel__subtitle">Track unplanned downtime for visibility and analysis.</p>
+                                    <h2>Log today&rsquo;s hour meter</h2>
+                                    <p class="panel__subtitle">Record 07:00 &amp; 19:00 readings, add overtime and note the idle reason.</p>
                                 </div>
                             </header>
                             <div class="panel__body">
-                                <div class="alert alert--info" id="idle-form-notice" hidden></div>
-                                <div class="alert alert--success" id="idle-form-success" hidden>Idle time recorded.</div>
-                                <div class="alert alert--error" id="idle-form-error" hidden></div>
-                                <form class="form" id="idle-form" novalidate>
-                                    <div class="form-grid">
+                                <div class="alert alert--info" id="idle-entry-notice" hidden></div>
+                                <div class="alert alert--success" id="idle-entry-success" hidden></div>
+                                <div class="alert alert--error" id="idle-entry-error" hidden></div>
+                                <form class="form idle-form" id="idle-entry-form" novalidate>
+                                    <div class="idle-form__grid">
                                         <div class="input-group">
-                                            <label for="idle-asset">Asset <span class="required">*</span></label>
-                                            <select id="idle-asset" name="asset_id" required></select>
+                                            <label for="idle-machine">Machine <span class="required">*</span></label>
+                                            <select id="idle-machine" name="machine" required>
+                                                <option value="MCH-0001">MCH-0001 — Cutting Cell</option>
+                                                <option value="MCH-0002">MCH-0002 — Precision Lathe</option>
+                                                <option value="MCH-0003">MCH-0003 — Finishing Line</option>
+                                            </select>
                                         </div>
                                         <div class="input-group">
-                                            <label for="idle-started">Start <span class="required">*</span></label>
-                                            <input id="idle-started" name="started_at" type="datetime-local" required />
+                                            <label for="idle-start-reading">07:00 hour meter <span class="required">*</span></label>
+                                            <input id="idle-start-reading" name="start_reading" type="number" step="0.1" min="0" placeholder="e.g. 1,250.0" required />
                                         </div>
                                         <div class="input-group">
-                                            <label for="idle-ended">End</label>
-                                            <input id="idle-ended" name="ended_at" type="datetime-local" />
+                                            <label for="idle-end-reading">19:00 hour meter <span class="required">*</span></label>
+                                            <input id="idle-end-reading" name="end_reading" type="number" step="0.1" min="0" placeholder="e.g. 1,261.0" required />
                                         </div>
-                                    </div>
-                                    <div class="input-group">
-                                        <label for="idle-reason">Reason</label>
-                                        <input id="idle-reason" name="reason" type="text" placeholder="Breakdown, inspection, etc." />
+                                        <div class="input-group">
+                                            <label for="idle-extended-time">Extended shift end</label>
+                                            <input id="idle-extended-time" name="extended_time" type="time" min="19:00" step="900" />
+                                            <span class="input-hint">Only needed if the factory ran past 19:00.</span>
+                                        </div>
+                                        <div class="input-group">
+                                            <label for="idle-extended-reading">Extended hour meter</label>
+                                            <input id="idle-extended-reading" name="extended_reading" type="number" step="0.1" min="0" placeholder="e.g. 1,264.5" />
+                                        </div>
+                                        <div class="input-group">
+                                            <label for="idle-reason">Primary idle reason</label>
+                                            <select id="idle-reason" name="reason">
+                                                <option value="">No idle &mdash; full run</option>
+                                                <option value="Machine break down">Machine break down</option>
+                                                <option value="No Labor Force">No Labor Force</option>
+                                                <option value="No Material">No Material</option>
+                                                <option value="Planned maintenance">Planned maintenance</option>
+                                                <option value="Changeover / setup">Changeover / setup</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     <div class="input-group">
                                         <label for="idle-notes">Notes</label>
-                                        <textarea id="idle-notes" name="notes" rows="3" placeholder="Optional details"></textarea>
+                                        <textarea id="idle-notes" name="notes" rows="2" placeholder="Add context, corrective action or follow-up"></textarea>
                                     </div>
                                     <div class="form__footer">
-                                        <button type="submit" class="button">Log idle time</button>
+                                        <button type="submit" class="button">Save day record</button>
                                     </div>
                                 </form>
                             </div>
                         </section>
-                        <section class="panel panel--list">
+                        <section class="panel idle-panel idle-panel--chart">
                             <header class="panel__header">
                                 <div>
-                                    <h2>Idle time log</h2>
-                                    <p class="panel__subtitle">Most recent idle events first.</p>
+                                    <h2>Running vs idle hours</h2>
+                                    <p class="panel__subtitle">Stacked comparison for the 07:00 &ndash; 19:00 shift plus captured overtime.</p>
                                 </div>
-                                <button type="button" class="button button--ghost" id="refresh-idle">Refresh</button>
                             </header>
-                            <div class="panel__body">
-                                <div class="alert alert--error" id="idle-error" hidden></div>
-                                <div class="empty-state" id="idle-empty" hidden>
-                                    <p>No idle time has been recorded yet.</p>
-                                </div>
-                                <div class="table-wrapper">
-                                    <table class="data-table" aria-describedby="idle-empty">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Asset</th>
-                                                <th scope="col">Start</th>
-                                                <th scope="col">End</th>
-                                                <th scope="col">Duration (min)</th>
-                                                <th scope="col">Reason</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="idle-table-body"></tbody>
-                                    </table>
-                                </div>
+                            <div class="panel__body idle-chart-wrapper">
+                                <canvas id="idle-chart" role="img" aria-label="Machine running, idle and overtime hours"></canvas>
+                                <p class="idle-chart__legend-hint">Standard shift = 11 productive hours (60 minutes paused for lunch).</p>
                             </div>
                         </section>
                     </div>
+                    <section class="panel idle-machines">
+                        <header class="idle-machines__header">
+                            <div>
+                                <h2>Machine spotlight</h2>
+                                <p class="panel__subtitle">Realtime utilisation pulse with reason-led idle windows.</p>
+                            </div>
+                        </header>
+                        <div class="idle-machine-grid">
+                            <article class="machine-glance" data-machine-card="MCH-0001">
+                                <header class="machine-glance__header">
+                                    <div>
+                                        <p class="machine-glance__code">MCH-0001</p>
+                                        <h3 class="machine-glance__title">Cutting Cell</h3>
+                                    </div>
+                                    <span class="status-pill" data-machine-status>Awaiting data</span>
+                                </header>
+                                <p class="machine-glance__runtime"><span data-machine-runtime>—</span> <small>runtime</small></p>
+                                <div class="machine-glance__progress" aria-hidden="true">
+                                    <div class="machine-glance__progress-bar" data-machine-progress></div>
+                                </div>
+                                <dl class="machine-glance__metrics">
+                                    <div>
+                                        <dt>Idle</dt>
+                                        <dd data-machine-idle>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Overtime</dt>
+                                        <dd data-machine-extended>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Utilisation</dt>
+                                        <dd data-machine-utilisation>—</dd>
+                                    </div>
+                                </dl>
+                                <div class="machine-glance__reason" data-machine-reason>Idle reason insights will appear here.</div>
+                                <p class="machine-glance__note" data-machine-note></p>
+                            </article>
+                            <article class="machine-glance" data-machine-card="MCH-0002">
+                                <header class="machine-glance__header">
+                                    <div>
+                                        <p class="machine-glance__code">MCH-0002</p>
+                                        <h3 class="machine-glance__title">Precision Lathe</h3>
+                                    </div>
+                                    <span class="status-pill" data-machine-status>Awaiting data</span>
+                                </header>
+                                <p class="machine-glance__runtime"><span data-machine-runtime>—</span> <small>runtime</small></p>
+                                <div class="machine-glance__progress" aria-hidden="true">
+                                    <div class="machine-glance__progress-bar" data-machine-progress></div>
+                                </div>
+                                <dl class="machine-glance__metrics">
+                                    <div>
+                                        <dt>Idle</dt>
+                                        <dd data-machine-idle>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Overtime</dt>
+                                        <dd data-machine-extended>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Utilisation</dt>
+                                        <dd data-machine-utilisation>—</dd>
+                                    </div>
+                                </dl>
+                                <div class="machine-glance__reason" data-machine-reason>Idle reason insights will appear here.</div>
+                                <p class="machine-glance__note" data-machine-note></p>
+                            </article>
+                            <article class="machine-glance" data-machine-card="MCH-0003">
+                                <header class="machine-glance__header">
+                                    <div>
+                                        <p class="machine-glance__code">MCH-0003</p>
+                                        <h3 class="machine-glance__title">Finishing Line</h3>
+                                    </div>
+                                    <span class="status-pill" data-machine-status>Awaiting data</span>
+                                </header>
+                                <p class="machine-glance__runtime"><span data-machine-runtime>—</span> <small>runtime</small></p>
+                                <div class="machine-glance__progress" aria-hidden="true">
+                                    <div class="machine-glance__progress-bar" data-machine-progress></div>
+                                </div>
+                                <dl class="machine-glance__metrics">
+                                    <div>
+                                        <dt>Idle</dt>
+                                        <dd data-machine-idle>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Overtime</dt>
+                                        <dd data-machine-extended>—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Utilisation</dt>
+                                        <dd data-machine-utilisation>—</dd>
+                                    </div>
+                                </dl>
+                                <div class="machine-glance__reason" data-machine-reason>Idle reason insights will appear here.</div>
+                                <p class="machine-glance__note" data-machine-note></p>
+                            </article>
+                        </div>
+                    </section>
+                    <section class="panel idle-insights">
+                        <header class="idle-insights__header">
+                            <div>
+                                <h2>Actionable insights</h2>
+                                <p class="panel__subtitle">Reasons with the biggest impact and suggested focus areas.</p>
+                            </div>
+                        </header>
+                        <div class="idle-insights__body">
+                            <ul class="insight-list" id="idle-insights"></ul>
+                            <div class="idle-reasons" id="idle-reason-pills"></div>
+                        </div>
+                    </section>
                 </section>
                 <section id="tab-suppliers" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-suppliers" data-tab-panel="suppliers" hidden>
                     <div class="panel-grid">
@@ -537,6 +677,7 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-bpBHZqKq+2SkKHlO0AXuI61uvcJmMsStzPkqVd/cTHttFQRz+7y//kKS1a2s4N8b" crossorigin="anonymous"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -837,12 +978,14 @@
                 } else if (target === "maintenance") {
                     loadJobs();
                 } else if (target === "idle") {
-                    loadIdleEvents();
+                    initializeIdleAnalytics();
                 } else if (target === "suppliers") {
                     loadSuppliers();
                 }
             } else if (target === "assets") {
                 populateAssetSelects();
+            } else if (target === "idle") {
+                updateIdleAnalytics();
             }
         }
 
@@ -883,15 +1026,25 @@
         const jobsTableBody = document.getElementById("jobs-table-body");
         const refreshJobsButton = document.getElementById("refresh-jobs");
 
-        const idleForm = document.getElementById("idle-form");
-        const idleFormNotice = document.getElementById("idle-form-notice");
-        const idleFormSuccess = document.getElementById("idle-form-success");
-        const idleFormError = document.getElementById("idle-form-error");
-        const idleAssetSelect = document.getElementById("idle-asset");
-        const idleError = document.getElementById("idle-error");
-        const idleEmpty = document.getElementById("idle-empty");
-        const idleTableBody = document.getElementById("idle-table-body");
-        const refreshIdleButton = document.getElementById("refresh-idle");
+        const idleEntryForm = document.getElementById("idle-entry-form");
+        const idleEntryNotice = document.getElementById("idle-entry-notice");
+        const idleEntrySuccess = document.getElementById("idle-entry-success");
+        const idleEntryError = document.getElementById("idle-entry-error");
+        const idleDateInput = document.getElementById("idle-date");
+        const idleMachineSelect = document.getElementById("idle-machine");
+        const idleStartReadingInput = document.getElementById("idle-start-reading");
+        const idleEndReadingInput = document.getElementById("idle-end-reading");
+        const idleExtendedTimeInput = document.getElementById("idle-extended-time");
+        const idleExtendedReadingInput = document.getElementById("idle-extended-reading");
+        const idleReasonSelect = document.getElementById("idle-reason");
+        const idleNotesInput = document.getElementById("idle-notes");
+        const idleChartCanvas = document.getElementById("idle-chart");
+        const idleStatRuntime = document.querySelector("[data-total-runtime]");
+        const idleStatIdle = document.querySelector("[data-total-idle]");
+        const idleStatExtended = document.querySelector("[data-total-extended]");
+        const idleInsightsList = document.getElementById("idle-insights");
+        const idleReasonPills = document.getElementById("idle-reason-pills");
+        const machineCards = Array.from(document.querySelectorAll("[data-machine-card]"));
 
         const supplierForm = document.getElementById("supplier-form");
         const supplierFormNotice = document.getElementById("supplier-form-notice");
@@ -906,6 +1059,85 @@
         let currentAssetId = null;
         let currentParts = [];
         let latestCodeRequest = 0;
+
+        const SHIFT_DURATION_HOURS = 11;
+        const machineMetadata = new Map([
+            ["MCH-0001", { title: "Cutting Cell" }],
+            ["MCH-0002", { title: "Precision Lathe" }],
+            ["MCH-0003", { title: "Finishing Line" }],
+        ]);
+
+        const today = new Date();
+        const todayDateString = today.toISOString().slice(0, 10);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const yesterdayDateString = yesterday.toISOString().slice(0, 10);
+
+        const idleEntries = [
+            {
+                machine: "MCH-0001",
+                date: todayDateString,
+                startReading: 1520,
+                shiftEndReading: 1530.5,
+                extendedEndTime: "21:30",
+                extendedReading: 1533.2,
+                reason: "Machine break down",
+                notes: "Hydraulic seal replaced after 40 min stoppage.",
+            },
+            {
+                machine: "MCH-0002",
+                date: todayDateString,
+                startReading: 880,
+                shiftEndReading: 890.2,
+                extendedEndTime: "",
+                extendedReading: null,
+                reason: "No Labor Force",
+                notes: "Second shift operator onboarding from 14:00-15:00.",
+            },
+            {
+                machine: "MCH-0003",
+                date: todayDateString,
+                startReading: 430,
+                shiftEndReading: 435.5,
+                extendedEndTime: "22:00",
+                extendedReading: 438.4,
+                reason: "No Material",
+                notes: "Waiting for anodised components until 13:30.",
+            },
+            {
+                machine: "MCH-0001",
+                date: yesterdayDateString,
+                startReading: 1508.5,
+                shiftEndReading: 1519.5,
+                extendedEndTime: "",
+                extendedReading: null,
+                reason: "",
+                notes: "Smooth production run.",
+            },
+            {
+                machine: "MCH-0002",
+                date: yesterdayDateString,
+                startReading: 869.8,
+                shiftEndReading: 880.4,
+                extendedEndTime: "20:30",
+                extendedReading: 882.6,
+                reason: "Machine break down",
+                notes: "Spindle vibration check took 25 min.",
+            },
+            {
+                machine: "MCH-0003",
+                date: yesterdayDateString,
+                startReading: 421,
+                shiftEndReading: 432,
+                extendedEndTime: "",
+                extendedReading: null,
+                reason: "Planned maintenance",
+                notes: "Preventive polishing head change.",
+            },
+        ];
+
+        let idleChartInstance = null;
+        let idleInitialized = false;
 
         const DEFAULT_PARTS_EMPTY_MESSAGE = assetPartsEmptyMessage?.textContent?.trim() ||
             "No parts have been registered for this asset yet.";
@@ -944,10 +1176,10 @@
             });
         }
 
-        if (!canLogIdle) {
-            idleFormNotice.textContent = "Only authorised maintenance roles can log idle time.";
-            idleFormNotice.hidden = false;
-            idleForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
+        if (!canLogIdle && idleEntryForm) {
+            idleEntryNotice.textContent = "Only Production, Maintenance Managers or Admins can log hour meter readings.";
+            idleEntryNotice.hidden = false;
+            idleEntryForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
                 element.disabled = true;
             });
         }
@@ -1068,33 +1300,22 @@
         }
 
         function populateAssetSelects() {
-            if (!idleAssetSelect) return;
-            const currentValue = idleAssetSelect.value;
-            idleAssetSelect.innerHTML = "";
-            if (!assets.length) {
-                const option = document.createElement("option");
-                option.value = "";
-                option.textContent = "No assets available";
-                idleAssetSelect.appendChild(option);
-                idleAssetSelect.disabled = true;
-                return;
-            }
-            idleAssetSelect.disabled = false;
-            const placeholder = document.createElement("option");
-            placeholder.value = "";
-            placeholder.textContent = "Select an asset";
-            idleAssetSelect.appendChild(placeholder);
+            if (!idleMachineSelect) return;
+            const currentValue = idleMachineSelect.value;
+            const existingValues = new Set(Array.from(idleMachineSelect.options).map((option) => option.value));
             assets.forEach((asset) => {
+                if (!asset?.code || existingValues.has(asset.code)) return;
                 const option = document.createElement("option");
-                option.value = asset.id;
-                option.textContent = `${asset.code} — ${asset.name}`;
-                if (currentAssetId && asset.id === currentAssetId) {
-                    option.selected = true;
-                } else if (currentValue && String(asset.id) === currentValue) {
-                    option.selected = true;
+                option.value = asset.code;
+                option.textContent = `${asset.code} — ${asset.name || "Machine"}`;
+                idleMachineSelect.appendChild(option);
+                if (!machineMetadata.has(asset.code)) {
+                    machineMetadata.set(asset.code, { title: asset.name || asset.code });
                 }
-                idleAssetSelect.appendChild(option);
             });
+            if (!currentValue && idleMachineSelect.options.length > 0) {
+                idleMachineSelect.value = idleMachineSelect.options[0].value;
+            }
         }
 
         async function loadAssets() {
@@ -1575,76 +1796,452 @@
             });
         }
 
-        function renderIdleEvents(events) {
-            idleTableBody.innerHTML = "";
-            if (!Array.isArray(events) || events.length === 0) {
-                idleEmpty.hidden = false;
+        function hideIdleMessages() {
+            if (idleEntrySuccess) idleEntrySuccess.hidden = true;
+            if (idleEntryError) idleEntryError.hidden = true;
+        }
+
+        function initializeIdleAnalytics() {
+            if (!idleEntryForm || idleInitialized) {
+                updateIdleAnalytics();
                 return;
             }
-            idleEmpty.hidden = true;
-            events.forEach((event) => {
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td data-label="Asset">${event.asset ? `${event.asset.code} — ${event.asset.name}` : event.asset_id}</td>
-                    <td data-label="Start">${formatDate(event.started_at, true)}</td>
-                    <td data-label="End">${formatDate(event.ended_at, true)}</td>
-                    <td data-label="Duration">${formatDuration(event.duration_minutes)}</td>
-                    <td data-label="Reason">${event.reason || "—"}</td>
-                `;
-                idleTableBody.appendChild(row);
-            });
+
+            idleInitialized = true;
+
+            if (idleDateInput && !idleDateInput.value) {
+                idleDateInput.value = todayDateString;
+            }
+
+            if (idleMachineSelect && !idleMachineSelect.value && idleMachineSelect.options.length > 0) {
+                idleMachineSelect.value = idleMachineSelect.options[0].value;
+            }
+
+            if (idleEntryForm && canLogIdle) {
+                idleEntryForm.addEventListener("submit", handleIdleFormSubmit);
+            }
+
+            if (idleMachineSelect) {
+                idleMachineSelect.addEventListener("change", () => {
+                    hideIdleMessages();
+                    prefillIdleForm();
+                });
+            }
+
+            if (idleDateInput) {
+                idleDateInput.addEventListener("change", () => {
+                    hideIdleMessages();
+                    prefillIdleForm();
+                    updateIdleAnalytics();
+                });
+            }
+
+            if (idleEntryForm) {
+                idleEntryForm.addEventListener("reset", () => {
+                    setTimeout(() => {
+                        prefillIdleForm();
+                        updateIdleAnalytics();
+                    }, 0);
+                });
+            }
+
+            if (idleChartCanvas && window.Chart && !idleChartInstance) {
+                const context = idleChartCanvas.getContext("2d");
+                idleChartInstance = new Chart(context, {
+                    type: "bar",
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: "Active (07:00 – 19:00)",
+                                data: [],
+                                backgroundColor: "rgba(37, 99, 235, 0.85)",
+                                borderRadius: 14,
+                                borderSkipped: false,
+                                stack: "shift",
+                            },
+                            {
+                                label: "Idle (07:00 – 19:00)",
+                                data: [],
+                                backgroundColor: "rgba(148, 163, 184, 0.55)",
+                                borderRadius: 14,
+                                borderSkipped: false,
+                                stack: "shift",
+                            },
+                            {
+                                label: "Extended runtime",
+                                data: [],
+                                backgroundColor: "rgba(16, 185, 129, 0.8)",
+                                borderRadius: 14,
+                                borderSkipped: false,
+                                stack: "shift",
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                ticks: {
+                                    color: "#0f172a",
+                                    font: { weight: 600 },
+                                },
+                                grid: { display: false },
+                            },
+                            y: {
+                                stacked: true,
+                                title: { display: true, text: "Hours" },
+                                ticks: {
+                                    callback: (value) => `${value} h`,
+                                },
+                                grid: { color: "rgba(148, 163, 184, 0.25)" },
+                            },
+                        },
+                        plugins: {
+                            legend: {
+                                position: "bottom",
+                                labels: { usePointStyle: true },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(2)} h`,
+                                },
+                            },
+                        },
+                    },
+                });
+            }
+
+            prefillIdleForm();
+            updateIdleAnalytics();
         }
 
-        async function loadIdleEvents() {
-            idleError.hidden = true;
-            idleError.textContent = "";
-            try {
-                const events = await fetchJson("/api/machines/idle-events");
-                renderIdleEvents(events);
-            } catch (error) {
-                idleError.textContent = error.message || "Unable to load idle events";
-                idleError.hidden = false;
-                renderIdleEvents([]);
+        function prefillIdleForm() {
+            if (!idleEntryForm) return;
+            const machine = idleMachineSelect?.value || "";
+            const dateValue = idleDateInput?.value || todayDateString;
+            const entry = idleEntries.find((record) => record.machine === machine && record.date === dateValue);
+
+            if (idleStartReadingInput) {
+                idleStartReadingInput.value = entry?.startReading ?? "";
+            }
+            if (idleEndReadingInput) {
+                idleEndReadingInput.value = entry?.shiftEndReading ?? "";
+            }
+            if (idleExtendedTimeInput) {
+                idleExtendedTimeInput.value = entry?.extendedEndTime ?? "";
+            }
+            if (idleExtendedReadingInput) {
+                idleExtendedReadingInput.value = entry?.extendedReading ?? "";
+            }
+            if (idleReasonSelect) {
+                idleReasonSelect.value = entry?.reason ?? "";
+            }
+            if (idleNotesInput) {
+                idleNotesInput.value = entry?.notes ?? "";
             }
         }
 
-        refreshIdleButton.addEventListener("click", loadIdleEvents);
+        function handleIdleFormSubmit(event) {
+            event.preventDefault();
+            hideIdleMessages();
 
-        if (canLogIdle) {
-            idleForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                idleFormSuccess.hidden = true;
-                idleFormError.hidden = true;
-                const formData = new FormData(idleForm);
-                const payload = {
-                    asset_id: formData.get("asset_id"),
-                    started_at: formData.get("started_at"),
-                    ended_at: formData.get("ended_at") || null,
-                    reason: formData.get("reason")?.trim() || null,
-                    notes: formData.get("notes")?.trim() || null,
+            if (!canLogIdle) {
+                return;
+            }
+
+            const machine = idleMachineSelect?.value || "";
+            const dateValue = idleDateInput?.value || todayDateString;
+            const startReading = idleStartReadingInput ? Number(idleStartReadingInput.value) : NaN;
+            const endReading = idleEndReadingInput ? Number(idleEndReadingInput.value) : NaN;
+            const extendedTime = idleExtendedTimeInput?.value || "";
+            const extendedReadingValue = idleExtendedReadingInput?.value;
+            const extendedReading = extendedReadingValue ? Number(extendedReadingValue) : null;
+            const reason = idleReasonSelect?.value || "";
+            const notes = idleNotesInput?.value?.trim() || "";
+
+            if (!machine) {
+                if (idleEntryError) {
+                    idleEntryError.textContent = "Select a machine to continue.";
+                    idleEntryError.hidden = false;
+                }
+                return;
+            }
+
+            if (!Number.isFinite(startReading) || !Number.isFinite(endReading)) {
+                if (idleEntryError) {
+                    idleEntryError.textContent = "Enter valid hour meter readings for 07:00 and 19:00.";
+                    idleEntryError.hidden = false;
+                }
+                return;
+            }
+
+            if (endReading < startReading) {
+                if (idleEntryError) {
+                    idleEntryError.textContent = "19:00 reading must be greater than the 07:00 reading.";
+                    idleEntryError.hidden = false;
+                }
+                return;
+            }
+
+            if (extendedReading != null && !Number.isFinite(extendedReading)) {
+                if (idleEntryError) {
+                    idleEntryError.textContent = "Enter a valid extended hour meter reading.";
+                    idleEntryError.hidden = false;
+                }
+                return;
+            }
+
+            if (extendedReading != null && extendedReading < endReading) {
+                if (idleEntryError) {
+                    idleEntryError.textContent = "Extended reading must be greater than the 19:00 reading.";
+                    idleEntryError.hidden = false;
+                }
+                return;
+            }
+
+            const record = {
+                machine,
+                date: dateValue,
+                startReading,
+                shiftEndReading: endReading,
+                extendedEndTime: extendedTime,
+                extendedReading: extendedReading ?? null,
+                reason,
+                notes,
+            };
+
+            const existingIndex = idleEntries.findIndex((entry) => entry.machine === machine && entry.date === dateValue);
+            if (existingIndex >= 0) {
+                idleEntries.splice(existingIndex, 1, record);
+            } else {
+                idleEntries.push(record);
+            }
+
+            prefillIdleForm();
+            updateIdleAnalytics();
+
+            if (idleEntrySuccess) {
+                idleEntrySuccess.textContent = `Captured ${machine} hour meter readings for ${formatDate(dateValue)}.`;
+                idleEntrySuccess.hidden = false;
+            }
+        }
+
+        function computeMachineMetrics(entry) {
+            if (!entry) {
+                return {
+                    shiftRuntime: 0,
+                    idleTime: 0,
+                    extendedRuntime: 0,
+                    totalRuntime: 0,
+                    utilisation: 0,
+                    reason: "",
+                    notes: "",
+                    machine: null,
+                    hasEntry: false,
                 };
-                if (!payload.asset_id || !payload.started_at) {
-                    idleFormError.textContent = "Asset and start time are required.";
-                    idleFormError.hidden = false;
-                    return;
+            }
+
+            const start = Number(entry.startReading ?? 0);
+            const shiftEnd = Number(entry.shiftEndReading ?? start);
+            const extendedReading = entry.extendedReading != null ? Number(entry.extendedReading) : null;
+
+            const shiftRuntime = Math.max(0, shiftEnd - start);
+            const idleTime = Math.max(0, SHIFT_DURATION_HOURS - shiftRuntime);
+            const extendedRuntime = extendedReading != null ? Math.max(0, extendedReading - shiftEnd) : 0;
+            const totalRuntime = shiftRuntime + extendedRuntime;
+            const utilisation = SHIFT_DURATION_HOURS > 0 ? Math.max(0, Math.min(1, shiftRuntime / SHIFT_DURATION_HOURS)) : 0;
+
+            return {
+                shiftRuntime,
+                idleTime,
+                extendedRuntime,
+                totalRuntime,
+                utilisation,
+                reason: entry.reason || "",
+                notes: entry.notes || "",
+                machine: entry.machine,
+                hasEntry: true,
+            };
+        }
+
+        function updateIdleAnalytics() {
+            if (!idleEntryForm) return;
+            const labels = machineCards.map((card) => card.dataset.machineCard);
+            const dateValue = idleDateInput?.value || todayDateString;
+            const runtimeData = [];
+            const idleData = [];
+            const extendedData = [];
+            const metricsByMachine = new Map();
+            let totalShiftRuntime = 0;
+            let totalExtended = 0;
+            let totalIdle = 0;
+            const reasonCounts = new Map();
+
+            machineCards.forEach((card) => {
+                const machineCode = card.dataset.machineCard;
+                const entry = idleEntries.find((item) => item.machine === machineCode && item.date === dateValue);
+                const metrics = computeMachineMetrics(entry);
+                metricsByMachine.set(machineCode, metrics);
+                runtimeData.push(Number(metrics.shiftRuntime.toFixed(2)));
+                idleData.push(Number(metrics.idleTime.toFixed(2)));
+                extendedData.push(Number(metrics.extendedRuntime.toFixed(2)));
+                totalShiftRuntime += metrics.shiftRuntime;
+                totalExtended += metrics.extendedRuntime;
+                totalIdle += metrics.idleTime;
+                if (metrics.hasEntry && metrics.idleTime > 0.05 && metrics.reason) {
+                    reasonCounts.set(metrics.reason, (reasonCounts.get(metrics.reason) || 0) + 1);
                 }
-                const submitButton = idleForm.querySelector('button[type="submit"]');
-                submitButton.disabled = true;
-                try {
-                    await fetchJson("/api/machines/idle-events", {
-                        method: "POST",
-                        body: JSON.stringify(payload),
-                    });
-                    idleForm.reset();
-                    idleFormSuccess.hidden = false;
-                    await loadIdleEvents();
-                } catch (error) {
-                    idleFormError.textContent = error.message || "Unable to record idle time";
-                    idleFormError.hidden = false;
-                } finally {
-                    submitButton.disabled = false;
-                }
+                updateMachineCard(card, machineCode, metrics);
             });
+
+            if (idleChartInstance) {
+                idleChartInstance.data.labels = labels;
+                idleChartInstance.data.datasets[0].data = runtimeData;
+                idleChartInstance.data.datasets[1].data = idleData;
+                idleChartInstance.data.datasets[2].data = extendedData;
+                idleChartInstance.update();
+            }
+
+            if (idleStatRuntime) {
+                idleStatRuntime.textContent = formatHours(totalShiftRuntime + totalExtended);
+            }
+            if (idleStatIdle) {
+                idleStatIdle.textContent = formatHours(totalIdle);
+            }
+            if (idleStatExtended) {
+                idleStatExtended.textContent = formatHours(totalExtended);
+            }
+
+            updateIdleInsights(metricsByMachine, reasonCounts, totalIdle, totalExtended);
+        }
+
+        function updateMachineCard(card, machineCode, metrics) {
+            const runtimeEl = card.querySelector("[data-machine-runtime]");
+            const idleEl = card.querySelector("[data-machine-idle]");
+            const extendedEl = card.querySelector("[data-machine-extended]");
+            const utilisationEl = card.querySelector("[data-machine-utilisation]");
+            const reasonEl = card.querySelector("[data-machine-reason]");
+            const noteEl = card.querySelector("[data-machine-note]");
+            const statusEl = card.querySelector("[data-machine-status]");
+            const progressEl = card.querySelector("[data-machine-progress]");
+
+            if (runtimeEl) runtimeEl.textContent = formatHours(metrics.totalRuntime);
+            if (idleEl) idleEl.textContent = formatHours(metrics.idleTime);
+            if (extendedEl) extendedEl.textContent = formatHours(metrics.extendedRuntime);
+            if (utilisationEl) utilisationEl.textContent = `${Math.round(metrics.utilisation * 100)}%`;
+
+            const status = determineStatus(metrics.utilisation, metrics.idleTime, metrics.hasEntry);
+            if (statusEl) {
+                statusEl.textContent = status.label;
+                statusEl.dataset.statusLevel = status.level;
+            }
+
+            if (progressEl) {
+                progressEl.style.width = `${Math.min(100, Math.round(metrics.utilisation * 100))}%`;
+            }
+
+            if (reasonEl) {
+                if (!metrics.hasEntry) {
+                    reasonEl.textContent = "Awaiting hour meter capture for this date.";
+                } else if (metrics.idleTime <= 0.05) {
+                    reasonEl.textContent = "Fully utilised within the 11-hour shift window.";
+                } else if (metrics.reason) {
+                    reasonEl.textContent = `${metrics.reason} caused ${formatHours(metrics.idleTime)} of idle time.`;
+                } else {
+                    reasonEl.textContent = `Idle time of ${formatHours(metrics.idleTime)} recorded without a reason.`;
+                }
+            }
+
+            if (noteEl) {
+                noteEl.textContent = metrics.hasEntry ? metrics.notes || "" : "";
+            }
+
+            const metadata = machineMetadata.get(machineCode);
+            if (!metadata && machineCode) {
+                machineMetadata.set(machineCode, { title: machineCode });
+            }
+        }
+
+        function determineStatus(utilisation, idleTime, hasEntry) {
+            if (!hasEntry) {
+                return { label: "Awaiting data", level: "neutral" };
+            }
+            if (utilisation >= 0.9) {
+                return { label: "On target", level: "positive" };
+            }
+            if (utilisation >= 0.75) {
+                return { label: "Monitor", level: "warning" };
+            }
+            if (idleTime > 0) {
+                return { label: "Idle risk", level: "alert" };
+            }
+            return { label: "Awaiting data", level: "neutral" };
+        }
+
+        function updateIdleInsights(metricsByMachine, reasonCounts, totalIdle, totalExtended) {
+            if (idleInsightsList) {
+                idleInsightsList.innerHTML = "";
+            }
+            if (idleReasonPills) {
+                idleReasonPills.innerHTML = "";
+            }
+
+            const insights = [];
+            const metricsEntries = Array.from(metricsByMachine.entries());
+            const recorded = metricsEntries.filter(([, metrics]) => metrics.hasEntry);
+            const missing = metricsEntries.filter(([, metrics]) => !metrics.hasEntry);
+            const topMachine = recorded.sort((a, b) => b[1].idleTime - a[1].idleTime)[0];
+
+            if (topMachine && topMachine[1].idleTime > 0.1) {
+                const machineLabel = machineMetadata.get(topMachine[0])?.title || topMachine[0];
+                const reasonText = topMachine[1].reason ? ` (${topMachine[1].reason})` : "";
+                insights.push(`${machineLabel} lost ${formatHours(topMachine[1].idleTime)}${reasonText}. Rally support to close the gap.`);
+            } else if (recorded.length) {
+                insights.push("All tracked machines achieved the planned 11-hour shift runtime.");
+            } else {
+                insights.push("No hour meter readings logged for this date. Capture data to unlock insights.");
+            }
+
+            if (missing.length) {
+                insights.push(`${missing.length} machine${missing.length > 1 ? "s" : ""} awaiting readings for this date.`);
+            }
+
+            if (totalExtended > 0.1) {
+                insights.push(`Overtime delivered ${formatHours(totalExtended)} of extra capacity. Confirm labour and energy plans.`);
+            }
+
+            if (reasonCounts.size > 0) {
+                const reasonLeaders = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1]);
+                const [topReason, count] = reasonLeaders[0];
+                insights.push(`${topReason} triggered idle time on ${count} machine${count > 1 ? "s" : ""}. Align materials, people and maintenance accordingly.`);
+                reasonLeaders.forEach(([reason, countValue]) => {
+                    const chip = document.createElement("span");
+                    chip.className = "reason-chip";
+                    chip.textContent = `${reason} · ${countValue}`;
+                    idleReasonPills?.appendChild(chip);
+                });
+            } else {
+                const chip = document.createElement("span");
+                chip.className = "reason-chip reason-chip--muted";
+                chip.textContent = "No idle reasons captured";
+                idleReasonPills?.appendChild(chip);
+            }
+
+            insights.slice(0, 3).forEach((message) => {
+                if (!idleInsightsList) return;
+                const item = document.createElement("li");
+                item.textContent = message;
+                idleInsightsList.appendChild(item);
+            });
+        }
+
+        function formatHours(value) {
+            if (value == null || Number.isNaN(value)) return "0.0 h";
+            const rounded = Math.round(value * 10) / 10;
+            return `${rounded.toFixed(1)} h`;
         }
 
         function renderSuppliers(suppliers) {

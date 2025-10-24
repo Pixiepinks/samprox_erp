@@ -1,4 +1,6 @@
+import calendar
 import os
+from datetime import date as dt_date, datetime, time as dt_time, timedelta
 from typing import Optional, Tuple
 
 import click
@@ -18,6 +20,8 @@ from models import (
     CustomerCreditTerm,
     CustomerTransportMode,
     CustomerType,
+    MachineAsset,
+    MachineIdleEvent,
     RoleEnum,
     SalesActualEntry,
     SalesForecastEntry,
@@ -324,6 +328,161 @@ def _bootstrap_accessall_user(flask_app=None):
 # Call the hooks at startup (idempotent)
 _bootstrap_admin_user(flask_app=app)
 _bootstrap_accessall_user(flask_app=app)
+
+
+def _ensure_asset(code: str, *, name: str, location: str, status: str) -> MachineAsset:
+    asset = MachineAsset.query.filter(func.lower(MachineAsset.code) == code.lower()).first()
+    if asset is None:
+        asset = MachineAsset(code=code, name=name, location=location, status=status)
+        db.session.add(asset)
+    else:
+        updated = False
+        for field, value in {
+            "name": name,
+            "location": location,
+            "status": status,
+        }.items():
+            if getattr(asset, field) != value:
+                setattr(asset, field, value)
+                updated = True
+        if updated:
+            db.session.add(asset)
+    return asset
+
+
+# ---- CLI: seed idle monitoring demo ----
+@app.cli.command("seed-idle-demo")
+@click.option("--period", help="Target month in YYYY-MM format (defaults to current month)")
+def seed_idle_demo(period):
+    """Populate demo assets and idle events for the idle monitoring dashboard."""
+
+    def _month_end(day: dt_date) -> dt_date:
+        last_day = calendar.monthrange(day.year, day.month)[1]
+        return dt_date(day.year, day.month, last_day)
+
+    with app.app_context():
+        if period:
+            try:
+                anchor = datetime.strptime(f"{period}-01", "%Y-%m-%d").date()
+            except ValueError as exc:  # pragma: no cover - CLI validation
+                raise click.BadParameter("Period must use YYYY-MM format.") from exc
+        else:
+            anchor = dt_date.today().replace(day=1)
+
+        month_start = anchor
+        month_end = _month_end(anchor)
+        today = dt_date.today()
+        target_day = min(max(today, month_start), month_end)
+
+        assets = {
+            "MCH-0001": _ensure_asset(
+                "MCH-0001",
+                name="Cutting Cell",
+                location="Fabrication Hall",
+                status="Running",
+            ),
+            "MCH-0002": _ensure_asset(
+                "MCH-0002",
+                name="Precision Lathe",
+                location="Machining Bay",
+                status="Running",
+            ),
+            "MCH-0003": _ensure_asset(
+                "MCH-0003",
+                name="Finishing Line",
+                location="Assembly Floor",
+                status="Running",
+            ),
+        }
+
+        db.session.flush()
+
+        lower_codes = [code.lower() for code in assets]
+        start_bound = datetime.combine(month_start, dt_time.min)
+        end_bound = datetime.combine(month_end, dt_time.max)
+
+        events_to_clear = (
+            MachineIdleEvent.query.join(MachineAsset)
+            .filter(func.lower(MachineAsset.code).in_(lower_codes))
+            .filter(MachineIdleEvent.started_at >= start_bound)
+            .filter(MachineIdleEvent.started_at <= end_bound)
+            .all()
+        )
+
+        for event in events_to_clear:
+            db.session.delete(event)
+
+        sample_events = [
+            (
+                "MCH-0001",
+                datetime.combine(target_day, dt_time(7, 45)),
+                datetime.combine(target_day, dt_time(9, 5)),
+                "Machine break down",
+                "Operator swapped the worn blade and re-ran calibration.",
+            ),
+            (
+                "MCH-0001",
+                datetime.combine(target_day, dt_time(16, 20)),
+                datetime.combine(target_day, dt_time(17, 0)),
+                "Changeover / setup",
+                "Setup for the evening order batch.",
+            ),
+            (
+                "MCH-0002",
+                datetime.combine(target_day, dt_time(10, 15)),
+                datetime.combine(target_day, dt_time(11, 0)),
+                "No Material",
+                "Awaited feedstock delivery from stores.",
+            ),
+            (
+                "MCH-0003",
+                datetime.combine(target_day, dt_time(13, 30)),
+                datetime.combine(target_day, dt_time(14, 10)),
+                "Planned maintenance",
+                "Lubrication check on conveyor bearings.",
+            ),
+        ]
+
+        previous_day = target_day - timedelta(days=1)
+        if previous_day >= month_start:
+            sample_events.extend(
+                [
+                    (
+                        "MCH-0002",
+                        datetime.combine(previous_day, dt_time(18, 30)),
+                        datetime.combine(previous_day, dt_time(19, 45)),
+                        "Machine break down",
+                        "Replaced coolant pump before late shift.",
+                    ),
+                    (
+                        "MCH-0003",
+                        datetime.combine(previous_day, dt_time(8, 0)),
+                        datetime.combine(previous_day, dt_time(8, 40)),
+                        "No Labor Force",
+                        "Operators assisted with urgent dispatch.",
+                    ),
+                ]
+            )
+
+        for code, start, end, reason, notes in sample_events:
+            asset = assets.get(code)
+            if not asset:
+                continue
+            db.session.add(
+                MachineIdleEvent(
+                    asset_id=asset.id,
+                    started_at=start,
+                    ended_at=end,
+                    reason=reason,
+                    notes=notes,
+                )
+            )
+
+        db.session.commit()
+        click.echo(
+            f"✅ Seeded idle demo data for {len(sample_events)} events between {month_start} and {month_end}."
+        )
+
 
 # ---- CLI: seed or reset admin ----
 @app.cli.command("seed-admin")

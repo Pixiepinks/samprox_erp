@@ -775,6 +775,12 @@ body {
     align-items: flex-start;
 }
 
+.forecast-left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
 .forecast-detail {
     display: flex;
     flex-direction: column;
@@ -1350,6 +1356,10 @@ body {
 @media (max-width: 960px) {
     .forecast-layout {
         grid-template-columns: 1fr;
+    }
+
+    .forecast-left-panel {
+        gap: 1.25rem;
     }
 
     .forecast-detail {

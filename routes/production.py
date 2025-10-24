@@ -1,7 +1,7 @@
 """REST endpoints for manufacturing daily production tracking."""
 
 import calendar
-from datetime import date as dt_date, datetime
+from datetime import date as dt_date, datetime, time as dt_time, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
@@ -10,6 +10,7 @@ from extensions import db
 from models import (
     DailyProductionEntry,
     MachineAsset,
+    MachineIdleEvent,
     ProductionForecastEntry,
     RoleEnum,
 )
@@ -24,6 +25,11 @@ entry_schema = DailyProductionEntrySchema()
 forecast_entry_schema = ProductionForecastEntrySchema()
 
 SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
+
+IDLE_SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
+IDLE_SUMMARY_SHIFT_START_HOUR = 7
+IDLE_SUMMARY_SHIFT_END_HOUR = 19
+IDLE_SUMMARY_SCHEDULED_MINUTES = 11 * 60
 
 SRI_LANKA_FALLBACK_HOLIDAYS = {
     2024: [
@@ -796,6 +802,184 @@ def get_monthly_production_summary():
         "total_production": total_production,
         "average_day_production": average_day_production,
         "peak": peak,
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/monthly/idle-summary")
+@jwt_required()
+def get_monthly_idle_summary():
+    if not require_role(
+        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    try:
+        anchor = _parse_period_param(request.args.get("period"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    machine_param = request.args.get("machine_codes")
+    (
+        requested_codes,
+        canonical_codes,
+        machine_filters,
+    ) = _parse_machine_codes_param(machine_param)
+
+    if not requested_codes:
+        requested_codes = list(IDLE_SUMMARY_MACHINE_CODES)
+        canonical_codes = {
+            code.lower(): code for code in requested_codes if isinstance(code, str)
+        }
+        machine_filters = list(canonical_codes.keys())
+
+    month_start, month_end, month_days = _month_range(anchor)
+
+    shift_start = dt_time(IDLE_SUMMARY_SHIFT_START_HOUR, 0)
+    shift_end = dt_time(IDLE_SUMMARY_SHIFT_END_HOUR, 0)
+    period_start_limit = datetime.combine(month_start, dt_time.min)
+    period_end_limit = datetime.combine(month_end, dt_time.max)
+    month_shift_start = datetime.combine(month_start, shift_start)
+    month_shift_end = datetime.combine(month_end, shift_end)
+
+    assets = (
+        MachineAsset.query.filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .order_by(MachineAsset.code.asc())
+        .all()
+    )
+
+    asset_by_code: dict[str, MachineAsset] = {}
+    for asset in assets:
+        asset_code = (asset.code or "").lower()
+        canonical_code = canonical_codes.get(asset_code)
+        if canonical_code:
+            asset_by_code[canonical_code] = asset
+
+    events = (
+        MachineIdleEvent.query.options(joinedload(MachineIdleEvent.asset))
+        .join(MachineAsset)
+        .filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .filter(MachineIdleEvent.started_at <= period_end_limit)
+        .filter(func.coalesce(MachineIdleEvent.ended_at, datetime.utcnow()) >= period_start_limit)
+        .order_by(MachineIdleEvent.started_at.asc())
+        .all()
+    )
+
+    idle_minutes: dict[dt_date, dict[str, float]] = {}
+    totals_minutes: dict[str, dict[str, float]] = {}
+
+    for day in range(1, month_days + 1):
+        current_date = dt_date(anchor.year, anchor.month, day)
+        idle_minutes[current_date] = {code: 0.0 for code in requested_codes}
+
+    for code in requested_codes:
+        totals_minutes[code] = {"idle": 0.0, "runtime": 0.0}
+
+    for event in events:
+        asset = event.asset
+        if not asset or not asset.code:
+            continue
+
+        canonical_code = canonical_codes.get(asset.code.lower())
+        if not canonical_code:
+            continue
+
+        event_start = getattr(event, "started_at", None)
+        if not isinstance(event_start, datetime):
+            continue
+        event_end = getattr(event, "ended_at", None) or datetime.utcnow()
+        if not isinstance(event_end, datetime) or event_end <= event_start:
+            continue
+
+        clamped_start = max(event_start, month_shift_start)
+        clamped_end = min(event_end, month_shift_end)
+
+        if clamped_end <= clamped_start:
+            continue
+
+        current_day = clamped_start.date()
+        last_day = clamped_end.date()
+
+        while current_day <= last_day:
+            if current_day not in idle_minutes:
+                current_day += timedelta(days=1)
+                continue
+
+            day_start_dt = datetime.combine(current_day, shift_start)
+            day_end_dt = datetime.combine(current_day, shift_end)
+
+            overlap_start = max(clamped_start, day_start_dt)
+            overlap_end = min(clamped_end, day_end_dt)
+
+            if overlap_end > overlap_start:
+                minutes = (overlap_end - overlap_start).total_seconds() / 60
+                if minutes > 0:
+                    idle_minutes[current_day][canonical_code] += minutes
+
+            current_day += timedelta(days=1)
+
+    day_payloads = []
+
+    for day in range(1, month_days + 1):
+        current_date = dt_date(anchor.year, anchor.month, day)
+        machines_payload = {}
+        daily_minutes = idle_minutes.get(current_date, {})
+
+        for code in requested_codes:
+            raw_idle = max(daily_minutes.get(code, 0.0), 0.0)
+            capped_idle = min(raw_idle, IDLE_SUMMARY_SCHEDULED_MINUTES)
+            runtime_minutes = max(IDLE_SUMMARY_SCHEDULED_MINUTES - capped_idle, 0.0)
+
+            idle_hours = round(capped_idle / 60, 3)
+            runtime_hours = round(runtime_minutes / 60, 3)
+
+            machines_payload[code] = {
+                "idle_hours": idle_hours,
+                "runtime_hours": runtime_hours,
+            }
+
+            totals_minutes[code]["idle"] += capped_idle
+            totals_minutes[code]["runtime"] += runtime_minutes
+
+        day_payloads.append(
+            {
+                "day": day,
+                "date": current_date.isoformat(),
+                "machines": machines_payload,
+            }
+        )
+
+    totals_payload = {}
+    for code in requested_codes:
+        idle_total_minutes = totals_minutes.get(code, {}).get("idle", 0.0)
+        runtime_total_minutes = totals_minutes.get(code, {}).get("runtime", 0.0)
+        totals_payload[code] = {
+            "idle_hours": round(idle_total_minutes / 60, 3),
+            "runtime_hours": round(runtime_total_minutes / 60, 3),
+        }
+
+    machines_metadata = []
+    for code in requested_codes:
+        asset = asset_by_code.get(code)
+        machines_metadata.append(
+            {
+                "code": code,
+                "name": getattr(asset, "name", None),
+            }
+        )
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": month_days,
+        "scheduled_hours_per_day": round(IDLE_SUMMARY_SCHEDULED_MINUTES / 60, 3),
+        "machine_codes": requested_codes,
+        "machines": machines_metadata,
+        "day_entries": day_payloads,
+        "totals": totals_payload,
     }
 
     return jsonify(response)

@@ -955,6 +955,124 @@ body {
     background: linear-gradient(135deg, #0f172a, #334155);
 }
 
+.forecast-overview-card--idle {
+    background: linear-gradient(135deg, #1e293b, #0f172a);
+}
+
+.idle-summary__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.idle-summary__period {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.idle-summary__hint {
+    margin: 0;
+    font-size: 0.65rem;
+    opacity: 0.8;
+}
+
+.idle-summary__table-wrapper {
+    margin-top: 0.5rem;
+    background: rgba(15, 23, 42, 0.25);
+    border-radius: 14px;
+    overflow: hidden;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.idle-summary__table-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+.idle-summary__table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(248, 250, 252, 0.4);
+    border-radius: 999px;
+}
+
+.idle-summary__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    color: #f8fafc;
+    font-variant-numeric: tabular-nums;
+}
+
+.idle-summary__table thead th {
+    position: sticky;
+    top: 0;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 0.45rem 0.6rem;
+    text-align: right;
+    font-weight: 600;
+    z-index: 1;
+}
+
+.idle-summary__table thead th:first-child {
+    text-align: left;
+}
+
+.idle-summary__table tbody th,
+.idle-summary__table tbody td,
+.idle-summary__table tfoot th,
+.idle-summary__table tfoot td {
+    padding: 0.35rem 0.6rem;
+}
+
+.idle-summary__table tbody th {
+    text-align: left;
+    font-weight: 600;
+}
+
+.idle-summary__table tbody td,
+.idle-summary__table tfoot td {
+    text-align: right;
+}
+
+.idle-summary__table tbody tr:nth-child(even) {
+    background: rgba(15, 23, 42, 0.18);
+}
+
+.idle-summary__table tfoot {
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.idle-summary__totals th {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+}
+
+.idle-summary__totals td {
+    font-weight: 600;
+}
+
+.idle-summary__empty td {
+    text-align: center;
+    padding: 0.6rem 0.5rem;
+    opacity: 0.8;
+}
+
+.idle-summary__value--alert {
+    color: #facc15;
+    font-weight: 600;
+}
+
+.idle-summary__error {
+    margin: 0.45rem 0 0;
+    font-size: 0.65rem;
+    color: #fde68a;
+}
+
 .forecast-calendar__table {
     width: 100%;
     border-collapse: separate;

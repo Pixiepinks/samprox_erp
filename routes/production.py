@@ -147,6 +147,16 @@ def _month_range(anchor: dt_date):
     return start, end, month_days
 
 
+def _overlap_minutes(
+    a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime
+) -> int:
+    start = max(a_start, b_start)
+    end = min(a_end, b_end)
+    if end <= start:
+        return 0
+    return int((end - start).total_seconds() // 60)
+
+
 @bp.post("/daily")
 @jwt_required()
 def upsert_daily_production():
@@ -807,9 +817,140 @@ def get_monthly_production_summary():
     return jsonify(response)
 
 
+def _monthly_idle_summary_for_ui():
+    period_param = request.args.get("period")
+    try:
+        anchor = _parse_period_param(period_param)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    month_start, month_end, month_days = _month_range(anchor)
+
+    machine_param = (request.args.get("machine_codes") or "").strip()
+    requested_codes = [code.strip() for code in machine_param.split(",") if code.strip()]
+
+    q_assets = MachineAsset.query
+    if requested_codes:
+        lowered = [code.lower() for code in requested_codes]
+        q_assets = q_assets.filter(func.lower(MachineAsset.code).in_(lowered))
+
+    assets = q_assets.order_by(MachineAsset.code.asc()).all()
+
+    machine_codes = [asset.code for asset in assets]
+    if not machine_codes and requested_codes:
+        machine_codes = [code.upper() for code in requested_codes]
+    machines_meta = [{"code": asset.code, "name": asset.name} for asset in assets]
+
+    shift_start = dt_time(IDLE_SUMMARY_SHIFT_START_HOUR, 0)
+    shift_end = dt_time(IDLE_SUMMARY_SHIFT_END_HOUR, 0)
+    period_start_limit = datetime.combine(month_start, dt_time.min)
+    period_end_limit = datetime.combine(month_end, dt_time.max)
+
+    q_events = (
+        MachineIdleEvent.query.options(joinedload(MachineIdleEvent.asset))
+        .join(MachineAsset)
+        .filter(MachineIdleEvent.started_at <= period_end_limit)
+        .filter(
+            func.coalesce(MachineIdleEvent.ended_at, datetime.utcnow())
+            >= period_start_limit
+        )
+    )
+
+    if machine_codes:
+        lowered = [code.lower() for code in machine_codes]
+        q_events = q_events.filter(func.lower(MachineAsset.code).in_(lowered))
+
+    events = q_events.all()
+
+    events_by_code: dict[str, list[MachineIdleEvent]] = {}
+    for event in events:
+        asset = event.asset
+        if not asset or not asset.code:
+            continue
+        events_by_code.setdefault(asset.code, []).append(event)
+
+    scheduled_minutes = IDLE_SUMMARY_SCHEDULED_MINUTES
+    scheduled_hours = round(scheduled_minutes / 60.0, 3)
+
+    totals_minutes = {
+        asset.code: {"idle": 0, "runtime": 0}
+        for asset in assets
+    }
+
+    day_entries = []
+    current_date = month_start
+    day_index = 1
+    while current_date <= month_end:
+        shift_start_dt = datetime.combine(current_date, shift_start)
+        shift_end_dt = datetime.combine(current_date, shift_end)
+
+        day_payload = {
+            "day": day_index,
+            "date": current_date.isoformat(),
+            "machines": {},
+        }
+
+        for asset in assets:
+            idle_minutes = 0
+            for event in events_by_code.get(asset.code, []):
+                event_start = event.started_at
+                event_end = event.ended_at or datetime.utcnow()
+                idle_minutes += _overlap_minutes(
+                    event_start,
+                    event_end,
+                    shift_start_dt,
+                    shift_end_dt,
+                )
+
+            idle_minutes = max(0, min(idle_minutes, scheduled_minutes))
+            runtime_minutes = max(0, scheduled_minutes - idle_minutes)
+
+            idle_hours = round(idle_minutes / 60.0, 3)
+            runtime_hours = round(runtime_minutes / 60.0, 3)
+
+            day_payload["machines"][asset.code] = {
+                "runtime_hours": runtime_hours,
+                "idle_hours": idle_hours,
+            }
+
+            totals_minutes[asset.code]["idle"] += idle_minutes
+            totals_minutes[asset.code]["runtime"] += runtime_minutes
+
+        day_entries.append(day_payload)
+        current_date += timedelta(days=1)
+        day_index += 1
+
+    totals = {}
+    for asset in assets:
+        minutes = totals_minutes.get(asset.code, {"idle": 0, "runtime": 0})
+        totals[asset.code] = {
+            "idle_hours": round(minutes["idle"] / 60.0, 3),
+            "runtime_hours": round(minutes["runtime"] / 60.0, 3),
+        }
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": month_days,
+        "scheduled_hours_per_day": scheduled_hours,
+        "machine_codes": machine_codes,
+        "machines": machines_meta,
+        "day_entries": day_entries,
+        "totals": totals,
+    }
+
+    return jsonify(response)
+
+
 @bp.get("/monthly/idle-summary")
 @jwt_required()
 def get_monthly_idle_summary():
+    shape = (request.args.get("shape") or "").strip().lower()
+    if shape == "ui":
+        return _monthly_idle_summary_for_ui()
+
     if not require_role(
         RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
     ):

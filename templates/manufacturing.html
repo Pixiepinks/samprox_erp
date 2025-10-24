@@ -2013,6 +2013,8 @@
                 params.set("machine_codes", idleSummaryMachineCodes.join(","));
             }
 
+            params.set("shape", "ui");
+
             try {
                 const response = await fetch(
                     `/api/production/monthly/idle-summary?${params.toString()}`,

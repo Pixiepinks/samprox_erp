@@ -711,7 +711,7 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -2238,6 +2238,7 @@
             if (machineCodes.length > 0) {
                 params.set("machine_codes", machineCodes.join(","));
             }
+            params.set("shape", "ui");
             const summary = await fetchJson(`/api/production/monthly/idle-summary?${params.toString()}`);
             if (cacheKey) {
                 idleSummaryCache.set(cacheKey, summary);

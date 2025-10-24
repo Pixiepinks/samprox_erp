@@ -444,12 +444,57 @@
                                     </ul>
                                     <p class="forecast-overview-card__hint">MCH-0001 + MCH-0002 only</p>
                                 </article>
+                                <article class="forecast-overview-card forecast-overview-card--dryer">
+                                    <h4 class="forecast-overview-card__heading">Dryer production</h4>
+                                    <p class="forecast-overview-card__value">
+                                        <span id="forecast-summary-dryer">0.00</span>
+                                        <span class="forecast-overview-card__unit">tons</span>
+                                    </p>
+                                    <p class="forecast-overview-card__note">
+                                        Avg hourly output
+                                        <span class="forecast-overview-card__note-value" id="forecast-summary-dryer-average"
+                                            >0.00</span
+                                        >
+                                        <span class="forecast-overview-card__note-unit">tons/hr</span>
+                                    </p>
+                                </article>
                                 <article class="forecast-overview-card forecast-overview-card--hourly">
                                     <h4 class="forecast-overview-card__heading">Hourly output</h4>
                                     <p class="forecast-overview-card__value">
                                         <span id="forecast-summary-hourly-output">0.00</span>
                                         <span class="forecast-overview-card__unit">tons/hr</span>
                                     </p>
+                                    <ul
+                                        class="forecast-overview-card__micro-breakdown"
+                                        id="forecast-summary-hourly-output-breakdown"
+                                    >
+                                        <li class="forecast-overview-card__micro-item" data-machine="MCH-0001">
+                                            <span class="forecast-overview-card__micro-label">MCH-0001</span>
+                                            <span class="forecast-overview-card__micro-value">0.00</span>
+                                        </li>
+                                        <li class="forecast-overview-card__micro-item" data-machine="MCH-0002">
+                                            <span class="forecast-overview-card__micro-label">MCH-0002</span>
+                                            <span class="forecast-overview-card__micro-value">0.00</span>
+                                        </li>
+                                    </ul>
+                                </article>
+                                <article class="forecast-overview-card forecast-overview-card--hours">
+                                    <h4 class="forecast-overview-card__heading">Machine hours</h4>
+                                    <ul class="forecast-overview-card__micro-breakdown" id="forecast-summary-machine-hours">
+                                        <li class="forecast-overview-card__micro-item" data-machine="MCH-0001">
+                                            <span class="forecast-overview-card__micro-label">MCH-0001</span>
+                                            <span class="forecast-overview-card__micro-value">0.00</span>
+                                        </li>
+                                        <li class="forecast-overview-card__micro-item" data-machine="MCH-0002">
+                                            <span class="forecast-overview-card__micro-label">MCH-0002</span>
+                                            <span class="forecast-overview-card__micro-value">0.00</span>
+                                        </li>
+                                        <li class="forecast-overview-card__micro-item" data-machine="MCH-0003">
+                                            <span class="forecast-overview-card__micro-label">MCH-0003</span>
+                                            <span class="forecast-overview-card__micro-value">0.00</span>
+                                        </li>
+                                    </ul>
+                                    <p class="forecast-overview-card__note">Total scheduled hours captured per machine.</p>
                                 </article>
                             </div>
                         </section>
@@ -527,6 +572,8 @@
             lastDays: document.getElementById("forecast-summary-last-days"),
             briquette: document.getElementById("forecast-summary-briquette"),
             hourlyOutput: document.getElementById("forecast-summary-hourly-output"),
+            dryerTotal: document.getElementById("forecast-summary-dryer"),
+            dryerAverage: document.getElementById("forecast-summary-dryer-average"),
         };
         const forecastSummaryBreakdowns = {
             firstTen: getForecastBreakdownElements("forecast-summary-first-ten-breakdown"),
@@ -538,6 +585,12 @@
                 "forecast-summary-briquette-breakdown",
             ),
         };
+        const hourlyOutputBreakdownElements = getForecastBreakdownElements(
+            "forecast-summary-hourly-output-breakdown",
+        );
+        const machineHourElements = getForecastBreakdownElements(
+            "forecast-summary-machine-hours",
+        );
 
         const today = new Date();
         const yyyy = today.getFullYear();
@@ -569,6 +622,12 @@
         const SUMMARY_MACHINE_NORMALIZED_CODES = SUMMARY_MACHINE_CODES.map((code) =>
             normalizeMachineCodeKey(code),
         ).filter((value) => value.length > 0);
+        const MACHINE_HOUR_CODES = ["MCH-0001", "MCH-0002", "MCH-0003"];
+        const MACHINE_HOUR_NORMALIZED_CODES = MACHINE_HOUR_CODES.map((code) =>
+            normalizeMachineCodeKey(code),
+        ).filter((value) => value.length > 0);
+        const DRYER_MACHINE_CODE = "MCH-0003";
+        const DRYER_MACHINE_NORMALIZED_CODE = normalizeMachineCodeKey(DRYER_MACHINE_CODE);
         const forecastState = {
             anchorDate: new Date(today.getFullYear(), today.getMonth(), 1),
             selectedDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
@@ -608,7 +667,7 @@
                 }
 
                 const valueElement = item.querySelector(
-                    ".forecast-overview-card__breakdown-value",
+                    ".forecast-overview-card__breakdown-value, .forecast-overview-card__micro-value",
                 );
                 if (valueElement) {
                     elements[normalized] = valueElement;
@@ -624,6 +683,14 @@
                 contributions[code] = 0;
             });
             return contributions;
+        }
+
+        function createEmptyMachineTotals(codes) {
+            const totals = {};
+            (codes || []).forEach((code) => {
+                totals[code] = 0;
+            });
+            return totals;
         }
 
         function createEmptyRangeSummary() {
@@ -752,6 +819,14 @@
                 briquette: createEmptyRangeSummary(),
                 totalHours: 0,
                 hourlyOutput: 0,
+                hourlyOutputMachines: createEmptyMachineTotals(
+                    SUMMARY_MACHINE_NORMALIZED_CODES,
+                ),
+                machineHours: createEmptyMachineTotals(MACHINE_HOUR_NORMALIZED_CODES),
+                dryer: {
+                    total: 0,
+                    average: 0,
+                },
             };
         }
 
@@ -855,6 +930,10 @@
 
             let monthTotal = 0;
             let totalHours = 0;
+            const machineProductionTotals = createEmptyMachineTotals(
+                MACHINE_HOUR_NORMALIZED_CODES,
+            );
+            const machineHourTotals = createEmptyMachineTotals(MACHINE_HOUR_NORMALIZED_CODES);
 
             forecastState.entries.forEach((entry, dateIso) => {
                 const date = parseISODate(dateIso);
@@ -887,6 +966,13 @@
                     contributions[code] = normalizedMachines[code] || 0;
                 });
 
+                MACHINE_HOUR_NORMALIZED_CODES.forEach((code) => {
+                    const value = normalizedMachines[code] || 0;
+                    if (Number.isFinite(value)) {
+                        machineProductionTotals[code] += value;
+                    }
+                });
+
                 const day = date.getDate();
                 if (day <= 10) {
                     addRangeValues(overview.firstTen, contributions);
@@ -898,6 +984,27 @@
 
                 addRangeValues(overview.briquette, contributions);
 
+                const normalizedHours = {};
+                Object.entries(hours).forEach(([code, rawValue]) => {
+                    const normalizedCode = normalizeMachineCodeKey(code);
+                    if (!normalizedCode) {
+                        return;
+                    }
+                    const number = Number(rawValue);
+                    if (!Number.isFinite(number)) {
+                        return;
+                    }
+                    normalizedHours[normalizedCode] =
+                        (normalizedHours[normalizedCode] || 0) + number;
+                });
+
+                MACHINE_HOUR_NORMALIZED_CODES.forEach((code) => {
+                    const value = normalizedHours[code] || 0;
+                    if (Number.isFinite(value)) {
+                        machineHourTotals[code] += value;
+                    }
+                });
+
                 totalHours += sumForecastHours(hours, limitSet);
             });
 
@@ -906,6 +1013,32 @@
             overview.monthTotal = roundToThree(monthTotal);
             overview.totalHours = roundToThree(totalHours);
             overview.hourlyOutput = roundToThree(hourlyOutput);
+
+            const hourlyBreakdown = createEmptyMachineTotals(
+                SUMMARY_MACHINE_NORMALIZED_CODES,
+            );
+            SUMMARY_MACHINE_NORMALIZED_CODES.forEach((code) => {
+                const production = machineProductionTotals[code] || 0;
+                const hoursTotal = machineHourTotals[code] || 0;
+                const average = hoursTotal > 0 ? production / hoursTotal : 0;
+                hourlyBreakdown[code] = roundToThree(average);
+            });
+
+            const machineHours = createEmptyMachineTotals(MACHINE_HOUR_NORMALIZED_CODES);
+            MACHINE_HOUR_NORMALIZED_CODES.forEach((code) => {
+                machineHours[code] = roundToThree(machineHourTotals[code] || 0);
+            });
+
+            const dryerTotal = machineProductionTotals[DRYER_MACHINE_NORMALIZED_CODE] || 0;
+            const dryerHours = machineHourTotals[DRYER_MACHINE_NORMALIZED_CODE] || 0;
+            const dryerAverage = dryerHours > 0 ? dryerTotal / dryerHours : 0;
+
+            overview.hourlyOutputMachines = hourlyBreakdown;
+            overview.machineHours = machineHours;
+            overview.dryer = {
+                total: roundToThree(dryerTotal),
+                average: roundToThree(dryerAverage),
+            };
 
             finalizeRangeSummary(overview.firstTen);
             finalizeRangeSummary(overview.middleTen);
@@ -923,6 +1056,16 @@
             updateRangeCard("lastDays", overview.lastDays);
             updateRangeCard("briquette", overview.briquette);
             updateTotalElement(forecastSummaryElements.hourlyOutput, overview.hourlyOutput);
+            updateTotalElement(
+                forecastSummaryElements.dryerTotal,
+                overview?.dryer?.total ?? 0,
+            );
+            updateTotalElement(
+                forecastSummaryElements.dryerAverage,
+                overview?.dryer?.average ?? 0,
+            );
+            updateBreakdownValues(hourlyOutputBreakdownElements, overview.hourlyOutputMachines);
+            updateBreakdownValues(machineHourElements, overview.machineHours);
         }
 
         function updateRangeCard(rangeKey, summary) {
@@ -942,6 +1085,20 @@
                     return;
                 }
                 const value = rangeSummary.contributions?.[code];
+                updateTotalElement(element, value ?? 0);
+            });
+        }
+
+        function updateBreakdownValues(elementMap, values) {
+            if (!elementMap) {
+                return;
+            }
+
+            Object.entries(elementMap).forEach(([code, element]) => {
+                if (!element) {
+                    return;
+                }
+                const value = values?.[code];
                 updateTotalElement(element, value ?? 0);
             });
         }

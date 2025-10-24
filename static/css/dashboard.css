@@ -841,6 +841,27 @@ body {
     opacity: 0.8;
 }
 
+.forecast-overview-card__note {
+    margin: 0.1rem 0 0;
+    font-size: 0.7rem;
+    opacity: 0.9;
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+}
+
+.forecast-overview-card__note-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.forecast-overview-card__note-unit {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.75;
+}
+
 .forecast-overview-card__hint {
     margin: 0;
     font-size: 0.75rem;
@@ -874,6 +895,34 @@ body {
     text-align: right;
 }
 
+.forecast-overview-card__micro-breakdown {
+    margin: 0.2rem 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.62rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    opacity: 0.95;
+}
+
+.forecast-overview-card__micro-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.forecast-overview-card__micro-label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.forecast-overview-card__micro-value {
+    min-width: 2rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 .forecast-overview-card--total {
     background: linear-gradient(135deg, #0284c7, #38bdf8);
 }
@@ -896,6 +945,14 @@ body {
 
 .forecast-overview-card--hourly {
     background: linear-gradient(135deg, #be123c, #f43f5e);
+}
+
+.forecast-overview-card--dryer {
+    background: linear-gradient(135deg, #db2777, #fb7185);
+}
+
+.forecast-overview-card--hours {
+    background: linear-gradient(135deg, #0f172a, #334155);
 }
 
 .forecast-calendar__table {

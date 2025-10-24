@@ -1782,6 +1782,22 @@
             if (idleEntryError) idleEntryError.hidden = true;
         }
 
+        function normalizeMachineCodes(values) {
+            const normalized = [];
+            const seen = new Set();
+            if (!Array.isArray(values)) return normalized;
+            values.forEach((value) => {
+                if (typeof value !== "string") return;
+                const trimmed = value.trim();
+                if (!trimmed) return;
+                const key = trimmed.toUpperCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                normalized.push(trimmed);
+            });
+            return normalized;
+        }
+
         function getTrackedMachineCodes() {
             const codes = new Set();
             machineCards.forEach((card) => {
@@ -1791,7 +1807,7 @@
             assets.forEach((asset) => {
                 if (asset?.code) codes.add(asset.code);
             });
-            return Array.from(codes);
+            return normalizeMachineCodes(Array.from(codes));
         }
 
         function getEventDurationMinutes(event) {
@@ -2046,6 +2062,18 @@
         }
 
         function applyIdleAnalytics(summary, events, dateValue, machineCodes) {
+            const requestedCodes = normalizeMachineCodes(machineCodes);
+            const summaryCodes = normalizeMachineCodes(summary?.machine_codes || []);
+            const cardCodes = normalizeMachineCodes(
+                machineCards.map((card) => card.dataset.machineCard)
+            );
+            const trackedCodes =
+                requestedCodes.length > 0
+                    ? requestedCodes
+                    : summaryCodes.length > 0
+                    ? summaryCodes
+                    : cardCodes;
+
             const labels = [];
             const runtimeData = [];
             const idleData = [];
@@ -2093,7 +2121,7 @@
                 if (code) machineCardMap.set(code.toUpperCase(), card);
             });
 
-            machineCodes.forEach((code) => {
+            trackedCodes.forEach((code) => {
                 const normalizedCode = code.toUpperCase();
                 const machineEntry = dayEntry?.machines?.[code] || {};
                 const runtimeHours = Number(machineEntry.runtime_hours) || 0;
@@ -2150,7 +2178,13 @@
                 idleStatExtended.textContent = formatHours(totalExtended);
             }
 
-            updateIdleInsights(metricsByMachine, reasonStats, totalIdle, totalExtended, machineCodes);
+            updateIdleInsights(
+                metricsByMachine,
+                reasonStats,
+                totalIdle,
+                totalExtended,
+                trackedCodes
+            );
         }
 
         function updateMachineCard(card, machineCode, metrics, machineEvents) {

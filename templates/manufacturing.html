@@ -496,6 +496,44 @@
                                     </ul>
                                     <p class="forecast-overview-card__note">Total scheduled hours captured per machine.</p>
                                 </article>
+                                <article class="forecast-overview-card forecast-overview-card--idle">
+                                    <h4 class="forecast-overview-card__heading">Idle hours tracker</h4>
+                                    <p class="forecast-overview-card__note">
+                                        Target runtime
+                                        <span class="forecast-overview-card__note-value" id="idle-summary-target-hours">11.00</span>
+                                        <span class="forecast-overview-card__note-unit">hrs/day</span>
+                                    </p>
+                                    <div class="idle-summary__header">
+                                        <p class="idle-summary__period" id="idle-summary-period">—</p>
+                                        <p class="idle-summary__hint">Values show idle hours per machine.</p>
+                                    </div>
+                                    <div class="idle-summary__table-wrapper">
+                                        <table class="idle-summary__table">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Day</th>
+                                                    <th scope="col">MCH-0001</th>
+                                                    <th scope="col">MCH-0002</th>
+                                                    <th scope="col">MCH-0003</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="idle-summary-body">
+                                                <tr id="idle-summary-empty">
+                                                    <td colspan="4">Idle summary will appear here.</td>
+                                                </tr>
+                                            </tbody>
+                                            <tfoot>
+                                                <tr class="idle-summary__totals">
+                                                    <th scope="row">Total idle</th>
+                                                    <td id="idle-summary-total-mch-0001">0.00</td>
+                                                    <td id="idle-summary-total-mch-0002">0.00</td>
+                                                    <td id="idle-summary-total-mch-0003">0.00</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    <p class="idle-summary__error" id="idle-summary-error" hidden></p>
+                                </article>
                             </div>
                         </section>
                     </div>
@@ -626,6 +664,8 @@
         const MACHINE_HOUR_NORMALIZED_CODES = MACHINE_HOUR_CODES.map((code) =>
             normalizeMachineCodeKey(code),
         ).filter((value) => value.length > 0);
+        const IDLE_SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002", "MCH-0003"];
+        const IDLE_SCHEDULED_HOURS_PER_DAY = 11;
         const DRYER_MACHINE_CODE = "MCH-0003";
         const DRYER_MACHINE_NORMALIZED_CODE = normalizeMachineCodeKey(DRYER_MACHINE_CODE);
         const forecastState = {
@@ -1131,6 +1171,17 @@
             showMessage(forecastError);
         }
 
+        function formatPeriodFromDate(date) {
+            if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
+                return "";
+            }
+
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+
+            return `${year}-${month}`;
+        }
+
         function formatDateISO(date) {
             if (!(date instanceof Date) || Number.isNaN(date.valueOf())) {
                 return "";
@@ -1576,6 +1627,18 @@
 
         let latestSummary = null;
 
+        const idleSummaryTargetHours = document.getElementById("idle-summary-target-hours");
+        const idleSummaryPeriodElement = document.getElementById("idle-summary-period");
+        const idleSummaryBody = document.getElementById("idle-summary-body");
+        const idleSummaryEmptyRow = document.getElementById("idle-summary-empty");
+        const idleSummaryError = document.getElementById("idle-summary-error");
+        const idleSummaryTotals = {};
+        IDLE_SUMMARY_MACHINE_CODES.forEach((code) => {
+            idleSummaryTotals[code] = document.getElementById(
+                `idle-summary-total-${code.toLowerCase()}`,
+            );
+        });
+
         function formatQuantity(value) {
             const number = Number(value);
             return Number.isFinite(number) ? number.toFixed(2) : "0.00";
@@ -1652,6 +1715,96 @@
 
             updateTotalElement(totalsTodayTotal, todayTotal);
             updateTotalElement(totalsMtdTotal, mtdTotal);
+        }
+
+        function updateIdleSummaryTotals(totals) {
+            IDLE_SUMMARY_MACHINE_CODES.forEach((code) => {
+                const element = idleSummaryTotals[code];
+                if (!element) {
+                    return;
+                }
+                const value = Number(totals?.[code]?.idle_hours ?? 0);
+                element.textContent = formatQuantity(value);
+                if (value > 0.01) {
+                    element.classList.add("idle-summary__value--alert");
+                } else {
+                    element.classList.remove("idle-summary__value--alert");
+                }
+            });
+        }
+
+        function renderIdleSummary(data) {
+            if (idleSummaryTargetHours) {
+                const target = Number(
+                    data?.scheduled_hours_per_day ?? IDLE_SCHEDULED_HOURS_PER_DAY,
+                );
+                idleSummaryTargetHours.textContent = formatQuantity(target);
+            }
+
+            if (idleSummaryPeriodElement) {
+                idleSummaryPeriodElement.textContent = data?.label || "—";
+            }
+
+            if (idleSummaryError) {
+                idleSummaryError.hidden = true;
+                idleSummaryError.textContent = "";
+            }
+
+            updateIdleSummaryTotals(data?.totals || {});
+
+            if (!idleSummaryBody) {
+                return;
+            }
+
+            idleSummaryBody.innerHTML = "";
+
+            if (idleSummaryEmptyRow) {
+                idleSummaryEmptyRow.hidden = true;
+            }
+
+            const days = Array.isArray(data?.day_entries) ? data.day_entries : [];
+            if (days.length === 0) {
+                if (idleSummaryEmptyRow) {
+                    const cell = idleSummaryEmptyRow.querySelector("td");
+                    if (cell) {
+                        cell.textContent = "No idle time recorded for this month.";
+                    }
+                    idleSummaryEmptyRow.hidden = false;
+                    idleSummaryBody.appendChild(idleSummaryEmptyRow);
+                }
+                return;
+            }
+
+            days.forEach((dayEntry) => {
+                const row = document.createElement("tr");
+                row.className = "idle-summary__row";
+                if (dayEntry?.date) {
+                    row.dataset.date = dayEntry.date;
+                }
+
+                const dayCell = document.createElement("th");
+                dayCell.scope = "row";
+                dayCell.textContent = String(dayEntry?.day ?? "");
+                row.appendChild(dayCell);
+
+                IDLE_SUMMARY_MACHINE_CODES.forEach((code) => {
+                    const machineData = dayEntry?.machines?.[code];
+                    const idleHours = Number(machineData?.idle_hours ?? 0);
+                    const runtimeHours = Number(
+                        machineData?.runtime_hours ?? IDLE_SCHEDULED_HOURS_PER_DAY,
+                    );
+
+                    const cell = document.createElement("td");
+                    cell.textContent = formatQuantity(idleHours);
+                    if (idleHours > 0.01) {
+                        cell.classList.add("idle-summary__value--alert");
+                    }
+                    cell.title = `Idle ${formatQuantity(idleHours)} hrs • Runtime ${formatQuantity(runtimeHours)} hrs`;
+                    row.appendChild(cell);
+                });
+
+                idleSummaryBody.appendChild(row);
+            });
         }
 
         function renderSummary(data) {
@@ -1758,6 +1911,78 @@
             const machineData = hourData?.machines?.[machineCode];
             const quantity = Number(machineData?.quantity_tons ?? 0);
             quantityInput.value = formatQuantity(quantity);
+        }
+
+        async function loadIdleSummary() {
+            if (!idleSummaryBody) {
+                return;
+            }
+
+            if (idleSummaryError) {
+                idleSummaryError.hidden = true;
+                idleSummaryError.textContent = "";
+            }
+
+            if (idleSummaryBody && idleSummaryEmptyRow) {
+                idleSummaryBody.innerHTML = "";
+                idleSummaryEmptyRow.hidden = false;
+                const cell = idleSummaryEmptyRow.querySelector("td");
+                if (cell) {
+                    cell.textContent = "Loading idle hours…";
+                }
+                idleSummaryBody.appendChild(idleSummaryEmptyRow);
+            }
+
+            const params = new URLSearchParams();
+            const period = formatPeriodFromDate(forecastState.anchorDate);
+            if (period) {
+                params.set("period", period);
+            }
+            if (IDLE_SUMMARY_MACHINE_CODES.length > 0) {
+                params.set("machine_codes", IDLE_SUMMARY_MACHINE_CODES.join(","));
+            }
+
+            try {
+                const response = await fetch(
+                    `/api/production/monthly/idle-summary?${params.toString()}`,
+                    {
+                        headers: authHeaders,
+                    },
+                );
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error("Unable to load idle summary.");
+                }
+
+                const data = await response.json();
+                renderIdleSummary(data);
+            } catch (error) {
+                updateIdleSummaryTotals({});
+                if (idleSummaryTargetHours) {
+                    idleSummaryTargetHours.textContent = formatQuantity(
+                        IDLE_SCHEDULED_HOURS_PER_DAY,
+                    );
+                }
+                if (idleSummaryPeriodElement) {
+                    idleSummaryPeriodElement.textContent = "—";
+                }
+                if (idleSummaryBody && idleSummaryEmptyRow) {
+                    idleSummaryBody.innerHTML = "";
+                    idleSummaryEmptyRow.hidden = false;
+                    const cell = idleSummaryEmptyRow.querySelector("td");
+                    if (cell) {
+                        cell.textContent = "Idle summary unavailable.";
+                    }
+                    idleSummaryBody.appendChild(idleSummaryEmptyRow);
+                }
+                if (idleSummaryError) {
+                    idleSummaryError.hidden = false;
+                    idleSummaryError.textContent = error.message || "Unable to load idle summary.";
+                }
+            }
         }
 
         async function loadProductionSummary() {
@@ -1903,6 +2128,7 @@
         async function loadForecastData() {
             updateForecastMonthLabel();
             ensureForecastNavState();
+            loadIdleSummary();
 
             const machineCodes = getActiveMachineCodes();
             if (machineCodes.length === 0) {

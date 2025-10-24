@@ -365,6 +365,104 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertIn("MCH-0002", data["machine_codes"])
 
 
+    def test_monthly_idle_summary_accounts_for_shift_hours(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+        third_asset = self._create_machine()
+
+        def log_idle(asset_id, start, end):
+            payload = {
+                "asset_id": asset_id,
+                "started_at": start,
+                "ended_at": end,
+            }
+            response = self.client.post(
+                "/api/machines/idle-events",
+                headers=self._auth_headers(self.pm_token),
+                json=payload,
+            )
+            self.assertEqual(response.status_code, 201)
+
+        log_idle(first_asset["id"], "2024-05-01T08:00:00", "2024-05-01T09:30:00")
+        log_idle(first_asset["id"], "2024-05-01T17:00:00", "2024-05-01T20:00:00")
+        log_idle(first_asset["id"], "2024-05-02T18:00:00", "2024-05-03T08:00:00")
+
+        log_idle(second_asset["id"], "2024-04-30T22:00:00", "2024-05-01T08:00:00")
+        log_idle(second_asset["id"], "2024-05-20T06:00:00", "2024-05-20T07:30:00")
+
+        response = self.client.get(
+            "/api/production/monthly/idle-summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={
+                "period": "2024-05",
+                "machine_codes": ",".join(
+                    [
+                        first_asset["code"],
+                        second_asset["code"],
+                        third_asset["code"],
+                    ]
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertAlmostEqual(data["scheduled_hours_per_day"], 11.0)
+
+        day_entries = data["day_entries"]
+        self.assertEqual(len(day_entries), 31)
+        days_by_index = {item["day"]: item for item in day_entries}
+
+        may_first = days_by_index[1]
+        self.assertAlmostEqual(
+            may_first["machines"][first_asset["code"]]["idle_hours"],
+            3.5,
+        )
+        self.assertAlmostEqual(
+            may_first["machines"][first_asset["code"]]["runtime_hours"],
+            7.5,
+        )
+        self.assertAlmostEqual(
+            may_first["machines"][second_asset["code"]]["idle_hours"],
+            1.0,
+        )
+
+        may_second = days_by_index[2]
+        self.assertAlmostEqual(
+            may_second["machines"][first_asset["code"]]["idle_hours"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            may_second["machines"][first_asset["code"]]["runtime_hours"],
+            10.0,
+        )
+
+        may_third = days_by_index[3]
+        self.assertAlmostEqual(
+            may_third["machines"][first_asset["code"]]["idle_hours"],
+            1.0,
+        )
+
+        may_twentieth = days_by_index[20]
+        self.assertAlmostEqual(
+            may_twentieth["machines"][second_asset["code"]]["idle_hours"],
+            0.5,
+        )
+
+        totals = data["totals"]
+        self.assertAlmostEqual(totals[first_asset["code"]]["idle_hours"], 5.5)
+        self.assertAlmostEqual(totals[second_asset["code"]]["idle_hours"], 1.5)
+        self.assertAlmostEqual(totals[third_asset["code"]]["idle_hours"], 0.0)
+
+        self.assertAlmostEqual(
+            totals[first_asset["code"]]["runtime_hours"],
+            31 * 11 - 5.5,
+        )
+
+
     def test_monthly_summary_validates_period(self):
         response = self.client.get(
             "/api/production/monthly/summary",

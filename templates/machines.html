@@ -2284,13 +2284,28 @@
             trackedCodes.forEach((code) => {
                 const normalizedCode = code.toUpperCase();
                 const machineEntry = dayEntry?.machines?.[code] || {};
-                const runtimeHours = Number(machineEntry.runtime_hours) || 0;
-                const idleHours = Number(machineEntry.idle_hours) || 0;
-                const extendedHours = Math.max(0, runtimeHours - SHIFT_DURATION_HOURS);
                 const machineEvents = eventsByMachine.get(normalizedCode) || [];
                 const prominentEvent = machineEvents
                     .slice()
                     .sort((a, b) => getEventDurationMinutes(b) - getEventDurationMinutes(a))[0];
+
+                const scheduledMinutes = SHIFT_DURATION_HOURS * 60;
+                const eventIdleMinutes = machineEvents
+                    .map((event) => getEventDurationMinutes(event))
+                    .reduce((total, minutes) => total + minutes, 0);
+                const clampedEventIdleMinutes = Math.min(Math.max(eventIdleMinutes, 0), scheduledMinutes);
+                const eventIdleHours = Number((clampedEventIdleMinutes / 60).toFixed(3));
+
+                let runtimeHours = Number(machineEntry.runtime_hours) || 0;
+                let idleHours = Number(machineEntry.idle_hours) || 0;
+
+                if (clampedEventIdleMinutes > 0) {
+                    idleHours = eventIdleHours;
+                    const runtimeMinutes = Math.max(scheduledMinutes - clampedEventIdleMinutes, 0);
+                    runtimeHours = Number((runtimeMinutes / 60).toFixed(3));
+                }
+
+                const extendedHours = Math.max(0, runtimeHours - SHIFT_DURATION_HOURS);
 
                 const metrics = {
                     shiftRuntime: runtimeHours,

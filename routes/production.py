@@ -866,15 +866,45 @@ def get_monthly_idle_summary():
         .all()
     )
 
+    forecast_entries = (
+        ProductionForecastEntry.query.options(joinedload(ProductionForecastEntry.asset))
+        .join(MachineAsset)
+        .filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .filter(ProductionForecastEntry.date >= month_start)
+        .filter(ProductionForecastEntry.date <= month_end)
+        .all()
+    )
+
     idle_minutes: dict[dt_date, dict[str, float]] = {}
     totals_minutes: dict[str, dict[str, float]] = {}
+    forecast_runtime_minutes: dict[dt_date, dict[str, float]] = {}
 
     for day in range(1, month_days + 1):
         current_date = dt_date(anchor.year, anchor.month, day)
         idle_minutes[current_date] = {code: 0.0 for code in requested_codes}
+        forecast_runtime_minutes[current_date] = {}
 
     for code in requested_codes:
         totals_minutes[code] = {"idle": 0.0, "runtime": 0.0}
+
+    for entry in forecast_entries:
+        asset = entry.asset
+        if not asset or not asset.code:
+            continue
+
+        canonical_code = canonical_codes.get(asset.code.lower())
+        if not canonical_code:
+            continue
+
+        runtime_minutes = max(float(entry.forecast_hours or 0.0), 0.0) * 60
+        runtime_minutes = min(runtime_minutes, IDLE_SUMMARY_SCHEDULED_MINUTES)
+
+        entry_date = getattr(entry, "date", None)
+        if not isinstance(entry_date, dt_date):
+            continue
+
+        if month_start <= entry_date <= month_end:
+            forecast_runtime_minutes.setdefault(entry_date, {})[canonical_code] = runtime_minutes
 
     for event in events:
         asset = event.asset
@@ -928,19 +958,48 @@ def get_monthly_idle_summary():
 
         for code in requested_codes:
             raw_idle = max(daily_minutes.get(code, 0.0), 0.0)
-            capped_idle = min(raw_idle, IDLE_SUMMARY_SCHEDULED_MINUTES)
-            runtime_minutes = max(IDLE_SUMMARY_SCHEDULED_MINUTES - capped_idle, 0.0)
+            capped_event_idle = min(raw_idle, IDLE_SUMMARY_SCHEDULED_MINUTES)
+            runtime_from_events = max(
+                IDLE_SUMMARY_SCHEDULED_MINUTES - capped_event_idle,
+                0.0,
+            )
 
-            idle_hours = round(capped_idle / 60, 3)
-            runtime_hours = round(runtime_minutes / 60, 3)
+            forecast_runtime_map = forecast_runtime_minutes.get(current_date, {})
+            forecast_runtime_value = forecast_runtime_map.get(code)
+            if forecast_runtime_value is not None:
+                forecast_runtime_value = max(
+                    min(forecast_runtime_value, IDLE_SUMMARY_SCHEDULED_MINUTES),
+                    0.0,
+                )
+                forecast_idle_minutes = (
+                    IDLE_SUMMARY_SCHEDULED_MINUTES - forecast_runtime_value
+                )
+            else:
+                forecast_idle_minutes = None
+
+            if capped_event_idle > 0.0:
+                idle_minutes_value = capped_event_idle
+                runtime_minutes_value = runtime_from_events
+            elif forecast_idle_minutes is not None:
+                idle_minutes_value = max(forecast_idle_minutes, 0.0)
+                runtime_minutes_value = max(
+                    IDLE_SUMMARY_SCHEDULED_MINUTES - idle_minutes_value,
+                    0.0,
+                )
+            else:
+                idle_minutes_value = 0.0
+                runtime_minutes_value = IDLE_SUMMARY_SCHEDULED_MINUTES
+
+            idle_hours = round(idle_minutes_value / 60, 3)
+            runtime_hours = round(runtime_minutes_value / 60, 3)
 
             machines_payload[code] = {
                 "idle_hours": idle_hours,
                 "runtime_hours": runtime_hours,
             }
 
-            totals_minutes[code]["idle"] += capped_idle
-            totals_minutes[code]["runtime"] += runtime_minutes
+            totals_minutes[code]["idle"] += idle_minutes_value
+            totals_minutes[code]["runtime"] += runtime_minutes_value
 
         day_payloads.append(
             {

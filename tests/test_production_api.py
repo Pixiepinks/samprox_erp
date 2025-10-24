@@ -462,6 +462,49 @@ class ProductionApiTestCase(unittest.TestCase):
             31 * 11 - 5.5,
         )
 
+    def test_idle_summary_uses_forecast_hours_when_no_events(self):
+        asset = self._create_machine()
+
+        forecast_payload = {
+            "machine_code": asset["code"],
+            "date": "2025-11-01",
+            "forecast_hours": 10,
+            "average_hourly_production": 1.5,
+        }
+
+        response = self.client.post(
+            "/api/production/forecast",
+            headers=self._auth_headers(self.pm_token),
+            json=forecast_payload,
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.get(
+            "/api/production/monthly/idle-summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={
+                "period": "2025-11",
+                "machine_codes": asset["code"],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(data["period"], "2025-11")
+
+        entries_by_day = {item["day"]: item for item in data["day_entries"]}
+        november_first = entries_by_day[1]
+        machine_entry = november_first["machines"][asset["code"]]
+
+        self.assertAlmostEqual(machine_entry["idle_hours"], 1.0)
+        self.assertAlmostEqual(machine_entry["runtime_hours"], 10.0)
+
+        totals = data["totals"][asset["code"]]
+        self.assertAlmostEqual(totals["idle_hours"], 1.0)
+        scheduled_hours = data["scheduled_hours_per_day"]
+        expected_runtime_total = data["days"] * scheduled_hours - totals["idle_hours"]
+        self.assertAlmostEqual(totals["runtime_hours"], expected_runtime_total)
+
 
     def test_monthly_summary_validates_period(self):
         response = self.client.get(

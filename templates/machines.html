@@ -738,6 +738,13 @@
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
 
+        const DEFAULT_IDLE_MACHINES = [
+            { code: "MCH-0001", name: "Cutting Cell" },
+            { code: "MCH-0002", name: "Precision Lathe" },
+            { code: "MCH-0003", name: "Finishing Line" },
+        ];
+        const MAX_MACHINE_CARDS = 6;
+
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
 
@@ -1113,7 +1120,10 @@
         const idleStatExtended = document.querySelector("[data-total-extended]");
         const idleInsightsList = document.getElementById("idle-insights");
         const idleReasonPills = document.getElementById("idle-reason-pills");
-        const machineCards = Array.from(document.querySelectorAll("[data-machine-card]"));
+        const machineCardsContainer = document.querySelector(".idle-machine-grid");
+        let machineCards = Array.from(
+            machineCardsContainer?.querySelectorAll("[data-machine-card]") || []
+        );
 
         const supplierForm = document.getElementById("supplier-form");
         const supplierFormNotice = document.getElementById("supplier-form-notice");
@@ -1130,11 +1140,9 @@
         let latestCodeRequest = 0;
 
         const SHIFT_DURATION_HOURS = 11;
-        const machineMetadata = new Map([
-            ["MCH-0001", { title: "Cutting Cell" }],
-            ["MCH-0002", { title: "Precision Lathe" }],
-            ["MCH-0003", { title: "Finishing Line" }],
-        ]);
+        const machineMetadata = new Map(
+            DEFAULT_IDLE_MACHINES.map((machine) => [machine.code, { title: machine.name }])
+        );
 
         const today = new Date();
         const todayDateString = today.toISOString().slice(0, 10);
@@ -1326,23 +1334,100 @@
             });
         }
 
+        function getIdleMachinesForUi() {
+            if (Array.isArray(assets) && assets.length > 0) {
+                return assets
+                    .slice()
+                    .sort((a, b) => (a.code || "").localeCompare(b.code || ""));
+            }
+            return DEFAULT_IDLE_MACHINES.slice();
+        }
+
         function populateAssetSelects() {
             if (!idleMachineSelect) return;
-            const currentValue = idleMachineSelect.value;
-            const existingValues = new Set(Array.from(idleMachineSelect.options).map((option) => option.value));
-            assets.forEach((asset) => {
-                if (!asset?.code || existingValues.has(asset.code)) return;
+            const previousValue = idleMachineSelect.value;
+            const machines = getIdleMachinesForUi();
+
+            idleMachineSelect.innerHTML = "";
+
+            machines.forEach((machine) => {
+                const code = machine?.code;
+                if (!code) return;
+                const label = machine?.name || machine?.title || code;
                 const option = document.createElement("option");
-                option.value = asset.code;
-                option.textContent = `${asset.code} — ${asset.name || "Machine"}`;
+                option.value = code;
+                option.textContent = `${code} — ${label}`;
                 idleMachineSelect.appendChild(option);
-                if (!machineMetadata.has(asset.code)) {
-                    machineMetadata.set(asset.code, { title: asset.name || asset.code });
+                const existing = machineMetadata.get(code);
+                if (existing) {
+                    existing.title = label;
+                } else {
+                    machineMetadata.set(code, { title: label });
                 }
             });
-            if (!currentValue && idleMachineSelect.options.length > 0) {
+
+            const hasPrevious = machines.some((machine) => machine?.code === previousValue);
+            if (previousValue && hasPrevious) {
+                idleMachineSelect.value = previousValue;
+            } else if (idleMachineSelect.options.length > 0) {
                 idleMachineSelect.value = idleMachineSelect.options[0].value;
             }
+        }
+
+        function renderMachineCards() {
+            if (!machineCardsContainer) return;
+
+            const machines = getIdleMachinesForUi();
+            machineCardsContainer.innerHTML = "";
+
+            machines.slice(0, MAX_MACHINE_CARDS).forEach((machine) => {
+                const code = machine?.code;
+                if (!code) return;
+                const label = machine?.name || machine?.title || code;
+                const card = document.createElement("article");
+                card.className = "machine-glance";
+                card.dataset.machineCard = code;
+                card.innerHTML = `
+                    <header class="machine-glance__header">
+                        <div>
+                            <p class="machine-glance__code">${code}</p>
+                            <h3 class="machine-glance__title">${label}</h3>
+                        </div>
+                        <span class="status-pill" data-machine-status>Awaiting data</span>
+                    </header>
+                    <p class="machine-glance__runtime"><span data-machine-runtime>—</span> <small>runtime</small></p>
+                    <div class="machine-glance__progress" aria-hidden="true">
+                        <div class="machine-glance__progress-bar" data-machine-progress></div>
+                    </div>
+                    <dl class="machine-glance__metrics">
+                        <div>
+                            <dt>Idle</dt>
+                            <dd data-machine-idle>—</dd>
+                        </div>
+                        <div>
+                            <dt>Overtime</dt>
+                            <dd data-machine-extended>—</dd>
+                        </div>
+                        <div>
+                            <dt>Utilisation</dt>
+                            <dd data-machine-utilisation>—</dd>
+                        </div>
+                    </dl>
+                    <div class="machine-glance__reason" data-machine-reason>Idle reason insights will appear here.</div>
+                    <p class="machine-glance__note" data-machine-note></p>
+                `;
+                machineCardsContainer.appendChild(card);
+                const existing = machineMetadata.get(code);
+                if (existing) {
+                    existing.title = label;
+                } else {
+                    machineMetadata.set(code, { title: label });
+                }
+            });
+
+            machineCards = Array.from(
+                machineCardsContainer.querySelectorAll("[data-machine-card]")
+            );
         }
 
         async function loadAssets() {
@@ -1354,6 +1439,10 @@
                 assets = await fetchJson("/api/machines/assets");
                 renderAssets();
                 populateAssetSelects();
+                renderMachineCards();
+                if (idleInitialized) {
+                    Promise.resolve(refreshIdleAnalytics()).catch(() => {});
+                }
             } catch (error) {
                 if (assetError) {
                     assetError.textContent = error.message || "Unable to load assets";
@@ -1362,6 +1451,10 @@
                 assets = [];
                 renderAssets();
                 populateAssetSelects();
+                renderMachineCards();
+                if (idleInitialized) {
+                    Promise.resolve(refreshIdleAnalytics()).catch(() => {});
+                }
             }
         }
 

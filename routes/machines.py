@@ -1,5 +1,5 @@
 """REST endpoints for machine assets, parts, idle events and suppliers."""
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
@@ -71,18 +71,51 @@ def _parse_date(value, *, field_name: str):
         raise ValueError(f"Invalid date for {field_name}")
 
 
+def _normalise_datetime_string(
+    value, *, fallback_date: date | None = None
+) -> tuple[datetime | str | None, bool]:
+    """Return a normalised value and whether a fallback date was applied."""
+
+    if isinstance(value, datetime):
+        return value, False
+
+    if not isinstance(value, str):
+        return value, False
+
+    trimmed = value.strip()
+    if not trimmed:
+        return "", False
+
+    if trimmed.endswith("Z"):
+        trimmed = f"{trimmed[:-1]}+00:00"
+
+    used_fallback = False
+    if fallback_date and "T" not in trimmed and " " not in trimmed:
+        trimmed = f"{fallback_date.isoformat()}T{trimmed}"
+        used_fallback = True
+
+    return trimmed, used_fallback
+
+
 def _parse_datetime(value, *, field_name: str):
     if not value:
         return None
     if isinstance(value, datetime):
         return value
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S"):
+    normalised = value.strip() if isinstance(value, str) else value
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ):
         try:
-            return datetime.strptime(value, fmt)
+            return datetime.strptime(normalised, fmt)
         except (TypeError, ValueError):
             continue
     try:
-        return datetime.fromisoformat(value)
+        return datetime.fromisoformat(normalised)
     except (TypeError, ValueError):
         raise ValueError(f"Invalid datetime for {field_name}")
 
@@ -360,17 +393,56 @@ def create_idle_event():
 
     asset = MachineAsset.query.get_or_404(asset_id)
 
+    analysis_date = None
     try:
-        started_at = _parse_datetime(payload.get("started_at"), field_name="started_at")
-        ended_at = _parse_datetime(payload.get("ended_at"), field_name="ended_at")
+        analysis_date = _parse_date(payload.get("analysis_date"), field_name="analysis_date")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    started_value, _ = _normalise_datetime_string(
+        payload.get("started_at"), fallback_date=analysis_date
+    )
+    try:
+        started_at = _parse_datetime(started_value, field_name="started_at")
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
     if not started_at:
         return jsonify({"msg": "started_at is required"}), 400
 
+    if isinstance(started_at, datetime) and analysis_date and started_at.date() != analysis_date:
+        started_at = datetime.combine(analysis_date, started_at.time())
+
+    end_fallback_date = analysis_date or (
+        started_at.date() if isinstance(started_at, datetime) else None
+    )
+    ended_value, end_used_fallback = _normalise_datetime_string(
+        payload.get("ended_at"), fallback_date=end_fallback_date
+    )
+    try:
+        ended_at = _parse_datetime(ended_value, field_name="ended_at")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    if (
+        ended_at
+        and isinstance(ended_at, datetime)
+        and analysis_date
+        and end_used_fallback
+        and ended_at.date() != analysis_date
+    ):
+        ended_at = datetime.combine(analysis_date, ended_at.time())
+
     if ended_at and ended_at < started_at:
-        return jsonify({"msg": "ended_at must be after started_at"}), 400
+        if (
+            isinstance(payload.get("ended_at"), str)
+            and end_used_fallback
+            and isinstance(started_at, datetime)
+            and isinstance(ended_at, datetime)
+        ):
+            ended_at = ended_at + timedelta(days=1)
+        if ended_at and ended_at < started_at:
+            return jsonify({"msg": "ended_at must be after started_at"}), 400
 
     event = MachineIdleEvent(
         asset=asset,

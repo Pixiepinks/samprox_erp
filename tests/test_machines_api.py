@@ -147,6 +147,36 @@ class MachineApiTestCase(unittest.TestCase):
         self.assertEqual(events[0]["asset"]["id"], asset_id)
         self.assertEqual(events[0]["duration_minutes"], 90)
 
+    def test_idle_event_time_only_payload_combines_with_analysis_date(self):
+        asset_payload = {
+            "name": "Press Line",
+            "category": "Plant & Machines",
+        }
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json=asset_payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        asset_id = response.get_json()["id"]
+
+        payload = {
+            "asset_id": asset_id,
+            "analysis_date": "2024-03-10",
+            "started_at": "07:15",
+            "ended_at": "08:45",
+            "reason": "Lubrication",
+        }
+        response = self.client.post(
+            "/api/machines/idle-events",
+            headers=self._auth_headers(self.mm_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        event = response.get_json()
+        self.assertTrue(event["started_at"].startswith("2024-03-10T07:15"))
+        self.assertTrue(event["ended_at"].startswith("2024-03-10T08:45"))
+
         # Create service supplier
         supplier_payload = {
             "name": "Rapid Repairs",

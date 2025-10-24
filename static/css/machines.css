@@ -191,6 +191,9 @@ body {
 }
 
 .machine-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 16px;
     padding: 0.75rem 1.4rem;
@@ -198,6 +201,7 @@ body {
     font-size: 0.95rem;
     background: rgba(59, 130, 246, 0.12);
     color: #1d4ed8;
+    text-decoration: none;
     cursor: pointer;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     box-shadow: 0 12px 18px rgba(37, 99, 235, 0.15);

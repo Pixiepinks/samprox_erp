@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/machines.css') }}" />
 </head>
-<body>
+<body data-initial-tab="{{ active_tab | default('assets') }}">
     <div class="page">
         <header class="topbar">
             <div class="brand">
@@ -40,13 +40,53 @@
         </nav>
         <main class="machine-layout">
             <div class="machine-tabs" role="tablist" aria-label="Machine subsections">
-                <button type="button" id="tab-button-assets" class="machine-tab is-active" role="tab" aria-selected="true" aria-controls="tab-assets" data-tab-target="assets">Assets Register</button>
-                <button type="button" id="tab-button-maintenance" class="machine-tab" role="tab" aria-selected="false" aria-controls="tab-maintenance" data-tab-target="maintenance">Maintenance Management</button>
-                <button type="button" id="tab-button-idle" class="machine-tab" role="tab" aria-selected="false" aria-controls="tab-idle" data-tab-target="idle">Idle Time Monitoring</button>
-                <button type="button" id="tab-button-suppliers" class="machine-tab" role="tab" aria-selected="false" aria-controls="tab-suppliers" data-tab-target="suppliers">Service Supplier Register</button>
+                <a
+                    id="tab-button-assets"
+                    class="machine-tab{% if active_tab == 'assets' %} is-active{% endif %}"
+                    role="tab"
+                    aria-selected="{{ 'true' if active_tab == 'assets' else 'false' }}"
+                    aria-controls="tab-assets"
+                    data-tab-target="assets"
+                    href="{{ url_for('ui.machines_page', tab='assets') }}"
+                >
+                    Assets Register
+                </a>
+                <a
+                    id="tab-button-maintenance"
+                    class="machine-tab{% if active_tab == 'maintenance' %} is-active{% endif %}"
+                    role="tab"
+                    aria-selected="{{ 'true' if active_tab == 'maintenance' else 'false' }}"
+                    aria-controls="tab-maintenance"
+                    data-tab-target="maintenance"
+                    href="{{ url_for('ui.machines_page', tab='maintenance') }}"
+                >
+                    Maintenance Management
+                </a>
+                <a
+                    id="tab-button-idle"
+                    class="machine-tab{% if active_tab == 'idle' %} is-active{% endif %}"
+                    role="tab"
+                    aria-selected="{{ 'true' if active_tab == 'idle' else 'false' }}"
+                    aria-controls="tab-idle"
+                    data-tab-target="idle"
+                    href="{{ url_for('ui.machines_page', tab='idle') }}"
+                >
+                    Idle Time Monitoring
+                </a>
+                <a
+                    id="tab-button-suppliers"
+                    class="machine-tab{% if active_tab == 'suppliers' %} is-active{% endif %}"
+                    role="tab"
+                    aria-selected="{{ 'true' if active_tab == 'suppliers' else 'false' }}"
+                    aria-controls="tab-suppliers"
+                    data-tab-target="suppliers"
+                    href="{{ url_for('ui.machines_page', tab='suppliers') }}"
+                >
+                    Service Supplier Register
+                </a>
             </div>
             <div class="machine-panels">
-                                <section id="tab-assets" class="tab-panel is-active" role="tabpanel" aria-labelledby="tab-button-assets" data-tab-panel="assets">
+                                <section id="tab-assets" class="tab-panel{% if active_tab == 'assets' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-assets" data-tab-panel="assets"{% if active_tab != 'assets' %} hidden{% endif %}>
                     <section id="machine-inputs" class="panel-group">
                         <header class="panel-group__header">
                             <h2>Inputs</h2>
@@ -189,7 +229,7 @@
                             </div>
                         </section>
                     </section>
-                <section id="tab-maintenance" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-maintenance" data-tab-panel="maintenance" hidden>
+                <section id="tab-maintenance" class="tab-panel{% if active_tab == 'maintenance' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-maintenance" data-tab-panel="maintenance"{% if active_tab != 'maintenance' %} hidden{% endif %}>
                     <div class="panel-grid">
                         <section class="panel panel--form">
                             <header class="panel__header">
@@ -272,7 +312,7 @@
                         </section>
                     </div>
                 </section>
-                <section id="tab-idle" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-idle" data-tab-panel="idle" hidden>
+                <section id="tab-idle" class="tab-panel{% if active_tab == 'idle' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-idle" data-tab-panel="idle"{% if active_tab != 'idle' %} hidden{% endif %}>
                     <section class="idle-hero">
                         <div class="idle-hero__content">
                             <p class="idle-hero__eyebrow">Intelligent downtime radar</p>
@@ -478,7 +518,7 @@
                         </div>
                     </section>
                 </section>
-                <section id="tab-suppliers" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-suppliers" data-tab-panel="suppliers" hidden>
+                <section id="tab-suppliers" class="tab-panel{% if active_tab == 'suppliers' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-suppliers" data-tab-panel="suppliers"{% if active_tab != 'suppliers' %} hidden{% endif %}>
                     <div class="panel-grid">
                         <section class="panel panel--form">
                             <header class="panel__header">
@@ -915,8 +955,10 @@
 
         document.querySelectorAll("[data-activate-tab]").forEach((element) => {
             element.addEventListener("click", (event) => {
+                event.preventDefault();
                 const tabTarget = element.dataset.activateTab;
                 if (!tabTarget) return;
+                updateTabUrl(tabTarget);
                 activateTab(tabTarget);
             });
         });
@@ -953,6 +995,24 @@
         const tabs = document.querySelectorAll(".machine-tab");
         const panels = document.querySelectorAll(".tab-panel");
         const loadedTabs = new Set();
+        const initialTab = (document.body?.dataset?.initialTab || "assets").toLowerCase();
+
+        function updateTabUrl(target) {
+            if (!target || !window?.history?.replaceState) {
+                return;
+            }
+            try {
+                const url = new URL(window.location.href);
+                if (target === "assets") {
+                    url.searchParams.delete("tab");
+                } else {
+                    url.searchParams.set("tab", target);
+                }
+                window.history.replaceState(null, "", url.toString());
+            } catch (_) {
+                // ignore navigation errors
+            }
+        }
 
         function activateTab(target) {
             if (!target) return;
@@ -994,7 +1054,13 @@
 
         if (tabs.length > 0) {
             tabs.forEach((tab) => {
-                tab.addEventListener("click", () => activateTab(tab.dataset.tabTarget));
+                tab.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    const target = tab.dataset.tabTarget;
+                    if (!target) return;
+                    updateTabUrl(target);
+                    activateTab(target);
+                });
             });
         }
 
@@ -2489,9 +2555,12 @@
             });
         }
 
-        activateTab("assets");
-        loadedTabs.add("assets");
-        loadAssets();
+        const allowedTabs = new Set(["assets", "maintenance", "idle", "suppliers"]);
+        const defaultTab = allowedTabs.has(initialTab) ? initialTab : "assets";
+        activateTab(defaultTab);
+        if (defaultTab !== "assets") {
+            Promise.resolve(loadAssets()).catch(() => {});
+        }
     </script>
 </body>
 </html>

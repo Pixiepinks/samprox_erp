@@ -1864,9 +1864,11 @@
                 if (updatedValue) {
                     const updatedDate = new Date(updatedValue);
                     if (!Number.isNaN(updatedDate.valueOf())) {
-                        updatedCell.textContent = updatedDate.toLocaleString(undefined, {
+                        updatedCell.textContent = updatedDate.toLocaleTimeString("en-LK", {
                             hour: "2-digit",
                             minute: "2-digit",
+                            hour12: true,
+                            timeZone: "Asia/Colombo",
                         });
                     } else {
                         updatedCell.textContent = "—";

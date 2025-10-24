@@ -961,6 +961,8 @@
         const loadedTabs = new Set();
 
         function activateTab(target) {
+            if (!target) return;
+
             tabs.forEach((tab) => {
                 const isActive = tab.dataset.tabTarget === target;
                 tab.classList.toggle("is-active", isActive);
@@ -969,8 +971,11 @@
             panels.forEach((panel) => {
                 const isActive = panel.dataset.tabPanel === target;
                 panel.classList.toggle("is-active", isActive);
-                panel.hidden = !isActive;
+                if (panel.hidden !== undefined) {
+                    panel.hidden = !isActive;
+                }
             });
+
             if (!loadedTabs.has(target)) {
                 loadedTabs.add(target);
                 if (target === "assets") {
@@ -989,9 +994,11 @@
             }
         }
 
-        tabs.forEach((tab) => {
-            tab.addEventListener("click", () => activateTab(tab.dataset.tabTarget));
-        });
+        if (tabs.length > 0) {
+            tabs.forEach((tab) => {
+                tab.addEventListener("click", () => activateTab(tab.dataset.tabTarget));
+            });
+        }
 
         const assetsTableBody = document.getElementById("assets-table-body");
         const assetsEmpty = document.getElementById("assets-empty");
@@ -1144,19 +1151,27 @@
         const FILTERED_PARTS_EMPTY_MESSAGE = "No parts match your search.";
 
         if (!canManageAssets) {
-            assetFormNotice.textContent = "Only Production Managers or Admins can add assets.";
-            assetFormNotice.hidden = false;
-            assetForm.querySelectorAll("input, textarea, button").forEach((element) => {
-                element.disabled = true;
-            });
+            if (assetFormNotice) {
+                assetFormNotice.textContent = "Only Production Managers or Admins can add assets.";
+                assetFormNotice.hidden = false;
+            }
+            if (assetForm) {
+                assetForm.querySelectorAll("input, textarea, button").forEach((element) => {
+                    element.disabled = true;
+                });
+            }
         }
 
         if (!canManageParts) {
-            assetPartForm.querySelectorAll("input, textarea, button").forEach((element) => {
-                element.disabled = true;
-            });
-            assetPartError.textContent = "Only authorised maintenance roles can add parts or log replacements.";
-            assetPartError.hidden = false;
+            if (assetPartForm) {
+                assetPartForm.querySelectorAll("input, textarea, button").forEach((element) => {
+                    element.disabled = true;
+                });
+            }
+            if (assetPartError) {
+                assetPartError.textContent = "Only authorised maintenance roles can add parts or log replacements.";
+                assetPartError.hidden = false;
+            }
         }
 
         if (assetPartSearchInput) {
@@ -1169,27 +1184,37 @@
         }
 
         if (!canCreateJobs) {
-            creationNotice.textContent = "Only Production Managers can create jobs. You can still view existing jobs.";
-            creationNotice.hidden = false;
-            jobForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
-                element.disabled = true;
-            });
+            if (creationNotice) {
+                creationNotice.textContent = "Only Production Managers can create jobs. You can still view existing jobs.";
+                creationNotice.hidden = false;
+            }
+            if (jobForm) {
+                jobForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
+                    element.disabled = true;
+                });
+            }
         }
 
         if (!canLogIdle && idleEntryForm) {
-            idleEntryNotice.textContent = "Only Production, Maintenance Managers or Admins can log hour meter readings.";
-            idleEntryNotice.hidden = false;
+            if (idleEntryNotice) {
+                idleEntryNotice.textContent = "Only Production, Maintenance Managers or Admins can log hour meter readings.";
+                idleEntryNotice.hidden = false;
+            }
             idleEntryForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
                 element.disabled = true;
             });
         }
 
         if (!canAddSuppliers) {
-            supplierFormNotice.textContent = "Only Production Managers or Admins can add suppliers.";
-            supplierFormNotice.hidden = false;
-            supplierForm.querySelectorAll("input, textarea, button").forEach((element) => {
-                element.disabled = true;
-            });
+            if (supplierFormNotice) {
+                supplierFormNotice.textContent = "Only Production Managers or Admins can add suppliers.";
+                supplierFormNotice.hidden = false;
+            }
+            if (supplierForm) {
+                supplierForm.querySelectorAll("input, textarea, button").forEach((element) => {
+                    element.disabled = true;
+                });
+            }
         }
 
         function formatDate(value, withTime = false) {
@@ -1276,14 +1301,16 @@
         }
 
         function renderAssets() {
+            if (!assetsTableBody) return;
+
             assetsTableBody.innerHTML = "";
 
             if (!Array.isArray(assets) || assets.length === 0) {
-                assetsEmpty.hidden = false;
+                if (assetsEmpty) assetsEmpty.hidden = false;
                 return;
             }
 
-            assetsEmpty.hidden = true;
+            if (assetsEmpty) assetsEmpty.hidden = true;
 
             assets.forEach((asset) => {
                 const row = document.createElement("tr");
@@ -1319,15 +1346,19 @@
         }
 
         async function loadAssets() {
-            assetError.hidden = true;
-            assetError.textContent = "";
+            if (assetError) {
+                assetError.hidden = true;
+                assetError.textContent = "";
+            }
             try {
                 assets = await fetchJson("/api/machines/assets");
                 renderAssets();
                 populateAssetSelects();
             } catch (error) {
-                assetError.textContent = error.message || "Unable to load assets";
-                assetError.hidden = false;
+                if (assetError) {
+                    assetError.textContent = error.message || "Unable to load assets";
+                    assetError.hidden = false;
+                }
                 assets = [];
                 renderAssets();
                 populateAssetSelects();
@@ -1335,16 +1366,18 @@
         }
 
         async function loadAssetParts(assetId) {
-            assetPartError.hidden = true;
-            assetPartSuccess.hidden = true;
+            if (assetPartError) assetPartError.hidden = true;
+            if (assetPartSuccess) assetPartSuccess.hidden = true;
             try {
                 const parts = await fetchJson(`/api/machines/assets/${assetId}/parts`);
                 currentParts = Array.isArray(parts) ? parts : [];
                 updatePartNumberField(currentParts);
                 renderFilteredParts();
             } catch (error) {
-                assetPartError.textContent = error.message || "Unable to load parts";
-                assetPartError.hidden = false;
+                if (assetPartError) {
+                    assetPartError.textContent = error.message || "Unable to load parts";
+                    assetPartError.hidden = false;
+                }
                 currentParts = [];
                 updatePartNumberField(currentParts);
                 renderFilteredParts();
@@ -1547,7 +1580,7 @@
             renderPartsList(partsToRender, { filtered: isFiltered });
         }
 
-        assetsTableBody.addEventListener("click", (event) => {
+        assetsTableBody?.addEventListener("click", (event) => {
             const button = event.target.closest("[data-action='ckd']");
             if (!button) return;
             const assetId = Number(button.dataset.assetId);
@@ -1560,10 +1593,10 @@
             if (assetPartsEmptyMessage) {
                 assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
             }
-            assetDetailTitle.textContent = `${asset.name} (${asset.code})`;
+            if (assetDetailTitle) assetDetailTitle.textContent = `${asset.name} (${asset.code})`;
             const metaParts = asset.part_count === 1 ? "1 part" : `${asset.part_count || 0} parts`;
             const metaLocation = asset.location ? ` • ${asset.location}` : "";
-            assetDetailMeta.textContent = `${metaParts}${metaLocation}`;
+            if (assetDetailMeta) assetDetailMeta.textContent = `${metaParts}${metaLocation}`;
             const facts = [];
             if (asset.manufacturer) facts.push(["Manufacturer", asset.manufacturer]);
             if (asset.model_number) facts.push(["Model", asset.model_number]);
@@ -1572,19 +1605,21 @@
             if (asset.status) facts.push(["Status", asset.status]);
             if (asset.category) facts.push(["Category", asset.category]);
             if (asset.notes) facts.push(["Notes", asset.notes]);
-            assetDetailFacts.innerHTML = facts.length
+            if (assetDetailFacts) {
+                assetDetailFacts.innerHTML = facts.length
                 ? facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")
                 : "<p>No additional details provided.</p>";
-            assetDetail.hidden = false;
+            }
+            if (assetDetail) assetDetail.hidden = false;
             loadAssetParts(asset.id);
         });
 
-        closeAssetDetail.addEventListener("click", () => {
-            assetDetail.hidden = true;
+        closeAssetDetail?.addEventListener("click", () => {
+            if (assetDetail) assetDetail.hidden = true;
             currentAssetId = null;
             currentParts = [];
-            assetPartsList.innerHTML = "";
-            assetPartsEmpty.hidden = true;
+            if (assetPartsList) assetPartsList.innerHTML = "";
+            if (assetPartsEmpty) assetPartsEmpty.hidden = true;
             if (assetPartSearchInput) {
                 assetPartSearchInput.value = "";
             }
@@ -1594,21 +1629,21 @@
             updatePartNumberField(currentParts);
         });
 
-        refreshAssetsButton.addEventListener("click", loadAssets);
+        refreshAssetsButton?.addEventListener("click", loadAssets);
 
         if (canManageAssets && assetCategorySelect) {
             assetCategorySelect.addEventListener("change", () => {
-                assetFormError.hidden = true;
-                assetFormSuccess.hidden = true;
+                if (assetFormError) assetFormError.hidden = true;
+                if (assetFormSuccess) assetFormSuccess.hidden = true;
                 refreshAssetCodePreview();
             });
         }
 
-        if (canManageAssets) {
+        if (canManageAssets && assetForm) {
             assetForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                assetFormSuccess.hidden = true;
-                assetFormError.hidden = true;
+                if (assetFormSuccess) assetFormSuccess.hidden = true;
+                if (assetFormError) assetFormError.hidden = true;
                 const formData = new FormData(assetForm);
                 const payload = {
                     name: formData.get("name")?.trim() || "",
@@ -1622,13 +1657,13 @@
                     notes: formData.get("notes")?.trim() || null,
                 };
 
-                if (!payload.name) {
+                if (!payload.name && assetFormError) {
                     assetFormError.textContent = "Name is required.";
                     assetFormError.hidden = false;
                     return;
                 }
 
-                if (!payload.category) {
+                if (!payload.category && assetFormError) {
                     assetFormError.textContent = "Select a category to generate an asset code.";
                     assetFormError.hidden = false;
                     return;
@@ -1644,15 +1679,17 @@
                     });
                     const selectedCategory = assetCategorySelect?.value || null;
                     assetForm.reset();
-                    assetFormSuccess.hidden = false;
+                    if (assetFormSuccess) assetFormSuccess.hidden = false;
                     if (assetCategorySelect && selectedCategory) {
                         assetCategorySelect.value = selectedCategory;
                         await refreshAssetCodePreview();
                     }
                     await loadAssets();
                 } catch (error) {
-                    assetFormError.textContent = error.message || "Unable to add asset";
-                    assetFormError.hidden = false;
+                    if (assetFormError) {
+                        assetFormError.textContent = error.message || "Unable to add asset";
+                        assetFormError.hidden = false;
+                    }
                 } finally {
                     submitButton.disabled = false;
                 }
@@ -1663,12 +1700,12 @@
             refreshAssetCodePreview();
         }
 
-        if (canManageParts) {
+        if (canManageParts && assetPartForm) {
             assetPartForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 if (!currentAssetId) return;
-                assetPartError.hidden = true;
-                assetPartSuccess.hidden = true;
+                if (assetPartError) assetPartError.hidden = true;
+                if (assetPartSuccess) assetPartSuccess.hidden = true;
                 const formData = new FormData(assetPartForm);
                 const payload = {
                     name: formData.get("name")?.trim(),
@@ -1677,12 +1714,12 @@
                     description: formData.get("description")?.trim() || null,
                     notes: formData.get("notes")?.trim() || null,
                 };
-                if (!payload.name) {
+                if (!payload.name && assetPartError) {
                     assetPartError.textContent = "Part name is required.";
                     assetPartError.hidden = false;
                     return;
                 }
-                if (!payload.part_number) {
+                if (!payload.part_number && assetPartError) {
                     assetPartError.textContent = "Part number is required.";
                     assetPartError.hidden = false;
                     return;
@@ -1702,12 +1739,14 @@
                         body: JSON.stringify(payload),
                     });
                     assetPartForm.reset();
-                    assetPartSuccess.hidden = false;
+                    if (assetPartSuccess) assetPartSuccess.hidden = false;
                     await loadAssets();
                     await loadAssetParts(currentAssetId);
                 } catch (error) {
-                    assetPartError.textContent = error.message || "Unable to add part";
-                    assetPartError.hidden = false;
+                    if (assetPartError) {
+                        assetPartError.textContent = error.message || "Unable to add part";
+                        assetPartError.hidden = false;
+                    }
                 } finally {
                     submitButton.disabled = false;
                 }
@@ -1715,28 +1754,34 @@
         }
 
         async function loadJobs() {
-            jobsError.hidden = true;
-            jobsError.textContent = "";
+            if (jobsError) {
+                jobsError.hidden = true;
+                jobsError.textContent = "";
+            }
 
             try {
                 const jobs = await fetchJson("/api/jobs");
                 renderJobs(jobs);
             } catch (error) {
-                jobsError.textContent = error.message || "Unable to load jobs";
-                jobsError.hidden = false;
+                if (jobsError) {
+                    jobsError.textContent = error.message || "Unable to load jobs";
+                    jobsError.hidden = false;
+                }
                 renderJobs([]);
             }
         }
 
         function renderJobs(jobs) {
+            if (!jobsTableBody) return;
+
             jobsTableBody.innerHTML = "";
 
             if (!Array.isArray(jobs) || jobs.length === 0) {
-                jobsEmpty.hidden = false;
+                if (jobsEmpty) jobsEmpty.hidden = false;
                 return;
             }
 
-            jobsEmpty.hidden = true;
+            if (jobsEmpty) jobsEmpty.hidden = true;
 
             jobs.forEach((job) => {
                 const row = document.createElement("tr");
@@ -1753,13 +1798,13 @@
             });
         }
 
-        refreshJobsButton.addEventListener("click", loadJobs);
+        refreshJobsButton?.addEventListener("click", loadJobs);
 
-        if (canCreateJobs) {
+        if (canCreateJobs && jobForm) {
             jobForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                creationSuccess.hidden = true;
-                creationError.hidden = true;
+                if (creationSuccess) creationSuccess.hidden = true;
+                if (creationError) creationError.hidden = true;
                 const formData = new FormData(jobForm);
                 const payload = {
                     code: formData.get("code")?.trim(),
@@ -1770,7 +1815,7 @@
                     expected_completion_date: formData.get("expected_completion_date") || null,
                 };
 
-                if (!payload.code || !payload.title) {
+                if ((!payload.code || !payload.title) && creationError) {
                     creationError.textContent = "Code and Title are required.";
                     creationError.hidden = false;
                     return;
@@ -1785,11 +1830,13 @@
                         body: JSON.stringify(payload),
                     });
                     jobForm.reset();
-                    creationSuccess.hidden = false;
+                    if (creationSuccess) creationSuccess.hidden = false;
                     await loadJobs();
                 } catch (error) {
-                    creationError.textContent = error.message || "Unable to create job";
-                    creationError.hidden = false;
+                    if (creationError) {
+                        creationError.textContent = error.message || "Unable to create job";
+                        creationError.hidden = false;
+                    }
                 } finally {
                     submitButton.disabled = false;
                 }
@@ -2245,12 +2292,14 @@
         }
 
         function renderSuppliers(suppliers) {
+            if (!suppliersTableBody) return;
+
             suppliersTableBody.innerHTML = "";
             if (!Array.isArray(suppliers) || suppliers.length === 0) {
-                suppliersEmpty.hidden = false;
+                if (suppliersEmpty) suppliersEmpty.hidden = false;
                 return;
             }
-            suppliersEmpty.hidden = true;
+            if (suppliersEmpty) suppliersEmpty.hidden = true;
             suppliers.forEach((supplier) => {
                 const row = document.createElement("tr");
                 row.innerHTML = `
@@ -2265,25 +2314,29 @@
         }
 
         async function loadSuppliers() {
-            supplierError.hidden = true;
-            supplierError.textContent = "";
+            if (supplierError) {
+                supplierError.hidden = true;
+                supplierError.textContent = "";
+            }
             try {
                 const suppliers = await fetchJson("/api/machines/service-suppliers");
                 renderSuppliers(suppliers);
             } catch (error) {
-                supplierError.textContent = error.message || "Unable to load suppliers";
-                supplierError.hidden = false;
+                if (supplierError) {
+                    supplierError.textContent = error.message || "Unable to load suppliers";
+                    supplierError.hidden = false;
+                }
                 renderSuppliers([]);
             }
         }
 
-        refreshSuppliersButton.addEventListener("click", loadSuppliers);
+        refreshSuppliersButton?.addEventListener("click", loadSuppliers);
 
-        if (canAddSuppliers) {
+        if (canAddSuppliers && supplierForm) {
             supplierForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                supplierFormSuccess.hidden = true;
-                supplierFormError.hidden = true;
+                if (supplierFormSuccess) supplierFormSuccess.hidden = true;
+                if (supplierFormError) supplierFormError.hidden = true;
                 const formData = new FormData(supplierForm);
                 const payload = {
                     name: formData.get("name")?.trim(),
@@ -2294,7 +2347,7 @@
                     preferred_assets: formData.get("preferred_assets")?.trim() || null,
                     notes: formData.get("notes")?.trim() || null,
                 };
-                if (!payload.name) {
+                if (!payload.name && supplierFormError) {
                     supplierFormError.textContent = "Supplier name is required.";
                     supplierFormError.hidden = false;
                     return;
@@ -2307,11 +2360,13 @@
                         body: JSON.stringify(payload),
                     });
                     supplierForm.reset();
-                    supplierFormSuccess.hidden = false;
+                    if (supplierFormSuccess) supplierFormSuccess.hidden = false;
                     await loadSuppliers();
                 } catch (error) {
-                    supplierFormError.textContent = error.message || "Unable to add supplier";
-                    supplierFormError.hidden = false;
+                    if (supplierFormError) {
+                        supplierFormError.textContent = error.message || "Unable to add supplier";
+                        supplierFormError.hidden = false;
+                    }
                 } finally {
                     submitButton.disabled = false;
                 }

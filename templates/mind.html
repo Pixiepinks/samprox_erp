@@ -89,6 +89,25 @@
                     </div>
                 </div>
             </section>
+            <section class="production-chart" aria-labelledby="idle-pareto-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="idle-pareto-title">Secondary idle reasons</h2>
+                        <p>Pareto view of downtime drivers, stacked by machine for the month.</p>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="idle-pareto-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas
+                            id="idle-pareto-chart"
+                            height="320"
+                            aria-label="Secondary idle reasons stacked Pareto chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
             <section class="production-chart" aria-labelledby="sales-chart-title">
                 <header class="production-chart__header">
                     <div>
@@ -154,6 +173,8 @@
         const productionPulseSummaryContainer = document.getElementById("production-pulse-summary");
         const productionPulseChartCanvas = document.getElementById("production-pulse-chart");
         const productionPulseMachineSelect = document.getElementById("production-pulse-machine");
+        const idleParetoSummaryContainer = document.getElementById("idle-pareto-summary");
+        const idleParetoChartCanvas = document.getElementById("idle-pareto-chart");
         const salesSummaryContainer = document.getElementById("sales-summary");
         const salesChartCanvas = document.getElementById("sales-chart");
 
@@ -199,6 +220,11 @@
                 borderColor: "rgb(96, 165, 250)",
             },
         ];
+
+        const DEFAULT_MACHINE_STACK_STYLE = {
+            backgroundColor: "rgba(148, 163, 184, 0.65)",
+            borderColor: "rgb(148, 163, 184)",
+        };
 
         const PULSE_MACHINE_SERIES = [
             {
@@ -322,6 +348,7 @@
         const productionPeriodCache = new Map();
         const productionPulsePeriodCache = new Map();
         const idleSummaryPeriodCache = new Map();
+        const idleParetoPeriodCache = new Map();
         const salesPeriodCache = new Map();
 
         const formatTons = (value) => {
@@ -377,6 +404,18 @@
                 PULSE_MACHINE_SERIES.find(
                     (series) => series.field === fieldName || series.label === machineCode,
                 ) || null
+            );
+        };
+
+        const getMachineStackStyleForCode = (machineCode) => {
+            const fieldName = getMachineFieldName(machineCode);
+            if (!fieldName) {
+                return DEFAULT_MACHINE_STACK_STYLE;
+            }
+            return (
+                MACHINE_SERIES.find(
+                    (series) => series.field === fieldName || series.label === machineCode,
+                ) || DEFAULT_MACHINE_STACK_STYLE
             );
         };
 
@@ -764,6 +803,35 @@
             return data;
         };
 
+        const fetchIdleSecondaryPareto = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (idleParetoPeriodCache.has(periodKey)) {
+                return idleParetoPeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey });
+            const response = await fetch(
+                `/api/production/monthly/idle-secondary-pareto?${params.toString()}`,
+                { headers: authHeaders },
+            );
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load secondary idle reasons.");
+            }
+
+            const data = await response.json();
+            idleParetoPeriodCache.set(periodKey, data);
+            return data;
+        };
+
         const buildProductionPulseDataset = async (periodKey) => {
             const periodData = await fetchProductionPulseSummary(periodKey);
             if (!periodData) {
@@ -954,6 +1022,358 @@
             } catch (error) {
                 console.error(error);
                 showProductionPulseSummaryError("Unable to load machine pulse data.");
+            }
+        };
+
+        const renderIdleParetoSummary = (periodData) => {
+            if (!idleParetoSummaryContainer) {
+                return;
+            }
+
+            const totalHours = Number(periodData?.total_idle_hours ?? 0);
+            const reasons = Array.isArray(periodData?.reasons) ? periodData.reasons : [];
+
+            const positiveReasons = reasons.filter(
+                (item) => Number(item?.total_idle_hours ?? 0) > 0,
+            );
+            const topReason = positiveReasons[0] || reasons[0] || null;
+            const topHours = Number(topReason?.total_idle_hours ?? 0);
+            const topLabel = topReason?.label ?? "—";
+            const topPercent = totalHours > 0 ? (topHours / totalHours) * 100 : 0;
+
+            if (!reasons.length || totalHours <= 0) {
+                idleParetoSummaryContainer.innerHTML = `
+                    <div class="production-chart__metric">
+                        <span class="production-chart__metric-label">Idle breakdown</span>
+                        <span class="production-chart__metric-value">No secondary idle reasons captured.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            let cumulativeHours = 0;
+            let reasonsForEighty = 0;
+            const threshold = totalHours * 0.8;
+            positiveReasons.forEach((reason) => {
+                if (reasonsForEighty > 0 && cumulativeHours >= threshold) {
+                    return;
+                }
+                const value = Number(reason?.total_idle_hours ?? 0);
+                if (!Number.isFinite(value) || value <= 0) {
+                    return;
+                }
+                cumulativeHours += value;
+                reasonsForEighty += 1;
+            });
+
+            if (totalHours <= 0) {
+                reasonsForEighty = 0;
+            } else if (reasonsForEighty === 0) {
+                reasonsForEighty = positiveReasons.length || 0;
+            }
+
+            const metrics = [
+                {
+                    label: "Total captured idle",
+                    value: `${formatHours(totalHours)} h`,
+                },
+                {
+                    label: "Top secondary reason",
+                    value: `${topLabel} (${formatHours(topHours)} h, ${formatPercent(topPercent)}%)`,
+                },
+                {
+                    label: "Reasons covering 80%",
+                    value:
+                        reasonsForEighty > 0
+                            ? `${reasonsForEighty} ${reasonsForEighty === 1 ? "reason" : "reasons"}`
+                            : "—",
+                },
+            ];
+
+            idleParetoSummaryContainer.innerHTML = metrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.value}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const showIdleParetoSummaryError = (message) => {
+            if (!idleParetoSummaryContainer) {
+                return;
+            }
+            idleParetoSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Idle breakdown</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const buildIdleParetoDataset = async (periodKey) => {
+            const periodData = await fetchIdleSecondaryPareto(periodKey);
+            if (!periodData) {
+                return null;
+            }
+
+            renderIdleParetoSummary(periodData);
+
+            const reasons = Array.isArray(periodData.reasons) ? periodData.reasons : [];
+
+            const machineCodes = (() => {
+                const seen = new Set();
+                const codes = [];
+
+                const append = (code) => {
+                    const normalized = normalizeMachineCode(code);
+                    if (!normalized || seen.has(normalized)) {
+                        return;
+                    }
+                    seen.add(normalized);
+                    codes.push(normalized);
+                };
+
+                if (Array.isArray(periodData.machine_codes)) {
+                    periodData.machine_codes.forEach(append);
+                }
+
+                if (codes.length === 0) {
+                    reasons.forEach((reason) => {
+                        const machines = reason?.machines;
+                        if (!machines || typeof machines !== "object") {
+                            return;
+                        }
+                        Object.keys(machines).forEach(append);
+                    });
+                }
+
+                return codes;
+            })();
+
+            if (!reasons.length || machineCodes.length === 0) {
+                return {
+                    labels: [],
+                    datasets: [],
+                    reasonTotals: [],
+                    totalIdleHours: Number(periodData?.total_idle_hours ?? 0) || 0,
+                };
+            }
+
+            const labels = reasons.map((item) => item?.label || "Unspecified");
+            const reasonTotals = reasons.map((item) => {
+                const value = Number(item?.total_idle_hours ?? 0);
+                return Number.isFinite(value) ? value : 0;
+            });
+
+            const barDatasets = machineCodes.map((code) => {
+                const style = getMachineStackStyleForCode(code);
+                const values = reasons.map((item) => {
+                    const rawValue = Number(item?.machines?.[code] ?? 0);
+                    return Number.isFinite(rawValue) ? rawValue : 0;
+                });
+
+                return {
+                    label: code,
+                    data: values,
+                    backgroundColor: style.backgroundColor,
+                    borderColor: style.borderColor,
+                    borderWidth: 1,
+                    stack: "idle",
+                    maxBarThickness: 22,
+                    borderSkipped: false,
+                    order: 1,
+                };
+            });
+
+            const totalIdleHours = reasonTotals.reduce(
+                (sum, value) => sum + (Number.isFinite(value) ? value : 0),
+                0,
+            );
+
+            const cumulativePercentages = [];
+            let running = 0;
+            reasonTotals.forEach((value) => {
+                running += Number.isFinite(value) ? value : 0;
+                const percent = totalIdleHours > 0 ? (running / totalIdleHours) * 100 : 0;
+                cumulativePercentages.push(Number.isFinite(percent) ? Number(percent.toFixed(2)) : 0);
+            });
+
+            const paretoDataset = {
+                label: "Cumulative %",
+                type: "line",
+                data: cumulativePercentages,
+                yAxisID: "y1",
+                borderColor: "rgb(234, 179, 8)",
+                backgroundColor: "rgba(234, 179, 8, 0.2)",
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 4,
+                tension: 0.25,
+                fill: false,
+                order: 0,
+            };
+
+            return {
+                labels,
+                datasets: [...barDatasets, paretoDataset],
+                reasonTotals,
+                totalIdleHours,
+            };
+        };
+
+        const buildIdleParetoChart = async () => {
+            if (!idleParetoSummaryContainer || !idleParetoChartCanvas) {
+                return;
+            }
+
+            idleParetoSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Loading</span>
+                    <span class="production-chart__metric-value">…</span>
+                </div>
+            `;
+
+            try {
+                const periodKey = getSelectedPeriodKey();
+                const dataset = await buildIdleParetoDataset(periodKey);
+                if (!dataset) {
+                    showIdleParetoSummaryError("Unable to load idle breakdown.");
+                    return;
+                }
+
+                const hasBarData = dataset.datasets.some(
+                    (item) =>
+                        item.stack === "idle" &&
+                        Array.isArray(item.data) &&
+                        item.data.some((value) => Number(value) > 0),
+                );
+
+                if (!hasBarData) {
+                    if (window.idleParetoChartInstance) {
+                        window.idleParetoChartInstance.data.labels = [];
+                        window.idleParetoChartInstance.data.datasets = [];
+                        window.idleParetoChartInstance.$reasonTotals = dataset.reasonTotals || [];
+                        window.idleParetoChartInstance.$totalIdleHours = dataset.totalIdleHours || 0;
+                        window.idleParetoChartInstance.update();
+                    }
+                    return;
+                }
+
+                if (window.idleParetoChartInstance) {
+                    window.idleParetoChartInstance.data.labels = dataset.labels;
+                    window.idleParetoChartInstance.data.datasets = dataset.datasets;
+                    window.idleParetoChartInstance.$reasonTotals = dataset.reasonTotals;
+                    window.idleParetoChartInstance.$totalIdleHours = dataset.totalIdleHours;
+                    window.idleParetoChartInstance.update();
+                    return;
+                }
+
+                window.idleParetoChartInstance = new Chart(idleParetoChartCanvas, {
+                    type: "bar",
+                    data: {
+                        labels: dataset.labels,
+                        datasets: dataset.datasets,
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: "Secondary idle reason",
+                                },
+                                ticks: {
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 12,
+                                },
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: "Idle hours",
+                                },
+                                ticks: {
+                                    callback: (value) => `${formatHours(value)} h`,
+                                },
+                            },
+                            y1: {
+                                beginAtZero: true,
+                                position: "right",
+                                suggestedMax: 100,
+                                title: {
+                                    display: true,
+                                    text: "Cumulative %",
+                                },
+                                ticks: {
+                                    callback: (value) => `${formatPercent(value)}%`,
+                                },
+                                grid: {
+                                    drawOnChartArea: false,
+                                },
+                            },
+                        },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    usePointStyle: true,
+                                },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => {
+                                        if (context.dataset.type === "line") {
+                                            const percentValue = Number(context.parsed.y ?? 0);
+                                            return `${context.dataset.label}: ${formatPercent(percentValue)}%`;
+                                        }
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${context.dataset.label}: ${formatHours(value)} h`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const chart = contexts[0]?.chart;
+                                        const dataIndex = contexts[0]?.dataIndex;
+                                        if (!chart || !Number.isInteger(dataIndex)) {
+                                            return "";
+                                        }
+                                        const totals = chart.$reasonTotals || [];
+                                        const total = Number(totals[dataIndex] ?? 0);
+                                        if (!Number.isFinite(total)) {
+                                            return "";
+                                        }
+                                        const totalIdle = Number(chart.$totalIdleHours ?? 0);
+                                        const lines = [`Total: ${formatHours(total)} h`];
+                                        if (totalIdle > 0) {
+                                            const share = (total / totalIdle) * 100;
+                                            lines.push(`Share: ${formatPercent(share)}%`);
+                                        }
+                                        return lines.join("\n");
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+
+                window.idleParetoChartInstance.$reasonTotals = dataset.reasonTotals;
+                window.idleParetoChartInstance.$totalIdleHours = dataset.totalIdleHours;
+            } catch (error) {
+                console.error(error);
+                showIdleParetoSummaryError("Unable to load idle breakdown.");
             }
         };
 
@@ -1319,6 +1739,13 @@
             });
         };
 
+        const refreshIdleParetoChart = () => {
+            buildIdleParetoChart().catch((error) => {
+                console.error(error);
+                showIdleParetoSummaryError("Unable to load idle breakdown.");
+            });
+        };
+
         const refreshSalesChart = () => {
             buildSalesChart().catch((error) => {
                 console.error(error);
@@ -1329,6 +1756,7 @@
         const refreshCharts = () => {
             refreshProductionChart();
             refreshProductionPulseChart();
+            refreshIdleParetoChart();
             refreshSalesChart();
         };
 

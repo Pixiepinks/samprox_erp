@@ -529,6 +529,106 @@ class ProductionApiTestCase(unittest.TestCase):
             31 * 11 - 5.5,
         )
 
+    def test_monthly_idle_secondary_pareto_stacks_minutes(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+        third_asset = self._create_machine()
+
+        def log_idle(asset_id, start, end, reason="Breakdown", secondary=None):
+            payload = {
+                "asset_id": asset_id,
+                "started_at": start,
+                "ended_at": end,
+                "reason": reason,
+            }
+            if secondary is not None:
+                payload["secondary_reason"] = secondary
+
+            response = self.client.post(
+                "/api/machines/idle-events",
+                headers=self._auth_headers(self.pm_token),
+                json=payload,
+            )
+            self.assertEqual(response.status_code, 201)
+
+        log_idle(
+            first_asset["id"],
+            "2024-05-01T07:30:00",
+            "2024-05-01T09:30:00",
+            secondary="Power trip",
+        )
+        log_idle(
+            second_asset["id"],
+            "2024-05-03T08:00:00",
+            "2024-05-03T09:00:00",
+            secondary="Power trip",
+        )
+        log_idle(
+            first_asset["id"],
+            "2024-05-05T10:00:00",
+            "2024-05-05T12:00:00",
+            secondary="Material delay",
+        )
+        log_idle(
+            third_asset["id"],
+            "2024-05-10T11:00:00",
+            "2024-05-10T12:00:00",
+            reason="Maintenance",
+            secondary=None,
+        )
+
+        machine_codes = ",".join(
+            [first_asset["code"], second_asset["code"], third_asset["code"]]
+        )
+
+        response = self.client.get(
+            "/api/production/monthly/idle-secondary-pareto",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-05", "machine_codes": machine_codes},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(
+            data["machine_codes"],
+            [first_asset["code"], second_asset["code"], third_asset["code"]],
+        )
+
+        reasons = data["reasons"]
+        self.assertGreaterEqual(len(reasons), 2)
+
+        power_trip = reasons[0]
+        self.assertEqual(power_trip["label"], "Power trip")
+        self.assertAlmostEqual(power_trip["total_idle_hours"], 3.0)
+        self.assertAlmostEqual(power_trip["machines"][first_asset["code"]], 2.0)
+        self.assertAlmostEqual(power_trip["machines"][second_asset["code"]], 1.0)
+
+        material_delay = next(
+            (item for item in reasons if item["label"] == "Material delay"),
+            None,
+        )
+        self.assertIsNotNone(material_delay)
+        self.assertAlmostEqual(material_delay["total_idle_hours"], 2.0)
+        self.assertAlmostEqual(material_delay["machines"][first_asset["code"]], 2.0)
+
+        unspecified = next(
+            (
+                item
+                for item in reasons
+                if item["label"] == "Maintenance — unspecified secondary"
+            ),
+            None,
+        )
+        self.assertIsNotNone(unspecified)
+        self.assertAlmostEqual(
+            unspecified["machines"][third_asset["code"]],
+            1.0,
+        )
+
+        self.assertAlmostEqual(data["total_idle_hours"], 6.0)
+
     def test_idle_summary_uses_forecast_hours_when_no_events(self):
         asset = self._create_machine()
 

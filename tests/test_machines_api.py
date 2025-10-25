@@ -200,6 +200,42 @@ class MachineApiTestCase(unittest.TestCase):
         self.assertEqual(len(suppliers), 1)
         self.assertEqual(suppliers[0]["name"], "Rapid Repairs")
 
+    def test_idle_events_date_filter_includes_entire_day(self):
+        asset_payload = {
+            "name": "Laser Cutter",
+            "category": "Plant & Machines",
+        }
+        response = self.client.post(
+            "/api/machines/assets",
+            headers=self._auth_headers(self.pm_token),
+            json=asset_payload,
+        )
+        self.assertEqual(response.status_code, 201)
+        asset_id = response.get_json()["id"]
+
+        idle_payload = {
+            "asset_id": asset_id,
+            "started_at": "2024-06-01T09:00",
+            "ended_at": "2024-06-01T11:30",
+            "reason": "Material shortage",
+        }
+        response = self.client.post(
+            "/api/machines/idle-events",
+            headers=self._auth_headers(self.mm_token),
+            json=idle_payload,
+        )
+        self.assertEqual(response.status_code, 201)
+
+        response = self.client.get(
+            "/api/machines/idle-events",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"start_date": "2024-06-01", "end_date": "2024-06-01"},
+        )
+        self.assertEqual(response.status_code, 200)
+        events = response.get_json()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["asset"]["id"], asset_id)
+
     def test_part_number_required_when_creating_part(self):
         asset_payload = {
             "name": "CNC Machine",

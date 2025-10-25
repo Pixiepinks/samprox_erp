@@ -413,58 +413,71 @@ def seed_idle_demo(period):
             db.session.delete(event)
 
         sample_events = [
-            (
-                "MCH-0001",
-                datetime.combine(target_day, dt_time(7, 45)),
-                datetime.combine(target_day, dt_time(9, 5)),
-                "Machine break down",
-                "Operator swapped the worn blade and re-ran calibration.",
-            ),
-            (
-                "MCH-0001",
-                datetime.combine(target_day, dt_time(16, 20)),
-                datetime.combine(target_day, dt_time(17, 0)),
-                "Changeover / setup",
-                "Setup for the evening order batch.",
-            ),
-            (
-                "MCH-0002",
-                datetime.combine(target_day, dt_time(10, 15)),
-                datetime.combine(target_day, dt_time(11, 0)),
-                "No Material",
-                "Awaited feedstock delivery from stores.",
-            ),
-            (
-                "MCH-0003",
-                datetime.combine(target_day, dt_time(13, 30)),
-                datetime.combine(target_day, dt_time(14, 10)),
-                "Planned maintenance",
-                "Lubrication check on conveyor bearings.",
-            ),
+            {
+                "code": "MCH-0001",
+                "start": datetime.combine(target_day, dt_time(7, 45)),
+                "end": datetime.combine(target_day, dt_time(9, 5)),
+                "reason": "Machine",
+                "secondary": "Feeder Box Issue",
+                "notes": "Operator swapped the worn blade and re-ran calibration.",
+            },
+            {
+                "code": "MCH-0001",
+                "start": datetime.combine(target_day, dt_time(16, 20)),
+                "end": datetime.combine(target_day, dt_time(17, 0)),
+                "reason": "Other",
+                "secondary": "Changeover setup",
+                "notes": "Setup for the evening order batch.",
+            },
+            {
+                "code": "MCH-0002",
+                "start": datetime.combine(target_day, dt_time(10, 15)),
+                "end": datetime.combine(target_day, dt_time(11, 0)),
+                "reason": "Material",
+                "secondary": "Material Sourcing Issue",
+                "notes": "Awaited feedstock delivery from stores.",
+            },
+            {
+                "code": "MCH-0003",
+                "start": datetime.combine(target_day, dt_time(13, 30)),
+                "end": datetime.combine(target_day, dt_time(14, 10)),
+                "reason": "Other",
+                "secondary": "Planned maintenance",
+                "notes": "Lubrication check on conveyor bearings.",
+            },
         ]
 
         previous_day = target_day - timedelta(days=1)
         if previous_day >= month_start:
             sample_events.extend(
                 [
-                    (
-                        "MCH-0002",
-                        datetime.combine(previous_day, dt_time(18, 30)),
-                        datetime.combine(previous_day, dt_time(19, 45)),
-                        "Machine break down",
-                        "Replaced coolant pump before late shift.",
-                    ),
-                    (
-                        "MCH-0003",
-                        datetime.combine(previous_day, dt_time(8, 0)),
-                        datetime.combine(previous_day, dt_time(8, 40)),
-                        "No Labor Force",
-                        "Operators assisted with urgent dispatch.",
-                    ),
+                    {
+                        "code": "MCH-0002",
+                        "start": datetime.combine(previous_day, dt_time(18, 30)),
+                        "end": datetime.combine(previous_day, dt_time(19, 45)),
+                        "reason": "Machine",
+                        "secondary": "Oil Circulation Issue",
+                        "notes": "Replaced coolant pump before late shift.",
+                    },
+                    {
+                        "code": "MCH-0003",
+                        "start": datetime.combine(previous_day, dt_time(8, 0)),
+                        "end": datetime.combine(previous_day, dt_time(8, 40)),
+                        "reason": "Labor",
+                        "secondary": "Key Member Absent",
+                        "notes": "Operators assisted with urgent dispatch.",
+                    },
                 ]
             )
 
-        for code, start, end, reason, notes in sample_events:
+        for event in sample_events:
+            code = event.get("code")
+            start = event.get("start")
+            end = event.get("end")
+            reason = event.get("reason")
+            notes = event.get("notes")
+            secondary = event.get("secondary")
+
             asset = assets.get(code)
             if not asset:
                 continue
@@ -474,6 +487,7 @@ def seed_idle_demo(period):
                     started_at=start,
                     ended_at=end,
                     reason=reason,
+                    secondary_reason=secondary,
                     notes=notes,
                 )
             )

@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, redirect, render_template, url_for
 
 bp = Blueprint("ui", __name__)
 
@@ -35,11 +35,8 @@ def man_page():
 
 @bp.get("/machines")
 def machines_page():
-    """Render the machine maintenance jobs page."""
-    requested = (request.args.get("tab") or "assets").lower()
-    allowed = {"assets", "maintenance", "idle", "suppliers"}
-    active_tab = requested if requested in allowed else "assets"
-    return render_template("machines.html", active_tab=active_tab)
+    """Render the machine operations hub."""
+    return render_template("machines.html")
 
 
 @bp.get("/material")

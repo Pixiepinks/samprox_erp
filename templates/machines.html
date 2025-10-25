@@ -304,9 +304,17 @@
                         <div class="idle-hero__chart">
                             <div class="idle-hero__chart-card">
                                 <div class="idle-chart-wrapper">
-                                    <canvas id="idle-chart" aria-label="Daily machine utilisation" role="img"></canvas>
+                                    <div
+                                        id="idle-pulse-grid"
+                                        class="idle-pulse"
+                                        role="grid"
+                                        aria-label="Daily machine utilisation pulse"
+                                    ></div>
                                 </div>
-                                <p class="idle-chart__legend-hint">Stacked hours for MCH-0001 &ndash; MCH-0003 between 07:00 and 19:00.</p>
+                                <p class="idle-chart__legend-hint">
+                                    Each square represents one hour between 07:00 and 19:00. Green marks productive runtime,
+                                    red highlights idle periods and mixed squares indicate split hours.
+                                </p>
                             </div>
                         </div>
                     </section>
@@ -678,7 +686,6 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -1025,7 +1032,7 @@
         const idleSecondaryReasonSelect = document.getElementById("idle-secondary-reason");
         const idleSecondaryRequiredIndicator = document.querySelector("[data-secondary-required]");
         const idleNotesInput = document.getElementById("idle-notes");
-        const idleChartCanvas = document.getElementById("idle-chart");
+        const idlePulseGrid = document.getElementById("idle-pulse-grid");
         const idleStatRuntime = document.querySelector("[data-total-runtime]");
         const idleStatIdle = document.querySelector("[data-total-idle]");
         const idleStatExtended = document.querySelector("[data-total-extended]");
@@ -1058,7 +1065,6 @@
         const today = new Date();
         const todayDateString = today.toISOString().slice(0, 10);
 
-        let idleChartInstance = null;
         let idleInitialized = false;
         let idleEvents = [];
         const idleSummaryCache = new Map();
@@ -2143,6 +2149,235 @@
             return (overlapEnd - overlapStart) / 60000;
         }
 
+        function getEventIdleMinutesWithinWindow(event, windowStart, windowEnd) {
+            if (!event || !(windowStart instanceof Date) || !(windowEnd instanceof Date)) {
+                return 0;
+            }
+
+            const startDate = event?.started_at ? parseDateFromIso(event.started_at) : null;
+            const rawEndDate = event?.ended_at ? parseDateFromIso(event.ended_at) : null;
+            if (!startDate) {
+                return 0;
+            }
+
+            const eventStart = startDate.getTime();
+            const eventEnd = (rawEndDate || new Date()).getTime();
+            if (!Number.isFinite(eventStart) || !Number.isFinite(eventEnd)) {
+                return 0;
+            }
+
+            const overlapStart = Math.max(eventStart, windowStart.getTime());
+            const overlapEnd = Math.min(eventEnd, windowEnd.getTime());
+            if (overlapEnd <= overlapStart) {
+                return 0;
+            }
+
+            return (overlapEnd - overlapStart) / 60000;
+        }
+
+        function formatTimeFromDate(date) {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                return "--:--";
+            }
+
+            const hours = String(date.getHours()).padStart(2, "0");
+            const minutes = String(date.getMinutes()).padStart(2, "0");
+            return `${hours}:${minutes}`;
+        }
+
+        function formatPulseRange(startDate, endDate) {
+            const startLabel = formatTimeFromDate(startDate);
+            const endLabel = formatTimeFromDate(endDate);
+            return `${startLabel} – ${endLabel}`;
+        }
+
+        function buildIdlePulseSlots(machineEvents, dateValue, metrics) {
+            const shiftBounds = getShiftWindowBounds(dateValue);
+            const events = Array.isArray(machineEvents) ? machineEvents : [];
+            const hasEntry = Boolean(metrics?.hasEntry);
+
+            if (!shiftBounds) {
+                return Array.from({ length: SHIFT_DURATION_HOURS }, (_, index) => ({
+                    idleMinutes: 0,
+                    runtimeMinutes: 0,
+                    idleRatio: 0,
+                    state: hasEntry ? "mixed" : "empty",
+                    estimated: true,
+                    rangeLabel: `Hour ${index + 1}`,
+                }));
+            }
+
+            const hasEvents = events.length > 0;
+            const fallbackIdleHours = hasEvents ? 0 : Math.max(Number(metrics?.idleTime) || 0, 0);
+            const fallbackIdleRatio =
+                fallbackIdleHours > 0 && SHIFT_DURATION_HOURS > 0
+                    ? Math.min(fallbackIdleHours / SHIFT_DURATION_HOURS, 1)
+                    : 0;
+
+            const slots = [];
+            const startMs = shiftBounds.start.getTime();
+
+            for (let index = 0; index < SHIFT_DURATION_HOURS; index += 1) {
+                const slotStart = new Date(startMs + index * 60 * 60000);
+                const slotEnd = new Date(startMs + (index + 1) * 60 * 60000);
+                const slotDurationMinutes = Math.max((slotEnd.getTime() - slotStart.getTime()) / 60000, 0);
+
+                let idleMinutes = 0;
+                let estimated = false;
+
+                if (hasEntry) {
+                    if (hasEvents) {
+                        idleMinutes = events.reduce((total, event) => {
+                            return total + getEventIdleMinutesWithinWindow(event, slotStart, slotEnd);
+                        }, 0);
+                    } else if (fallbackIdleRatio > 0 && slotDurationMinutes > 0) {
+                        idleMinutes = slotDurationMinutes * fallbackIdleRatio;
+                        estimated = true;
+                    }
+                }
+
+                idleMinutes = Math.min(Math.max(idleMinutes, 0), slotDurationMinutes);
+                const runtimeMinutes = Math.max(slotDurationMinutes - idleMinutes, 0);
+                const idleRatio = slotDurationMinutes > 0 ? idleMinutes / slotDurationMinutes : 0;
+
+                let state = "active";
+                if (!hasEntry) {
+                    state = "empty";
+                } else if (idleRatio >= 0.75) {
+                    state = "idle";
+                } else if (idleRatio <= 0.25) {
+                    state = "active";
+                } else {
+                    state = "mixed";
+                }
+
+                slots.push({
+                    idleMinutes,
+                    runtimeMinutes,
+                    idleRatio,
+                    state,
+                    estimated,
+                    rangeLabel: formatPulseRange(slotStart, slotEnd),
+                });
+            }
+
+            return slots;
+        }
+
+        function renderIdlePulseGrid(container, machineCodes, pulseDataByMachine, dateValue) {
+            if (!container) {
+                return;
+            }
+
+            const codes = Array.isArray(machineCodes) ? machineCodes : [];
+            const referenceDate = dateValue || todayDateString;
+
+            container.innerHTML = "";
+            container.setAttribute("aria-rowcount", String(codes.length));
+            container.setAttribute("aria-colcount", String(SHIFT_DURATION_HOURS));
+
+            const fragment = document.createDocumentFragment();
+
+            codes.forEach((code) => {
+                const normalizedCode = String(code || "").toUpperCase();
+                if (!normalizedCode) {
+                    return;
+                }
+
+                const rowData = pulseDataByMachine.get(normalizedCode) || {};
+                const machineName =
+                    rowData.machineName || machineMetadata.get(normalizedCode)?.title || normalizedCode;
+
+                const baseSlots =
+                    Array.isArray(rowData.slots) && rowData.slots.length > 0
+                        ? rowData.slots
+                        : buildIdlePulseSlots([], referenceDate, { hasEntry: false });
+
+                const slots = Array.from({ length: SHIFT_DURATION_HOURS }, (_, slotIndex) => {
+                    const slot = baseSlots[slotIndex];
+                    if (slot) {
+                        return slot;
+                    }
+                    return {
+                        idleMinutes: 0,
+                        runtimeMinutes: 0,
+                        idleRatio: 0,
+                        state: rowData.metrics?.hasEntry ? "mixed" : "empty",
+                        estimated: true,
+                        rangeLabel: `Hour ${slotIndex + 1}`,
+                    };
+                });
+
+                const row = document.createElement("div");
+                row.className = "idle-pulse__row";
+                row.setAttribute("role", "row");
+                row.dataset.machineCode = normalizedCode;
+
+                const label = document.createElement("span");
+                label.className = "idle-pulse__machine";
+                label.textContent = normalizedCode;
+                label.title =
+                    machineName === normalizedCode ? `Machine ${normalizedCode}` : `${normalizedCode} — ${machineName}`;
+                row.appendChild(label);
+
+                const slotsWrapper = document.createElement("div");
+                slotsWrapper.className = "idle-pulse__slots";
+                slotsWrapper.setAttribute("role", "presentation");
+
+                slots.forEach((slot, index) => {
+                    const cell = document.createElement("span");
+                    cell.className = "idle-pulse__slot";
+                    cell.setAttribute("role", "gridcell");
+                    cell.dataset.state = slot?.state || "empty";
+                    if (slot && Number.isFinite(slot.idleRatio)) {
+                        cell.style.setProperty("--idle-ratio", slot.idleRatio.toFixed(3));
+                    } else {
+                        cell.style.setProperty("--idle-ratio", "0");
+                    }
+
+                    if (slot?.estimated) {
+                        cell.dataset.estimated = "true";
+                    } else {
+                        cell.removeAttribute("data-estimated");
+                    }
+
+                    const runtimeMinutesRounded = Math.round(slot?.runtimeMinutes ?? 0);
+                    const idleMinutesRounded = Math.round(slot?.idleMinutes ?? 0);
+                    const parts = [];
+                    if (slot?.rangeLabel) {
+                        parts.push(slot.rangeLabel);
+                    } else {
+                        parts.push(`Hour ${index + 1}`);
+                    }
+
+                    if (slot?.state === "empty") {
+                        parts.push("No runtime or idle records");
+                    } else {
+                        parts.push(`${runtimeMinutesRounded} min productive`);
+                        if (idleMinutesRounded > 0) {
+                            parts.push(`${idleMinutesRounded} min idle`);
+                        }
+                        if (slot?.estimated) {
+                            parts.push("Estimated distribution");
+                        }
+                    }
+
+                    const description = parts.join(" — ");
+                    const accessibleMachineName =
+                        machineName === normalizedCode ? machineName : `${normalizedCode} — ${machineName}`;
+
+                    cell.title = description;
+                    cell.setAttribute("aria-label", `${accessibleMachineName}: ${description}`);
+                    slotsWrapper.appendChild(cell);
+                });
+
+                row.appendChild(slotsWrapper);
+                fragment.appendChild(row);
+            });
+
+            container.appendChild(fragment);
+        }
+
         function formatRangeLabel(startIso, endIso, referenceDate) {
             if (!startIso) return "this window";
             const startDate = parseDateFromIso(startIso);
@@ -2328,89 +2563,6 @@
 
             updateSecondaryReasonField();
 
-            if (idleChartCanvas && window.Chart && !idleChartInstance) {
-                const context = idleChartCanvas.getContext("2d");
-                idleChartInstance = new Chart(context, {
-                    type: "bar",
-                    data: {
-                        labels: [],
-                        datasets: [
-                            {
-                                label: "Effective (07:00 – 19:00)",
-                                data: [],
-                                backgroundColor: "rgba(34, 197, 94, 0.9)",
-                                borderRadius: 14,
-                                borderSkipped: false,
-                                stack: "hours",
-                                maxBarThickness: 26,
-                            },
-                            {
-                                label: "Idle (07:00 – 19:00)",
-                                data: [],
-                                backgroundColor: "rgba(248, 113, 113, 0.85)",
-                                borderRadius: 14,
-                                borderSkipped: false,
-                                stack: "hours",
-                                maxBarThickness: 26,
-                            },
-                            {
-                                label: "Extended (> 19:00)",
-                                data: [],
-                                backgroundColor: "rgba(59, 130, 246, 0.85)",
-                                borderRadius: 14,
-                                borderSkipped: false,
-                                stack: "hours",
-                                maxBarThickness: 26,
-                            },
-                        ],
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        indexAxis: "y",
-                        layout: {
-                            padding: {
-                                top: 8,
-                                bottom: 8,
-                                left: 4,
-                                right: 8,
-                            },
-                        },
-                        scales: {
-                            x: {
-                                stacked: true,
-                                ticks: {
-                                    color: "#e2e8f0",
-                                    font: { weight: 600 },
-                                    callback: (value) => `${value} h`,
-                                },
-                                grid: { color: "rgba(148, 163, 184, 0.22)" },
-                                border: { color: "rgba(148, 163, 184, 0.22)" },
-                            },
-                            y: {
-                                stacked: true,
-                                ticks: {
-                                    color: "#f8fafc",
-                                    font: { weight: 600 },
-                                },
-                                grid: { display: false },
-                            },
-                        },
-                        plugins: {
-                            legend: {
-                                position: "bottom",
-                                labels: { usePointStyle: true, color: "#f8fafc" },
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => `${context.dataset.label}: ${context.parsed.x.toFixed(2)} h`,
-                                },
-                            },
-                        },
-                    },
-                });
-            }
-
             await refreshIdleAnalytics();
         }
 
@@ -2531,13 +2683,10 @@
                     ? summaryCodes
                     : cardCodes;
 
-            const labels = [];
-            const effectiveData = [];
-            const idleData = [];
-            const extendedData = [];
             const metricsByMachine = new Map();
             const reasonStats = new Map();
             const eventsByMachine = new Map();
+            const pulseDataByMachine = new Map();
             let totalRuntimeAll = 0;
             let totalIdle = 0;
             let totalExtended = 0;
@@ -2656,10 +2805,11 @@
                 };
 
                 metricsByMachine.set(normalizedCode, metrics);
-                labels.push(code);
-                effectiveData.push(Number(metrics.effectiveRuntime.toFixed(2)));
-                idleData.push(Number(metrics.idleTime.toFixed(2)));
-                extendedData.push(Number(metrics.extendedRuntime.toFixed(2)));
+                pulseDataByMachine.set(normalizedCode, {
+                    slots: buildIdlePulseSlots(machineEvents, dateValue, metrics),
+                    metrics,
+                    machineName: machineMetadata.get(normalizedCode)?.title || code,
+                });
                 totalRuntimeAll += metrics.totalRuntime;
                 totalIdle += metrics.idleTime;
                 totalExtended += metrics.extendedRuntime;
@@ -2670,12 +2820,8 @@
                 }
             });
 
-            if (idleChartInstance) {
-                idleChartInstance.data.labels = labels;
-                idleChartInstance.data.datasets[0].data = effectiveData;
-                idleChartInstance.data.datasets[1].data = idleData;
-                idleChartInstance.data.datasets[2].data = extendedData;
-                idleChartInstance.update();
+            if (idlePulseGrid) {
+                renderIdlePulseGrid(idlePulseGrid, trackedCodes, pulseDataByMachine, dateValue);
             }
 
             if (idleStatRuntime) {

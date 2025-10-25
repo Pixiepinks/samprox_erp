@@ -301,6 +301,14 @@
                                 <span class="idle-stat__hint">Beyond 19:00</span>
                             </div>
                         </div>
+                        <div class="idle-hero__chart">
+                            <div class="idle-hero__chart-card">
+                                <div class="idle-chart-wrapper">
+                                    <canvas id="idle-chart" aria-label="Daily machine utilisation" role="img"></canvas>
+                                </div>
+                                <p class="idle-chart__legend-hint">Stacked hours for MCH-0001 &ndash; MCH-0003 between 07:00 and 19:00.</p>
+                            </div>
+                        </div>
                     </section>
                     <div class="panel-grid idle-grid">
                         <section class="panel idle-panel idle-panel--form">
@@ -1042,7 +1050,7 @@
         let currentParts = [];
         let latestCodeRequest = 0;
 
-        const SHIFT_DURATION_HOURS = 11;
+        const SHIFT_DURATION_HOURS = 12;
         const machineMetadata = new Map(
             DEFAULT_IDLE_MACHINES.map((machine) => [machine.code, { title: machine.name }])
         );
@@ -1080,6 +1088,7 @@
         }
 
         const IDLE_SHIFT_START = "07:00";
+        const IDLE_SHIFT_END = "19:00";
 
         function getSecondaryReasonOptions(primaryReason) {
             const key = (primaryReason || "").trim();
@@ -2038,6 +2047,17 @@
             return { startIso, endIso, startDate, endDate };
         }
 
+        function parseTimeParts(value) {
+            if (!value) {
+                return [0, 0];
+            }
+            const stringValue = String(value);
+            const [hourRaw = "0", minuteRaw = "0"] = stringValue.split(":");
+            const hour = Math.max(0, Math.min(Number.parseInt(hourRaw, 10), 23));
+            const minute = Math.max(0, Math.min(Number.parseInt(minuteRaw, 10), 59));
+            return [hour, minute];
+        }
+
         function buildDateTimeString(dateString, hour, minute = 0) {
             if (!dateString) return null;
             const parts = String(dateString).split("-");
@@ -2068,6 +2088,59 @@
                 return null;
             }
             return parsed;
+        }
+
+        function getShiftWindowBounds(dateString) {
+            if (!dateString) return null;
+            const [startHour, startMinute] = parseTimeParts(IDLE_SHIFT_START);
+            const [endHour, endMinute] = parseTimeParts(IDLE_SHIFT_END);
+            const startIso = buildDateTimeString(dateString, startHour, startMinute);
+            const endIso = buildDateTimeString(dateString, endHour, endMinute);
+            if (!startIso || !endIso) {
+                return null;
+            }
+
+            const startDate = parseDateFromIso(startIso);
+            const endDate = parseDateFromIso(endIso);
+            if (!startDate || !endDate) {
+                return null;
+            }
+
+            return {
+                start: startDate,
+                end: endDate,
+            };
+        }
+
+        function getEventIdleMinutesWithinShift(event, dateString) {
+            if (!event || !dateString) {
+                return 0;
+            }
+
+            const bounds = getShiftWindowBounds(dateString);
+            if (!bounds) {
+                return 0;
+            }
+
+            const startDate = event?.started_at ? parseDateFromIso(event.started_at) : null;
+            const rawEndDate = event?.ended_at ? parseDateFromIso(event.ended_at) : null;
+            if (!startDate) {
+                return 0;
+            }
+
+            const startMs = startDate.getTime();
+            const endMs = (rawEndDate || new Date()).getTime();
+            if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+                return 0;
+            }
+
+            const overlapStart = Math.max(startMs, bounds.start.getTime());
+            const overlapEnd = Math.min(endMs, bounds.end.getTime());
+            if (overlapEnd <= overlapStart) {
+                return 0;
+            }
+
+            return (overlapEnd - overlapStart) / 60000;
         }
 
         function formatRangeLabel(startIso, endIso, referenceDate) {
@@ -2263,60 +2336,74 @@
                         labels: [],
                         datasets: [
                             {
-                                label: "Active (07:00 – 19:00)",
+                                label: "Effective (07:00 – 19:00)",
                                 data: [],
-                                backgroundColor: "rgba(37, 99, 235, 0.85)",
+                                backgroundColor: "rgba(34, 197, 94, 0.9)",
                                 borderRadius: 14,
                                 borderSkipped: false,
-                                stack: "shift",
+                                stack: "hours",
+                                maxBarThickness: 26,
                             },
                             {
                                 label: "Idle (07:00 – 19:00)",
                                 data: [],
-                                backgroundColor: "rgba(148, 163, 184, 0.55)",
+                                backgroundColor: "rgba(248, 113, 113, 0.85)",
                                 borderRadius: 14,
                                 borderSkipped: false,
-                                stack: "shift",
+                                stack: "hours",
+                                maxBarThickness: 26,
                             },
                             {
-                                label: "Extended runtime",
+                                label: "Extended (> 19:00)",
                                 data: [],
-                                backgroundColor: "rgba(16, 185, 129, 0.8)",
+                                backgroundColor: "rgba(59, 130, 246, 0.85)",
                                 borderRadius: 14,
                                 borderSkipped: false,
-                                stack: "shift",
+                                stack: "hours",
+                                maxBarThickness: 26,
                             },
                         ],
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        indexAxis: "y",
+                        layout: {
+                            padding: {
+                                top: 8,
+                                bottom: 8,
+                                left: 4,
+                                right: 8,
+                            },
+                        },
                         scales: {
                             x: {
                                 stacked: true,
                                 ticks: {
-                                    color: "#0f172a",
+                                    color: "#e2e8f0",
                                     font: { weight: 600 },
+                                    callback: (value) => `${value} h`,
                                 },
-                                grid: { display: false },
+                                grid: { color: "rgba(148, 163, 184, 0.22)" },
+                                border: { color: "rgba(148, 163, 184, 0.22)" },
                             },
                             y: {
                                 stacked: true,
-                                title: { display: true, text: "Hours" },
                                 ticks: {
-                                    callback: (value) => `${value} h`,
+                                    color: "#f8fafc",
+                                    font: { weight: 600 },
                                 },
-                                grid: { color: "rgba(148, 163, 184, 0.25)" },
+                                grid: { display: false },
                             },
                         },
                         plugins: {
                             legend: {
                                 position: "bottom",
-                                labels: { usePointStyle: true },
+                                labels: { usePointStyle: true, color: "#f8fafc" },
                             },
                             tooltip: {
                                 callbacks: {
-                                    label: (context) => `${context.dataset.label}: ${context.parsed.y.toFixed(2)} h`,
+                                    label: (context) => `${context.dataset.label}: ${context.parsed.x.toFixed(2)} h`,
                                 },
                             },
                         },
@@ -2445,13 +2532,13 @@
                     : cardCodes;
 
             const labels = [];
-            const runtimeData = [];
+            const effectiveData = [];
             const idleData = [];
             const extendedData = [];
             const metricsByMachine = new Map();
             const reasonStats = new Map();
             const eventsByMachine = new Map();
-            let totalRuntime = 0;
+            let totalRuntimeAll = 0;
             let totalIdle = 0;
             let totalExtended = 0;
 
@@ -2477,7 +2564,7 @@
 
                 const reasonLabel = formatIdleReasonLabel(event.reason, event.secondary_reason);
                 if (reasonLabel) {
-                    const durationHours = getEventDurationMinutes(event) / 60;
+                    const durationHours = getEventIdleMinutesWithinShift(event, dateValue) / 60;
                     const stat = reasonStats.get(reasonLabel) || { hours: 0, count: 0 };
                     stat.hours += durationHours;
                     stat.count += 1;
@@ -2497,52 +2584,83 @@
                 const machineEvents = eventsByMachine.get(normalizedCode) || [];
                 const prominentEvent = machineEvents
                     .slice()
-                    .sort((a, b) => getEventDurationMinutes(b) - getEventDurationMinutes(a))[0];
+                    .sort(
+                        (a, b) =>
+                            getEventIdleMinutesWithinShift(b, dateValue) -
+                            getEventIdleMinutesWithinShift(a, dateValue)
+                    )[0];
 
                 const scheduledMinutes = SHIFT_DURATION_HOURS * 60;
                 const eventIdleMinutes = machineEvents
-                    .map((event) => getEventDurationMinutes(event))
+                    .map((event) => getEventIdleMinutesWithinShift(event, dateValue))
                     .reduce((total, minutes) => total + minutes, 0);
                 const clampedEventIdleMinutes = Math.min(Math.max(eventIdleMinutes, 0), scheduledMinutes);
-                const eventIdleHours = Number((clampedEventIdleMinutes / 60).toFixed(3));
+                const eventIdleHoursRaw = clampedEventIdleMinutes / 60;
 
-                let runtimeHours = Number(machineEntry.runtime_hours) || 0;
-                let idleHours = Number(machineEntry.idle_hours) || 0;
+                const totalRuntimeHoursRaw = Math.max(Number(machineEntry.runtime_hours) || 0, 0);
+                const fallbackIdleHoursRaw = Math.max(Number(machineEntry.idle_hours) || 0, 0);
+                const idleHoursRaw =
+                    clampedEventIdleMinutes > 0 ? eventIdleHoursRaw : fallbackIdleHoursRaw;
+                const idleHoursCapped = Math.max(
+                    Math.min(idleHoursRaw, SHIFT_DURATION_HOURS),
+                    0
+                );
 
-                if (clampedEventIdleMinutes > 0) {
-                    idleHours = eventIdleHours;
-                    const runtimeMinutes = Math.max(scheduledMinutes - clampedEventIdleMinutes, 0);
-                    runtimeHours = Number((runtimeMinutes / 60).toFixed(3));
-                }
-
-                const extendedHours = Math.max(0, runtimeHours - SHIFT_DURATION_HOURS);
+                const shiftRuntimeHoursRaw = Math.min(totalRuntimeHoursRaw, SHIFT_DURATION_HOURS);
+                const effectiveWithinShiftRaw = Math.max(
+                    Math.min(shiftRuntimeHoursRaw, SHIFT_DURATION_HOURS - idleHoursCapped),
+                    0
+                );
+                const extendedHoursRaw = Math.max(
+                    totalRuntimeHoursRaw - effectiveWithinShiftRaw,
+                    0
+                );
 
                 const primaryReason = (prominentEvent?.reason || "").trim();
                 const secondaryReason = (prominentEvent?.secondary_reason || "").trim();
                 const reasonLabel = formatIdleReasonLabel(primaryReason, secondaryReason);
 
+                const prominentEventIdleHours = prominentEvent
+                    ? Number(
+                          (
+                              getEventIdleMinutesWithinShift(prominentEvent, dateValue) /
+                              60
+                          ).toFixed(3)
+                      )
+                    : 0;
+
+                const effectiveRuntime = Number(effectiveWithinShiftRaw.toFixed(3));
+                const idleHours = Number(idleHoursCapped.toFixed(3));
+                const extendedHours = Number(extendedHoursRaw.toFixed(3));
+                const totalRuntime = Number(
+                    (effectiveWithinShiftRaw + extendedHoursRaw).toFixed(3)
+                );
+
                 const metrics = {
-                    shiftRuntime: runtimeHours,
+                    effectiveRuntime,
                     idleTime: idleHours,
                     extendedRuntime: extendedHours,
-                    totalRuntime: runtimeHours + extendedHours,
-                    utilisation: SHIFT_DURATION_HOURS ? Math.min(runtimeHours / SHIFT_DURATION_HOURS, 1) : 0,
+                    totalRuntime,
+                    utilisation: SHIFT_DURATION_HOURS
+                        ? Math.min(effectiveWithinShiftRaw / SHIFT_DURATION_HOURS, 1)
+                        : 0,
                     reason: reasonLabel,
                     reasonPrimary: primaryReason,
                     reasonSecondary: secondaryReason,
                     prominentEventId: prominentEvent?.id ?? null,
+                    prominentEventIdleHours,
                     notes: prominentEvent?.notes || "",
                     hasEntry:
-                        runtimeHours > 0 || idleHours > 0 || machineEvents.length > 0,
+                        totalRuntime > 0 || idleHours > 0 || machineEvents.length > 0,
                     events: machineEvents,
                 };
 
                 metricsByMachine.set(normalizedCode, metrics);
                 labels.push(code);
-                runtimeData.push(Number(metrics.shiftRuntime.toFixed(2)));
+                effectiveData.push(Number(metrics.effectiveRuntime.toFixed(2)));
                 idleData.push(Number(metrics.idleTime.toFixed(2)));
                 extendedData.push(Number(metrics.extendedRuntime.toFixed(2)));
-                totalRuntime += metrics.shiftRuntime;
+                totalRuntimeAll += metrics.totalRuntime;
                 totalIdle += metrics.idleTime;
                 totalExtended += metrics.extendedRuntime;
 
@@ -2554,14 +2672,14 @@
 
             if (idleChartInstance) {
                 idleChartInstance.data.labels = labels;
-                idleChartInstance.data.datasets[0].data = runtimeData;
+                idleChartInstance.data.datasets[0].data = effectiveData;
                 idleChartInstance.data.datasets[1].data = idleData;
                 idleChartInstance.data.datasets[2].data = extendedData;
                 idleChartInstance.update();
             }
 
             if (idleStatRuntime) {
-                idleStatRuntime.textContent = formatHours(totalRuntime);
+                idleStatRuntime.textContent = formatHours(totalRuntimeAll);
             }
             if (idleStatIdle) {
                 idleStatIdle.textContent = formatHours(totalIdle);
@@ -2608,7 +2726,7 @@
                 if (!metrics.hasEntry) {
                     reasonEl.textContent = "Awaiting downtime capture for this date.";
                 } else if (metrics.idleTime <= 0.05) {
-                    reasonEl.textContent = "Fully utilised within the 11-hour shift window.";
+                    reasonEl.textContent = "Fully utilised within the 12-hour shift window.";
                 } else if (metrics.reason) {
                     const prominentEvent =
                         machineEvents?.find((event) => event?.id === metrics.prominentEventId) ||
@@ -2621,7 +2739,10 @@
                             );
                         }) ||
                         null;
-                    const durationHours = prominentEvent ? getEventDurationMinutes(prominentEvent) / 60 : metrics.idleTime;
+                    const durationHours =
+                        prominentEvent && metrics.prominentEventIdleHours > 0
+                            ? metrics.prominentEventIdleHours
+                            : metrics.idleTime;
                     reasonEl.textContent = `${metrics.reason} caused ${formatHours(durationHours)} of idle time.`;
                 } else {
                     reasonEl.textContent = `Idle time of ${formatHours(metrics.idleTime)} recorded without a reason.`;
@@ -2675,7 +2796,7 @@
                 const reasonText = topMachine[1].reason ? ` (${topMachine[1].reason})` : "";
                 insights.push(`${machineLabel} lost ${formatHours(topMachine[1].idleTime)}${reasonText}. Align maintenance and materials to recover capacity.`);
             } else if (recorded.length) {
-                insights.push("All tracked machines achieved the planned 11-hour shift runtime.");
+                insights.push("All tracked machines achieved the planned 12-hour shift runtime.");
             } else {
                 insights.push("No idle records captured for this date. Log downtime to surface trends.");
             }

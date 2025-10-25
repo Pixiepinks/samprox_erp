@@ -70,6 +70,12 @@
                         <h2 id="pulse-chart-title">Machine running pulse</h2>
                         <p>Track hourly tons for each critical machine across the month.</p>
                     </div>
+                    <div class="production-chart__controls">
+                        <label class="production-chart__select">
+                            <span>Machine</span>
+                            <select id="production-pulse-machine"></select>
+                        </label>
+                    </div>
                 </header>
                 <div class="production-chart__body">
                     <div class="production-chart__summary" id="production-pulse-summary" aria-live="polite"></div>
@@ -147,12 +153,20 @@
         const productionChartCanvas = document.getElementById("production-chart");
         const productionPulseSummaryContainer = document.getElementById("production-pulse-summary");
         const productionPulseChartCanvas = document.getElementById("production-pulse-chart");
+        const productionPulseMachineSelect = document.getElementById("production-pulse-machine");
         const salesSummaryContainer = document.getElementById("sales-summary");
         const salesChartCanvas = document.getElementById("sales-chart");
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
         };
+
+        let selectedPulseMachine = null;
+        const initialSearchParams = new URLSearchParams(window.location.search);
+        const machineQueryParam = (initialSearchParams.get("machine") || "").trim().toUpperCase();
+        if (machineQueryParam) {
+            selectedPulseMachine = machineQueryParam;
+        }
 
         const numberFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
@@ -163,6 +177,10 @@
             maximumFractionDigits: 1,
         });
         const currencyFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        });
+        const hoursFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
             maximumFractionDigits: 2,
         });
@@ -202,6 +220,11 @@
                 backgroundColor: "rgba(56, 189, 248, 0.25)",
             },
         ];
+
+        const DEFAULT_PULSE_MACHINE_STYLE = {
+            borderColor: "rgb(37, 99, 235)",
+            backgroundColor: "rgba(37, 99, 235, 0.25)",
+        };
 
         const SALES_DATASET_COLORS = [
             { background: "rgba(14, 165, 233, 0.75)", border: "rgb(14, 165, 233)" },
@@ -298,6 +321,7 @@
 
         const productionPeriodCache = new Map();
         const productionPulsePeriodCache = new Map();
+        const idleSummaryPeriodCache = new Map();
         const salesPeriodCache = new Map();
 
         const formatTons = (value) => {
@@ -322,6 +346,99 @@
                 return "Rs 0";
             }
             return `Rs ${currencyFormatter.format(number)}`;
+        };
+
+        const formatHours = (value) => {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return "0";
+            }
+            return hoursFormatter.format(number);
+        };
+
+        const normalizeMachineCode = (code) => (code || "").trim().toUpperCase();
+
+        const getMachineFieldName = (machineCode) => {
+            if (!machineCode) {
+                return null;
+            }
+            if (machineCode.startsWith("MCH-000")) {
+                return machineCode.replace("MCH-000", "MCH");
+            }
+            return machineCode.replace(/-/g, "");
+        };
+
+        const getPulseMachineSeriesForCode = (machineCode) => {
+            const fieldName = getMachineFieldName(machineCode);
+            if (!fieldName) {
+                return null;
+            }
+            return (
+                PULSE_MACHINE_SERIES.find(
+                    (series) => series.field === fieldName || series.label === machineCode,
+                ) || null
+            );
+        };
+
+        const updateMachineQueryParam = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (selectedPulseMachine) {
+                params.set("machine", selectedPulseMachine);
+            } else {
+                params.delete("machine");
+            }
+            const searchString = params.toString();
+            const newUrl = `${window.location.pathname}${searchString ? `?${searchString}` : ""}${window.location.hash}`;
+            window.history.replaceState({}, "", newUrl);
+        };
+
+        const updatePulseMachineOptions = (availableCodes, selectedCode) => {
+            if (!productionPulseMachineSelect) {
+                return;
+            }
+
+            const normalizedCodes = Array.isArray(availableCodes)
+                ? availableCodes.map((code) => normalizeMachineCode(code))
+                : [];
+
+            productionPulseMachineSelect.innerHTML = "";
+
+            normalizedCodes.forEach((code) => {
+                const option = document.createElement("option");
+                option.value = code;
+                option.textContent = code;
+                if (code === selectedCode) {
+                    option.selected = true;
+                }
+                productionPulseMachineSelect.append(option);
+            });
+
+            productionPulseMachineSelect.disabled = normalizedCodes.length === 0;
+        };
+
+        const resolvePulseMachineSelection = (availableCodes) => {
+            const normalizedCodes = Array.isArray(availableCodes)
+                ? availableCodes.map((code) => normalizeMachineCode(code))
+                : [];
+
+            if (normalizedCodes.length === 0) {
+                selectedPulseMachine = null;
+                updatePulseMachineOptions([], null);
+                updateMachineQueryParam();
+                return null;
+            }
+
+            const normalizedSelection = normalizeMachineCode(selectedPulseMachine);
+            const hasValidSelection = normalizedSelection
+                ? normalizedCodes.includes(normalizedSelection)
+                : false;
+            const nextSelection = hasValidSelection ? normalizedSelection : normalizedCodes[0];
+
+            selectedPulseMachine = nextSelection;
+            updatePulseMachineOptions(normalizedCodes, nextSelection);
+            updateMachineQueryParam();
+
+            return nextSelection;
         };
 
         const renderProductionSummary = (periodData, comparisonData = null) => {
@@ -389,15 +506,39 @@
             `;
         };
 
-        const renderProductionPulseSummary = (periodData) => {
+        const renderProductionPulseSummary = ({
+            machineCode,
+            hourlyTotals,
+            values,
+            idleTotals,
+        }) => {
             if (!productionPulseSummaryContainer) {
                 return;
             }
 
-            const total = Number(periodData?.total_production ?? 0);
-            const average = Number(periodData?.average_hour_production ?? 0);
-            const peakLabel = periodData?.peak?.label ?? null;
-            const peakValue = Number(periodData?.peak?.total_tons ?? 0);
+            const seriesValues = Array.isArray(values) ? values : [];
+            const total = seriesValues.reduce(
+                (sum, value) => sum + (Number.isFinite(value) ? value : 0),
+                0,
+            );
+            const hoursCount = seriesValues.length;
+            const average = hoursCount ? total / hoursCount : 0;
+
+            let peakLabel = null;
+            let peakValue = 0;
+
+            if (Array.isArray(hourlyTotals)) {
+                hourlyTotals.forEach((entry, index) => {
+                    const value = Number(seriesValues[index] ?? 0);
+                    if (value > peakValue) {
+                        peakValue = value;
+                        peakLabel = entry?.label ?? null;
+                    }
+                });
+            }
+
+            const runtimeHours = Number(idleTotals?.runtime_hours ?? 0);
+            const idleHours = Number(idleTotals?.idle_hours ?? 0);
 
             const summaryMetrics = [
                 {
@@ -405,12 +546,20 @@
                     value: `${formatTons(total)} tons`,
                 },
                 {
-                    label: "Average Tons per Hour",
+                    label: "Average tons/operating hour",
                     value: `${formatTons(average)} tons`,
                 },
                 {
                     label: "Peak hour",
                     value: peakLabel ? `${peakLabel} – ${formatTons(peakValue)} tons` : "—",
+                },
+                {
+                    label: "Total Effective Hours",
+                    value: `${formatHours(runtimeHours)} hours`,
+                },
+                {
+                    label: "Total Idle Hours",
+                    value: `${formatHours(idleHours)} hours`,
                 },
             ];
 
@@ -429,6 +578,10 @@
         const showProductionPulseSummaryError = (message) => {
             if (!productionPulseSummaryContainer) {
                 return;
+            }
+            if (productionPulseMachineSelect) {
+                productionPulseMachineSelect.innerHTML = "";
+                productionPulseMachineSelect.disabled = true;
             }
             productionPulseSummaryContainer.innerHTML = `
                 <div class="production-chart__metric">
@@ -583,9 +736,50 @@
             return data;
         };
 
+        const fetchIdleSummaryForPeriod = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (idleSummaryPeriodCache.has(periodKey)) {
+                return idleSummaryPeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey, shape: "ui" });
+            const response = await fetch(`/api/production/monthly/idle-summary?${params.toString()}`, {
+                headers: authHeaders,
+            });
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load idle summary data.");
+            }
+
+            const data = await response.json();
+            idleSummaryPeriodCache.set(periodKey, data);
+            return data;
+        };
+
         const buildProductionPulseDataset = async (periodKey) => {
             const periodData = await fetchProductionPulseSummary(periodKey);
             if (!periodData) {
+                return null;
+            }
+
+            const machineCodes = Array.isArray(periodData.machine_codes)
+                ? periodData.machine_codes.map((code) => normalizeMachineCode(code))
+                : [];
+            const machineCode = resolvePulseMachineSelection(machineCodes);
+            if (!machineCode) {
+                return null;
+            }
+
+            const machineField = getMachineFieldName(machineCode);
+            if (!machineField) {
                 return null;
             }
 
@@ -602,28 +796,46 @@
                 return `Day ${day} – ${hour}:00`;
             });
 
-            const datasets = PULSE_MACHINE_SERIES.map((series) => {
-                const values = hourlyTotals.map((item) => {
-                    const value = Number(item?.[series.field] ?? 0);
-                    return Number.isFinite(value) ? value : 0;
-                });
-
-                return {
-                    label: series.label,
-                    data: values,
-                    borderColor: series.borderColor,
-                    backgroundColor: series.backgroundColor,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHoverRadius: 3,
-                    tension: 0.25,
-                    fill: false,
-                };
+            const values = hourlyTotals.map((item) => {
+                const value = Number(item?.[machineField] ?? 0);
+                return Number.isFinite(value) ? value : 0;
             });
 
-            renderProductionPulseSummary(periodData);
+            const machineSeries = getPulseMachineSeriesForCode(machineCode) || DEFAULT_PULSE_MACHINE_STYLE;
 
-            return { labels, datasets, hourlyTotals };
+            let idleTotals = null;
+            try {
+                const idleSummary = await fetchIdleSummaryForPeriod(periodKey);
+                if (idleSummary?.totals) {
+                    const totalsEntry = idleSummary.totals[machineCode];
+                    if (totalsEntry) {
+                        idleTotals = totalsEntry;
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+            }
+
+            renderProductionPulseSummary({
+                machineCode,
+                hourlyTotals,
+                values,
+                idleTotals,
+            });
+
+            const dataset = {
+                label: machineCode,
+                data: values,
+                borderColor: machineSeries.borderColor,
+                backgroundColor: machineSeries.backgroundColor,
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                tension: 0.25,
+                fill: false,
+            };
+
+            return { labels, datasets: [dataset], hourlyTotals };
         };
 
         const buildProductionPulseChart = async () => {
@@ -637,6 +849,9 @@
                     <span class="production-chart__metric-value">…</span>
                 </div>
             `;
+            if (productionPulseMachineSelect) {
+                productionPulseMachineSelect.disabled = true;
+            }
 
             try {
                 const periodKey = getSelectedPeriodKey();
@@ -722,18 +937,8 @@
                                         if (!Array.isArray(contexts) || contexts.length === 0) {
                                             return "";
                                         }
-                                        const chart = contexts[0]?.chart;
-                                        const index = contexts[0]?.dataIndex ?? null;
-                                        const totals = chart?.$hourlyTotals;
-                                        if (!Array.isArray(totals) || index === null) {
-                                            return "";
-                                        }
-                                        const entry = totals[index];
-                                        if (!entry) {
-                                            return "";
-                                        }
-                                        const totalValue = Number(entry?.total_tons ?? 0);
-                                        return `Total: ${formatTons(totalValue)} tons`;
+                                        const value = Number(contexts[0]?.parsed.y ?? 0);
+                                        return `Machine total: ${formatTons(value)} tons`;
                                     },
                                 },
                             },
@@ -1133,6 +1338,14 @@
         monthSelect.addEventListener("change", () => {
             refreshCharts();
         });
+
+        if (productionPulseMachineSelect) {
+            productionPulseMachineSelect.addEventListener("change", () => {
+                selectedPulseMachine = normalizeMachineCode(productionPulseMachineSelect.value);
+                updateMachineQueryParam();
+                refreshProductionPulseChart();
+            });
+        }
 
         compareToggle.addEventListener("click", () => {
             const isActive = compareToggle.getAttribute("aria-pressed") === "true";

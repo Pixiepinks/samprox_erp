@@ -25,6 +25,7 @@ entry_schema = DailyProductionEntrySchema()
 forecast_entry_schema = ProductionForecastEntrySchema()
 
 SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
+PULSE_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 
 IDLE_SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 IDLE_SUMMARY_SHIFT_START_HOUR = 7
@@ -81,11 +82,14 @@ def _parse_date(value, *, field_name: str):
         raise ValueError(f"Invalid date for {field_name}")
 
 
-def _parse_machine_codes_param(param_value):
+def _parse_machine_codes_param(param_value, default_codes=None):
+    if default_codes is None:
+        default_codes = SUMMARY_MACHINE_CODES
+
     if param_value:
         raw_codes = [code.strip() for code in param_value.split(",") if code.strip()]
     else:
-        raw_codes = list(SUMMARY_MACHINE_CODES)
+        raw_codes = list(default_codes)
 
     machine_codes = []
     seen = set()
@@ -100,7 +104,7 @@ def _parse_machine_codes_param(param_value):
         seen.add(key)
 
     if not machine_codes:
-        machine_codes = list(SUMMARY_MACHINE_CODES)
+        machine_codes = list(default_codes)
 
     canonical = {code.lower(): code for code in machine_codes}
     filters = list(canonical.keys())
@@ -873,6 +877,149 @@ def get_monthly_production_summary():
         "daily_totals": daily_totals,
         "total_production": total_production,
         "average_day_production": average_day_production,
+        "peak": peak,
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/monthly/hourly-pulse")
+@jwt_required()
+def get_monthly_hourly_pulse():
+    if not require_role(
+        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+    ):
+        return jsonify({"msg": "You do not have permission to view production."}), 403
+
+    try:
+        anchor = _parse_period_param(request.args.get("period"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    (
+        machine_codes,
+        canonical_codes,
+        machine_filters,
+    ) = _parse_machine_codes_param(
+        request.args.get("machine_codes"), default_codes=PULSE_MACHINE_CODES
+    )
+
+    month_start, month_end, month_days = _month_range(anchor)
+
+    totals_query = (
+        db.session.query(
+            DailyProductionEntry.date,
+            DailyProductionEntry.hour_no,
+            func.lower(MachineAsset.code),
+            func.coalesce(func.sum(DailyProductionEntry.quantity_tons), 0.0),
+        )
+        .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
+        .filter(
+            DailyProductionEntry.date >= month_start,
+            DailyProductionEntry.date <= month_end,
+            func.lower(MachineAsset.code).in_(machine_filters),
+        )
+        .group_by(
+            DailyProductionEntry.date,
+            DailyProductionEntry.hour_no,
+            func.lower(MachineAsset.code),
+        )
+        .order_by(
+            DailyProductionEntry.date.asc(),
+            DailyProductionEntry.hour_no.asc(),
+        )
+    )
+
+    totals_by_window = {}
+    for date_value, hour_value, code_value, total_value in totals_query.all():
+        if not isinstance(date_value, dt_date):
+            continue
+        try:
+            hour_no = int(hour_value)
+        except (TypeError, ValueError):
+            continue
+        key = (date_value, hour_no)
+        machine_totals = totals_by_window.setdefault(key, {})
+        try:
+            machine_totals[code_value] = float(total_value or 0.0)
+        except (TypeError, ValueError):
+            machine_totals[code_value] = 0.0
+
+    machine_field_map = {
+        code: code.replace("MCH-000", "MCH") if code.startswith("MCH-000") else code.replace("-", "")
+        for code in machine_codes
+    }
+
+    hourly_totals = []
+    total_production = 0.0
+    peak_payload = None
+
+    for day in range(1, month_days + 1):
+        current_date = dt_date(anchor.year, anchor.month, day)
+        for hour_no in range(1, 25):
+            machine_values = totals_by_window.get((current_date, hour_no), {})
+            hour_start, _ = _production_hour_window(current_date, hour_no)
+            label = f"{hour_start.strftime('%b')} {hour_start.day:02d} – {hour_start.strftime('%H:%M')}"
+
+            payload = {
+                "index": len(hourly_totals) + 1,
+                "day": day,
+                "hour": hour_no,
+                "timestamp": hour_start.isoformat(),
+                "label": label,
+            }
+
+            hour_total = 0.0
+            for machine_filter, canonical_code in canonical_codes.items():
+                field_name = machine_field_map.get(canonical_code, canonical_code)
+                value = round(machine_values.get(machine_filter, 0.0), 3)
+                payload[field_name] = value
+                hour_total += value
+
+            hour_total = round(hour_total, 3)
+            payload["total_tons"] = hour_total
+
+            hourly_totals.append(payload)
+            total_production += hour_total
+
+            if (peak_payload is None) or (hour_total > peak_payload["total_tons"]):
+                peak_payload = {
+                    "day": day,
+                    "hour": hour_no,
+                    "timestamp": payload["timestamp"],
+                    "label": label,
+                    "total_tons": hour_total,
+                }
+
+    total_production = round(total_production, 3)
+    total_hours = len(hourly_totals)
+    average_hour_production = round(
+        total_production / total_hours if total_hours else 0.0,
+        3,
+    )
+
+    if peak_payload is None:
+        peak = {
+            "day": None,
+            "hour": None,
+            "timestamp": None,
+            "label": None,
+            "total_tons": 0.0,
+        }
+    else:
+        peak = peak_payload
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": month_days,
+        "hours": total_hours,
+        "machine_codes": machine_codes,
+        "hourly_totals": hourly_totals,
+        "total_production": total_production,
+        "average_hour_production": average_hour_production,
         "peak": peak,
     }
 

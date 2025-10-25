@@ -365,6 +365,70 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertIn("MCH-0002", data["machine_codes"])
 
 
+    def test_hourly_pulse_returns_hourly_series(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+        third_asset = self._create_machine()
+
+        def record_output(machine_code, date, hour_no, quantity):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        record_output(first_asset["code"], "2024-05-01", 1, 1.5)
+        record_output(second_asset["code"], "2024-05-01", 1, 2.5)
+        record_output(third_asset["code"], "2024-05-01", 24, 3.0)
+        record_output(first_asset["code"], "2024-05-15", 12, 4.2)
+        record_output(second_asset["code"], "2024-05-31", 6, 1.0)
+        record_output(first_asset["code"], "2024-04-30", 3, 9.0)
+
+        response = self.client.get(
+            "/api/production/monthly/hourly-pulse",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-05"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(len(data["hourly_totals"]), data["hours"])
+        self.assertEqual(data["hours"], data["days"] * 24)
+
+        entries = {(item["day"], item["hour"]): item for item in data["hourly_totals"]}
+
+        may_first_hour_one = entries[(1, 1)]
+        self.assertAlmostEqual(may_first_hour_one["MCH1"], 1.5)
+        self.assertAlmostEqual(may_first_hour_one["MCH2"], 2.5)
+        self.assertAlmostEqual(may_first_hour_one["MCH3"], 0.0)
+
+        may_first_hour_twenty_four = entries[(1, 24)]
+        self.assertAlmostEqual(may_first_hour_twenty_four["MCH3"], 3.0)
+
+        may_fifteenth_hour_twelve = entries[(15, 12)]
+        self.assertAlmostEqual(may_fifteenth_hour_twelve["MCH1"], 4.2)
+
+        may_thirty_first_hour_six = entries[(31, 6)]
+        self.assertAlmostEqual(may_thirty_first_hour_six["MCH2"], 1.0)
+
+        self.assertAlmostEqual(data["total_production"], 12.2)
+        expected_average = round(12.2 / data["hours"], 3)
+        self.assertAlmostEqual(data["average_hour_production"], expected_average)
+        self.assertEqual(data["peak"]["day"], 15)
+        self.assertEqual(data["peak"]["hour"], 12)
+        self.assertAlmostEqual(data["peak"]["total_tons"], 4.2)
+        self.assertIn(first_asset["code"], data["machine_codes"])
+        self.assertIn(second_asset["code"], data["machine_codes"])
+        self.assertIn(third_asset["code"], data["machine_codes"])
+
+
     def test_monthly_idle_summary_accounts_for_shift_hours(self):
         first_asset = self._create_machine()
         second_asset = self._create_machine()

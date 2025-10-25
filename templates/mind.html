@@ -130,7 +130,10 @@
         </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <script>
+        Chart.register(ChartDataLabels);
+        Chart.defaults.set("plugins.datalabels", { display: false });
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
         let user;
@@ -373,6 +376,14 @@
                 return "Rs 0";
             }
             return `Rs ${currencyFormatter.format(number)}`;
+        };
+
+        const formatQuantity = (value) => {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return "0";
+            }
+            return numberFormatter.format(number);
         };
 
         const formatHours = (value) => {
@@ -1586,9 +1597,14 @@
             const customers = Array.isArray(periodData.customers) ? periodData.customers : [];
 
             const datasets = customers.map((customer, index, array) => {
-                const fieldName = customer.field;
-                const values = periodData.daily_totals.map((item) => {
-                    const value = Number(item?.[fieldName] ?? 0);
+                const amountField = customer.amount_field ?? customer.field;
+                const quantityField = customer.quantity_field ?? customer.field;
+                const quantities = periodData.daily_totals.map((item) => {
+                    const value = Number(item?.[quantityField] ?? 0);
+                    return Number.isFinite(value) ? value : 0;
+                });
+                const amounts = periodData.daily_totals.map((item) => {
+                    const value = Number(item?.[amountField] ?? 0);
                     return Number.isFinite(value) ? value : 0;
                 });
 
@@ -1598,7 +1614,8 @@
 
                 return {
                     label: customer.name,
-                    data: values,
+                    data: quantities,
+                    customAmounts: amounts,
                     backgroundColor: colors.background,
                     borderColor: colors.border,
                     borderWidth: 1,
@@ -1673,10 +1690,10 @@
                                 beginAtZero: true,
                                 title: {
                                     display: true,
-                                    text: "Sales value (Rs)",
+                                    text: "Quantity (units)",
                                 },
                                 ticks: {
-                                    callback: (value) => formatCurrency(value),
+                                    callback: (value) => formatQuantity(value),
                                 },
                             },
                         },
@@ -1695,8 +1712,11 @@
                                 callbacks: {
                                     label: (context) => {
                                         const label = context.dataset.label || "";
-                                        const value = Number(context.parsed.y ?? 0);
-                                        return `${label}: ${formatCurrency(value)}`;
+                                        const quantity = Number(context.parsed.y ?? 0);
+                                        const amount = Number(
+                                            context.dataset?.customAmounts?.[context.dataIndex] ?? 0,
+                                        );
+                                        return `${label}: ${formatQuantity(quantity)} (${formatCurrency(amount)})`;
                                     },
                                     footer: (contexts) => {
                                         if (!Array.isArray(contexts) || contexts.length === 0) {
@@ -1708,11 +1728,70 @@
                                         if (stackContexts.length === 0) {
                                             return "";
                                         }
-                                        const total = stackContexts.reduce(
+                                        const totalQuantity = stackContexts.reduce(
                                             (sum, item) => sum + Number(item.parsed.y ?? 0),
                                             0,
                                         );
-                                        return `Total: ${formatCurrency(total)}`;
+                                        const totalAmount = stackContexts.reduce(
+                                            (sum, item) =>
+                                                sum +
+                                                Number(
+                                                    item.dataset?.customAmounts?.[item.dataIndex] ?? 0,
+                                                ),
+                                            0,
+                                        );
+                                        return [
+                                            `Total quantity: ${formatQuantity(totalQuantity)}`,
+                                            `Total amount: ${formatCurrency(totalAmount)}`,
+                                        ];
+                                    },
+                                },
+                            },
+                            datalabels: {
+                                display: (context) => {
+                                    const quantity = Number(context.dataset.data?.[context.dataIndex] ?? 0);
+                                    const amount = Number(
+                                        context.dataset?.customAmounts?.[context.dataIndex] ?? 0,
+                                    );
+                                    return quantity > 0 || amount > 0;
+                                },
+                                anchor: "center",
+                                align: "center",
+                                clamp: true,
+                                labels: {
+                                    quantity: {
+                                        color: "#0f172a",
+                                        font: {
+                                            size: 12,
+                                            weight: "700",
+                                        },
+                                        offset: -6,
+                                        formatter: (value, context) => {
+                                            const quantity = Number(
+                                                context.dataset.data?.[context.dataIndex] ?? 0,
+                                            );
+                                            if (!Number.isFinite(quantity) || quantity <= 0) {
+                                                return "";
+                                            }
+                                            return formatQuantity(quantity);
+                                        },
+                                    },
+                                    amount: {
+                                        color: "#475569",
+                                        font: {
+                                            size: 10,
+                                            weight: "500",
+                                        },
+                                        offset: 8,
+                                        formatter: (value, context) => {
+                                            const amount = Number(
+                                                context.dataset?.customAmounts?.[context.dataIndex] ?? 0,
+                                            );
+                                            if (!Number.isFinite(amount) || amount <= 0) {
+                                                return "";
+                                            }
+                                            return formatCurrency(amount);
+                                        },
                                     },
                                 },
                             },

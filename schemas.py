@@ -243,6 +243,7 @@ class MachineIdleEventSchema(Schema):
     started_at = fields.DateTime()
     ended_at = fields.DateTime(allow_none=True)
     reason = fields.Str(allow_none=True)
+    secondary_reason = fields.Str(allow_none=True)
     notes = fields.Str(allow_none=True)
     duration_minutes = fields.Int(allow_none=True)
     asset = fields.Nested(MachineAssetSchema(only=("id", "name", "code")))

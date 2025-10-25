@@ -562,6 +562,7 @@ def create_idle_event():
         started_at=started_at,
         ended_at=ended_at,
         reason=(payload.get("reason") or None),
+        secondary_reason=(payload.get("secondary_reason") or None),
         notes=(payload.get("notes") or None),
     )
 

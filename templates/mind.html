@@ -64,6 +64,25 @@
                     </div>
                 </div>
             </section>
+            <section class="production-chart" aria-labelledby="pulse-chart-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="pulse-chart-title">Machine running pulse</h2>
+                        <p>Track hourly tons for each critical machine across the month.</p>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="production-pulse-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas
+                            id="production-pulse-chart"
+                            height="320"
+                            aria-label="Hourly machine production line chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
             <section class="production-chart" aria-labelledby="sales-chart-title">
                 <header class="production-chart__header">
                     <div>
@@ -126,6 +145,8 @@
         const compareToggle = document.getElementById("production-compare-toggle");
         const productionSummaryContainer = document.getElementById("production-summary");
         const productionChartCanvas = document.getElementById("production-chart");
+        const productionPulseSummaryContainer = document.getElementById("production-pulse-summary");
+        const productionPulseChartCanvas = document.getElementById("production-pulse-chart");
         const salesSummaryContainer = document.getElementById("sales-summary");
         const salesChartCanvas = document.getElementById("sales-chart");
 
@@ -158,6 +179,27 @@
                 label: "MCH-0002",
                 backgroundColor: "rgba(96, 165, 250, 0.75)",
                 borderColor: "rgb(96, 165, 250)",
+            },
+        ];
+
+        const PULSE_MACHINE_SERIES = [
+            {
+                field: "MCH1",
+                label: "MCH-0001",
+                borderColor: "rgb(37, 99, 235)",
+                backgroundColor: "rgba(37, 99, 235, 0.25)",
+            },
+            {
+                field: "MCH2",
+                label: "MCH-0002",
+                borderColor: "rgb(59, 130, 246)",
+                backgroundColor: "rgba(59, 130, 246, 0.25)",
+            },
+            {
+                field: "MCH3",
+                label: "MCH-0003",
+                borderColor: "rgb(56, 189, 248)",
+                backgroundColor: "rgba(56, 189, 248, 0.25)",
             },
         ];
 
@@ -255,6 +297,7 @@
         };
 
         const productionPeriodCache = new Map();
+        const productionPulsePeriodCache = new Map();
         const salesPeriodCache = new Map();
 
         const formatTons = (value) => {
@@ -341,6 +384,55 @@
             productionSummaryContainer.innerHTML = `
                 <div class="production-chart__metric">
                     <span class="production-chart__metric-label">Production data</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const renderProductionPulseSummary = (periodData) => {
+            if (!productionPulseSummaryContainer) {
+                return;
+            }
+
+            const total = Number(periodData?.total_production ?? 0);
+            const average = Number(periodData?.average_hour_production ?? 0);
+            const peakLabel = periodData?.peak?.label ?? null;
+            const peakValue = Number(periodData?.peak?.total_tons ?? 0);
+
+            const summaryMetrics = [
+                {
+                    label: "Total Production",
+                    value: `${formatTons(total)} tons`,
+                },
+                {
+                    label: "Average Tons per Hour",
+                    value: `${formatTons(average)} tons`,
+                },
+                {
+                    label: "Peak hour",
+                    value: peakLabel ? `${peakLabel} – ${formatTons(peakValue)} tons` : "—",
+                },
+            ];
+
+            productionPulseSummaryContainer.innerHTML = summaryMetrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.value}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const showProductionPulseSummaryError = (message) => {
+            if (!productionPulseSummaryContainer) {
+                return;
+            }
+            productionPulseSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Machine pulse</span>
                     <span class="production-chart__metric-value">${message}</span>
                 </div>
             `;
@@ -461,6 +553,198 @@
 
             renderProductionSummary(periodData, comparisonData);
             return { labels, datasets };
+        };
+
+        const fetchProductionPulseSummary = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (productionPulsePeriodCache.has(periodKey)) {
+                return productionPulsePeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey });
+            const response = await fetch(`/api/production/monthly/hourly-pulse?${params.toString()}`, {
+                headers: authHeaders,
+            });
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load machine pulse data.");
+            }
+
+            const data = await response.json();
+            productionPulsePeriodCache.set(periodKey, data);
+            return data;
+        };
+
+        const buildProductionPulseDataset = async (periodKey) => {
+            const periodData = await fetchProductionPulseSummary(periodKey);
+            if (!periodData) {
+                return null;
+            }
+
+            const hourlyTotals = Array.isArray(periodData.hourly_totals)
+                ? periodData.hourly_totals
+                : [];
+
+            const labels = hourlyTotals.map((item) => {
+                if (item.label) {
+                    return item.label;
+                }
+                const day = String(item.day ?? "").padStart(2, "0");
+                const hour = String(item.hour ?? "").padStart(2, "0");
+                return `Day ${day} – ${hour}:00`;
+            });
+
+            const datasets = PULSE_MACHINE_SERIES.map((series) => {
+                const values = hourlyTotals.map((item) => {
+                    const value = Number(item?.[series.field] ?? 0);
+                    return Number.isFinite(value) ? value : 0;
+                });
+
+                return {
+                    label: series.label,
+                    data: values,
+                    borderColor: series.borderColor,
+                    backgroundColor: series.backgroundColor,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    tension: 0.25,
+                    fill: false,
+                };
+            });
+
+            renderProductionPulseSummary(periodData);
+
+            return { labels, datasets, hourlyTotals };
+        };
+
+        const buildProductionPulseChart = async () => {
+            if (!productionPulseSummaryContainer || !productionPulseChartCanvas) {
+                return;
+            }
+
+            productionPulseSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Loading</span>
+                    <span class="production-chart__metric-value">…</span>
+                </div>
+            `;
+
+            try {
+                const periodKey = getSelectedPeriodKey();
+                const dataset = await buildProductionPulseDataset(periodKey);
+                if (!dataset) {
+                    showProductionPulseSummaryError("No pulse data available.");
+                    return;
+                }
+
+                if (window.productionPulseChartInstance) {
+                    window.productionPulseChartInstance.data.labels = dataset.labels;
+                    window.productionPulseChartInstance.data.datasets = dataset.datasets;
+                    window.productionPulseChartInstance.$hourlyTotals = dataset.hourlyTotals;
+                    window.productionPulseChartInstance.update();
+                    return;
+                }
+
+                window.productionPulseChartInstance = new Chart(productionPulseChartCanvas, {
+                    type: "line",
+                    data: {
+                        labels: dataset.labels,
+                        datasets: dataset.datasets,
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: "Hour of month",
+                                },
+                                grid: {
+                                    display: false,
+                                },
+                                ticks: {
+                                    autoSkip: true,
+                                    maxTicksLimit: 31,
+                                },
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: "Tons per hour",
+                                },
+                                ticks: {
+                                    callback: (value) => formatTons(value),
+                                },
+                            },
+                        },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        elements: {
+                            point: {
+                                radius: 0,
+                                hoverRadius: 3,
+                            },
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    usePointStyle: true,
+                                },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        return contexts[0].label || "";
+                                    },
+                                    label: (context) => {
+                                        const label = context.dataset.label || "";
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${label}: ${formatTons(value)} tons`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const chart = contexts[0]?.chart;
+                                        const index = contexts[0]?.dataIndex ?? null;
+                                        const totals = chart?.$hourlyTotals;
+                                        if (!Array.isArray(totals) || index === null) {
+                                            return "";
+                                        }
+                                        const entry = totals[index];
+                                        if (!entry) {
+                                            return "";
+                                        }
+                                        const totalValue = Number(entry?.total_tons ?? 0);
+                                        return `Total: ${formatTons(totalValue)} tons`;
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+                window.productionPulseChartInstance.$hourlyTotals = dataset.hourlyTotals;
+            } catch (error) {
+                console.error(error);
+                showProductionPulseSummaryError("Unable to load machine pulse data.");
+            }
         };
 
         const buildProductionChart = async () => {
@@ -818,6 +1102,13 @@
             });
         };
 
+        const refreshProductionPulseChart = () => {
+            buildProductionPulseChart().catch((error) => {
+                console.error(error);
+                showProductionPulseSummaryError("Unable to load machine pulse data.");
+            });
+        };
+
         const refreshSalesChart = () => {
             buildSalesChart().catch((error) => {
                 console.error(error);
@@ -827,6 +1118,7 @@
 
         const refreshCharts = () => {
             refreshProductionChart();
+            refreshProductionPulseChart();
             refreshSalesChart();
         };
 

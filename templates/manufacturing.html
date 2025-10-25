@@ -718,6 +718,46 @@
             return elements;
         }
 
+        function formatHourLabel(hourNumber) {
+            const value = Number(hourNumber);
+            if (!Number.isFinite(value) || value < 1 || value > 24) {
+                return "";
+            }
+
+            const startHour = value - 1;
+            const endHour = value % 24;
+
+            const formatPart = (hour) => {
+                const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+                const period = hour < 12 ? "am" : "pm";
+                return `${hour12}.00 ${period}`;
+            };
+
+            return `${formatPart(startHour)} - ${formatPart(endHour)}`;
+        }
+
+        const HOUR_LABELS = {};
+        for (let hour = 1; hour <= 24; hour += 1) {
+            const label = formatHourLabel(hour);
+            if (label) {
+                HOUR_LABELS[hour] = label;
+            }
+        }
+
+        if (hourSelect) {
+            Array.from(hourSelect.options).forEach((option) => {
+                const optionValue = Number(option.value);
+                if (!Number.isFinite(optionValue)) {
+                    return;
+                }
+
+                const label = HOUR_LABELS[optionValue];
+                if (label) {
+                    option.textContent = label;
+                }
+            });
+        }
+
         function createEmptyContributions() {
             const contributions = {};
             SUMMARY_MACHINE_NORMALIZED_CODES.forEach((code) => {
@@ -1905,7 +1945,7 @@
 
                 const hourCell = document.createElement("th");
                 hourCell.scope = "row";
-                hourCell.textContent = String(hour).padStart(2, "0");
+                hourCell.textContent = HOUR_LABELS[hour] || String(hour).padStart(2, "0");
                 tr.appendChild(hourCell);
 
                 SUMMARY_MACHINE_CODES.forEach((code) => {

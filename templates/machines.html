@@ -1154,14 +1154,18 @@
 
             if (!response.ok) {
                 let message = `Request failed (${response.status})`;
+                let payload = null;
                 try {
-                    const data = await response.json();
-                    if (data?.msg) message = data.msg;
+                    payload = await response.json();
+                    if (payload?.msg) message = payload.msg;
                 } catch (_) {
                     // ignore
                 }
                 const error = new Error(message);
                 error.status = response.status;
+                if (payload !== null) {
+                    error.payload = payload;
+                }
                 throw error;
             }
 
@@ -1895,10 +1899,204 @@
 
         function addDaysToDateString(dateString, days) {
             if (!dateString) return dateString;
-            const base = new Date(`${dateString}T00:00:00`);
-            if (Number.isNaN(base.getTime())) return dateString;
-            base.setDate(base.getDate() + days);
-            return base.toISOString().slice(0, 10);
+            const parts = String(dateString).split("-");
+            if (parts.length !== 3) return dateString;
+            const [yearRaw, monthRaw, dayRaw] = parts;
+            const year = Number.parseInt(yearRaw, 10);
+            const month = Number.parseInt(monthRaw, 10);
+            const day = Number.parseInt(dayRaw, 10);
+            if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+                return dateString;
+            }
+
+            const utcDate = new Date(Date.UTC(year, month - 1, day));
+            if (Number.isNaN(utcDate.getTime())) {
+                return dateString;
+            }
+
+            utcDate.setUTCDate(utcDate.getUTCDate() + days);
+
+            const nextYear = String(utcDate.getUTCFullYear()).padStart(4, "0");
+            const nextMonth = String(utcDate.getUTCMonth() + 1).padStart(2, "0");
+            const nextDay = String(utcDate.getUTCDate()).padStart(2, "0");
+            return `${nextYear}-${nextMonth}-${nextDay}`;
+        }
+
+        function getProductionHourWindowDetails(dateValue, hourNo) {
+            const hourNumber = Number(hourNo);
+            if (!Number.isFinite(hourNumber) || hourNumber < 1 || hourNumber > 24) {
+                return null;
+            }
+
+            const startHour = Math.max(0, Math.min(hourNumber - 1, 23));
+            const startIso = buildDateTimeString(dateValue, startHour);
+            if (!startIso) return null;
+
+            const endIso =
+                hourNumber >= 24
+                    ? buildDateTimeString(addDaysToDateString(dateValue, 1), 0)
+                    : buildDateTimeString(dateValue, startHour + 1);
+
+            if (!endIso) return null;
+
+            const startDate = parseDateFromIso(startIso);
+            const endDate = parseDateFromIso(endIso);
+
+            if (!startDate || !endDate) {
+                return null;
+            }
+
+            return { startIso, endIso, startDate, endDate };
+        }
+
+        function buildDateTimeString(dateString, hour, minute = 0) {
+            if (!dateString) return null;
+            const parts = String(dateString).split("-");
+            if (parts.length !== 3) return null;
+            const [yearRaw, monthRaw, dayRaw] = parts;
+            const year = Number.parseInt(yearRaw, 10);
+            const month = Number.parseInt(monthRaw, 10);
+            const day = Number.parseInt(dayRaw, 10);
+            if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+                return null;
+            }
+
+            const safeHour = Math.max(0, Math.min(Number.parseInt(hour, 10), 23));
+            const safeMinute = Math.max(0, Math.min(Number.parseInt(minute, 10), 59));
+
+            const y = String(year).padStart(4, "0");
+            const m = String(month).padStart(2, "0");
+            const d = String(day).padStart(2, "0");
+            const h = String(safeHour).padStart(2, "0");
+            const min = String(safeMinute).padStart(2, "0");
+            return `${y}-${m}-${d}T${h}:${min}:00`;
+        }
+
+        function parseDateFromIso(value) {
+            if (!value) return null;
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+            return parsed;
+        }
+
+        function formatRangeLabel(startIso, endIso, referenceDate) {
+            if (!startIso) return "this window";
+            const startDate = parseDateFromIso(startIso);
+            if (!startDate) return "this window";
+
+            const formatTime = (date) => {
+                const hours = String(date.getHours()).padStart(2, "0");
+                const minutes = String(date.getMinutes()).padStart(2, "0");
+                return `${hours}:${minutes}`;
+            };
+
+            const startDatePart = startIso.split("T")[0];
+            const endDatePart = endIso ? endIso.split("T")[0] : null;
+            const baseline = referenceDate || startDatePart;
+
+            let startLabel = formatTime(startDate);
+            if (startDatePart && baseline && startDatePart !== baseline) {
+                startLabel = `${startDatePart} ${startLabel}`;
+            }
+
+            let endLabel = "ongoing";
+            if (endIso) {
+                const endDate = parseDateFromIso(endIso);
+                if (endDate) {
+                    endLabel = formatTime(endDate);
+                    if (endDatePart && baseline && endDatePart !== baseline) {
+                        endLabel = `${endDatePart} ${endLabel}`;
+                    }
+                }
+            }
+
+            return `${startLabel} – ${endLabel}`;
+        }
+
+        function formatConflictMessage(conflict, fallbackMessage, options = {}) {
+            if (!conflict || typeof conflict !== "object") {
+                return fallbackMessage;
+            }
+
+            const referenceDate = options.referenceDate || null;
+
+            if (conflict.type === "idle_event") {
+                const idle = conflict.idle_event || {};
+                const range = formatRangeLabel(idle.start, idle.end, referenceDate);
+                const reason = idle.reason ? ` (${idle.reason})` : "";
+                return `Idle window ${range}${reason} already exists. Adjust or remove it before saving production.`;
+            }
+
+            if (conflict.type === "production_hour") {
+                const production = conflict.production_hour || {};
+                const range = formatRangeLabel(production.start, production.end, referenceDate);
+                const hourNumber = Number(production.hour_no);
+                const hourLabel = Number.isFinite(hourNumber)
+                    ? `hour ${String(hourNumber).padStart(2, "0")}`
+                    : "a recorded hour";
+                const quantityValue = Number(production.quantity_tons);
+                const quantityLabel = Number.isFinite(quantityValue)
+                    ? ` (${quantityValue.toFixed(2)} tons)`
+                    : "";
+                return `Production ${hourLabel}${quantityLabel} already exists for ${range}. Clear it before logging idle time.`;
+            }
+
+            return fallbackMessage;
+        }
+
+        async function findProductionConflictForIdle(machineCode, dateValue, startIso, endIso) {
+            if (!machineCode || !dateValue || !startIso) {
+                return null;
+            }
+
+            const idleStart = parseDateFromIso(startIso);
+            if (!idleStart) {
+                return null;
+            }
+
+            let idleEnd = endIso ? parseDateFromIso(endIso) : null;
+            if (!idleEnd) {
+                idleEnd = new Date(idleStart.getTime() + 24 * 60 * 60 * 1000);
+            }
+
+            const params = new URLSearchParams({
+                machine_code: machineCode,
+                date: dateValue,
+            });
+
+            const data = await fetchJson(`/api/production/daily?${params.toString()}`);
+            const entries = Array.isArray(data?.entries) ? data.entries : [];
+
+            for (const entry of entries) {
+                if (!entry?.id) continue;
+                const windowDetails = getProductionHourWindowDetails(dateValue, entry.hour_no);
+                if (!windowDetails) continue;
+
+                if (
+                    idleStart < windowDetails.endDate &&
+                    idleEnd > windowDetails.startDate
+                ) {
+                    return {
+                        type: "production_hour",
+                        machine: data?.machine || null,
+                        idle_window: {
+                            start: startIso,
+                            end: endIso,
+                        },
+                        production_hour: {
+                            id: entry.id,
+                            hour_no: entry.hour_no,
+                            start: windowDetails.startIso,
+                            end: windowDetails.endIso,
+                            quantity_tons: entry.quantity_tons,
+                        },
+                    };
+                }
+            }
+
+            return null;
         }
 
         async function initializeIdleAnalytics() {
@@ -2450,6 +2648,29 @@
                 endDateTime = `${endDate}T${endTime}`;
             }
 
+            try {
+                const conflict = await findProductionConflictForIdle(
+                    machineCode,
+                    dateValue,
+                    startDateTime,
+                    endDateTime,
+                );
+                if (conflict) {
+                    if (idleEntryError) {
+                        const message = formatConflictMessage(
+                            conflict,
+                            "Idle window overlaps with recorded production.",
+                            { referenceDate: dateValue },
+                        );
+                        idleEntryError.textContent = message;
+                        idleEntryError.hidden = false;
+                    }
+                    return;
+                }
+            } catch (precheckError) {
+                console.warn("Idle production pre-check failed", precheckError);
+            }
+
             const payload = {
                 asset_id: asset.id,
                 analysis_date: dateValue,
@@ -2476,7 +2697,13 @@
                 await refreshIdleAnalytics();
             } catch (error) {
                 if (idleEntryError) {
-                    idleEntryError.textContent = error.message || "Unable to save idle record.";
+                    let message = error.message || "Unable to save idle record.";
+                    if (error.status === 409 && error.payload?.conflict) {
+                        message = formatConflictMessage(error.payload.conflict, message, {
+                            referenceDate: dateValue,
+                        });
+                    }
+                    idleEntryError.textContent = message;
                     idleEntryError.hidden = false;
                 }
             }

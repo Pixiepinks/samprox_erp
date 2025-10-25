@@ -163,6 +163,7 @@ class MachineIdleEvent(db.Model):
     started_at = db.Column(db.DateTime, nullable=False)
     ended_at = db.Column(db.DateTime)
     reason = db.Column(db.String(255))
+    secondary_reason = db.Column(db.String(255))
     notes = db.Column(db.Text)
     asset = db.relationship("MachineAsset", backref=db.backref("idle_events", cascade="all,delete-orphan"))
 

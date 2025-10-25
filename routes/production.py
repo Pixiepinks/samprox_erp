@@ -14,7 +14,7 @@ from models import (
     ProductionForecastEntry,
     RoleEnum,
 )
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from schemas import DailyProductionEntrySchema, ProductionForecastEntrySchema
 
@@ -157,6 +157,18 @@ def _overlap_minutes(
     return int((end - start).total_seconds() // 60)
 
 
+def _production_hour_window(production_date: dt_date, hour_no: int) -> tuple[datetime, datetime]:
+    """Return the datetime window represented by ``hour_no`` for ``production_date``."""
+
+    start_hour = max(0, min(int(hour_no) - 1, 23))
+    hour_start = datetime.combine(production_date, dt_time(start_hour))
+    if hour_no >= 24:
+        hour_end = datetime.combine(production_date + timedelta(days=1), dt_time.min)
+    else:
+        hour_end = hour_start + timedelta(hours=1)
+    return hour_start, hour_end
+
+
 @bp.post("/daily")
 @jwt_required()
 def upsert_daily_production():
@@ -192,6 +204,56 @@ def upsert_daily_production():
 
     if quantity_tons < 0:
         return jsonify({"msg": "quantity_tons cannot be negative."}), 400
+
+    hour_start, hour_end = _production_hour_window(production_date, hour_no)
+
+    conflicting_idle_event = (
+        MachineIdleEvent.query.filter(
+            MachineIdleEvent.asset_id == asset.id,
+            MachineIdleEvent.started_at < hour_end,
+            or_(
+                MachineIdleEvent.ended_at.is_(None),
+                MachineIdleEvent.ended_at > hour_start,
+            ),
+        )
+        .order_by(MachineIdleEvent.started_at.asc())
+        .first()
+    )
+
+    if conflicting_idle_event:
+        machine_payload = {
+            "id": asset.id,
+            "code": asset.code,
+            "name": asset.name,
+        }
+        conflict_payload = {
+            "type": "idle_event",
+            "machine": machine_payload,
+            "hour": {
+                "hour_no": hour_no,
+                "start": hour_start.isoformat(),
+                "end": hour_end.isoformat(),
+            },
+            "idle_event": {
+                "id": conflicting_idle_event.id,
+                "start": conflicting_idle_event.started_at.isoformat(),
+                "end": (
+                    conflicting_idle_event.ended_at.isoformat()
+                    if conflicting_idle_event.ended_at
+                    else None
+                ),
+                "reason": conflicting_idle_event.reason,
+            },
+        }
+        return (
+            jsonify(
+                {
+                    "msg": "Idle window already logged for this machine and hour.",
+                    "conflict": conflict_payload,
+                }
+            ),
+            409,
+        )
 
     entry = DailyProductionEntry.query.filter_by(
         date=production_date,

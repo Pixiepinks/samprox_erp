@@ -13,6 +13,7 @@ from models import (
     MachinePart,
     MachinePartReplacement,
     MachineIdleEvent,
+    DailyProductionEntry,
     RoleEnum,
     ServiceSupplier,
 )
@@ -95,6 +96,18 @@ def _normalise_datetime_string(
         used_fallback = True
 
     return trimmed, used_fallback
+
+
+def _production_hour_window(production_date: date, hour_no: int) -> tuple[datetime, datetime]:
+    """Return the datetime window represented by ``hour_no`` for ``production_date``."""
+
+    start_hour = max(0, min(int(hour_no) - 1, 23))
+    hour_start = datetime.combine(production_date, time(start_hour))
+    if hour_no >= 24:
+        hour_end = datetime.combine(production_date + timedelta(days=1), time.min)
+    else:
+        hour_end = hour_start + timedelta(hours=1)
+    return hour_start, hour_end
 
 
 def _parse_datetime(value, *, field_name: str):
@@ -478,6 +491,71 @@ def create_idle_event():
             ended_at = ended_at + timedelta(days=1)
         if ended_at and ended_at < started_at:
             return jsonify({"msg": "ended_at must be after started_at"}), 400
+
+    comparison_date = analysis_date or (
+        started_at.date() if isinstance(started_at, datetime) else None
+    )
+
+    idle_window_end = None
+    if ended_at and isinstance(ended_at, datetime):
+        idle_window_end = ended_at
+    elif comparison_date and isinstance(started_at, datetime):
+        idle_window_end = datetime.combine(
+            comparison_date + timedelta(days=1),
+            time.min,
+        )
+    elif isinstance(started_at, datetime):
+        idle_window_end = started_at + timedelta(hours=1)
+
+    conflicting_entry = None
+    if comparison_date and isinstance(started_at, datetime) and idle_window_end:
+        entries = DailyProductionEntry.query.filter_by(
+            date=comparison_date,
+            asset_id=asset.id,
+        ).all()
+
+        for candidate in entries:
+            hour_start, hour_end = _production_hour_window(
+                comparison_date, candidate.hour_no
+            )
+            if hour_start >= idle_window_end or hour_end <= started_at:
+                continue
+            conflicting_entry = candidate
+            break
+
+    if conflicting_entry:
+        machine_payload = {
+            "id": asset.id,
+            "code": asset.code,
+            "name": asset.name,
+        }
+        hour_start, hour_end = _production_hour_window(
+            comparison_date, conflicting_entry.hour_no
+        )
+        conflict_payload = {
+            "type": "production_hour",
+            "machine": machine_payload,
+            "idle_window": {
+                "start": started_at.isoformat(),
+                "end": ended_at.isoformat() if ended_at else None,
+            },
+            "production_hour": {
+                "id": conflicting_entry.id,
+                "hour_no": conflicting_entry.hour_no,
+                "start": hour_start.isoformat(),
+                "end": hour_end.isoformat(),
+                "quantity_tons": conflicting_entry.quantity_tons,
+            },
+        }
+        return (
+            jsonify(
+                {
+                    "msg": "Production already recorded for this time window.",
+                    "conflict": conflict_payload,
+                }
+            ),
+            409,
+        )
 
     event = MachineIdleEvent(
         asset=asset,

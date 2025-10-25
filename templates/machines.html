@@ -353,12 +353,11 @@
                                         <div class="input-group">
                                             <label for="idle-reason">Primary idle reason</label>
                                             <select id="idle-reason" name="reason">
-                                                <option value="">No idle &mdash; full run</option>
-                                                <option value="Machine break down">Machine break down</option>
-                                                <option value="No Labor Force">No Labor Force</option>
-                                                <option value="No Material">No Material</option>
-                                                <option value="Planned maintenance">Planned maintenance</option>
-                                                <option value="Changeover / setup">Changeover / setup</option>
+                                                <option value="">Select primary reason</option>
+                                                <option value="Machine">Machine</option>
+                                                <option value="Labor">Labor</option>
+                                                <option value="Material">Material</option>
+                                                <option value="Other">Other</option>
                                             </select>
                                         </div>
                                         <div class="input-group" id="idle-secondary-group" hidden>
@@ -719,7 +718,7 @@
         ];
         const MAX_MACHINE_CARDS = 6;
         const SECONDARY_IDLE_REASON_MAP = Object.freeze({
-            "Machine break down": [
+            "Machine": [
                 "Cuppy motor issue",
                 "Feeder Box Refilling",
                 "Pannel Board Issue",
@@ -730,15 +729,23 @@
                 "Feeder Box Issue",
                 "Screw Conveyor issue",
             ],
-            "No Labor Force": [
+            "Labor": [
                 "Key Member Absent",
                 "Labor Strike",
                 "Unautarized Leaves",
+                "Recruitment issue",
             ],
-            "No Material": [
+            "Material": [
                 "Material Quality Issue",
                 "Material Mixing Issue",
                 "Material Sourcing Issue",
+            ],
+            "Other": [
+                "Planned maintenance",
+                "Changeover setup",
+                "Power cut",
+                "Environment issue",
+                "Not define",
             ],
         });
 

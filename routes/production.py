@@ -27,6 +27,8 @@ forecast_entry_schema = ProductionForecastEntrySchema()
 SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
 PULSE_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 
+EFFECTIVE_TON_THRESHOLD = 0.4
+
 IDLE_SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 IDLE_SUMMARY_SHIFT_START_HOUR = 7
 IDLE_SUMMARY_SHIFT_END_HOUR = 19
@@ -953,6 +955,7 @@ def get_monthly_hourly_pulse():
     hourly_totals = []
     total_production = 0.0
     peak_payload = None
+    effective_hours = {code: 0 for code in machine_codes}
 
     for day in range(1, month_days + 1):
         current_date = dt_date(anchor.year, anchor.month, day)
@@ -975,6 +978,9 @@ def get_monthly_hourly_pulse():
                 value = round(machine_values.get(machine_filter, 0.0), 3)
                 payload[field_name] = value
                 hour_total += value
+
+                if value >= EFFECTIVE_TON_THRESHOLD:
+                    effective_hours[canonical_code] = effective_hours.get(canonical_code, 0) + 1
 
             hour_total = round(hour_total, 3)
             payload["total_tons"] = hour_total
@@ -1020,6 +1026,7 @@ def get_monthly_hourly_pulse():
         "hourly_totals": hourly_totals,
         "total_production": total_production,
         "average_hour_production": average_hour_production,
+        "effective_hours": effective_hours,
         "peak": peak,
     }
 

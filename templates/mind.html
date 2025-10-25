@@ -510,6 +510,7 @@
             machineCode,
             hourlyTotals,
             values,
+            effectiveHours,
             idleTotals,
         }) => {
             if (!productionPulseSummaryContainer) {
@@ -537,7 +538,7 @@
                 });
             }
 
-            const runtimeHours = Number(idleTotals?.runtime_hours ?? 0);
+            const effectiveHoursValue = Number(effectiveHours ?? 0);
             const idleHours = Number(idleTotals?.idle_hours ?? 0);
 
             const summaryMetrics = [
@@ -555,7 +556,7 @@
                 },
                 {
                     label: "Total Effective Hours",
-                    value: `${formatHours(runtimeHours)} hours`,
+                    value: `${formatHours(effectiveHoursValue)} hours`,
                 },
                 {
                     label: "Total Idle Hours",
@@ -816,10 +817,15 @@
                 console.error(error);
             }
 
+            const effectiveHours = Number(
+                periodData?.effective_hours?.[machineCode] ?? 0,
+            );
+
             renderProductionPulseSummary({
                 machineCode,
                 hourlyTotals,
                 values,
+                effectiveHours,
                 idleTotals,
             });
 

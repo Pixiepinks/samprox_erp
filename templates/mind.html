@@ -522,8 +522,6 @@
                 (sum, value) => sum + (Number.isFinite(value) ? value : 0),
                 0,
             );
-            const hoursCount = seriesValues.length;
-            const average = hoursCount ? total / hoursCount : 0;
 
             let peakLabel = null;
             let peakValue = 0;
@@ -539,6 +537,7 @@
             }
 
             const effectiveHoursValue = Number(effectiveHours ?? 0);
+            const average = effectiveHoursValue > 0 ? total / effectiveHoursValue : 0;
             const idleHours = Number(idleTotals?.idle_hours ?? 0);
 
             const summaryMetrics = [
@@ -547,7 +546,7 @@
                     value: `${formatTons(total)} tons`,
                 },
                 {
-                    label: "Average tons/operating hour",
+                    label: "Average tons/effective hour",
                     value: `${formatTons(average)} tons`,
                 },
                 {

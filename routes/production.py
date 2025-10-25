@@ -998,9 +998,13 @@ def get_monthly_hourly_pulse():
                 }
 
     total_production = round(total_production, 3)
-    total_hours = len(hourly_totals)
+    total_effective_hours = sum(
+        float(value)
+        for value in effective_hours.values()
+        if isinstance(value, (int, float))
+    )
     average_hour_production = round(
-        total_production / total_hours if total_hours else 0.0,
+        total_production / total_effective_hours if total_effective_hours else 0.0,
         3,
     )
 
@@ -1021,12 +1025,13 @@ def get_monthly_hourly_pulse():
         "start_date": month_start.isoformat(),
         "end_date": month_end.isoformat(),
         "days": month_days,
-        "hours": total_hours,
+        "hours": len(hourly_totals),
         "machine_codes": machine_codes,
         "hourly_totals": hourly_totals,
         "total_production": total_production,
         "average_hour_production": average_hour_production,
         "effective_hours": effective_hours,
+        "total_effective_hours": total_effective_hours,
         "peak": peak,
     }
 

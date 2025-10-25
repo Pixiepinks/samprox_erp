@@ -419,8 +419,11 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(may_thirty_first_hour_six["MCH2"], 1.0)
 
         self.assertAlmostEqual(data["total_production"], 12.2)
-        expected_average = round(12.2 / data["hours"], 3)
+        total_effective_hours = sum(data["effective_hours"].values())
+        self.assertAlmostEqual(total_effective_hours, 5)
+        expected_average = round(12.2 / total_effective_hours, 3)
         self.assertAlmostEqual(data["average_hour_production"], expected_average)
+        self.assertAlmostEqual(data["total_effective_hours"], total_effective_hours)
         self.assertEqual(data["peak"]["day"], 15)
         self.assertEqual(data["peak"]["hour"], 12)
         self.assertAlmostEqual(data["peak"]["total_tons"], 4.2)

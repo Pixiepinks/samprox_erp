@@ -120,6 +120,27 @@ def _parse_datetime(value, *, field_name: str):
         raise ValueError(f"Invalid datetime for {field_name}")
 
 
+def _is_date_only_string(value) -> bool:
+    """Return ``True`` when ``value`` represents a date without any time information."""
+
+    if not isinstance(value, str):
+        return False
+
+    trimmed = value.strip()
+    if not trimmed or "T" in trimmed or " " in trimmed:
+        return False
+
+    if trimmed.endswith("Z") or "+" in trimmed[1:]:
+        return False
+
+    try:
+        date.fromisoformat(trimmed)
+    except ValueError:
+        return False
+
+    return True
+
+
 def _generate_asset_code(category_value):
     category = (category_value or "").strip()
     if not category:
@@ -343,24 +364,38 @@ def list_idle_events():
     end_dt = None
 
     if start_param:
-        try:
-            start_dt = _parse_datetime(start_param, field_name="start_date")
-        except ValueError:
+        if _is_date_only_string(start_param):
             try:
                 parsed_date = _parse_date(start_param, field_name="start_date")
             except ValueError as exc:
                 return jsonify({"msg": str(exc)}), 400
             start_dt = datetime.combine(parsed_date, time.min)
+        else:
+            try:
+                start_dt = _parse_datetime(start_param, field_name="start_date")
+            except ValueError:
+                try:
+                    parsed_date = _parse_date(start_param, field_name="start_date")
+                except ValueError as exc:
+                    return jsonify({"msg": str(exc)}), 400
+                start_dt = datetime.combine(parsed_date, time.min)
 
     if end_param:
-        try:
-            end_dt = _parse_datetime(end_param, field_name="end_date")
-        except ValueError:
+        if _is_date_only_string(end_param):
             try:
                 parsed_date = _parse_date(end_param, field_name="end_date")
             except ValueError as exc:
                 return jsonify({"msg": str(exc)}), 400
             end_dt = datetime.combine(parsed_date, time.max)
+        else:
+            try:
+                end_dt = _parse_datetime(end_param, field_name="end_date")
+            except ValueError:
+                try:
+                    parsed_date = _parse_date(end_param, field_name="end_date")
+                except ValueError as exc:
+                    return jsonify({"msg": str(exc)}), 400
+                end_dt = datetime.combine(parsed_date, time.max)
 
     if start_dt and end_dt and end_dt < start_dt:
         return jsonify({"msg": "end_date must be after start_date"}), 400

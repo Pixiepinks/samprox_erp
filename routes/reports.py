@@ -301,6 +301,7 @@ def monthly_sales_summary():
             SalesActualEntry.date,
             SalesActualEntry.customer_id,
             func.coalesce(func.sum(SalesActualEntry.amount), 0.0),
+            func.coalesce(func.sum(SalesActualEntry.quantity_tons), 0.0),
         )
         .filter(
             SalesActualEntry.date >= month_start,
@@ -312,15 +313,25 @@ def monthly_sales_summary():
 
     totals_by_date = {}
     customer_totals = {}
+    customer_quantities = {}
 
-    for entry_date, customer_id, total_amount in totals_query.all():
+    for entry_date, customer_id, total_amount, total_quantity in totals_query.all():
         if not isinstance(entry_date, date):
             continue
 
         amount_value = float(total_amount or 0.0)
+        quantity_value = float(total_quantity or 0.0)
+
         day_totals = totals_by_date.setdefault(entry_date, {})
-        day_totals[customer_id] = day_totals.get(customer_id, 0.0) + amount_value
+        entry_totals = day_totals.setdefault(
+            customer_id, {"amount": 0.0, "quantity": 0.0}
+        )
+        entry_totals["amount"] += amount_value
+        entry_totals["quantity"] += quantity_value
         customer_totals[customer_id] = customer_totals.get(customer_id, 0.0) + amount_value
+        customer_quantities[customer_id] = (
+            customer_quantities.get(customer_id, 0.0) + quantity_value
+        )
 
     customer_ids = [customer_id for customer_id in customer_totals.keys() if customer_id is not None]
     customer_names = {}
@@ -344,6 +355,7 @@ def monthly_sales_summary():
 
     for customer_id, total in sorted_totals[:max_customers]:
         field_name = "customer_unassigned" if customer_id is None else f"customer_{customer_id}"
+        quantity_field_name = f"{field_name}_quantity"
         selected_ids.add(customer_id)
         customer_metadata.append(
             {
@@ -351,30 +363,43 @@ def monthly_sales_summary():
                 "name": customer_names.get(customer_id)
                 or ("Customer" if customer_id is None else f"Customer {customer_id}"),
                 "field": field_name,
+                "amount_field": field_name,
+                "quantity_field": quantity_field_name,
                 "total_sales": round(float(total or 0.0), 2),
+                "total_quantity": round(
+                    float(customer_quantities.get(customer_id, 0.0) or 0.0), 2
+                ),
                 "is_other": False,
             }
         )
 
     include_other_bucket = len(sorted_totals) > len(customer_metadata)
     other_total_value = 0.0
+    other_total_quantity = 0.0
     if include_other_bucket:
         for customer_id, total in sorted_totals:
             if customer_id not in selected_ids:
                 other_total_value += float(total or 0.0)
+                other_total_quantity += float(
+                    customer_quantities.get(customer_id, 0.0) or 0.0
+                )
 
         customer_metadata.append(
             {
                 "id": "other",
                 "name": "Other customers",
                 "field": "customer_other",
+                "amount_field": "customer_other",
+                "quantity_field": "customer_other_quantity",
                 "total_sales": round(other_total_value, 2),
+                "total_quantity": round(other_total_quantity, 2),
                 "is_other": True,
             }
         )
 
     daily_totals = []
     total_sales_value = 0.0
+    total_sales_quantity = 0.0
 
     non_other_ids = {item["id"] for item in customer_metadata if not item.get("is_other")}
 
@@ -384,26 +409,40 @@ def monthly_sales_summary():
         payload = {"day": day, "date": current_date.isoformat()}
 
         day_total_value = 0.0
+        day_total_quantity = 0.0
         for metadata in customer_metadata:
             if metadata.get("is_other"):
-                value = sum(
-                    float(amount or 0.0)
-                    for customer_id, amount in day_totals.items()
-                    if customer_id not in non_other_ids
-                )
+                amount_value = 0.0
+                quantity_value = 0.0
+                for customer_id, totals in day_totals.items():
+                    if customer_id in non_other_ids:
+                        continue
+                    amount_value += float(totals.get("amount", 0.0) or 0.0)
+                    quantity_value += float(totals.get("quantity", 0.0) or 0.0)
             else:
-                value = float(day_totals.get(metadata["id"], 0.0))
+                totals = day_totals.get(
+                    metadata["id"], {"amount": 0.0, "quantity": 0.0}
+                )
+                amount_value = float(totals.get("amount", 0.0) or 0.0)
+                quantity_value = float(totals.get("quantity", 0.0) or 0.0)
 
-            value = round(value, 2)
-            payload[metadata["field"]] = value
-            day_total_value += value
+            amount_value = round(amount_value, 2)
+            quantity_value = round(quantity_value, 2)
+            payload[metadata["field"]] = amount_value
+            payload[metadata["quantity_field"]] = quantity_value
+            day_total_value += amount_value
+            day_total_quantity += quantity_value
 
         day_total_value = round(day_total_value, 2)
+        day_total_quantity = round(day_total_quantity, 2)
         payload["total_value"] = day_total_value
+        payload["total_quantity"] = day_total_quantity
         total_sales_value += day_total_value
+        total_sales_quantity += day_total_quantity
         daily_totals.append(payload)
 
     total_sales_value = round(total_sales_value, 2)
+    total_sales_quantity = round(total_sales_quantity, 2)
     average_day_sales = round(total_sales_value / days_in_month if days_in_month else 0.0, 2)
 
     peak_day_payload = max(daily_totals, key=lambda item: item["total_value"], default=None)
@@ -434,6 +473,7 @@ def monthly_sales_summary():
         "customers": customer_metadata,
         "daily_totals": daily_totals,
         "total_sales": total_sales_value,
+        "total_quantity": total_sales_quantity,
         "average_day_sales": average_day_sales,
         "peak": peak,
         "top_customer": top_customer,

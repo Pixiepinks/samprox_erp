@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/machines.css') }}" />
 </head>
-<body data-initial-tab="{{ active_tab | default('assets') }}">
+<body>
     <div class="page">
         <header class="topbar">
             <div class="brand">
@@ -39,197 +39,154 @@
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <main class="machine-layout">
-            <div class="machine-tabs" role="tablist" aria-label="Machine subsections">
-                <a
-                    id="tab-button-assets"
-                    class="machine-tab{% if active_tab == 'assets' %} is-active{% endif %}"
-                    role="tab"
-                    aria-selected="{{ 'true' if active_tab == 'assets' else 'false' }}"
-                    aria-controls="tab-assets"
-                    data-tab-target="assets"
-                    href="{{ url_for('ui.machines_page', tab='assets') }}"
-                >
-                    Assets Register
-                </a>
-                <a
-                    id="tab-button-maintenance"
-                    class="machine-tab{% if active_tab == 'maintenance' %} is-active{% endif %}"
-                    role="tab"
-                    aria-selected="{{ 'true' if active_tab == 'maintenance' else 'false' }}"
-                    aria-controls="tab-maintenance"
-                    data-tab-target="maintenance"
-                    href="{{ url_for('ui.machines_page', tab='maintenance') }}"
-                >
-                    Maintenance Management
-                </a>
-                <a
-                    id="tab-button-idle"
-                    class="machine-tab{% if active_tab == 'idle' %} is-active{% endif %}"
-                    role="tab"
-                    aria-selected="{{ 'true' if active_tab == 'idle' else 'false' }}"
-                    aria-controls="tab-idle"
-                    data-tab-target="idle"
-                    href="{{ url_for('ui.machines_page', tab='idle') }}"
-                >
-                    Idle Time Monitoring
-                </a>
-                <a
-                    id="tab-button-suppliers"
-                    class="machine-tab{% if active_tab == 'suppliers' %} is-active{% endif %}"
-                    role="tab"
-                    aria-selected="{{ 'true' if active_tab == 'suppliers' else 'false' }}"
-                    aria-controls="tab-suppliers"
-                    data-tab-target="suppliers"
-                    href="{{ url_for('ui.machines_page', tab='suppliers') }}"
-                >
-                    Service Supplier Register
-                </a>
-            </div>
             <div class="machine-panels">
-                                <section id="tab-assets" class="tab-panel{% if active_tab == 'assets' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-assets" data-tab-panel="assets"{% if active_tab != 'assets' %} hidden{% endif %}>
-                    <section id="machine-inputs" class="panel-group">
-                        <header class="panel-group__header">
-                            <h2>Inputs</h2>
-                            <p>Capture the latest machine information for your records.</p>
-                        </header>
-                        <div class="panel-grid">
-                            <section class="panel panel--menu">
-                                <header class="panel__header">
-                                    <div>
-                                        <h3>Input actions</h3>
-                                        <p class="panel__subtitle">Choose an action to open it in a popup without leaving the page.</p>
-                                    </div>
-                                </header>
-                                <div class="panel__body">
-                                    <nav class="input-menu" data-input-menu>
-                                        <button type="button" class="input-menu__toggle" data-menu-toggle aria-expanded="false">
-                                            <span>Inputs</span>
-                                            <span class="input-menu__chevron" aria-hidden="true"></span>
-                                        </button>
-                                        <ul class="input-menu__list" data-menu-list>
-                                            <li class="input-menu__item">
-                                                <button type="button" class="input-menu__link" data-modal-open="asset-modal">Add new asset</button>
-                                            </li>
-                                            <li class="input-menu__item">
-                                                <button type="button" class="input-menu__link" data-modal-open="ckd-modal">Add CKD part to machine</button>
-                                            </li>
-                                            <li class="input-menu__item">
-                                                <button type="button" class="input-menu__link" data-modal-open="maintenance-modal">Request maintenance job</button>
-                                            </li>
-                                        </ul>
-                                    </nav>
-                                </div>
-                            </section>
-                        </div>
-                    </section>
-                    <section id="machine-outputs" class="panel-group">
-                        <header class="panel-group__header">
-                            <h2>Outputs</h2>
-                            <p>Review the current state of the machine fleet and its parts.</p>
-                        </header>
-                        <div class="panel-grid">
-                            <section class="panel panel--list">
-                                <header class="panel__header">
-                                    <div>
-                                        <h3>Assets register</h3>
-                                        <p class="panel__subtitle">All assets with quick access to CKD part lists.</p>
-                                    </div>
-                                    <div class="panel__header-actions">
-                                        <button type="button" class="button button--ghost" id="refresh-assets">Refresh</button>
-                                    </div>
-                                </header>
-                                <div class="panel__body">
-                                    <div class="alert alert--error" id="asset-error" hidden></div>
-                                    <div class="empty-state" id="assets-empty" hidden>
-                                        <p>No assets have been registered yet.</p>
-                                    </div>
-                                    <div class="table-wrapper">
-                                        <table class="data-table" aria-describedby="assets-empty">
-                                            <thead>
-                                                <tr>
-                                                    <th scope="col">Code</th>
-                                                    <th scope="col">Name</th>
-                                                    <th scope="col">Location</th>
-                                                    <th scope="col">Status</th>
-                                                    <th scope="col">Parts</th>
-                                                    <th scope="col">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="assets-table-body"></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </section>
-                        </div>
-                        <section class="panel panel--detail" id="asset-detail" hidden>
+                <section id="machine-inputs" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Inputs</h2>
+                        <p>Capture the latest machine information for your records.</p>
+                    </header>
+                    <div class="panel-grid">
+                        <section class="panel panel--menu">
                             <header class="panel__header">
                                 <div>
-                                    <h2 id="asset-detail-title"></h2>
-                                    <p class="panel__subtitle" id="asset-detail-meta"></p>
+                                    <h3>Input actions</h3>
+                                    <p class="panel__subtitle">Choose an action to open it in a popup without leaving the page.</p>
                                 </div>
-                                <button type="button" class="button button--ghost" id="close-asset-detail">Close</button>
                             </header>
-                            <div class="panel__body asset-detail__body">
-                                <div class="asset-detail__column">
-                                    <h3>Asset information</h3>
-                                    <dl class="asset-detail__facts" id="asset-detail-facts"></dl>
+                            <div class="panel__body">
+                                <nav class="input-menu" data-input-menu>
+                                    <button type="button" class="input-menu__toggle" data-menu-toggle aria-expanded="false">
+                                        <span>Inputs</span>
+                                        <span class="input-menu__chevron" aria-hidden="true"></span>
+                                    </button>
+                                    <ul class="input-menu__list" data-menu-list>
+                                        <li class="input-menu__item">
+                                            <button type="button" class="input-menu__link" data-modal-open="asset-modal">Add new asset</button>
+                                        </li>
+                                        <li class="input-menu__item">
+                                            <button type="button" class="input-menu__link" data-modal-open="ckd-modal">Add CKD part to machine</button>
+                                        </li>
+                                        <li class="input-menu__item">
+                                            <button type="button" class="input-menu__link" data-modal-open="maintenance-modal">Request maintenance job</button>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+                <section id="machine-outputs" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Outputs</h2>
+                        <p>Review the current state of the machine fleet and its parts.</p>
+                    </header>
+                    <div class="panel-grid">
+                        <section class="panel panel--list">
+                            <header class="panel__header">
+                                <div>
+                                    <h3>Assets register</h3>
+                                    <p class="panel__subtitle">All assets with quick access to CKD part lists.</p>
                                 </div>
-                                <div class="asset-detail__column asset-detail__column--wide">
-                                    <section class="asset-parts">
-                                        <header class="asset-parts__header">
-                                            <h3>Complete knock down (CKD) parts</h3>
-                                            <div class="asset-parts__search">
-                                                <label class="visually-hidden" for="asset-part-search">Search CKD parts</label>
-                                                <input
-                                                    id="asset-part-search"
-                                                    class="asset-parts__search-input"
-                                                    type="search"
-                                                    name="asset-part-search"
-                                                    placeholder="Search parts"
-                                                    autocomplete="off"
-                                                    spellcheck="false"
-                                                />
-                                            </div>
-                                        </header>
-                                        <div class="alert alert--error" id="asset-part-error" hidden></div>
-                                        <div class="alert alert--success" id="asset-part-success" hidden>Part added successfully.</div>
-                                        <form class="form asset-part-form" id="asset-part-form" novalidate>
-                                            <div class="form-grid">
-                                                <div class="input-group">
-                                                    <label for="part-name">Part name <span class="required">*</span></label>
-                                                    <input id="part-name" name="name" type="text" placeholder="Hydraulic pump" required />
-                                                </div>
-                                                <div class="input-group">
-                                                    <label for="part-number">Part number <span class="required">*</span></label>
-                                                    <input id="part-number" name="part_number" type="text" placeholder="P-009" required readonly />
-                                                </div>
-                                                <div class="input-group">
-                                                    <label for="part-life">Expected life (hrs)</label>
-                                                    <input id="part-life" name="expected_life_hours" type="number" min="0" step="1" />
-                                                </div>
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="part-description">Description</label>
-                                                <textarea id="part-description" name="description" rows="2" placeholder="Reference or specification"></textarea>
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="part-notes">Notes</label>
-                                                <textarea id="part-notes" name="notes" rows="2" placeholder="Storage, supplier, etc."></textarea>
-                                            </div>
-                                            <div class="form__footer">
-                                                <button type="submit" class="button">Add part</button>
-                                            </div>
-                                        </form>
-                                        <div class="asset-parts__list" id="asset-parts-list"></div>
-                                        <div class="empty-state" id="asset-parts-empty" hidden>
-                                            <p>No parts have been registered for this asset yet.</p>
-                                        </div>
-                                    </section>
+                                <div class="panel__header-actions">
+                                    <button type="button" class="button button--ghost" id="refresh-assets">Refresh</button>
+                                </div>
+                            </header>
+                            <div class="panel__body">
+                                <div class="alert alert--error" id="asset-error" hidden></div>
+                                <div class="empty-state" id="assets-empty" hidden>
+                                    <p>No assets have been registered yet.</p>
+                                </div>
+                                <div class="table-wrapper">
+                                    <table class="data-table" aria-describedby="assets-empty">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Code</th>
+                                                <th scope="col">Name</th>
+                                                <th scope="col">Location</th>
+                                                <th scope="col">Status</th>
+                                                <th scope="col">Parts</th>
+                                                <th scope="col">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="assets-table-body"></tbody>
+                                    </table>
                                 </div>
                             </div>
                         </section>
-                    </section>
-                <section id="tab-maintenance" class="tab-panel{% if active_tab == 'maintenance' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-maintenance" data-tab-panel="maintenance"{% if active_tab != 'maintenance' %} hidden{% endif %}>
+                    </div>
+                </section>
+                <section class="panel panel--detail" id="asset-detail" hidden>
+                    <header class="panel__header">
+                        <div>
+                            <h2 id="asset-detail-title"></h2>
+                            <p class="panel__subtitle" id="asset-detail-meta"></p>
+                        </div>
+                        <button type="button" class="button button--ghost" id="close-asset-detail">Close</button>
+                    </header>
+                    <div class="panel__body asset-detail__body">
+                        <div class="asset-detail__column">
+                            <h3>Asset information</h3>
+                            <dl class="asset-detail__facts" id="asset-detail-facts"></dl>
+                        </div>
+                        <div class="asset-detail__column asset-detail__column--wide">
+                            <section class="asset-parts">
+                                <header class="asset-parts__header">
+                                    <h3>Complete knock down (CKD) parts</h3>
+                                    <div class="asset-parts__search">
+                                        <label class="visually-hidden" for="asset-part-search">Search CKD parts</label>
+                                        <input
+                                            id="asset-part-search"
+                                            class="asset-parts__search-input"
+                                            type="search"
+                                            name="asset-part-search"
+                                            placeholder="Search parts"
+                                            autocomplete="off"
+                                            spellcheck="false"
+                                        />
+                                    </div>
+                                </header>
+                                <div class="alert alert--error" id="asset-part-error" hidden></div>
+                                <div class="alert alert--success" id="asset-part-success" hidden>Part added successfully.</div>
+                                <form class="form asset-part-form" id="asset-part-form" novalidate>
+                                    <div class="form-grid">
+                                        <div class="input-group">
+                                            <label for="part-name">Part name <span class="required">*</span></label>
+                                            <input id="part-name" name="name" type="text" placeholder="Hydraulic pump" required />
+                                        </div>
+                                        <div class="input-group">
+                                            <label for="part-number">Part number <span class="required">*</span></label>
+                                            <input id="part-number" name="part_number" type="text" placeholder="P-009" required readonly />
+                                        </div>
+                                        <div class="input-group">
+                                            <label for="part-life">Expected life (hrs)</label>
+                                            <input id="part-life" name="expected_life_hours" type="number" min="0" step="1" />
+                                        </div>
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="part-description">Description</label>
+                                        <textarea id="part-description" name="description" rows="2" placeholder="Reference or specification"></textarea>
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="part-notes">Notes</label>
+                                        <textarea id="part-notes" name="notes" rows="2" placeholder="Storage, supplier, etc."></textarea>
+                                    </div>
+                                    <div class="form__footer">
+                                        <button type="submit" class="button">Add part</button>
+                                    </div>
+                                </form>
+                                <div class="asset-parts__list" id="asset-parts-list"></div>
+                                <div class="empty-state" id="asset-parts-empty" hidden>
+                                    <p>No parts have been registered for this asset yet.</p>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </section>
+                <section id="maintenance-section" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Maintenance management</h2>
+                        <p>Log new work orders and keep track of open jobs.</p>
+                    </header>
                     <div class="panel-grid">
                         <section class="panel panel--form">
                             <header class="panel__header">
@@ -312,7 +269,11 @@
                         </section>
                     </div>
                 </section>
-                <section id="tab-idle" class="tab-panel{% if active_tab == 'idle' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-idle" data-tab-panel="idle"{% if active_tab != 'idle' %} hidden{% endif %}>
+                <section id="idle-section" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Idle time monitoring</h2>
+                        <p>Capture downtime windows and review utilisation insights.</p>
+                    </header>
                     <section class="idle-hero">
                         <div class="idle-hero__content">
                             <p class="idle-hero__eyebrow">Intelligent downtime radar</p>
@@ -518,7 +479,11 @@
                         </div>
                     </section>
                 </section>
-                <section id="tab-suppliers" class="tab-panel{% if active_tab == 'suppliers' %} is-active{% endif %}" role="tabpanel" aria-labelledby="tab-button-suppliers" data-tab-panel="suppliers"{% if active_tab != 'suppliers' %} hidden{% endif %}>
+                <section id="supplier-section" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Service supplier register</h2>
+                        <p>Maintain a directory of trusted maintenance partners.</p>
+                    </header>
                     <div class="panel-grid">
                         <section class="panel panel--form">
                             <header class="panel__header">
@@ -703,9 +668,9 @@
                 </header>
                 <div class="modal__body">
                     <p class="modal__subtitle">Create a work order for the maintenance team without leaving this page.</p>
-                    <p>Switch to the maintenance tab to fill in the job form, track priorities and review job status.</p>
+                    <p>Scroll down to the maintenance section to fill in the job form, track priorities and review job status.</p>
                     <div class="modal__actions">
-                        <button type="button" class="button" data-activate-tab="maintenance" data-modal-close-after>Open maintenance management</button>
+                        <button type="button" class="button" data-scroll-target="#maintenance-section" data-modal-close-after>Go to maintenance section</button>
                     </div>
                 </div>
             </div>
@@ -960,16 +925,6 @@
             });
         });
 
-        document.querySelectorAll("[data-activate-tab]").forEach((element) => {
-            element.addEventListener("click", (event) => {
-                event.preventDefault();
-                const tabTarget = element.dataset.activateTab;
-                if (!tabTarget) return;
-                updateTabUrl(tabTarget);
-                activateTab(tabTarget);
-            });
-        });
-
         document.querySelectorAll("[data-modal-close-after]").forEach((element) => {
             element.addEventListener("click", () => {
                 const modal = element.closest("[data-modal]");
@@ -997,79 +952,6 @@
             maintenanceTrigger.disabled = true;
             maintenanceTrigger.setAttribute("aria-disabled", "true");
             maintenanceTrigger.title = "Only Production Managers or Admins can request maintenance jobs.";
-        }
-
-        const tabs = document.querySelectorAll(".machine-tab");
-        const panels = document.querySelectorAll(".tab-panel");
-        const loadedTabs = new Set();
-        const initialTab = (document.body?.dataset?.initialTab || "assets").toLowerCase();
-
-        function updateTabUrl(target) {
-            if (!target || !window?.history?.replaceState) {
-                return;
-            }
-            try {
-                const url = new URL(window.location.href);
-                if (target === "assets") {
-                    url.searchParams.delete("tab");
-                } else {
-                    url.searchParams.set("tab", target);
-                }
-                window.history.replaceState(null, "", url.toString());
-            } catch (_) {
-                // ignore navigation errors
-            }
-        }
-
-        function activateTab(target) {
-            if (!target) return;
-
-            tabs.forEach((tab) => {
-                const isActive = tab.dataset.tabTarget === target;
-                tab.classList.toggle("is-active", isActive);
-                tab.setAttribute("aria-selected", isActive ? "true" : "false");
-            });
-            panels.forEach((panel) => {
-                const isActive = panel.dataset.tabPanel === target;
-                panel.classList.toggle("is-active", isActive);
-                if (typeof panel.toggleAttribute === "function") {
-                    panel.toggleAttribute("hidden", !isActive);
-                } else if (isActive) {
-                    panel.removeAttribute("hidden");
-                } else {
-                    panel.setAttribute("hidden", "");
-                }
-            });
-
-            if (!loadedTabs.has(target)) {
-                loadedTabs.add(target);
-                if (target === "assets") {
-                    loadAssets();
-                } else if (target === "maintenance") {
-                    loadJobs();
-                } else if (target === "idle") {
-                    Promise.resolve(initializeIdleAnalytics()).catch(() => {});
-                } else if (target === "suppliers") {
-                    loadSuppliers();
-                }
-            } else if (target === "assets") {
-                populateAssetSelects();
-            } else if (target === "idle") {
-                idleSummaryCache.clear();
-                Promise.resolve(refreshIdleAnalytics()).catch(() => {});
-            }
-        }
-
-        if (tabs.length > 0) {
-            tabs.forEach((tab) => {
-                tab.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    const target = tab.dataset.tabTarget;
-                    if (!target) return;
-                    updateTabUrl(target);
-                    activateTab(target);
-                });
-            });
         }
 
         const assetsTableBody = document.getElementById("assets-table-body");
@@ -2700,12 +2582,11 @@
             });
         }
 
-        const allowedTabs = new Set(["assets", "maintenance", "idle", "suppliers"]);
-        const defaultTab = allowedTabs.has(initialTab) ? initialTab : "assets";
-        activateTab(defaultTab);
-        if (defaultTab !== "assets") {
-            Promise.resolve(loadAssets()).catch(() => {});
-        }
+        Promise.resolve(loadAssets()).catch(() => {});
+        Promise.resolve(loadJobs()).catch(() => {});
+        Promise.resolve(initializeIdleAnalytics()).catch(() => {});
+        Promise.resolve(loadSuppliers()).catch(() => {});
+
     </script>
 </body>
 </html>

@@ -1165,6 +1165,157 @@ def _monthly_idle_summary_for_ui():
     return jsonify(response)
 
 
+def _get_secondary_reason_label(event: MachineIdleEvent) -> str:
+    secondary = (event.secondary_reason or "").strip()
+    if secondary:
+        return secondary
+
+    primary = (event.reason or "").strip()
+    if primary:
+        return f"{primary} — unspecified secondary"
+
+    return "Unspecified secondary reason"
+
+
+@bp.get("/monthly/idle-secondary-pareto")
+@jwt_required()
+def get_monthly_idle_secondary_pareto():
+    if not require_role(
+        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+    ):
+        return (
+            jsonify({"msg": "You do not have permission to view production."}),
+            403,
+        )
+
+    try:
+        anchor = _parse_period_param(request.args.get("period"))
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    (
+        machine_codes,
+        canonical_codes,
+        machine_filters,
+    ) = _parse_machine_codes_param(
+        request.args.get("machine_codes"), default_codes=IDLE_SUMMARY_MACHINE_CODES
+    )
+
+    month_start, month_end, _ = _month_range(anchor)
+    shift_start = dt_time(IDLE_SUMMARY_SHIFT_START_HOUR, 0)
+    shift_end = dt_time(IDLE_SUMMARY_SHIFT_END_HOUR, 0)
+
+    period_start_limit = datetime.combine(month_start, dt_time.min)
+    period_end_limit = datetime.combine(month_end, dt_time.max)
+
+    assets = (
+        MachineAsset.query.filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .order_by(MachineAsset.code.asc())
+        .all()
+    )
+
+    asset_by_code = {
+        asset.code: asset for asset in assets if asset.code is not None
+    }
+
+    events = (
+        MachineIdleEvent.query.options(joinedload(MachineIdleEvent.asset))
+        .join(MachineAsset)
+        .filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .filter(MachineIdleEvent.started_at <= period_end_limit)
+        .filter(
+            func.coalesce(MachineIdleEvent.ended_at, datetime.utcnow())
+            >= period_start_limit
+        )
+        .order_by(MachineIdleEvent.started_at.asc())
+        .all()
+    )
+
+    reasons_minutes: dict[str, dict[str, float]] = {}
+    totals_minutes: dict[str, float] = {}
+
+    for event in events:
+        asset = event.asset
+        if not asset or not asset.code:
+            continue
+
+        normalized_key = asset.code.lower()
+        normalized_code = canonical_codes.get(normalized_key)
+        if not normalized_code:
+            normalized_code = (asset.code or "").strip().upper()
+        if not normalized_code or normalized_code not in machine_codes:
+            continue
+        reason_label = _get_secondary_reason_label(event)
+
+        event_start = max(event.started_at, period_start_limit)
+        event_end = min(event.ended_at or datetime.utcnow(), period_end_limit)
+        if event_end <= event_start:
+            continue
+
+        current_date = max(event_start.date(), month_start)
+        last_date = min(event_end.date(), month_end)
+
+        while current_date <= last_date:
+            shift_start_dt = datetime.combine(current_date, shift_start)
+            shift_end_dt = datetime.combine(current_date, shift_end)
+            minutes = _overlap_minutes(event_start, event_end, shift_start_dt, shift_end_dt)
+            if minutes > 0:
+                reason_entry = reasons_minutes.setdefault(reason_label, {})
+                reason_entry[normalized_code] = reason_entry.get(normalized_code, 0.0) + minutes
+                totals_minutes[reason_label] = totals_minutes.get(reason_label, 0.0) + minutes
+            current_date += timedelta(days=1)
+
+    machine_totals_minutes = {code: 0.0 for code in machine_codes}
+
+    reasons_payload = []
+    for reason_label, machine_map in reasons_minutes.items():
+        reason_total_minutes = totals_minutes.get(reason_label, 0.0)
+        machine_hours = {}
+        for code in machine_codes:
+            minutes = machine_map.get(code, 0.0)
+            machine_hours[code] = round(minutes / 60.0, 3)
+            machine_totals_minutes[code] = machine_totals_minutes.get(code, 0.0) + minutes
+
+        reasons_payload.append(
+            {
+                "label": reason_label,
+                "total_idle_hours": round(reason_total_minutes / 60.0, 3),
+                "machines": machine_hours,
+            }
+        )
+
+    reasons_payload.sort(
+        key=lambda item: item.get("total_idle_hours", 0.0), reverse=True
+    )
+
+    total_idle_minutes = sum(totals_minutes.values())
+    total_idle_hours = round(total_idle_minutes / 60.0, 3)
+
+    machines_meta = []
+    for code in machine_codes:
+        asset = asset_by_code.get(code)
+        machines_meta.append(
+            {
+                "code": code,
+                "name": asset.name if asset and asset.name else code,
+                "idle_hours": round(machine_totals_minutes.get(code, 0.0) / 60.0, 3),
+            }
+        )
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "machine_codes": machine_codes,
+        "machines": machines_meta,
+        "total_idle_hours": total_idle_hours,
+        "reasons": reasons_payload,
+    }
+
+    return jsonify(response)
+
+
 @bp.get("/monthly/idle-summary")
 @jwt_required()
 def get_monthly_idle_summary():

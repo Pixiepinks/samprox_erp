@@ -10,12 +10,12 @@ from material import (
     MaterialValidationError,
     create_mrn,
     create_supplier,
+    get_material_category,
     get_mrn_detail,
     list_active_material_types,
     list_recent_mrns,
     search_suppliers,
 )
-from models import MaterialCategory
 from schemas import MRNSchema, MaterialTypeSchema, SupplierSchema
 
 bp = Blueprint("material", __name__, url_prefix="/api/material")
@@ -58,7 +58,7 @@ def list_types():
     except (ValueError, TypeError):
         return jsonify({"errors": {"category_id": "Invalid category identifier"}}), 400
 
-    category = MaterialCategory.query.get(category_uuid)
+    category = get_material_category(category_uuid)
     if not category:
         return jsonify({"errors": {"category_id": "Category not found"}}), 404
 

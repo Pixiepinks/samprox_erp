@@ -1,7 +1,6 @@
 from flask import Blueprint, abort, redirect, render_template, url_for
 
-from material import MaterialValidationError, get_mrn_detail
-from models import MaterialCategory
+from material import MaterialValidationError, get_mrn_detail, list_material_categories
 
 bp = Blueprint("ui", __name__)
 
@@ -51,7 +50,7 @@ def material_page():
 @bp.get("/material/mrn/new")
 def material_mrn_new_page():
     """Render the Material Receipt Note capture form."""
-    categories = MaterialCategory.query.order_by(MaterialCategory.name).all()
+    categories = list_material_categories()
     return render_template("material/mrn_new.html", categories=categories)
 
 

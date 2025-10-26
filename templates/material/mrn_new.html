@@ -239,21 +239,15 @@
                             <p class="error-text" data-error-for="supplier_name_free"></p>
                         </div>
                         <div class="field">
-                            <label for="category">Material Category<span class="text-red"> *</span></label>
-                            <select id="category" name="category_id" required>
-                                <option value="" disabled selected>Select category</option>
-                                {% for category in categories %}
-                                <option value="{{ category.id }}">{{ category.name }}</option>
+                            <label for="item-select">Item Name<span class="text-red"> *</span></label>
+                            <select id="item-select" name="item_id" required>
+                                <option value="__create__">➕ Create new item…</option>
+                                {% for item in items %}
+                                <option value="{{ item.id }}">{{ item.name }}</option>
                                 {% endfor %}
                             </select>
-                            <p class="error-text" data-error-for="category_id"></p>
-                        </div>
-                        <div class="field">
-                            <label for="material-type">Material Type<span class="text-red"> *</span></label>
-                            <select id="material-type" name="material_type_id" required>
-                                <option value="" disabled selected>Select type</option>
-                            </select>
-                            <p class="error-text" data-error-for="material_type_id"></p>
+                            <p class="helper">Choose an existing item or create a new one.</p>
+                            <p class="error-text" data-error-for="item_id"></p>
                         </div>
                         <div class="field">
                             <label for="qty-ton">Qty (Ton)<span class="text-red"> *</span></label>
@@ -352,6 +346,27 @@
         </div>
     </div>
 
+    <div id="item-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="item-modal-title">Create new item</h2>
+                <button type="button" class="modal-close" id="close-item-modal" aria-label="Close">×</button>
+            </div>
+            <form id="item-form" novalidate>
+                <div class="field">
+                    <label for="item-name">Item Name<span class="text-red"> *</span></label>
+                    <input id="item-name" name="name" type="text" required />
+                    <p class="error-text" data-error-for="modal_item_name"></p>
+                </div>
+                <div id="item-modal-alert" class="alert" style="display: none;"></div>
+                <div class="actions">
+                    <button type="button" class="button-secondary" id="cancel-item">Cancel</button>
+                    <button type="submit" class="button-primary" id="save-item">Save Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -400,14 +415,20 @@
         const approvedUnitPriceInput = document.getElementById("approved-unit-price");
         const qtyInput = document.getElementById("qty-ton");
         const amountInput = document.getElementById("amount");
-        const categorySelect = document.getElementById("category");
-        const materialTypeSelect = document.getElementById("material-type");
+        const itemSelect = document.getElementById("item-select");
+        let lastValidItemValue = "";
 
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalAlert = document.getElementById("supplier-modal-alert");
         const supplierModalClose = document.getElementById("close-supplier-modal");
         const supplierModalCancel = document.getElementById("cancel-supplier");
         const supplierModalForm = document.getElementById("supplier-form");
+
+        const itemModal = document.getElementById("item-modal");
+        const itemModalAlert = document.getElementById("item-modal-alert");
+        const itemModalClose = document.getElementById("close-item-modal");
+        const itemModalCancel = document.getElementById("cancel-item");
+        const itemModalForm = document.getElementById("item-form");
 
         function clearErrors() {
             formAlert.style.display = "none";
@@ -435,6 +456,16 @@
             }
             supplierModalAlert.style.display = "block";
             supplierModalAlert.textContent = message;
+        }
+
+        function setItemModalError(message) {
+            if (!message) {
+                itemModalAlert.style.display = "none";
+                itemModalAlert.textContent = "";
+                return;
+            }
+            itemModalAlert.style.display = "block";
+            itemModalAlert.textContent = message;
         }
 
         function toFixed(value, precision) {
@@ -606,6 +637,86 @@
             }
         });
 
+        function openItemModal() {
+            itemModal.classList.add("active");
+            setItemModalError("");
+            itemModalForm.reset();
+            document.querySelector("[data-error-for='modal_item_name']").textContent = "";
+            itemModal.querySelector("#item-name").focus();
+        }
+
+        function closeItemModal() {
+            itemModal.classList.remove("active");
+        }
+
+        itemModalClose.addEventListener("click", closeItemModal);
+        itemModalCancel.addEventListener("click", closeItemModal);
+
+        itemModal.addEventListener("click", (event) => {
+            if (event.target === itemModal) {
+                closeItemModal();
+            }
+        });
+
+        itemModalForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setItemModalError("");
+            document.querySelector("[data-error-for='modal_item_name']").textContent = "";
+
+            const formData = new FormData(itemModalForm);
+            const payload = Object.fromEntries(formData.entries());
+            payload.name = (payload.name || "").trim();
+            if (!payload.name) {
+                document.querySelector("[data-error-for='modal_item_name']").textContent = "Item name is required.";
+                return;
+            }
+
+            const saveButton = itemModalForm.querySelector("#save-item");
+            saveButton.disabled = true;
+            try {
+                const response = await fetch("/api/material/items", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    const message = data?.errors?.name || "Unable to save item.";
+                    setItemModalError(message);
+                    return;
+                }
+
+                const option = document.createElement("option");
+                option.value = data.id;
+                option.textContent = data.name;
+                itemSelect.appendChild(option);
+                itemSelect.value = data.id;
+                lastValidItemValue = data.id;
+                closeItemModal();
+            } catch (error) {
+                setItemModalError("Network error. Please try again.");
+            } finally {
+                saveButton.disabled = false;
+            }
+        });
+
+        if (itemSelect) {
+            itemSelect.selectedIndex = -1;
+            itemSelect.addEventListener("change", (event) => {
+                const value = event.target.value;
+                if (value === "__create__") {
+                    if (lastValidItemValue) {
+                        event.target.value = lastValidItemValue;
+                    } else {
+                        event.target.selectedIndex = -1;
+                    }
+                    openItemModal();
+                    return;
+                }
+                lastValidItemValue = value;
+            });
+        }
+
         resetBtn.addEventListener("click", () => {
             mrnForm.reset();
             supplierInput.value = "";
@@ -613,41 +724,11 @@
             supplierNameFreeInput.value = "";
             approvedUnitPriceInput.value = "0.00";
             amountInput.value = "0.00";
+            if (itemSelect) {
+                itemSelect.selectedIndex = -1;
+            }
+            lastValidItemValue = "";
             clearErrors();
-        });
-
-        async function loadMaterialTypes(categoryId) {
-            materialTypeSelect.innerHTML = '<option value="" disabled selected>Loading…</option>';
-            if (!categoryId) {
-                materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
-                return;
-            }
-            try {
-                const response = await fetch(`/api/material/types?category_id=${encodeURIComponent(categoryId)}`);
-                const data = await response.json();
-                if (!response.ok) {
-                    materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
-                    throw new Error(data?.errors?.category_id || "Unable to load types");
-                }
-                if (!Array.isArray(data) || data.length === 0) {
-                    materialTypeSelect.innerHTML = '<option value="" disabled selected>No active types</option>';
-                    return;
-                }
-                materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
-                data.forEach((item) => {
-                    const option = document.createElement("option");
-                    option.value = item.id;
-                    option.textContent = item.name;
-                    materialTypeSelect.appendChild(option);
-                });
-            } catch (error) {
-                formAlert.style.display = "block";
-                formAlert.textContent = error.message;
-            }
-        }
-
-        categorySelect.addEventListener("change", (event) => {
-            loadMaterialTypes(event.target.value);
         });
 
         function validateForm() {
@@ -657,11 +738,15 @@
             const unitValue = parseFloat(formData.get("unit_price"));
             const wetValue = parseFloat(formData.get("wet_factor"));
 
-            ["date", "mrn_no", "weighing_slip_no", "weigh_in_time", "weigh_out_time", "security_officer_name", "authorized_person_name", "category_id", "material_type_id"].forEach((field) => {
+            ["date", "mrn_no", "weighing_slip_no", "weigh_in_time", "weigh_out_time", "security_officer_name", "authorized_person_name", "item_id"].forEach((field) => {
                 if (!(formData.get(field) || "").trim()) {
                     errors[field] = "This field is required.";
                 }
             });
+
+            if ((formData.get("item_id") || "") === "__create__") {
+                errors["item_id"] = "Select an item.";
+            }
 
             if (!supplierIdInput.value && !(supplierNameFreeInput.value || "").trim()) {
                 errors["supplier_id"] = "Select a supplier or enter a name.";
@@ -711,6 +796,9 @@
             payload.weigh_out_time = new Date(payload.weigh_out_time).toISOString();
             payload.supplier_id = supplierIdInput.value || undefined;
             payload.supplier_name_free = (supplierNameFreeInput.value || "").trim() || undefined;
+            if (payload.item_id === "__create__") {
+                payload.item_id = undefined;
+            }
 
             try {
                 const response = await fetch("/api/material/mrn", {
@@ -737,9 +825,6 @@
             }
         });
 
-        if (categorySelect.value) {
-            loadMaterialTypes(categorySelect.value);
-        }
     </script>
 </body>
 </html>

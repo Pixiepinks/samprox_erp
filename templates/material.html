@@ -223,7 +223,7 @@
                 row.appendChild(supplierCell);
 
                 const materialCell = document.createElement("td");
-                materialCell.textContent = (item.material_type && item.material_type.name) || "—";
+                materialCell.textContent = (item.item && item.item.name) || "—";
                 row.appendChild(materialCell);
 
                 const qtyCell = document.createElement("td");

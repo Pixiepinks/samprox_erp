@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Any, Dict, Optional
 
-from typing import Any, Dict, Iterable, Optional
-
-from sqlalchemy import or_, text
-from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import MaterialCategory, MaterialType, MRNHeader, Supplier
+from models import MaterialItem, MRNHeader, Supplier
 
 
 class MaterialValidationError(Exception):
@@ -23,24 +21,6 @@ class MaterialValidationError(Exception):
     def __init__(self, errors: Dict[str, str]):
         super().__init__("Material validation error")
         self.errors = errors
-
-
-@dataclass
-class _CategoryRecord:
-    """Lightweight representation of a material category."""
-
-    id: uuid.UUID
-    name: str
-
-
-@dataclass
-class _MaterialTypeRecord:
-    """Lightweight representation of a material type."""
-
-    id: uuid.UUID
-    category_id: uuid.UUID
-    name: str
-    is_active: Optional[bool]
 
 
 def search_suppliers(query: Optional[str], limit: int = 20) -> list[Supplier]:
@@ -79,206 +59,52 @@ def create_supplier(payload: Dict[str, Any]) -> Supplier:
     return supplier
 
 
-def _get_table_columns(table: str) -> set[str]:
-    """Return the available column names for ``table`` in the current schema."""
+def list_material_items(*, search: Optional[str] = None, limit: Optional[int] = None) -> list[MaterialItem]:
+    """Return active material items, optionally filtered by ``search``."""
 
-    bind = db.session.get_bind()
-    dialect = (bind.dialect.name if bind is not None else "").lower()
-    if dialect.startswith("sqlite"):
-        result = db.session.execute(text(f"PRAGMA table_info({table})"))
-        return {row[1] for row in result}
-
-    result = db.session.execute(
-        text(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = current_schema()
-              AND table_name = :table
-            """
-        ),
-        {"table": table},
-    )
-    return {row[0] for row in result}
+    stmt = MaterialItem.query.filter(MaterialItem.is_active.is_(True)).order_by(MaterialItem.name)
+    if search:
+        like = f"%{search.strip()}%"
+        stmt = stmt.filter(MaterialItem.name.ilike(like))
+    if limit:
+        stmt = stmt.limit(limit)
+    return list(stmt)
 
 
-def _resolve_column(columns: set[str], *candidates: str) -> str:
-    for name in candidates:
-        if name in columns:
-            return name
-    raise MaterialValidationError({"database": "Missing expected database column."})
+def get_material_item(item_id: uuid.UUID) -> Optional[MaterialItem]:
+    return MaterialItem.query.get(item_id)
 
 
-def _coerce_uuid(value: Any) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def create_item(payload: Dict[str, Any]) -> MaterialItem:
+    errors: Dict[str, str] = {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        errors["name"] = "Item name is required."
 
+    is_active_raw = payload.get("is_active", True)
+    is_active = bool(is_active_raw) if isinstance(is_active_raw, bool) else str(is_active_raw).lower() != "false"
 
-def _list_material_categories_compat() -> list[_CategoryRecord]:
-    columns = _get_table_columns("material_categories")
-    id_column = _resolve_column(columns, "id", "category_id")
-    name_column = _resolve_column(columns, "name", "category_name")
-    query = text(
-        f"SELECT {id_column} AS id, {name_column} AS name "
-        f"FROM material_categories ORDER BY {name_column}"
-    )
-    rows = db.session.execute(query).fetchall()
-    return [_CategoryRecord(id=_coerce_uuid(row.id), name=row.name) for row in rows]
+    if errors:
+        raise MaterialValidationError(errors)
 
-
-def _get_material_category_compat(category_id: uuid.UUID) -> Optional[_CategoryRecord]:
-    columns = _get_table_columns("material_categories")
-    id_column = _resolve_column(columns, "id", "category_id")
-    name_column = _resolve_column(columns, "name", "category_name")
-    query = text(
-        f"SELECT {id_column} AS id, {name_column} AS name "
-        f"FROM material_categories WHERE {id_column} = :category_id"
-    )
-    row = db.session.execute(query, {"category_id": str(category_id)}).fetchone()
-    if not row:
-        return None
-    return _CategoryRecord(id=_coerce_uuid(row.id), name=row.name)
-
-
-def _list_material_types_compat(category_id: uuid.UUID, *, only_active: bool = True) -> list[_MaterialTypeRecord]:
-    columns = _get_table_columns("material_types")
-    id_column = _resolve_column(columns, "id", "material_type_id", "type_id")
-    category_column = _resolve_column(columns, "category_id", "material_category_id", "category")
-    name_column = _resolve_column(columns, "name", "type_name")
-    is_active_column = "is_active" if "is_active" in columns else None
-
-    conditions = [f"{category_column} = :category_id"]
-    if only_active and is_active_column:
-        conditions.append(f"{is_active_column} = TRUE")
-
-    where_clause = " AND ".join(conditions)
-    query = text(
-        f"SELECT {id_column} AS id, {category_column} AS category_id, {name_column} AS name"
-        + (
-            f", {is_active_column} AS is_active" if is_active_column else ", NULL AS is_active"
-        )
-        + " FROM material_types"
-        + (f" WHERE {where_clause}" if where_clause else "")
-        + f" ORDER BY {name_column}"
-    )
-    rows = db.session.execute(query, {"category_id": str(category_id)}).fetchall()
-    def _row_active(value: Any) -> Optional[bool]:
-        if is_active_column is None:
-            return True
-        if value is None:
-            return None
-        return bool(value)
-
-    return [
-        _MaterialTypeRecord(
-            id=_coerce_uuid(row.id),
-            category_id=_coerce_uuid(row.category_id),
-            name=row.name,
-            is_active=_row_active(row.is_active),
-        )
-        for row in rows
-    ]
-
-
-def _get_material_type_compat(material_type_id: uuid.UUID) -> Optional[_MaterialTypeRecord]:
-    columns = _get_table_columns("material_types")
-    id_column = _resolve_column(columns, "id", "material_type_id", "type_id")
-    category_column = _resolve_column(columns, "category_id", "material_category_id", "category")
-    name_column = _resolve_column(columns, "name", "type_name")
-    is_active_column = "is_active" if "is_active" in columns else None
-    query = text(
-        f"SELECT {id_column} AS id, {category_column} AS category_id, {name_column} AS name"
-        + (
-            f", {is_active_column} AS is_active" if is_active_column else ", NULL AS is_active"
-        )
-        + f" FROM material_types WHERE {id_column} = :material_type_id"
-    )
-    row = db.session.execute(query, {"material_type_id": str(material_type_id)}).fetchone()
-    if not row:
-        return None
-    is_active_value: Optional[bool]
-    if is_active_column is None:
-        is_active_value = True
-    elif row.is_active is None:
-        is_active_value = None
-    else:
-        is_active_value = bool(row.is_active)
-
-    return _MaterialTypeRecord(
-        id=_coerce_uuid(row.id),
-        category_id=_coerce_uuid(row.category_id),
-        name=row.name,
-        is_active=is_active_value,
-    )
-
-
-def list_material_categories() -> list[MaterialCategory | _CategoryRecord]:
-    """Return material categories, falling back to legacy schemas if needed."""
-
+    item = MaterialItem(name=name, is_active=is_active)
+    db.session.add(item)
     try:
-        return list(MaterialCategory.query.order_by(MaterialCategory.name))
-    except (ProgrammingError, OperationalError):
+        db.session.commit()
+    except IntegrityError as exc:
         db.session.rollback()
-        return _list_material_categories_compat()
-
-
-def get_material_category(category_id: uuid.UUID) -> Optional[MaterialCategory | _CategoryRecord]:
-    """Return a material category or ``None`` if it does not exist."""
-
-    try:
-        category = MaterialCategory.query.get(category_id)
-    except (ProgrammingError, OperationalError):
-        db.session.rollback()
-        category = None
-    if category:
-        return category
-    return _get_material_category_compat(category_id)
-
-
-def _is_missing_is_active_column(error: Exception) -> bool:
-    """Return True if the database error indicates the column is absent."""
-
-    raw = getattr(error, "orig", error)
-    message = str(raw).lower()
-    return "is_active" in message and "material_types" in message
-
-
-def _is_missing_category_reference(error: Exception) -> bool:
-    raw = getattr(error, "orig", error)
-    message = str(raw).lower()
-    return "material_categories" in message and "category_id" in message
-
-
-def list_active_material_types(category_id: uuid.UUID) -> list[MaterialType]:
-    """Return active material types for a category.
-
-    Older databases might miss the ``is_active`` column.  When that happens the
-    initial query raises a database programming error.  We gracefully recover by
-    rolling back the failed transaction and retrying without that filter so the
-    UI still receives data instead of a 500 HTML error page.
-    """
-
-    base_query = MaterialType.query.filter_by(category_id=category_id)
-    try:
-        return (
-            base_query.filter(MaterialType.is_active.is_(True))
-            .order_by(MaterialType.name)
-            .all()
-        )
-    except (ProgrammingError, OperationalError) as exc:
-        db.session.rollback()
-        if _is_missing_is_active_column(exc):
-            return base_query.order_by(MaterialType.name).all()
-        if _is_missing_category_reference(exc):
-            return _list_material_types_compat(category_id, only_active=True)
+        message = str(exc.orig).lower()
+        if "unique" in message and "material_items" in message:
+            raise MaterialValidationError({"name": "An item with this name already exists."}) from exc
         raise
+    return item
 
 
 def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[MRNHeader]:
     stmt = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
-            joinedload(MRNHeader.category),
-            joinedload(MRNHeader.material_type),
+            joinedload(MRNHeader.item),
         )
         .order_by(MRNHeader.date.desc(), MRNHeader.created_at.desc())
     )
@@ -289,12 +115,12 @@ def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[M
             like = f"%{term}%"
             stmt = (
                 stmt.outerjoin(MRNHeader.supplier)
-                .outerjoin(MRNHeader.material_type)
+                .outerjoin(MRNHeader.item)
                 .filter(
                     or_(
                         MRNHeader.mrn_no.ilike(like),
                         Supplier.name.ilike(like),
-                        MaterialType.name.ilike(like),
+                        MaterialItem.name.ilike(like),
                     )
                 )
                 .distinct()
@@ -435,34 +261,14 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     if not supplier_uuid and not supplier_name_free:
         errors["supplier_id"] = "Select a supplier or enter a name."
 
-    category_uuid = _parse_uuid(payload.get("category_id"), "category_id", errors)
-    category: Optional[MaterialCategory | _CategoryRecord] = None
-    if category_uuid:
-        category = get_material_category(category_uuid)
-        if not category:
-            errors["category_id"] = "Material category not found."
-
-    material_type_uuid = _parse_uuid(payload.get("material_type_id"), "material_type_id", errors)
-    material_type: Optional[MaterialType | _MaterialTypeRecord] = None
-    if material_type_uuid:
-        try:
-            material_type = MaterialType.query.get(material_type_uuid)
-        except (ProgrammingError, OperationalError):
-            db.session.rollback()
-            material_type = None
-        if not material_type:
-            material_type = _get_material_type_compat(material_type_uuid)
-        if not material_type:
-            errors["material_type_id"] = "Material type not found."
-        elif getattr(material_type, "is_active", True) is False:
-            errors["material_type_id"] = "Selected material type is inactive."
-
-    if (
-        category
-        and material_type
-        and getattr(material_type, "category_id", None) != getattr(category, "id", None)
-    ):
-        errors["material_type_id"] = "Material type does not belong to the selected category."
+    item_uuid = _parse_uuid(payload.get("item_id"), "item_id", errors)
+    item: Optional[MaterialItem] = None
+    if item_uuid:
+        item = get_material_item(item_uuid)
+        if not item:
+            errors["item_id"] = "Item not found."
+        elif item.is_active is False:
+            errors["item_id"] = "Selected item is inactive."
 
     mrn_date = _parse_date(payload.get("date"), "date", errors)
     weigh_in_time = _parse_datetime(payload.get("weigh_in_time"), "weigh_in_time", errors)
@@ -506,8 +312,7 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         date=mrn_date,
         supplier=supplier,
         supplier_name_free=supplier_name_free if not supplier else None,
-        category_id=category_uuid,
-        material_type_id=material_type_uuid,
+        item_id=item_uuid,
         qty_ton=qty_ton,
         unit_price=unit_price,
         wet_factor=wet_factor,
@@ -521,10 +326,8 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         created_by=created_by,
     )
 
-    if isinstance(category, MaterialCategory):
-        mrn_kwargs["category"] = category
-    if isinstance(material_type, MaterialType):
-        mrn_kwargs["material_type"] = material_type
+    if isinstance(item, MaterialItem):
+        mrn_kwargs["item"] = item
 
     mrn = MRNHeader(**mrn_kwargs)
 
@@ -549,8 +352,7 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
     mrn = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
-            joinedload(MRNHeader.category),
-            joinedload(MRNHeader.material_type),
+            joinedload(MRNHeader.item),
         )
         .filter(MRNHeader.id == mrn_uuid)
         .first()
@@ -561,31 +363,22 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
 
 
 def seed_material_defaults() -> None:
-    categories = [
-        "Product Material",
-        "Packing Material",
-        "Repair Material",
-        "Maintenance Material",
+    """Ensure a baseline set of material items exists."""
+
+    default_items = [
+        "Wood Shaving",
+        "Saw Dust",
+        "Wood Powder",
+        "Peanut Husk",
     ]
 
-    existing = {c.name: c for c in MaterialCategory.query.filter(MaterialCategory.name.in_(categories)).all()}
-    for name in categories:
-        if name not in existing:
-            category = MaterialCategory(name=name)
-            db.session.add(category)
-            existing[name] = category
-
-    db.session.flush()
-
-    product_category = existing.get("Product Material")
-    if product_category:
-        for type_name in ["wood shaving", "saw dust", "wood powder", "peanut husk"]:
-            match = (
-                MaterialType.query.filter_by(category_id=product_category.id, name=type_name)
-                .with_entities(MaterialType.id)
-                .first()
-            )
-            if not match:
-                db.session.add(MaterialType(category=product_category, name=type_name, is_active=True))
+    for name in default_items:
+        exists = (
+            MaterialItem.query.filter(func.lower(MaterialItem.name) == name.lower())
+            .with_entities(MaterialItem.id)
+            .first()
+        )
+        if not exists:
+            db.session.add(MaterialItem(name=name, is_active=True))
 
     db.session.commit()

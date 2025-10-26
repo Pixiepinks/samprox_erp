@@ -3,9 +3,6 @@ import os
 import sys
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
-
-from sqlalchemy.exc import ProgrammingError
 
 
 class MaterialMRNApiTestCase(unittest.TestCase):
@@ -27,8 +24,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
 
         self.client = self.app.test_client()
         self.Supplier = self.app_module.Supplier
-        self.MaterialCategory = self.app_module.MaterialCategory
-        self.MaterialType = self.app_module.MaterialType
+        self.MaterialItem = self.app_module.MaterialItem
         self.MRNHeader = self.app_module.MRNHeader
 
     def tearDown(self):
@@ -49,8 +45,9 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         return supplier
 
     def _default_payload(self):
-        category = self.MaterialCategory.query.filter_by(name="Product Material").first()
-        material_type = self.MaterialType.query.filter_by(name="wood shaving").first()
+        item = self.MaterialItem.query.filter_by(name="Wood Shaving").first()
+        if not item:
+            item = self.MaterialItem.query.first()
         supplier = self._create_supplier()
         weigh_in = datetime(2024, 8, 10, 9, 0, tzinfo=timezone.utc)
         weigh_out = datetime(2024, 8, 10, 10, 0, tzinfo=timezone.utc)
@@ -58,8 +55,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
             "mrn_no": "MRN-001",
             "date": "2024-08-10",
             "supplier_id": str(supplier.id),
-            "category_id": str(category.id),
-            "material_type_id": str(material_type.id),
+            "item_id": str(item.id),
             "qty_ton": 12.345,
             "unit_price": 95.5,
             "wet_factor": 1.1,
@@ -156,36 +152,4 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         search_data = search_response.get_json()
         self.assertEqual(len(search_data), 1)
         self.assertEqual(search_data[0]["mrn_no"], "MRN-002")
-
-    def test_list_material_types_handles_missing_is_active_column(self):
-        category = self.MaterialCategory.query.filter_by(name="Product Material").first()
-        from material import services
-
-        fallback_result = [object()]
-
-        with patch("material.services.MaterialType.query") as mock_query, patch(
-            "material.services.db.session.rollback"
-        ) as mock_rollback:
-            base_query = MagicMock()
-            filtered_query = MagicMock()
-            ordered_filtered_query = MagicMock()
-            fallback_ordered_query = MagicMock()
-
-            mock_query.filter_by.return_value = base_query
-            base_query.filter.return_value = filtered_query
-            filtered_query.order_by.return_value = ordered_filtered_query
-            ordered_filtered_query.all.side_effect = ProgrammingError(
-                "SELECT", {}, Exception("column material_types.is_active does not exist")
-            )
-            base_query.order_by.return_value = fallback_ordered_query
-            fallback_ordered_query.all.return_value = fallback_result
-
-            result = services.list_active_material_types(category.id)
-
-        mock_query.filter_by.assert_called_once_with(category_id=category.id)
-        base_query.filter.assert_called_once()
-        mock_rollback.assert_called_once()
-        base_query.order_by.assert_called_once()
-        fallback_ordered_query.all.assert_called_once()
-        self.assertIs(result, fallback_result)
 

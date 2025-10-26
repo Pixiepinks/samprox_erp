@@ -214,14 +214,8 @@ class SupplierSchema(Schema):
     tax_id = fields.Str(allow_none=True, data_key="taxId")
 
 
-class MaterialCategorySchema(Schema):
+class MaterialItemSchema(Schema):
     id = fields.UUID()
-    name = fields.Str(required=True)
-
-
-class MaterialTypeSchema(Schema):
-    id = fields.UUID()
-    category_id = fields.UUID()
     name = fields.Str(required=True)
     is_active = fields.Bool()
 
@@ -232,8 +226,7 @@ class MRNSchema(Schema):
     date = fields.Date(required=True)
     supplier_id = fields.UUID(allow_none=True)
     supplier_name_free = fields.Str(allow_none=True)
-    category_id = fields.UUID(required=True)
-    material_type_id = fields.UUID(required=True)
+    item_id = fields.UUID(required=True)
     qty_ton = fields.Decimal(as_string=True)
     unit_price = fields.Decimal(as_string=True)
     wet_factor = fields.Decimal(as_string=True)
@@ -249,8 +242,7 @@ class MRNSchema(Schema):
     updated_at = fields.DateTime()
 
     supplier = fields.Nested(SupplierSchema, allow_none=True)
-    category = fields.Nested(MaterialCategorySchema)
-    material_type = fields.Nested(MaterialTypeSchema)
+    item = fields.Nested(MaterialItemSchema)
 
 
 class MachinePartSchema(Schema):

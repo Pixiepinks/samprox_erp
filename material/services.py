@@ -364,11 +364,18 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     weigh_in_time = _parse_datetime(payload.get("weigh_in_time"), "weigh_in_time", errors)
     weigh_out_time = _parse_datetime(payload.get("weigh_out_time"), "weigh_out_time", errors)
 
-    qty_ton = _decimal_field(
-        payload.get("qty_ton"),
-        "qty_ton",
+    weigh_in_weight_kg = _decimal_field(
+        payload.get("weigh_in_weight_kg"),
+        "weigh_in_weight_kg",
         errors,
-        exclusive_minimum=Decimal("0"),
+        minimum=Decimal("0"),
+        quantize="0.001",
+    )
+    weigh_out_weight_kg = _decimal_field(
+        payload.get("weigh_out_weight_kg"),
+        "weigh_out_weight_kg",
+        errors,
+        minimum=Decimal("0"),
         quantize="0.001",
     )
     unit_price = _decimal_field(
@@ -387,8 +394,26 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         default=Decimal("1.000"),
     )
 
+    if (
+        weigh_in_weight_kg is not None
+        and weigh_out_weight_kg is not None
+        and weigh_out_weight_kg <= weigh_in_weight_kg
+    ):
+        errors["weigh_out_weight_kg"] = "Out weight must be greater than in weight."
+
     if errors:
         raise MaterialValidationError(errors)
+
+    net_weight_kg = (weigh_out_weight_kg - weigh_in_weight_kg).quantize(
+        Decimal("0.001"), rounding=ROUND_HALF_UP
+    )
+    if net_weight_kg <= Decimal("0"):
+        errors["qty_ton"] = "Quantity must be greater than 0."
+        raise MaterialValidationError(errors)
+
+    qty_ton = (net_weight_kg / Decimal("1000")).quantize(
+        Decimal("0.001"), rounding=ROUND_HALF_UP
+    )
 
     if weigh_in_time and weigh_out_time and weigh_out_time < weigh_in_time:
         errors["weigh_out_time"] = "Weigh-out time must be after weigh-in time."
@@ -409,6 +434,8 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         approved_unit_price=approved_unit_price,
         amount=amount,
         weighing_slip_no=weighing_slip_no,
+        weigh_in_weight_kg=weigh_in_weight_kg,
+        weigh_out_weight_kg=weigh_out_weight_kg,
         weigh_in_time=weigh_in_time,
         weigh_out_time=weigh_out_time,
         security_officer_name=security_officer_name,

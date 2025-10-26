@@ -170,6 +170,26 @@
                         <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
                     </div>
                     <div class="summary-item">
+                        <span class="summary-label">In Weight (Kg)</span>
+                        <span class="summary-value">
+                            {% if mrn.weigh_in_weight_kg is not none %}
+                                {{ '%.3f'|format(mrn.weigh_in_weight_kg) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Out Weight (Kg)</span>
+                        <span class="summary-value">
+                            {% if mrn.weigh_out_weight_kg is not none %}
+                                {{ '%.3f'|format(mrn.weigh_out_weight_kg) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
                         <span class="summary-label">Weigh Bridge In-time</span>
                         <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
                     </div>

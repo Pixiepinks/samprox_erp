@@ -248,6 +248,8 @@ class MRNSchema(Schema):
     approved_unit_price = fields.Decimal(as_string=True)
     amount = fields.Decimal(as_string=True)
     weighing_slip_no = fields.Str()
+    weigh_in_weight_kg = fields.Decimal(as_string=True)
+    weigh_out_weight_kg = fields.Decimal(as_string=True)
     weigh_in_time = fields.DateTime()
     weigh_out_time = fields.DateTime()
     security_officer_name = fields.Str()

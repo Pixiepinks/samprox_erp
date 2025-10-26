@@ -258,8 +258,19 @@
                             <p class="error-text" data-error-for="item_id"></p>
                         </div>
                         <div class="field">
+                            <label for="weigh-in-weight">In Weight (Kg)<span class="text-red"> *</span></label>
+                            <input id="weigh-in-weight" name="weigh_in_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
+                            <p class="error-text" data-error-for="weigh_in_weight_kg"></p>
+                        </div>
+                        <div class="field">
+                            <label for="weigh-out-weight">Out Weight (Kg)<span class="text-red"> *</span></label>
+                            <input id="weigh-out-weight" name="weigh_out_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
+                            <p class="error-text" data-error-for="weigh_out_weight_kg"></p>
+                        </div>
+                        <div class="field">
                             <label for="qty-ton">Qty (Ton)<span class="text-red"> *</span></label>
-                            <input id="qty-ton" name="qty_ton" type="number" min="0" step="0.001" placeholder="0.000" required />
+                            <input id="qty-ton" name="qty_ton" type="number" min="0" step="0.001" placeholder="0.000" readonly required />
+                            <p class="helper">Automatically calculated from Out Weight − In Weight.</p>
                             <p class="error-text" data-error-for="qty_ton"></p>
                         </div>
                         <div class="field">
@@ -473,6 +484,8 @@
         const unitPriceInput = document.getElementById("unit-price");
         const wetFactorInput = document.getElementById("wet-factor");
         const approvedUnitPriceInput = document.getElementById("approved-unit-price");
+        const weighInWeightInput = document.getElementById("weigh-in-weight");
+        const weighOutWeightInput = document.getElementById("weigh-out-weight");
         const qtyInput = document.getElementById("qty-ton");
         const amountInput = document.getElementById("amount");
         const itemSelect = document.getElementById("item-select");
@@ -704,9 +717,38 @@
             amountInput.value = toFixed(qty * approved, 2);
         }
 
+        function updateQuantityFromWeights() {
+            if (!weighInWeightInput || !weighOutWeightInput || !qtyInput) {
+                return;
+            }
+            const inWeight = parseFloat(weighInWeightInput.value);
+            const outWeight = parseFloat(weighOutWeightInput.value);
+            if (!Number.isFinite(inWeight) || !Number.isFinite(outWeight)) {
+                qtyInput.value = "";
+                updateAmount();
+                return;
+            }
+            const netKg = outWeight - inWeight;
+            if (netKg <= 0) {
+                qtyInput.value = "";
+                updateAmount();
+                return;
+            }
+            const netTon = netKg / 1000;
+            qtyInput.value = toFixed(netTon, 3);
+            updateAmount();
+        }
+
         unitPriceInput.addEventListener("input", updateApprovedUnitPrice);
         wetFactorInput.addEventListener("input", updateApprovedUnitPrice);
         qtyInput.addEventListener("input", updateAmount);
+        if (weighInWeightInput) {
+            weighInWeightInput.addEventListener("input", updateQuantityFromWeights);
+        }
+        if (weighOutWeightInput) {
+            weighOutWeightInput.addEventListener("input", updateQuantityFromWeights);
+        }
+        updateQuantityFromWeights();
 
         function toggleSupplierMenu(show) {
             if (show) {
@@ -1019,11 +1061,21 @@
             supplierNameFreeInput.value = "";
             approvedUnitPriceInput.value = "0.00";
             amountInput.value = "0.00";
+            if (weighInWeightInput) {
+                weighInWeightInput.value = "";
+            }
+            if (weighOutWeightInput) {
+                weighOutWeightInput.value = "";
+            }
+            if (qtyInput) {
+                qtyInput.value = "";
+            }
             if (itemSelect) {
                 itemSelect.selectedIndex = -1;
             }
             lastValidItemValue = "";
             clearErrors();
+            updateQuantityFromWeights();
         });
 
         function validateForm() {
@@ -1032,9 +1084,18 @@
             const qtyValue = parseFloat(formData.get("qty_ton"));
             const unitValue = parseFloat(formData.get("unit_price"));
             const wetValue = parseFloat(formData.get("wet_factor"));
+            const weighInWeightValue = parseFloat(formData.get("weigh_in_weight_kg"));
+            const weighOutWeightValue = parseFloat(formData.get("weigh_out_weight_kg"));
 
             ["date", "mrn_no", "weighing_slip_no", "weigh_in_time", "weigh_out_time", "security_officer_name", "authorized_person_name", "item_id"].forEach((field) => {
                 if (!(formData.get(field) || "").trim()) {
+                    errors[field] = "This field is required.";
+                }
+            });
+
+            ["weigh_in_weight_kg", "weigh_out_weight_kg"].forEach((field) => {
+                const raw = formData.get(field);
+                if ((raw || "").trim() === "") {
                     errors[field] = "This field is required.";
                 }
             });
@@ -1045,6 +1106,20 @@
 
             if (!supplierIdInput.value && !(supplierNameFreeInput.value || "").trim()) {
                 errors["supplier_id"] = "Select a supplier or enter a name.";
+            }
+
+            if (!Number.isFinite(weighInWeightValue) || weighInWeightValue < 0) {
+                errors["weigh_in_weight_kg"] = "Enter a valid non-negative weight.";
+            }
+            if (!Number.isFinite(weighOutWeightValue) || weighOutWeightValue < 0) {
+                errors["weigh_out_weight_kg"] = "Enter a valid non-negative weight.";
+            }
+            if (
+                Number.isFinite(weighInWeightValue) &&
+                Number.isFinite(weighOutWeightValue) &&
+                weighOutWeightValue <= weighInWeightValue
+            ) {
+                errors["weigh_out_weight_kg"] = "Out weight must be greater than in weight.";
             }
 
             if (Number.isNaN(qtyValue) || qtyValue <= 0) {
@@ -1084,7 +1159,12 @@
 
             const formData = new FormData(mrnForm);
             const payload = Object.fromEntries(formData.entries());
-            payload.qty_ton = parseFloat(payload.qty_ton);
+            const weighInWeightValue = parseFloat(payload.weigh_in_weight_kg);
+            const weighOutWeightValue = parseFloat(payload.weigh_out_weight_kg);
+            const qtyTonValue = parseFloat(payload.qty_ton);
+            payload.weigh_in_weight_kg = Number.isNaN(weighInWeightValue) ? undefined : weighInWeightValue;
+            payload.weigh_out_weight_kg = Number.isNaN(weighOutWeightValue) ? undefined : weighOutWeightValue;
+            payload.qty_ton = Number.isNaN(qtyTonValue) ? undefined : qtyTonValue;
             payload.unit_price = parseFloat(payload.unit_price);
             payload.wet_factor = payload.wet_factor ? parseFloat(payload.wet_factor) : 1;
             payload.weigh_in_time = new Date(payload.weigh_in_time).toISOString();

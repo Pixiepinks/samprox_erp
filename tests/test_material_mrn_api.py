@@ -65,7 +65,9 @@ class MaterialMRNApiTestCase(unittest.TestCase):
             "date": "2024-08-10",
             "supplier_id": str(supplier.id),
             "item_id": str(item.id),
-            "qty_ton": 12.345,
+            "weigh_in_weight_kg": 1000,
+            "weigh_out_weight_kg": 13345,
+            "qty_ton": 0,
             "unit_price": 95.5,
             "wet_factor": 1.1,
             "weighing_slip_no": "WS-9001",
@@ -100,16 +102,22 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(data["approved_unit_price"], "105.05")
         self.assertEqual(data["amount"], "1296.84")
         self.assertEqual(data["supplier_id"], payload["supplier_id"])
+        self.assertEqual(data["qty_ton"], "12.345")
+        self.assertEqual(data["weigh_in_weight_kg"], "1000.000")
+        self.assertEqual(data["weigh_out_weight_kg"], "13345.000")
 
         mrn = self.MRNHeader.query.filter_by(mrn_no=payload["mrn_no"]).first()
         self.assertIsNotNone(mrn)
         self.assertAlmostEqual(float(mrn.approved_unit_price), 105.05)
         self.assertAlmostEqual(float(mrn.amount), 1296.84)
+        self.assertAlmostEqual(float(mrn.qty_ton), 12.345)
+        self.assertAlmostEqual(float(mrn.weigh_in_weight_kg), 1000)
+        self.assertAlmostEqual(float(mrn.weigh_out_weight_kg), 13345)
 
     def test_create_mrn_validation_errors(self):
         payload = self._default_payload()
         payload["mrn_no"] = ""
-        payload["qty_ton"] = -1
+        payload["weigh_out_weight_kg"] = 900
         payload["weigh_out_time"] = datetime(2024, 8, 10, 8, 30, tzinfo=timezone.utc).isoformat()
 
         response = self.client.post("/api/material/mrn", json=payload)
@@ -117,7 +125,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertIn("errors", data)
         self.assertIn("mrn_no", data["errors"])
-        self.assertIn("qty_ton", data["errors"])
+        self.assertIn("weigh_out_weight_kg", data["errors"])
         self.assertNotIn("weigh_out_time", data["errors"])
 
         # weigh-out validation should trigger when other fields are valid

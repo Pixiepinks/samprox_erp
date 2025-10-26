@@ -92,6 +92,31 @@ def search_suppliers(query: Optional[str], limit: int = 20) -> list[Supplier]:
     return list(stmt)
 
 
+def _is_unique_violation(exc: IntegrityError, *keywords: str) -> bool:
+    """Return ``True`` if ``exc`` represents a unique constraint violation."""
+
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    constraint_name = getattr(diag, "constraint_name", None)
+    message_detail = getattr(diag, "message_detail", None)
+
+    haystacks: list[str] = []
+    if constraint_name:
+        haystacks.append(constraint_name.lower())
+    if message_detail:
+        haystacks.append(message_detail.lower())
+    if orig is not None:
+        haystacks.append(str(orig).lower())
+    else:
+        haystacks.append(str(exc).lower())
+
+    lowered_keywords = [keyword.lower() for keyword in keywords]
+    for haystack in haystacks:
+        if haystack and all(keyword in haystack for keyword in lowered_keywords):
+            return True
+    return False
+
+
 def create_supplier(payload: Dict[str, Any]) -> Supplier:
     errors: Dict[str, str] = {}
     name = (payload.get("name") or "").strip()
@@ -151,16 +176,25 @@ def create_supplier(payload: Dict[str, Any]) -> Supplier:
         tax_id=tax_id,
     )
     db.session.add(supplier)
-    try:
-        db.session.commit()
-    except IntegrityError as exc:  # pragma: no cover - database error branch
-        db.session.rollback()
-        message = str(exc.orig).lower()
-        if "suppliers_name_key" in message or "unique constraint" in message and "suppliers" in message and "name" in message:
-            raise MaterialValidationError({"name": "A supplier with this name already exists."}) from exc
-        if "supplier_reg_no" in message:
-            raise MaterialValidationError({"supplier_reg_no": "Unable to assign a registration number. Please try again."}) from exc
-        raise
+    registration_attempts = 0
+    while True:
+        try:
+            db.session.commit()
+            break
+        except IntegrityError as exc:  # pragma: no cover - database error branch
+            db.session.rollback()
+            if _is_unique_violation(exc, "suppliers", "name"):
+                raise MaterialValidationError({"name": "A supplier with this name already exists."}) from exc
+            if _is_unique_violation(exc, "supplier_reg_no"):
+                registration_attempts += 1
+                if registration_attempts >= 5:
+                    raise MaterialValidationError(
+                        {"supplier_reg_no": "Unable to assign a registration number. Please try again."}
+                    ) from exc
+                supplier.supplier_reg_no = get_next_supplier_registration_no()
+                db.session.add(supplier)
+                continue
+            raise
     return supplier
 
 

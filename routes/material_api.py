@@ -9,6 +9,7 @@ from material import (
     create_item,
     create_mrn,
     create_supplier,
+    get_next_supplier_registration_no,
     get_mrn_detail,
     list_material_items,
     list_recent_mrns,
@@ -35,6 +36,12 @@ def supplier_search():
         limit = 20
     suppliers = search_suppliers(query, limit=limit)
     return jsonify(suppliers_schema.dump(suppliers))
+
+
+@bp.get("/suppliers/next-registration-number")
+def supplier_next_registration_number():
+    registration_no = get_next_supplier_registration_no()
+    return jsonify({"registration_no": registration_no})
 
 
 @bp.post("/suppliers")

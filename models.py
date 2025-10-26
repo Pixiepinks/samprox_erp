@@ -131,7 +131,15 @@ class Supplier(db.Model):
 
     id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(255), unique=True, nullable=False)
-    phone = db.Column(db.String(40))
+    primary_phone = db.Column("phone", db.String(40))
+    secondary_phone = db.Column(db.String(40))
+    category = db.Column(db.String(40))
+    vehicle_no_1 = db.Column(db.String(40))
+    vehicle_no_2 = db.Column(db.String(40))
+    vehicle_no_3 = db.Column(db.String(40))
+    supplier_id_no = db.Column(db.String(120))
+    supplier_reg_no = db.Column(db.String(20), unique=True, nullable=False)
+    credit_period = db.Column(db.String(40))
     email = db.Column(db.String(255))
     address = db.Column(db.Text)
     tax_id = db.Column(db.String(120))
@@ -139,6 +147,14 @@ class Supplier(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     mrns = db.relationship("MRNHeader", back_populates="supplier")
+
+    @property
+    def phone(self):
+        return self.primary_phone
+
+    @phone.setter
+    def phone(self, value):
+        self.primary_phone = value
 
 
 class MaterialItem(db.Model):

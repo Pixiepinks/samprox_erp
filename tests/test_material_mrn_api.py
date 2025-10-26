@@ -19,6 +19,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.app_module.db.create_all()
 
         from material import seed_material_defaults
+        from material import create_supplier as create_supplier_service
 
         seed_material_defaults()
 
@@ -26,6 +27,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.Supplier = self.app_module.Supplier
         self.MaterialItem = self.app_module.MaterialItem
         self.MRNHeader = self.app_module.MRNHeader
+        self.create_supplier_service = create_supplier_service
 
     def tearDown(self):
         self.app_module.db.session.remove()
@@ -39,9 +41,16 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         existing = self.Supplier.query.filter_by(name=name).first()
         if existing:
             return existing
-        supplier = self.Supplier(name=name)
-        self.app_module.db.session.add(supplier)
-        self.app_module.db.session.commit()
+        payload = {
+            "name": name,
+            "primary_phone": "011-555-1234",
+            "secondary_phone": None,
+            "category": "Raw Material",
+            "vehicle_no_1": "TRK-001",
+            "supplier_id_no": f"SID-{name.replace(' ', '-').upper()}",
+            "credit_period": "Cash",
+        }
+        supplier = self.create_supplier_service(payload)
         return supplier
 
     def _default_payload(self):

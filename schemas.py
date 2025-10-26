@@ -208,10 +208,25 @@ class MachinePartReplacementSchema(Schema):
 class SupplierSchema(Schema):
     id = fields.UUID()
     name = fields.Str(required=True)
-    phone = fields.Str(allow_none=True)
+    primary_phone = fields.Str(attribute="primary_phone", allow_none=True, data_key="primaryPhone")
+    secondary_phone = fields.Str(attribute="secondary_phone", allow_none=True, data_key="secondaryPhone")
+    category = fields.Str(allow_none=True)
+    vehicle_no_1 = fields.Str(attribute="vehicle_no_1", allow_none=True, data_key="vehicleNo1")
+    vehicle_no_2 = fields.Str(attribute="vehicle_no_2", allow_none=True, data_key="vehicleNo2")
+    vehicle_no_3 = fields.Str(attribute="vehicle_no_3", allow_none=True, data_key="vehicleNo3")
+    supplier_id_no = fields.Str(attribute="supplier_id_no", allow_none=True, data_key="supplierIdNo")
+    supplier_reg_no = fields.Str(attribute="supplier_reg_no", data_key="supplierRegNo")
+    credit_period = fields.Str(attribute="credit_period", allow_none=True, data_key="creditPeriod")
+    phone = fields.Method("get_primary_phone", dump_only=True)
     email = fields.Str(allow_none=True)
     address = fields.Str(allow_none=True)
     tax_id = fields.Str(allow_none=True, data_key="taxId")
+
+    def get_primary_phone(self, obj):
+        try:
+            return obj.primary_phone
+        except AttributeError:
+            return None
 
 
 class MaterialItemSchema(Schema):

@@ -4,6 +4,10 @@ from alembic import op
 import sqlalchemy as sa
 
 
+def _is_sqlite() -> bool:
+    return op.get_bind().dialect.name == "sqlite"
+
+
 # revision identifiers, used by Alembic.
 revision = "8f2a7c2b1c45"
 down_revision = "7d4694ff3d6f"
@@ -34,24 +38,46 @@ def upgrade() -> None:
             {"registration_no": registration_no, "supplier_id": str(row[0])},
         )
 
-    op.alter_column(
-        "suppliers",
-        "supplier_reg_no",
-        existing_type=sa.String(length=20),
-        nullable=False,
-    )
-    op.create_unique_constraint(
-        "uq_suppliers_supplier_reg_no", "suppliers", ["supplier_reg_no"]
-    )
+    if _is_sqlite():
+        with op.batch_alter_table("suppliers", recreate="always") as batch_op:
+            batch_op.alter_column(
+                "supplier_reg_no",
+                existing_type=sa.String(length=20),
+                nullable=False,
+            )
+            batch_op.create_unique_constraint(
+                "uq_suppliers_supplier_reg_no", ["supplier_reg_no"]
+            )
+    else:
+        op.alter_column(
+            "suppliers",
+            "supplier_reg_no",
+            existing_type=sa.String(length=20),
+            nullable=False,
+        )
+        op.create_unique_constraint(
+            "uq_suppliers_supplier_reg_no", "suppliers", ["supplier_reg_no"]
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_suppliers_supplier_reg_no", "suppliers", type_="unique")
-    op.drop_column("suppliers", "credit_period")
-    op.drop_column("suppliers", "supplier_reg_no")
-    op.drop_column("suppliers", "supplier_id_no")
-    op.drop_column("suppliers", "vehicle_no_3")
-    op.drop_column("suppliers", "vehicle_no_2")
-    op.drop_column("suppliers", "vehicle_no_1")
-    op.drop_column("suppliers", "category")
-    op.drop_column("suppliers", "secondary_phone")
+    if _is_sqlite():
+        with op.batch_alter_table("suppliers", recreate="always") as batch_op:
+            batch_op.drop_column("credit_period")
+            batch_op.drop_column("supplier_reg_no")
+            batch_op.drop_column("supplier_id_no")
+            batch_op.drop_column("vehicle_no_3")
+            batch_op.drop_column("vehicle_no_2")
+            batch_op.drop_column("vehicle_no_1")
+            batch_op.drop_column("category")
+            batch_op.drop_column("secondary_phone")
+    else:
+        op.drop_constraint("uq_suppliers_supplier_reg_no", "suppliers", type_="unique")
+        op.drop_column("suppliers", "credit_period")
+        op.drop_column("suppliers", "supplier_reg_no")
+        op.drop_column("suppliers", "supplier_id_no")
+        op.drop_column("suppliers", "vehicle_no_3")
+        op.drop_column("suppliers", "vehicle_no_2")
+        op.drop_column("suppliers", "vehicle_no_1")
+        op.drop_column("suppliers", "category")
+        op.drop_column("suppliers", "secondary_phone")

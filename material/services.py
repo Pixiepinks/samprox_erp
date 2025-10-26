@@ -8,7 +8,7 @@ import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -71,7 +71,22 @@ def search_suppliers(query: Optional[str], limit: int = 20) -> list[Supplier]:
     stmt = Supplier.query.order_by(Supplier.name)
     if query:
         like = f"%{query.strip()}%"
-        stmt = stmt.filter(Supplier.name.ilike(like))
+        stmt = stmt.filter(
+            or_(
+                Supplier.name.ilike(like),
+                Supplier.supplier_reg_no.ilike(like),
+                Supplier.supplier_id_no.ilike(like),
+                Supplier.primary_phone.ilike(like),
+                Supplier.secondary_phone.ilike(like),
+                Supplier.vehicle_no_1.ilike(like),
+                Supplier.vehicle_no_2.ilike(like),
+                Supplier.vehicle_no_3.ilike(like),
+                Supplier.email.ilike(like),
+                Supplier.address.ilike(like),
+                Supplier.tax_id.ilike(like),
+                cast(Supplier.id, String).ilike(like),
+            )
+        )
     if limit:
         stmt = stmt.limit(limit)
     return list(stmt)

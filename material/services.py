@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 from typing import Any, Dict, Iterable, Optional
 
 from sqlalchemy import or_

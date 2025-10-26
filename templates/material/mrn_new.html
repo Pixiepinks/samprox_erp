@@ -750,6 +750,60 @@
         }
         updateQuantityFromWeights();
 
+        function coerceNumericValue(rawValue, { defaultValue } = {}) {
+            if (rawValue === undefined || rawValue === null) {
+                return defaultValue ?? "";
+            }
+
+            const stringValue = typeof rawValue === "string" ? rawValue.trim() : String(rawValue).trim();
+            if (stringValue === "") {
+                return defaultValue ?? "";
+            }
+
+            const attempts = [stringValue];
+
+            if (stringValue.includes(",") && stringValue.includes(".") && stringValue.indexOf(",") > stringValue.indexOf(".")) {
+                attempts.push(stringValue.replace(/\./g, "").replace(",", "."));
+            }
+
+            if (stringValue.includes(",") && !stringValue.includes(".")) {
+                attempts.push(stringValue.replace(",", "."));
+            }
+
+            if (stringValue.includes(",")) {
+                attempts.push(stringValue.replace(/,/g, ""));
+            }
+
+            attempts.push(stringValue.replace(/\s+/g, ""));
+
+            for (const attempt of attempts) {
+                const numeric = Number(attempt);
+                if (Number.isFinite(numeric)) {
+                    return numeric;
+                }
+            }
+
+            return stringValue;
+        }
+
+        function normalizeDateValue(rawValue) {
+            if (rawValue === undefined || rawValue === null) {
+                return "";
+            }
+
+            const stringValue = typeof rawValue === "string" ? rawValue.trim() : String(rawValue).trim();
+            if (stringValue === "") {
+                return "";
+            }
+
+            const parsed = Date.parse(stringValue);
+            if (Number.isNaN(parsed)) {
+                return stringValue;
+            }
+
+            return new Date(parsed).toISOString();
+        }
+
         function toggleSupplierMenu(show) {
             if (show) {
                 supplierMenu.classList.add("active");
@@ -1193,21 +1247,26 @@
 
             const formData = new FormData(mrnForm);
             const payload = Object.fromEntries(formData.entries());
-            const weighInWeightValue = parseFloat(payload.weigh_in_weight_kg);
-            const weighOutWeightValue = parseFloat(payload.weigh_out_weight_kg);
-            const qtyTonValue = parseFloat(payload.qty_ton);
-            payload.weigh_in_weight_kg = Number.isNaN(weighInWeightValue) ? undefined : weighInWeightValue;
-            payload.weigh_out_weight_kg = Number.isNaN(weighOutWeightValue) ? undefined : weighOutWeightValue;
-            payload.qty_ton = Number.isNaN(qtyTonValue) ? undefined : qtyTonValue;
-            payload.unit_price = parseFloat(payload.unit_price);
-            payload.wet_factor = payload.wet_factor ? parseFloat(payload.wet_factor) : 1;
-            payload.weigh_in_time = new Date(payload.weigh_in_time).toISOString();
-            payload.weigh_out_time = new Date(payload.weigh_out_time).toISOString();
+            payload.weigh_in_weight_kg = coerceNumericValue(payload.weigh_in_weight_kg);
+            payload.weigh_out_weight_kg = coerceNumericValue(payload.weigh_out_weight_kg);
+            payload.unit_price = coerceNumericValue(payload.unit_price);
+            payload.wet_factor = coerceNumericValue(payload.wet_factor, { defaultValue: 1 });
+            payload.qty_ton = coerceNumericValue(payload.qty_ton);
+            payload.weigh_in_time = normalizeDateValue(payload.weigh_in_time);
+            payload.weigh_out_time = normalizeDateValue(payload.weigh_out_time);
             payload.supplier_id = supplierIdInput.value || undefined;
             payload.supplier_name_free = (supplierNameFreeInput.value || "").trim() || undefined;
             if (payload.item_id === "__create__") {
                 payload.item_id = undefined;
             }
+
+            delete payload.qty_ton;
+
+            Object.keys(payload).forEach((key) => {
+                if (payload[key] === undefined || payload[key] === "") {
+                    delete payload[key];
+                }
+            });
 
             try {
                 const response = await fetch("/api/material/mrn", {

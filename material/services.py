@@ -464,6 +464,10 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         Decimal("0.001"), rounding=ROUND_HALF_UP
     )
 
+    if qty_ton <= Decimal("0"):
+        errors["qty_ton"] = "Quantity must be greater than 0."
+        raise MaterialValidationError(errors)
+
     if weigh_in_time and weigh_out_time and weigh_out_time < weigh_in_time:
         errors["weigh_out_time"] = "Weigh-out time must be after weigh-in time."
         raise MaterialValidationError(errors)

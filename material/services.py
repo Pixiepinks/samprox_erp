@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
+import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 
@@ -14,6 +15,15 @@ from sqlalchemy.orm import joinedload
 from extensions import db
 from models import MaterialItem, MRNHeader, Supplier
 
+SUPPLIER_CATEGORIES = {
+    "Raw Material",
+    "Packing Material",
+    "Repair Material",
+    "Maintenance Material",
+}
+
+CREDIT_PERIOD_OPTIONS = {"Cash", "3 Days", "7 Days", "1 Month"}
+
 
 class MaterialValidationError(Exception):
     """Raised when the payload provided by the client is invalid."""
@@ -21,6 +31,40 @@ class MaterialValidationError(Exception):
     def __init__(self, errors: Dict[str, str]):
         super().__init__("Material validation error")
         self.errors = errors
+
+
+SUPPLIER_REGISTRATION_PREFIX = "SR"
+
+
+def _strip_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    else:
+        value = str(value).strip()
+    return value or None
+
+
+def _next_registration_sequence(last_reg_no: Optional[str]) -> int:
+    if not last_reg_no:
+        return 1
+    match = re.search(r"(\d+)$", last_reg_no)
+    if not match:
+        return 1
+    try:
+        return int(match.group(1)) + 1
+    except ValueError:
+        return 1
+
+
+def _format_registration_no(sequence: int) -> str:
+    return f"{SUPPLIER_REGISTRATION_PREFIX}{sequence:04d}"
+
+
+def get_next_supplier_registration_no() -> str:
+    last_reg_no = db.session.query(func.max(Supplier.supplier_reg_no)).scalar()
+    return _format_registration_no(_next_registration_sequence(last_reg_no))
 
 
 def search_suppliers(query: Optional[str], limit: int = 20) -> list[Supplier]:
@@ -38,23 +82,69 @@ def create_supplier(payload: Dict[str, Any]) -> Supplier:
     name = (payload.get("name") or "").strip()
     if not name:
         errors["name"] = "Supplier name is required."
+
+    primary_phone_raw = payload.get("primary_phone")
+    primary_phone = (primary_phone_raw or "").strip() if isinstance(primary_phone_raw, str) else str(primary_phone_raw or "").strip()
+    if not primary_phone:
+        errors["primary_phone"] = "Primary phone is required."
+
+    secondary_phone = _strip_or_none(payload.get("secondary_phone"))
+
+    category = (payload.get("category") or "").strip()
+    if not category:
+        errors["category"] = "Category is required."
+    elif category not in SUPPLIER_CATEGORIES:
+        errors["category"] = "Invalid category."
+
+    vehicle_no_1 = _strip_or_none(payload.get("vehicle_no_1"))
+    vehicle_no_2 = _strip_or_none(payload.get("vehicle_no_2"))
+    vehicle_no_3 = _strip_or_none(payload.get("vehicle_no_3"))
+
+    if category == "Raw Material" and not vehicle_no_1:
+        errors["vehicle_no_1"] = "Vehicle number is required for Raw Material suppliers."
+
+    supplier_id_no = (payload.get("supplier_id_no") or "").strip()
+    if not supplier_id_no:
+        errors["supplier_id_no"] = "Supplier ID number is required."
+
+    credit_period = (payload.get("credit_period") or "").strip()
+    if not credit_period:
+        errors["credit_period"] = "Credit period is required."
+    elif credit_period not in CREDIT_PERIOD_OPTIONS:
+        errors["credit_period"] = "Invalid credit period."
+
+    email = _strip_or_none(payload.get("email"))
+    address = _strip_or_none(payload.get("address"))
+    tax_id = _strip_or_none(payload.get("tax_id"))
+
     if errors:
         raise MaterialValidationError(errors)
 
     supplier = Supplier(
         name=name,
-        phone=(payload.get("phone") or None),
-        email=(payload.get("email") or None),
-        address=(payload.get("address") or None),
-        tax_id=(payload.get("tax_id") or None),
+        primary_phone=primary_phone,
+        secondary_phone=secondary_phone,
+        category=category,
+        vehicle_no_1=vehicle_no_1,
+        vehicle_no_2=vehicle_no_2,
+        vehicle_no_3=vehicle_no_3,
+        supplier_id_no=supplier_id_no,
+        supplier_reg_no=get_next_supplier_registration_no(),
+        credit_period=credit_period,
+        email=email,
+        address=address,
+        tax_id=tax_id,
     )
     db.session.add(supplier)
     try:
         db.session.commit()
     except IntegrityError as exc:  # pragma: no cover - database error branch
         db.session.rollback()
-        if "suppliers_name_key" in str(exc.orig).lower() or "unique constraint" in str(exc.orig).lower():
+        message = str(exc.orig).lower()
+        if "suppliers_name_key" in message or "unique constraint" in message and "suppliers" in message and "name" in message:
             raise MaterialValidationError({"name": "A supplier with this name already exists."}) from exc
+        if "supplier_reg_no" in message:
+            raise MaterialValidationError({"supplier_reg_no": "Unable to assign a registration number. Please try again."}) from exc
         raise
     return supplier
 

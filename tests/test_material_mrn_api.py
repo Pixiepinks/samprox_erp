@@ -146,6 +146,22 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         errors = duplicate_response.get_json().get("errors")
         self.assertIn("mrn_no", errors)
 
+    def test_qty_ton_rounding_to_zero_returns_validation_error(self):
+        payload = self._default_payload()
+        payload.update(
+            {
+                "mrn_no": "MRN-SMALL-WEIGHT",
+                "weigh_in_weight_kg": 1000,
+                "weigh_out_weight_kg": 1000.4,
+            }
+        )
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("errors", data)
+        self.assertEqual(data["errors"].get("qty_ton"), "Quantity must be greater than 0.")
+
     def test_list_mrn_returns_recent_entries(self):
         first = self._create_mrn()
         second = self._create_mrn(

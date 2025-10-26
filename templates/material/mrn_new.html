@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Material Receipt Note | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+    <style>
+        .content-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px 20px;
+        }
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .field label {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .field input,
+        .field select,
+        .field textarea {
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+        }
+        .field input[readonly] {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+        .helper {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .text-red {
+            color: #dc2626;
+        }
+        .error-text {
+            font-size: 0.8rem;
+            color: #dc2626;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        .button-primary {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .button-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .button-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.2);
+        }
+        .button-secondary {
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .button-secondary:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .supplier-dropdown {
+            position: relative;
+        }
+        .supplier-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            width: 100%;
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+            max-height: 240px;
+            overflow-y: auto;
+            z-index: 30;
+            display: none;
+        }
+        .supplier-menu.active {
+            display: block;
+        }
+        .supplier-option {
+            width: 100%;
+            background: transparent;
+            border: none;
+            text-align: left;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+        .supplier-option:hover,
+        .supplier-option:focus {
+            background: #eef2ff;
+            outline: none;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+        }
+        .modal-backdrop.active {
+            display: flex;
+        }
+        .modal-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            width: min(480px, 90vw);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-close {
+            background: transparent;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .alert {
+            background: rgba(220, 38, 38, 0.08);
+            border: 1px solid rgba(220, 38, 38, 0.4);
+            color: #b91c1c;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Material Control</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link" href="{{ url_for('ui.mind_page') }}">Mind</a>
+            <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
+            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.material_page') }}">Material</a>
+            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <h1>Material Receipt Note (MRN)</h1>
+                <p class="section__description">Capture an incoming load and automatically compute approved rates.</p>
+            </header>
+            <div class="content-card">
+                <form id="mrn-form" novalidate>
+                    <div id="form-alert" class="alert" style="display: none;"></div>
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="mrn-date">Date<span class="text-red"> *</span></label>
+                            <input id="mrn-date" name="date" type="date" required />
+                            <p class="error-text" data-error-for="date"></p>
+                        </div>
+                        <div class="field">
+                            <label for="mrn-no">MRN No<span class="text-red"> *</span></label>
+                            <input id="mrn-no" name="mrn_no" type="text" placeholder="Enter MRN reference" required />
+                            <p class="error-text" data-error-for="mrn_no"></p>
+                        </div>
+                        <div class="field supplier-dropdown">
+                            <label for="supplier-search">Supplier<span class="text-red"> *</span></label>
+                            <input id="supplier-search" type="text" placeholder="Search suppliers" autocomplete="off" />
+                            <input id="supplier-id" type="hidden" name="supplier_id" />
+                            <div id="supplier-menu" class="supplier-menu"></div>
+                            <p class="helper">Start typing to search existing suppliers or create a new one.</p>
+                            <p class="error-text" data-error-for="supplier_id"></p>
+                        </div>
+                        <div class="field">
+                            <label for="supplier-name-free">Supplier name (ad-hoc)</label>
+                            <input id="supplier-name-free" type="text" placeholder="If supplier isn't in the list" />
+                            <p class="error-text" data-error-for="supplier_name_free"></p>
+                        </div>
+                        <div class="field">
+                            <label for="category">Material Category<span class="text-red"> *</span></label>
+                            <select id="category" name="category_id" required>
+                                <option value="" disabled selected>Select category</option>
+                                {% for category in categories %}
+                                <option value="{{ category.id }}">{{ category.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="error-text" data-error-for="category_id"></p>
+                        </div>
+                        <div class="field">
+                            <label for="material-type">Material Type<span class="text-red"> *</span></label>
+                            <select id="material-type" name="material_type_id" required>
+                                <option value="" disabled selected>Select type</option>
+                            </select>
+                            <p class="error-text" data-error-for="material_type_id"></p>
+                        </div>
+                        <div class="field">
+                            <label for="qty-ton">Qty (Ton)<span class="text-red"> *</span></label>
+                            <input id="qty-ton" name="qty_ton" type="number" min="0" step="0.001" placeholder="0.000" required />
+                            <p class="error-text" data-error-for="qty_ton"></p>
+                        </div>
+                        <div class="field">
+                            <label for="unit-price">Unit Price<span class="text-red"> *</span></label>
+                            <input id="unit-price" name="unit_price" type="number" min="0" step="0.01" placeholder="0.00" required />
+                            <p class="error-text" data-error-for="unit_price"></p>
+                        </div>
+                        <div class="field">
+                            <label for="wet-factor">Wet Factor</label>
+                            <input id="wet-factor" name="wet_factor" type="number" min="0" step="0.001" value="1.000" />
+                            <p class="error-text" data-error-for="wet_factor"></p>
+                        </div>
+                        <div class="field">
+                            <label for="approved-unit-price">Approved Unit Price</label>
+                            <input id="approved-unit-price" type="text" value="0.00" readonly />
+                            <p class="helper">Calculated as Unit Price × Wet Factor.</p>
+                        </div>
+                        <div class="field">
+                            <label for="amount">Amount</label>
+                            <input id="amount" type="text" value="0.00" readonly />
+                            <p class="helper">Calculated as Qty × Approved Unit Price.</p>
+                        </div>
+                        <div class="field">
+                            <label for="weighing-slip">Weighing Slip No<span class="text-red"> *</span></label>
+                            <input id="weighing-slip" name="weighing_slip_no" type="text" placeholder="Enter slip number" required />
+                            <p class="error-text" data-error-for="weighing_slip_no"></p>
+                        </div>
+                        <div class="field">
+                            <label for="weigh-in">Weigh Bridge In-time<span class="text-red"> *</span></label>
+                            <input id="weigh-in" name="weigh_in_time" type="datetime-local" required />
+                            <p class="error-text" data-error-for="weigh_in_time"></p>
+                        </div>
+                        <div class="field">
+                            <label for="weigh-out">Weigh Bridge Out-time<span class="text-red"> *</span></label>
+                            <input id="weigh-out" name="weigh_out_time" type="datetime-local" required />
+                            <p class="error-text" data-error-for="weigh_out_time"></p>
+                        </div>
+                        <div class="field">
+                            <label for="security-officer">Security Officer Name<span class="text-red"> *</span></label>
+                            <input id="security-officer" name="security_officer_name" type="text" required />
+                            <p class="error-text" data-error-for="security_officer_name"></p>
+                        </div>
+                        <div class="field">
+                            <label for="authorized-person">Authorized Person Name<span class="text-red"> *</span></label>
+                            <input id="authorized-person" name="authorized_person_name" type="text" required />
+                            <p class="error-text" data-error-for="authorized_person_name"></p>
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button type="button" class="button-secondary" id="reset-form">Reset</button>
+                        <button type="submit" class="button-primary" id="submit-btn">Save MRN</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div id="supplier-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="supplier-modal-title">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="supplier-modal-title">Create new supplier</h2>
+                <button type="button" class="modal-close" id="close-supplier-modal" aria-label="Close">×</button>
+            </div>
+            <form id="supplier-form" novalidate>
+                <div class="field">
+                    <label for="supplier-name">Supplier Name<span class="text-red"> *</span></label>
+                    <input id="supplier-name" name="name" type="text" required />
+                    <p class="error-text" data-error-for="modal_name"></p>
+                </div>
+                <div class="field">
+                    <label for="supplier-phone">Phone</label>
+                    <input id="supplier-phone" name="phone" type="text" />
+                </div>
+                <div class="field">
+                    <label for="supplier-email">Email</label>
+                    <input id="supplier-email" name="email" type="email" />
+                </div>
+                <div class="field">
+                    <label for="supplier-address">Address</label>
+                    <textarea id="supplier-address" name="address" rows="2"></textarea>
+                </div>
+                <div class="field">
+                    <label for="supplier-tax">Tax ID</label>
+                    <input id="supplier-tax" name="tax_id" type="text" />
+                </div>
+                <div id="supplier-modal-alert" class="alert" style="display: none;"></div>
+                <div class="actions">
+                    <button type="button" class="button-secondary" id="cancel-supplier">Cancel</button>
+                    <button type="submit" class="button-primary" id="save-supplier">Save Supplier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            technician: "Technician",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+
+        const supplierInput = document.getElementById("supplier-search");
+        const supplierIdInput = document.getElementById("supplier-id");
+        const supplierMenu = document.getElementById("supplier-menu");
+        const supplierNameFreeInput = document.getElementById("supplier-name-free");
+        const mrnForm = document.getElementById("mrn-form");
+        const submitBtn = document.getElementById("submit-btn");
+        const formAlert = document.getElementById("form-alert");
+        const resetBtn = document.getElementById("reset-form");
+        const unitPriceInput = document.getElementById("unit-price");
+        const wetFactorInput = document.getElementById("wet-factor");
+        const approvedUnitPriceInput = document.getElementById("approved-unit-price");
+        const qtyInput = document.getElementById("qty-ton");
+        const amountInput = document.getElementById("amount");
+        const categorySelect = document.getElementById("category");
+        const materialTypeSelect = document.getElementById("material-type");
+
+        const supplierModal = document.getElementById("supplier-modal");
+        const supplierModalAlert = document.getElementById("supplier-modal-alert");
+        const supplierModalClose = document.getElementById("close-supplier-modal");
+        const supplierModalCancel = document.getElementById("cancel-supplier");
+        const supplierModalForm = document.getElementById("supplier-form");
+
+        function clearErrors() {
+            formAlert.style.display = "none";
+            formAlert.textContent = "";
+            document.querySelectorAll("[data-error-for]").forEach((node) => {
+                node.textContent = "";
+            });
+        }
+
+        function setError(field, message) {
+            const target = document.querySelector(`[data-error-for="${field}"]`);
+            if (target) {
+                target.textContent = message;
+            } else {
+                formAlert.style.display = "block";
+                formAlert.textContent = message;
+            }
+        }
+
+        function setModalError(message) {
+            if (!message) {
+                supplierModalAlert.style.display = "none";
+                supplierModalAlert.textContent = "";
+                return;
+            }
+            supplierModalAlert.style.display = "block";
+            supplierModalAlert.textContent = message;
+        }
+
+        function toFixed(value, precision) {
+            const factor = Math.pow(10, precision);
+            return (Math.round(value * factor) / factor).toFixed(precision);
+        }
+
+        function updateApprovedUnitPrice() {
+            const unit = parseFloat(unitPriceInput.value) || 0;
+            const wet = parseFloat(wetFactorInput.value) || 0;
+            const approved = toFixed(unit * wet, 2);
+            approvedUnitPriceInput.value = approved;
+            updateAmount();
+        }
+
+        function updateAmount() {
+            const qty = parseFloat(qtyInput.value) || 0;
+            const approved = parseFloat(approvedUnitPriceInput.value) || 0;
+            amountInput.value = toFixed(qty * approved, 2);
+        }
+
+        unitPriceInput.addEventListener("input", updateApprovedUnitPrice);
+        wetFactorInput.addEventListener("input", updateApprovedUnitPrice);
+        qtyInput.addEventListener("input", updateAmount);
+
+        function toggleSupplierMenu(show) {
+            if (show) {
+                supplierMenu.classList.add("active");
+            } else {
+                supplierMenu.classList.remove("active");
+            }
+        }
+
+        async function fetchSuppliers(query = "") {
+            const url = new URL("/api/material/suppliers", window.location.origin);
+            if (query) {
+                url.searchParams.set("search", query);
+            }
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error("Failed to load suppliers");
+                }
+                const suppliers = await response.json();
+                renderSupplierMenu(suppliers);
+            } catch (error) {
+                renderSupplierMenu([]);
+                formAlert.style.display = "block";
+                formAlert.textContent = "Unable to load suppliers. Please try again.";
+            }
+        }
+
+        function renderSupplierMenu(suppliers) {
+            supplierMenu.innerHTML = "";
+            const createBtn = document.createElement("button");
+            createBtn.type = "button";
+            createBtn.className = "supplier-option";
+            createBtn.textContent = "➕ Create new supplier…";
+            createBtn.addEventListener("click", () => {
+                toggleSupplierMenu(false);
+                openSupplierModal();
+            });
+            supplierMenu.appendChild(createBtn);
+
+            if (suppliers.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "supplier-option";
+                empty.textContent = "No suppliers found";
+                empty.setAttribute("aria-disabled", "true");
+                empty.style.cursor = "default";
+                supplierMenu.appendChild(empty);
+                return;
+            }
+
+            suppliers.forEach((supplier) => {
+                const option = document.createElement("button");
+                option.type = "button";
+                option.className = "supplier-option";
+                option.textContent = supplier.name;
+                option.dataset.id = supplier.id;
+                option.addEventListener("click", () => {
+                    supplierInput.value = supplier.name;
+                    supplierIdInput.value = supplier.id;
+                    supplierNameFreeInput.value = "";
+                    toggleSupplierMenu(false);
+                });
+                supplierMenu.appendChild(option);
+            });
+        }
+
+        supplierInput.addEventListener("focus", () => {
+            fetchSuppliers("");
+            toggleSupplierMenu(true);
+        });
+
+        supplierInput.addEventListener("input", (event) => {
+            const value = event.target.value;
+            supplierIdInput.value = "";
+            fetchSuppliers(value);
+        });
+
+        document.addEventListener("click", (event) => {
+            if (!supplierMenu.contains(event.target) && event.target !== supplierInput) {
+                toggleSupplierMenu(false);
+            }
+        });
+
+        supplierNameFreeInput.addEventListener("input", () => {
+            if (supplierNameFreeInput.value.trim()) {
+                supplierIdInput.value = "";
+                supplierInput.value = "";
+            }
+        });
+
+        function openSupplierModal() {
+            supplierModal.classList.add("active");
+            setModalError("");
+            supplierModalForm.reset();
+            supplierModal.querySelector("#supplier-name").focus();
+        }
+
+        function closeSupplierModal() {
+            supplierModal.classList.remove("active");
+        }
+
+        supplierModalClose.addEventListener("click", closeSupplierModal);
+        supplierModalCancel.addEventListener("click", closeSupplierModal);
+
+        supplierModal.addEventListener("click", (event) => {
+            if (event.target === supplierModal) {
+                closeSupplierModal();
+            }
+        });
+
+        supplierModalForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setModalError("");
+            document.querySelector("[data-error-for='modal_name']").textContent = "";
+
+            const formData = new FormData(supplierModalForm);
+            const payload = Object.fromEntries(formData.entries());
+            payload.name = (payload.name || "").trim();
+            if (!payload.name) {
+                document.querySelector("[data-error-for='modal_name']").textContent = "Supplier name is required.";
+                return;
+            }
+
+            supplierModalForm.querySelector("#save-supplier").disabled = true;
+            try {
+                const response = await fetch("/api/material/suppliers", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    const message = data?.errors?.name || "Unable to save supplier.";
+                    setModalError(message);
+                    return;
+                }
+                supplierInput.value = data.name;
+                supplierIdInput.value = data.id;
+                supplierNameFreeInput.value = "";
+                closeSupplierModal();
+            } catch (error) {
+                setModalError("Network error. Please try again.");
+            } finally {
+                supplierModalForm.querySelector("#save-supplier").disabled = false;
+            }
+        });
+
+        resetBtn.addEventListener("click", () => {
+            mrnForm.reset();
+            supplierInput.value = "";
+            supplierIdInput.value = "";
+            supplierNameFreeInput.value = "";
+            approvedUnitPriceInput.value = "0.00";
+            amountInput.value = "0.00";
+            clearErrors();
+        });
+
+        async function loadMaterialTypes(categoryId) {
+            materialTypeSelect.innerHTML = '<option value="" disabled selected>Loading…</option>';
+            if (!categoryId) {
+                materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/material/types?category_id=${encodeURIComponent(categoryId)}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
+                    throw new Error(data?.errors?.category_id || "Unable to load types");
+                }
+                if (!Array.isArray(data) || data.length === 0) {
+                    materialTypeSelect.innerHTML = '<option value="" disabled selected>No active types</option>';
+                    return;
+                }
+                materialTypeSelect.innerHTML = '<option value="" disabled selected>Select type</option>';
+                data.forEach((item) => {
+                    const option = document.createElement("option");
+                    option.value = item.id;
+                    option.textContent = item.name;
+                    materialTypeSelect.appendChild(option);
+                });
+            } catch (error) {
+                formAlert.style.display = "block";
+                formAlert.textContent = error.message;
+            }
+        }
+
+        categorySelect.addEventListener("change", (event) => {
+            loadMaterialTypes(event.target.value);
+        });
+
+        function validateForm() {
+            const errors = {};
+            const formData = new FormData(mrnForm);
+            const qtyValue = parseFloat(formData.get("qty_ton"));
+            const unitValue = parseFloat(formData.get("unit_price"));
+            const wetValue = parseFloat(formData.get("wet_factor"));
+
+            ["date", "mrn_no", "weighing_slip_no", "weigh_in_time", "weigh_out_time", "security_officer_name", "authorized_person_name", "category_id", "material_type_id"].forEach((field) => {
+                if (!(formData.get(field) || "").trim()) {
+                    errors[field] = "This field is required.";
+                }
+            });
+
+            if (!supplierIdInput.value && !(supplierNameFreeInput.value || "").trim()) {
+                errors["supplier_id"] = "Select a supplier or enter a name.";
+            }
+
+            if (Number.isNaN(qtyValue) || qtyValue <= 0) {
+                errors["qty_ton"] = "Quantity must be greater than 0.";
+            }
+            if (Number.isNaN(unitValue) || unitValue < 0) {
+                errors["unit_price"] = "Unit price must be zero or greater.";
+            }
+            if (wetValue < 0 || Number.isNaN(wetValue)) {
+                errors["wet_factor"] = "Wet factor must be zero or greater.";
+            }
+
+            const weighIn = formData.get("weigh_in_time");
+            const weighOut = formData.get("weigh_out_time");
+            if (weighIn && weighOut) {
+                const inDate = new Date(weighIn);
+                const outDate = new Date(weighOut);
+                if (inDate > outDate) {
+                    errors["weigh_out_time"] = "Out-time must be after in-time.";
+                }
+            }
+
+            return errors;
+        }
+
+        mrnForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearErrors();
+            submitBtn.disabled = true;
+
+            const errors = validateForm();
+            if (Object.keys(errors).length > 0) {
+                Object.entries(errors).forEach(([field, message]) => setError(field, message));
+                submitBtn.disabled = false;
+                return;
+            }
+
+            const formData = new FormData(mrnForm);
+            const payload = Object.fromEntries(formData.entries());
+            payload.qty_ton = parseFloat(payload.qty_ton);
+            payload.unit_price = parseFloat(payload.unit_price);
+            payload.wet_factor = payload.wet_factor ? parseFloat(payload.wet_factor) : 1;
+            payload.weigh_in_time = new Date(payload.weigh_in_time).toISOString();
+            payload.weigh_out_time = new Date(payload.weigh_out_time).toISOString();
+            payload.supplier_id = supplierIdInput.value || undefined;
+            payload.supplier_name_free = (supplierNameFreeInput.value || "").trim() || undefined;
+
+            try {
+                const response = await fetch("/api/material/mrn", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    const serverErrors = data?.errors || {};
+                    Object.entries(serverErrors).forEach(([field, message]) => setError(field, message));
+                    if (Object.keys(serverErrors).length === 0) {
+                        formAlert.style.display = "block";
+                        formAlert.textContent = "Unable to save MRN. Please review your inputs.";
+                    }
+                    return;
+                }
+                window.location.href = `/material/mrn/${data.id}`;
+            } catch (error) {
+                formAlert.style.display = "block";
+                formAlert.textContent = "Network error. Please try again.";
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        if (categorySelect.value) {
+            loadMaterialTypes(categorySelect.value);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+import importlib
+import os
+import sys
+import unittest
+from datetime import datetime, timezone
+
+
+class MaterialMRNApiTestCase(unittest.TestCase):
+    def setUp(self):
+        os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+        if "app" in sys.modules:
+            self.app_module = importlib.reload(sys.modules["app"])
+        else:
+            self.app_module = importlib.import_module("app")
+
+        self.app = self.app_module.create_app()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+        self.app_module.db.create_all()
+
+        from material import seed_material_defaults
+
+        seed_material_defaults()
+
+        self.client = self.app.test_client()
+        self.Supplier = self.app_module.Supplier
+        self.MaterialCategory = self.app_module.MaterialCategory
+        self.MaterialType = self.app_module.MaterialType
+        self.MRNHeader = self.app_module.MRNHeader
+
+    def tearDown(self):
+        self.app_module.db.session.remove()
+        self.app_module.db.drop_all()
+        self.ctx.pop()
+        os.environ.pop("DATABASE_URL", None)
+        if "app" in sys.modules:
+            del sys.modules["app"]
+
+    def _create_supplier(self, name="Acme Timber"):
+        existing = self.Supplier.query.filter_by(name=name).first()
+        if existing:
+            return existing
+        supplier = self.Supplier(name=name)
+        self.app_module.db.session.add(supplier)
+        self.app_module.db.session.commit()
+        return supplier
+
+    def _default_payload(self):
+        category = self.MaterialCategory.query.filter_by(name="Product Material").first()
+        material_type = self.MaterialType.query.filter_by(name="wood shaving").first()
+        supplier = self._create_supplier()
+        weigh_in = datetime(2024, 8, 10, 9, 0, tzinfo=timezone.utc)
+        weigh_out = datetime(2024, 8, 10, 10, 0, tzinfo=timezone.utc)
+        return {
+            "mrn_no": "MRN-001",
+            "date": "2024-08-10",
+            "supplier_id": str(supplier.id),
+            "category_id": str(category.id),
+            "material_type_id": str(material_type.id),
+            "qty_ton": 12.345,
+            "unit_price": 95.5,
+            "wet_factor": 1.1,
+            "weighing_slip_no": "WS-9001",
+            "weigh_in_time": weigh_in.isoformat(),
+            "weigh_out_time": weigh_out.isoformat(),
+            "security_officer_name": "Officer Jane",
+            "authorized_person_name": "Manager John",
+            "approved_unit_price": 5,  # should be ignored by server
+            "amount": 1,
+        }
+
+    def test_create_mrn_success(self):
+        payload = self._default_payload()
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+
+        self.assertIn("id", data)
+        self.assertEqual(data["mrn_no"], payload["mrn_no"])
+        self.assertEqual(data["approved_unit_price"], "105.05")
+        self.assertEqual(data["amount"], "1296.84")
+        self.assertEqual(data["supplier_id"], payload["supplier_id"])
+
+        mrn = self.MRNHeader.query.filter_by(mrn_no=payload["mrn_no"]).first()
+        self.assertIsNotNone(mrn)
+        self.assertAlmostEqual(float(mrn.approved_unit_price), 105.05)
+        self.assertAlmostEqual(float(mrn.amount), 1296.84)
+
+    def test_create_mrn_validation_errors(self):
+        payload = self._default_payload()
+        payload["mrn_no"] = ""
+        payload["qty_ton"] = -1
+        payload["weigh_out_time"] = datetime(2024, 8, 10, 8, 30, tzinfo=timezone.utc).isoformat()
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("errors", data)
+        self.assertIn("mrn_no", data["errors"])
+        self.assertIn("qty_ton", data["errors"])
+        self.assertNotIn("weigh_out_time", data["errors"])
+
+        # weigh-out validation should trigger when other fields are valid
+        valid_payload = self._default_payload()
+        valid_payload["weigh_out_time"] = datetime(2024, 8, 10, 8, 30, tzinfo=timezone.utc).isoformat()
+        response = self.client.post("/api/material/mrn", json=valid_payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("weigh_out_time", data["errors"])
+
+    def test_mrn_number_must_be_unique(self):
+        payload = self._default_payload()
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 201)
+
+        duplicate_response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(duplicate_response.status_code, 400)
+        errors = duplicate_response.get_json().get("errors")
+        self.assertIn("mrn_no", errors)
+

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MRN {{ mrn.mrn_no }} | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+    <style>
+        .content-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px 20px;
+        }
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .summary-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+        }
+        .summary-value {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        .button-secondary {
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .button-secondary:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .print-button {
+            background: linear-gradient(135deg, #059669, #047857);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 12px 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .print-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(5, 150, 105, 0.18);
+        }
+        @media print {
+            body {
+                background: #fff;
+            }
+            .topbar,
+            .subnav,
+            .actions,
+            #logout {
+                display: none !important;
+            }
+            .page {
+                padding: 24px;
+            }
+            .content-card {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Material Control</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link" href="{{ url_for('ui.mind_page') }}">Mind</a>
+            <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
+            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.material_page') }}">Material</a>
+            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <h1>MRN {{ mrn.mrn_no }}</h1>
+                <p class="section__description">Review details of the recorded material receipt.</p>
+            </header>
+            <div class="actions">
+                <a class="button-secondary" href="{{ url_for('ui.material_mrn_new_page') }}">Record another MRN</a>
+                <button type="button" class="print-button" onclick="window.print()">Print</button>
+            </div>
+            <div class="content-card">
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="summary-label">Date</span>
+                        <span class="summary-value">{{ mrn.date.strftime('%Y-%m-%d') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">MRN Number</span>
+                        <span class="summary-value">{{ mrn.mrn_no }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Supplier</span>
+                        <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else mrn.supplier_name_free }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Material Category</span>
+                        <span class="summary-value">{{ mrn.category.name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Material Type</span>
+                        <span class="summary-value">{{ mrn.material_type.name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Qty (Ton)</span>
+                        <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Unit Price</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.unit_price) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Wet Factor</span>
+                        <span class="summary-value">{{ '%.3f'|format(mrn.wet_factor) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Approved Unit Price</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.approved_unit_price) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Amount</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Weighing Slip No</span>
+                        <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Weigh Bridge In-time</span>
+                        <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Weigh Bridge Out-time</span>
+                        <span class="summary-value">{{ mrn.weigh_out_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Security Officer</span>
+                        <span class="summary-value">{{ mrn.security_officer_name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Authorized Person</span>
+                        <span class="summary-value">{{ mrn.authorized_person_name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Recorded At</span>
+                        <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            technician: "Technician",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+    </script>
+</body>
+</html>

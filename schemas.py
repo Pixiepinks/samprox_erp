@@ -205,6 +205,54 @@ class MachinePartReplacementSchema(Schema):
     notes = fields.Str(allow_none=True)
 
 
+class SupplierSchema(Schema):
+    id = fields.UUID()
+    name = fields.Str(required=True)
+    phone = fields.Str(allow_none=True)
+    email = fields.Str(allow_none=True)
+    address = fields.Str(allow_none=True)
+    tax_id = fields.Str(allow_none=True, data_key="taxId")
+
+
+class MaterialCategorySchema(Schema):
+    id = fields.UUID()
+    name = fields.Str(required=True)
+
+
+class MaterialTypeSchema(Schema):
+    id = fields.UUID()
+    category_id = fields.UUID()
+    name = fields.Str(required=True)
+    is_active = fields.Bool()
+
+
+class MRNSchema(Schema):
+    id = fields.UUID()
+    mrn_no = fields.Str(required=True)
+    date = fields.Date(required=True)
+    supplier_id = fields.UUID(allow_none=True)
+    supplier_name_free = fields.Str(allow_none=True)
+    category_id = fields.UUID(required=True)
+    material_type_id = fields.UUID(required=True)
+    qty_ton = fields.Decimal(as_string=True)
+    unit_price = fields.Decimal(as_string=True)
+    wet_factor = fields.Decimal(as_string=True)
+    approved_unit_price = fields.Decimal(as_string=True)
+    amount = fields.Decimal(as_string=True)
+    weighing_slip_no = fields.Str()
+    weigh_in_time = fields.DateTime()
+    weigh_out_time = fields.DateTime()
+    security_officer_name = fields.Str()
+    authorized_person_name = fields.Str()
+    created_by = fields.Int(allow_none=True)
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+
+    supplier = fields.Nested(SupplierSchema, allow_none=True)
+    category = fields.Nested(MaterialCategorySchema)
+    material_type = fields.Nested(MaterialTypeSchema)
+
+
 class MachinePartSchema(Schema):
     id = fields.Int()
     asset_id = fields.Int()

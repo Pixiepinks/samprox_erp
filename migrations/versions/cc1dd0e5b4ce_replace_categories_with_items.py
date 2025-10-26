@@ -6,6 +6,10 @@ from alembic import op
 import sqlalchemy as sa
 
 
+def _is_sqlite() -> bool:
+    return op.get_bind().dialect.name == "sqlite"
+
+
 # revision identifiers, used by Alembic.
 revision = "cc1dd0e5b4ce"
 down_revision = "7d4694ff3d6f"
@@ -25,13 +29,17 @@ def upgrade() -> None:
     )
 
     op.add_column("mrn_headers", sa.Column("item_id", sa.String(length=36), nullable=True))
-    op.create_foreign_key(
-        "fk_mrn_headers_item",
-        "mrn_headers",
-        "material_items",
-        ["item_id"],
-        ["id"],
-    )
+
+    if _is_sqlite():
+        fk_creator = lambda: None
+    else:
+        fk_creator = lambda: op.create_foreign_key(
+            "fk_mrn_headers_item",
+            "mrn_headers",
+            "material_items",
+            ["item_id"],
+            ["id"],
+        )
 
     bind = op.get_bind()
     material_items_table = sa.Table(
@@ -77,12 +85,24 @@ def upgrade() -> None:
                 {"item_id": item_id, "id": mrn.id},
             )
 
-    op.alter_column("mrn_headers", "item_id", existing_type=sa.String(length=36), nullable=False)
-
-    op.drop_constraint("mrn_headers_material_type_id_fkey", "mrn_headers", type_="foreignkey")
-    op.drop_constraint("mrn_headers_category_id_fkey", "mrn_headers", type_="foreignkey")
-    op.drop_column("mrn_headers", "material_type_id")
-    op.drop_column("mrn_headers", "category_id")
+    if _is_sqlite():
+        with op.batch_alter_table("mrn_headers", recreate="always") as batch_op:
+            batch_op.drop_column("material_type_id")
+            batch_op.drop_column("category_id")
+            batch_op.alter_column("item_id", existing_type=sa.String(length=36), nullable=False)
+            batch_op.create_foreign_key(
+                "fk_mrn_headers_item",
+                "material_items",
+                ["item_id"],
+                ["id"],
+            )
+    else:
+        fk_creator()
+        op.alter_column("mrn_headers", "item_id", existing_type=sa.String(length=36), nullable=False)
+        op.drop_constraint("mrn_headers_material_type_id_fkey", "mrn_headers", type_="foreignkey")
+        op.drop_constraint("mrn_headers_category_id_fkey", "mrn_headers", type_="foreignkey")
+        op.drop_column("mrn_headers", "material_type_id")
+        op.drop_column("mrn_headers", "category_id")
 
     op.drop_table("material_types")
     op.drop_table("material_categories")
@@ -110,20 +130,39 @@ def downgrade() -> None:
 
     op.add_column("mrn_headers", sa.Column("category_id", sa.String(length=36), nullable=True))
     op.add_column("mrn_headers", sa.Column("material_type_id", sa.String(length=36), nullable=True))
-    op.create_foreign_key(
-        "mrn_headers_category_id_fkey",
-        "mrn_headers",
-        "material_categories",
-        ["category_id"],
-        ["id"],
-    )
-    op.create_foreign_key(
-        "mrn_headers_material_type_id_fkey",
-        "mrn_headers",
-        "material_types",
-        ["material_type_id"],
-        ["id"],
-    )
+
+    if _is_sqlite():
+        fk_recreator = lambda batch_op: (
+            batch_op.create_foreign_key(
+                "mrn_headers_category_id_fkey",
+                "material_categories",
+                ["category_id"],
+                ["id"],
+            ),
+            batch_op.create_foreign_key(
+                "mrn_headers_material_type_id_fkey",
+                "material_types",
+                ["material_type_id"],
+                ["id"],
+            ),
+        )
+    else:
+        fk_recreator = lambda _: (
+            op.create_foreign_key(
+                "mrn_headers_category_id_fkey",
+                "mrn_headers",
+                "material_categories",
+                ["category_id"],
+                ["id"],
+            ),
+            op.create_foreign_key(
+                "mrn_headers_material_type_id_fkey",
+                "mrn_headers",
+                "material_types",
+                ["material_type_id"],
+                ["id"],
+            ),
+        )
 
     bind = op.get_bind()
     categories_table = sa.Table(
@@ -174,9 +213,17 @@ def downgrade() -> None:
                 {"category_id": category_id, "material_type_id": type_id, "id": mrn.id},
             )
 
-    op.alter_column("mrn_headers", "category_id", existing_type=sa.String(length=36), nullable=False)
-    op.alter_column("mrn_headers", "material_type_id", existing_type=sa.String(length=36), nullable=False)
+    if _is_sqlite():
+        with op.batch_alter_table("mrn_headers", recreate="always") as batch_op:
+            batch_op.drop_column("item_id")
+            fk_recreator(batch_op)
+            batch_op.alter_column("category_id", existing_type=sa.String(length=36), nullable=False)
+            batch_op.alter_column("material_type_id", existing_type=sa.String(length=36), nullable=False)
+    else:
+        op.drop_constraint("fk_mrn_headers_item", "mrn_headers", type_="foreignkey")
+        op.drop_column("mrn_headers", "item_id")
+        fk_recreator(None)
+        op.alter_column("mrn_headers", "category_id", existing_type=sa.String(length=36), nullable=False)
+        op.alter_column("mrn_headers", "material_type_id", existing_type=sa.String(length=36), nullable=False)
 
-    op.drop_constraint("fk_mrn_headers_item", "mrn_headers", type_="foreignkey")
-    op.drop_column("mrn_headers", "item_id")
     op.drop_table("material_items")

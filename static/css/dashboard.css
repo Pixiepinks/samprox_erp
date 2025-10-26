@@ -656,6 +656,136 @@ body {
     padding: 1.5rem;
 }
 
+.material-receipts-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    background: rgba(248, 250, 252, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 20px;
+    padding: 1.5rem;
+}
+
+.material-receipts-card__header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.material-receipts-card__title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.material-receipts-card__meta {
+    margin: 0.1rem 0 0;
+    color: #475569;
+    font-size: 0.95rem;
+}
+
+.material-receipts-card__search {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.material-receipts-card__actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.material-receipts-card__search input[type="search"] {
+    flex: 1 1 240px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 12px;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: #ffffff;
+}
+
+.material-receipts-card__search input[type="search"]:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: #ffffff;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+.data-table thead {
+    background: rgba(241, 245, 249, 0.7);
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.9rem 1.1rem;
+    text-align: left;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.data-table th {
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+}
+
+.data-table tbody tr {
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    transition: background 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.data-table__link {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+}
+
+.data-table__link:focus,
+.data-table__link:hover {
+    text-decoration: underline;
+}
+
+.empty-state {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #475569;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .production-card__header {
     display: flex;
     flex-wrap: wrap;

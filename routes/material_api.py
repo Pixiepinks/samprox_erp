@@ -12,6 +12,7 @@ from material import (
     create_supplier,
     get_mrn_detail,
     list_active_material_types,
+    list_recent_mrns,
     search_suppliers,
 )
 from models import MaterialCategory
@@ -23,6 +24,7 @@ supplier_schema = SupplierSchema()
 suppliers_schema = SupplierSchema(many=True)
 material_type_schema = MaterialTypeSchema(many=True)
 mrn_schema = MRNSchema()
+mrn_list_schema = MRNSchema(many=True)
 
 
 @bp.get("/suppliers")
@@ -62,6 +64,18 @@ def list_types():
 
     material_types = list_active_material_types(category.id)
     return jsonify(material_type_schema.dump(material_types))
+
+
+@bp.get("/mrn")
+def list_mrn_entries():
+    search = request.args.get("q")
+    try:
+        limit = int(request.args.get("limit", 20))
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 100))
+    mrns = list_recent_mrns(search=search, limit=limit)
+    return jsonify(mrn_list_schema.dump(mrns))
 
 
 @bp.post("/mrn")

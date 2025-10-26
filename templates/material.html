@@ -72,6 +72,47 @@
                     </p>
                 </article>
             </div>
+            <div class="material-receipts-card">
+                <div class="material-receipts-card__header">
+                    <div>
+                        <h2 class="material-receipts-card__title">Material receipts</h2>
+                        <p class="material-receipts-card__meta">
+                            Review the latest material receipt notes recorded by your team.
+                        </p>
+                    </div>
+                    <a class="button" href="{{ url_for('ui.material_mrn_new_page') }}">Record material receipt</a>
+                </div>
+                <form class="material-receipts-card__search" id="mrn-search-form">
+                    <label class="sr-only" for="mrn-search-input">Search material receipts</label>
+                    <input
+                        id="mrn-search-input"
+                        type="search"
+                        name="q"
+                        placeholder="Search by MRN number, supplier, or material"
+                        autocomplete="off"
+                    />
+                    <div class="material-receipts-card__actions">
+                        <button type="submit" class="button button--secondary">Search</button>
+                        <button type="button" class="button button--ghost" id="mrn-clear-button">Clear</button>
+                    </div>
+                </form>
+                <p class="empty-state" id="mrn-empty-state">Loading material receipts…</p>
+                <div class="table-wrapper" id="mrn-table-wrapper" hidden>
+                    <table class="data-table" id="mrn-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">MRN number</th>
+                                <th scope="col">Date</th>
+                                <th scope="col">Supplier</th>
+                                <th scope="col">Material</th>
+                                <th scope="col">Qty (Ton)</th>
+                                <th scope="col">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mrn-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </section>
     </div>
     <script>
@@ -108,6 +149,158 @@
             localStorage.removeItem("samprox_user");
             window.location.href = "/";
         });
+
+        const mrnTableBody = document.getElementById("mrn-table-body");
+        const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
+        const mrnEmptyState = document.getElementById("mrn-empty-state");
+        const mrnSearchForm = document.getElementById("mrn-search-form");
+        const mrnSearchInput = document.getElementById("mrn-search-input");
+        const mrnClearButton = document.getElementById("mrn-clear-button");
+
+        function formatNumber(value, fractionDigits) {
+            const numeric = Number.parseFloat(value);
+            if (Number.isNaN(numeric)) {
+                return "—";
+            }
+            return numeric.toLocaleString(undefined, {
+                minimumFractionDigits: fractionDigits,
+                maximumFractionDigits: fractionDigits,
+            });
+        }
+
+        function formatDate(value) {
+            if (!value) {
+                return "—";
+            }
+            const parts = value.split("-");
+            if (parts.length !== 3) {
+                return value;
+            }
+            const [year, month, day] = parts.map((part) => Number.parseInt(part, 10));
+            if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+                return value;
+            }
+            const dateObject = new Date(year, month - 1, day);
+            return dateObject.toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
+        }
+
+        function renderMrnRows(items) {
+            if (!mrnTableBody || !mrnTableWrapper || !mrnEmptyState) {
+                return;
+            }
+
+            mrnTableBody.innerHTML = "";
+
+            if (!items || items.length === 0) {
+                mrnTableWrapper.hidden = true;
+                mrnEmptyState.hidden = false;
+                mrnEmptyState.textContent = "No material receipts recorded yet.";
+                return;
+            }
+
+            items.forEach((item) => {
+                const row = document.createElement("tr");
+
+                const mrnCell = document.createElement("td");
+                const mrnLink = document.createElement("a");
+                mrnLink.className = "data-table__link";
+                mrnLink.href = `/material/mrn/${item.id}`;
+                mrnLink.textContent = item.mrn_no;
+                mrnCell.appendChild(mrnLink);
+                row.appendChild(mrnCell);
+
+                const dateCell = document.createElement("td");
+                dateCell.textContent = formatDate(item.date);
+                row.appendChild(dateCell);
+
+                const supplierCell = document.createElement("td");
+                supplierCell.textContent =
+                    (item.supplier && item.supplier.name) || item.supplier_name_free || "—";
+                row.appendChild(supplierCell);
+
+                const materialCell = document.createElement("td");
+                materialCell.textContent = (item.material_type && item.material_type.name) || "—";
+                row.appendChild(materialCell);
+
+                const qtyCell = document.createElement("td");
+                qtyCell.textContent = formatNumber(item.qty_ton, 3);
+                row.appendChild(qtyCell);
+
+                const amountCell = document.createElement("td");
+                amountCell.textContent = formatNumber(item.amount, 2);
+                row.appendChild(amountCell);
+
+                mrnTableBody.appendChild(row);
+            });
+
+            mrnEmptyState.hidden = true;
+            mrnTableWrapper.hidden = false;
+        }
+
+        async function loadMrns(query = "") {
+            if (!mrnTableBody || !mrnEmptyState) {
+                return;
+            }
+
+            mrnEmptyState.hidden = false;
+            mrnEmptyState.textContent = "Loading material receipts…";
+            if (mrnTableWrapper) {
+                mrnTableWrapper.hidden = true;
+            }
+
+            try {
+                const url = new URL("/api/material/mrn", window.location.origin);
+                if (query && query.trim()) {
+                    url.searchParams.set("q", query.trim());
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error("Failed to load MRNs");
+                }
+                const data = await response.json();
+                if (!Array.isArray(data)) {
+                    renderMrnRows([]);
+                    return;
+                }
+                renderMrnRows(data);
+            } catch (error) {
+                console.error(error);
+                mrnEmptyState.hidden = false;
+                mrnEmptyState.textContent =
+                    "Unable to load material receipts right now. Please try again.";
+            }
+        }
+
+        if (mrnSearchForm) {
+            mrnSearchForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                const query = mrnSearchInput ? mrnSearchInput.value : "";
+                loadMrns(query);
+            });
+        }
+
+        if (mrnClearButton) {
+            mrnClearButton.addEventListener("click", () => {
+                if (mrnSearchInput) {
+                    mrnSearchInput.value = "";
+                }
+                loadMrns("");
+            });
+        }
+
+        if (mrnSearchInput) {
+            mrnSearchInput.addEventListener("input", () => {
+                if (mrnSearchInput.value.trim() === "") {
+                    loadMrns("");
+                }
+            });
+        }
+
+        loadMrns("");
     </script>
 </body>
 </html>

@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, Optional
 
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
@@ -64,6 +65,44 @@ def list_active_material_types(category_id: uuid.UUID) -> list[MaterialType]:
         .order_by(MaterialType.name)
         .all()
     )
+
+
+def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[MRNHeader]:
+    stmt = (
+        MRNHeader.query.options(
+            joinedload(MRNHeader.supplier),
+            joinedload(MRNHeader.category),
+            joinedload(MRNHeader.material_type),
+        )
+        .order_by(MRNHeader.date.desc(), MRNHeader.created_at.desc())
+    )
+
+    if search:
+        term = search.strip()
+        if term:
+            like = f"%{term}%"
+            stmt = (
+                stmt.outerjoin(MRNHeader.supplier)
+                .outerjoin(MRNHeader.material_type)
+                .filter(
+                    or_(
+                        MRNHeader.mrn_no.ilike(like),
+                        Supplier.name.ilike(like),
+                        MaterialType.name.ilike(like),
+                    )
+                )
+                .distinct()
+            )
+
+    if limit:
+        try:
+            limit_value = int(limit)
+        except (TypeError, ValueError):
+            limit_value = 20
+        if limit_value > 0:
+            stmt = stmt.limit(min(limit_value, 100))
+
+    return list(stmt)
 
 
 def _parse_uuid(value: Any, field: str, errors: Dict[str, str]) -> Optional[uuid.UUID]:

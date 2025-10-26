@@ -6,6 +6,7 @@ from .services import (
     create_supplier,
     get_mrn_detail,
     list_active_material_types,
+    list_recent_mrns,
     search_suppliers,
     seed_material_defaults,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "create_supplier",
     "get_mrn_detail",
     "list_active_material_types",
+    "list_recent_mrns",
     "search_suppliers",
     "seed_material_defaults",
 ]

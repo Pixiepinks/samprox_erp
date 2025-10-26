@@ -2,27 +2,26 @@
 
 from __future__ import annotations
 
-import uuid
-
 from flask import Blueprint, jsonify, request
 
 from material import (
     MaterialValidationError,
+    create_item,
     create_mrn,
     create_supplier,
-    get_material_category,
     get_mrn_detail,
-    list_active_material_types,
+    list_material_items,
     list_recent_mrns,
     search_suppliers,
 )
-from schemas import MRNSchema, MaterialTypeSchema, SupplierSchema
+from schemas import MRNSchema, MaterialItemSchema, SupplierSchema
 
 bp = Blueprint("material", __name__, url_prefix="/api/material")
 
 supplier_schema = SupplierSchema()
 suppliers_schema = SupplierSchema(many=True)
-material_type_schema = MaterialTypeSchema(many=True)
+item_schema = MaterialItemSchema()
+items_schema = MaterialItemSchema(many=True)
 mrn_schema = MRNSchema()
 mrn_list_schema = MRNSchema(many=True)
 
@@ -48,22 +47,26 @@ def supplier_create():
     return jsonify(supplier_schema.dump(supplier)), 201
 
 
-@bp.get("/types")
-def list_types():
-    raw_category_id = request.args.get("category_id")
-    if not raw_category_id:
-        return jsonify({"errors": {"category_id": "category_id is required"}}), 400
+@bp.get("/items")
+def list_items():
+    query = request.args.get("search")
     try:
-        category_uuid = uuid.UUID(str(raw_category_id))
-    except (ValueError, TypeError):
-        return jsonify({"errors": {"category_id": "Invalid category identifier"}}), 400
+        limit = int(request.args.get("limit", 100))
+    except (TypeError, ValueError):
+        limit = 100
+    limit = max(1, min(limit, 200))
+    items = list_material_items(search=query, limit=limit)
+    return jsonify(items_schema.dump(items))
 
-    category = get_material_category(category_uuid)
-    if not category:
-        return jsonify({"errors": {"category_id": "Category not found"}}), 404
 
-    material_types = list_active_material_types(category.id)
-    return jsonify(material_type_schema.dump(material_types))
+@bp.post("/items")
+def create_item_entry():
+    payload = request.get_json(silent=True) or {}
+    try:
+        item = create_item(payload)
+    except MaterialValidationError as exc:
+        return jsonify({"errors": exc.errors}), 400
+    return jsonify(item_schema.dump(item)), 201
 
 
 @bp.get("/mrn")

@@ -141,28 +141,16 @@ class Supplier(db.Model):
     mrns = db.relationship("MRNHeader", back_populates="supplier")
 
 
-class MaterialCategory(db.Model):
-    __tablename__ = "material_categories"
+class MaterialItem(db.Model):
+    __tablename__ = "material_items"
 
     id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
-    name = db.Column(db.String(80), unique=True, nullable=False)
-
-    types = db.relationship("MaterialType", back_populates="category", cascade="all,delete-orphan")
-    mrns = db.relationship("MRNHeader", back_populates="category")
-
-
-class MaterialType(db.Model):
-    __tablename__ = "material_types"
-
-    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
-    category_id = db.Column(GUID(), db.ForeignKey("material_categories.id"), nullable=False, index=True)
-    name = db.Column(db.String(120), nullable=False)
+    name = db.Column(db.String(120), unique=True, nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    __table_args__ = (UniqueConstraint("category_id", "name", name="uq_material_type_category_name"),)
-
-    category = db.relationship("MaterialCategory", back_populates="types")
-    mrns = db.relationship("MRNHeader", back_populates="material_type")
+    mrns = db.relationship("MRNHeader", back_populates="item")
 
 
 class MRNHeader(db.Model):
@@ -173,8 +161,7 @@ class MRNHeader(db.Model):
     date = db.Column(db.Date, nullable=False)
     supplier_id = db.Column(GUID(), db.ForeignKey("suppliers.id"))
     supplier_name_free = db.Column(db.String(255))
-    category_id = db.Column(GUID(), db.ForeignKey("material_categories.id"), nullable=False)
-    material_type_id = db.Column(GUID(), db.ForeignKey("material_types.id"), nullable=False)
+    item_id = db.Column(GUID(), db.ForeignKey("material_items.id"), nullable=False)
     qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     wet_factor = db.Column(db.Numeric(6, 3), nullable=False, default=Decimal("1.000"))
@@ -190,8 +177,7 @@ class MRNHeader(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     supplier = db.relationship("Supplier", back_populates="mrns")
-    category = db.relationship("MaterialCategory", back_populates="mrns")
-    material_type = db.relationship("MaterialType", back_populates="mrns")
+    item = db.relationship("MaterialItem", back_populates="mrns")
     creator = db.relationship("User")
 
     __table_args__ = (

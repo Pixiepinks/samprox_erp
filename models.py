@@ -184,6 +184,8 @@ class MRNHeader(db.Model):
     approved_unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     amount = db.Column(db.Numeric(14, 2), nullable=False)
     weighing_slip_no = db.Column(db.String(80), nullable=False)
+    weigh_in_weight_kg = db.Column(db.Numeric(12, 3), nullable=True)
+    weigh_out_weight_kg = db.Column(db.Numeric(12, 3), nullable=True)
     weigh_in_time = db.Column(db.DateTime(timezone=True), nullable=False)
     weigh_out_time = db.Column(db.DateTime(timezone=True), nullable=False)
     security_officer_name = db.Column(db.String(120), nullable=False)
@@ -202,6 +204,10 @@ class MRNHeader(db.Model):
         CheckConstraint("wet_factor >= 0", name="ck_mrn_wet_factor_non_negative"),
         CheckConstraint("approved_unit_price >= 0", name="ck_mrn_approved_unit_price_non_negative"),
         CheckConstraint("amount >= 0", name="ck_mrn_amount_non_negative"),
+        CheckConstraint(
+            "weigh_out_weight_kg IS NULL OR weigh_in_weight_kg IS NULL OR weigh_out_weight_kg > weigh_in_weight_kg",
+            name="ck_mrn_out_weight_greater_than_in",
+        ),
         CheckConstraint("weigh_out_time >= weigh_in_time", name="ck_mrn_weigh_out_after_in"),
     )
 

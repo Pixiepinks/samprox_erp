@@ -3,6 +3,9 @@ import os
 import sys
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+
+from sqlalchemy.exc import ProgrammingError
 
 
 class MaterialMRNApiTestCase(unittest.TestCase):
@@ -153,4 +156,36 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         search_data = search_response.get_json()
         self.assertEqual(len(search_data), 1)
         self.assertEqual(search_data[0]["mrn_no"], "MRN-002")
+
+    def test_list_material_types_handles_missing_is_active_column(self):
+        category = self.MaterialCategory.query.filter_by(name="Product Material").first()
+        from material import services
+
+        fallback_result = [object()]
+
+        with patch("material.services.MaterialType.query") as mock_query, patch(
+            "material.services.db.session.rollback"
+        ) as mock_rollback:
+            base_query = MagicMock()
+            filtered_query = MagicMock()
+            ordered_filtered_query = MagicMock()
+            fallback_ordered_query = MagicMock()
+
+            mock_query.filter_by.return_value = base_query
+            base_query.filter.return_value = filtered_query
+            filtered_query.order_by.return_value = ordered_filtered_query
+            ordered_filtered_query.all.side_effect = ProgrammingError(
+                "SELECT", {}, Exception("column material_types.is_active does not exist")
+            )
+            base_query.order_by.return_value = fallback_ordered_query
+            fallback_ordered_query.all.return_value = fallback_result
+
+            result = services.list_active_material_types(category.id)
+
+        mock_query.filter_by.assert_called_once_with(category_id=category.id)
+        base_query.filter.assert_called_once()
+        mock_rollback.assert_called_once()
+        base_query.order_by.assert_called_once()
+        fallback_ordered_query.all.assert_called_once()
+        self.assertIs(result, fallback_result)
 

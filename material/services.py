@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Iterable, Optional
 
 from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import joinedload
 
 from extensions import db
@@ -60,12 +60,35 @@ def create_supplier(payload: Dict[str, Any]) -> Supplier:
     return supplier
 
 
+def _is_missing_is_active_column(error: Exception) -> bool:
+    """Return True if the database error indicates the column is absent."""
+
+    raw = getattr(error, "orig", error)
+    message = str(raw).lower()
+    return "is_active" in message and "material_types" in message
+
+
 def list_active_material_types(category_id: uuid.UUID) -> list[MaterialType]:
-    return (
-        MaterialType.query.filter_by(category_id=category_id, is_active=True)
-        .order_by(MaterialType.name)
-        .all()
-    )
+    """Return active material types for a category.
+
+    Older databases might miss the ``is_active`` column.  When that happens the
+    initial query raises a database programming error.  We gracefully recover by
+    rolling back the failed transaction and retrying without that filter so the
+    UI still receives data instead of a 500 HTML error page.
+    """
+
+    base_query = MaterialType.query.filter_by(category_id=category_id)
+    try:
+        return (
+            base_query.filter(MaterialType.is_active.is_(True))
+            .order_by(MaterialType.name)
+            .all()
+        )
+    except (ProgrammingError, OperationalError) as exc:
+        db.session.rollback()
+        if not _is_missing_is_active_column(exc):
+            raise
+        return base_query.order_by(MaterialType.name).all()
 
 
 def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[MRNHeader]:

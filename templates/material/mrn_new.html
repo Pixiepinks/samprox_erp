@@ -758,17 +758,21 @@
             }
         }
 
-        async function fetchSuppliers(query = "") {
+        async function loadSuppliers(query = "") {
             const url = new URL("/api/material/suppliers", window.location.origin);
             if (query) {
                 url.searchParams.set("search", query);
             }
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error("Failed to load suppliers");
+            }
+            return await response.json();
+        }
+
+        async function fetchSuppliers(query = "") {
             try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error("Failed to load suppliers");
-                }
-                const suppliers = await response.json();
+                const suppliers = await loadSuppliers(query);
                 renderSupplierMenu(suppliers);
             } catch (error) {
                 renderSupplierMenu([]);
@@ -946,7 +950,15 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
-                const data = await response.json();
+                const responseText = await response.text();
+                let data = null;
+                if (responseText) {
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (parseError) {
+                        console.error("Failed to parse supplier response", parseError, responseText);
+                    }
+                }
                 if (!response.ok) {
                     const fieldErrors = data?.errors || {};
                     supplierServerErrors = { ...fieldErrors };
@@ -962,10 +974,32 @@
                     }
                     return;
                 }
-                supplierInput.value = data.name;
-                supplierIdInput.value = data.id;
+                let supplierRecord =
+                    data && typeof data === "object" && !Array.isArray(data) ? data : null;
+                if (!supplierRecord) {
+                    try {
+                        const nameToFind = (values.name || "").trim().toLowerCase();
+                        if (nameToFind) {
+                            const matches = await loadSuppliers(values.name || "");
+                            supplierRecord = matches.find((supplier) => {
+                                const supplierName = (supplier.name || "").trim().toLowerCase();
+                                return supplierName === nameToFind;
+                            }) || null;
+                        }
+                    } catch (loadError) {
+                        console.error("Supplier created but lookup failed", loadError);
+                    }
+                }
+                if (!supplierRecord) {
+                    setModalError(
+                        "Supplier was saved but we couldn't load it. Please refresh the page to continue.",
+                    );
+                    return;
+                }
+                supplierInput.value = supplierRecord.name || values.name;
+                supplierIdInput.value = supplierRecord.id || "";
                 supplierNameFreeInput.value = "";
-                fetchSuppliers(data.name || "");
+                fetchSuppliers(supplierRecord.name || "");
                 closeSupplierModal();
             } catch (error) {
                 setModalError("Network error. Please try again.");

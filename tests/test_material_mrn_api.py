@@ -69,6 +69,18 @@ class MaterialMRNApiTestCase(unittest.TestCase):
             "amount": 1,
         }
 
+    def _create_mrn(self, overrides=None):
+        payload = self._default_payload()
+        overrides = overrides or {}
+        if "supplier_id" in overrides and overrides["supplier_id"] is None:
+            payload.pop("supplier_id", None)
+        payload.update({k: v for k, v in overrides.items() if k != "supplier_id"})
+        if "supplier_id" in overrides and overrides["supplier_id"] is not None:
+            payload["supplier_id"] = overrides["supplier_id"]
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        return response.get_json()
+
     def test_create_mrn_success(self):
         payload = self._default_payload()
         response = self.client.post("/api/material/mrn", json=payload)
@@ -117,4 +129,28 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(duplicate_response.status_code, 400)
         errors = duplicate_response.get_json().get("errors")
         self.assertIn("mrn_no", errors)
+
+    def test_list_mrn_returns_recent_entries(self):
+        first = self._create_mrn()
+        second = self._create_mrn(
+            {
+                "mrn_no": "MRN-002",
+                "date": "2024-08-11",
+                "weighing_slip_no": "WS-9002",
+            }
+        )
+
+        response = self.client.get("/api/material/mrn")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsInstance(data, list)
+        self.assertGreaterEqual(len(data), 2)
+        self.assertEqual(data[0]["mrn_no"], second["mrn_no"])
+        self.assertEqual(data[1]["mrn_no"], first["mrn_no"])
+
+        search_response = self.client.get("/api/material/mrn", query_string={"q": "MRN-002"})
+        self.assertEqual(search_response.status_code, 200)
+        search_data = search_response.get_json()
+        self.assertEqual(len(search_data), 1)
+        self.assertEqual(search_data[0]["mrn_no"], "MRN-002")
 

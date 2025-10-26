@@ -1,8 +1,42 @@
 import re
+import uuid
 from datetime import datetime, date
+from decimal import Decimal
 from enum import Enum
+
+from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy.types import CHAR, TypeDecorator
+
 from extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
+
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type."""
+
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # pragma: no cover - SQLAlchemy hook
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import UUID as PGUUID
+
+            return dialect.type_descriptor(PGUUID(as_uuid=True))
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):  # pragma: no cover - SQLAlchemy hook
+        if value is None:
+            return value
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        return str(uuid.UUID(str(value)))
+
+    def process_result_value(self, value, dialect):  # pragma: no cover - SQLAlchemy hook
+        if value is None:
+            return value
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(str(value))
 
 class RoleEnum(str, Enum):
     admin = "admin"
@@ -91,6 +125,83 @@ class MaterialEntry(db.Model):
     note = db.Column(db.String(255))
     job = db.relationship("Job", backref=db.backref("material_entries", cascade="all,delete-orphan"))
 
+
+class Supplier(db.Model):
+    __tablename__ = "suppliers"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    name = db.Column(db.String(255), unique=True, nullable=False)
+    phone = db.Column(db.String(40))
+    email = db.Column(db.String(255))
+    address = db.Column(db.Text)
+    tax_id = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    mrns = db.relationship("MRNHeader", back_populates="supplier")
+
+
+class MaterialCategory(db.Model):
+    __tablename__ = "material_categories"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+
+    types = db.relationship("MaterialType", back_populates="category", cascade="all,delete-orphan")
+    mrns = db.relationship("MRNHeader", back_populates="category")
+
+
+class MaterialType(db.Model):
+    __tablename__ = "material_types"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    category_id = db.Column(GUID(), db.ForeignKey("material_categories.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+    __table_args__ = (UniqueConstraint("category_id", "name", name="uq_material_type_category_name"),)
+
+    category = db.relationship("MaterialCategory", back_populates="types")
+    mrns = db.relationship("MRNHeader", back_populates="material_type")
+
+
+class MRNHeader(db.Model):
+    __tablename__ = "mrn_headers"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    mrn_no = db.Column(db.String(60), nullable=False, unique=True)
+    date = db.Column(db.Date, nullable=False)
+    supplier_id = db.Column(GUID(), db.ForeignKey("suppliers.id"))
+    supplier_name_free = db.Column(db.String(255))
+    category_id = db.Column(GUID(), db.ForeignKey("material_categories.id"), nullable=False)
+    material_type_id = db.Column(GUID(), db.ForeignKey("material_types.id"), nullable=False)
+    qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
+    unit_price = db.Column(db.Numeric(12, 2), nullable=False)
+    wet_factor = db.Column(db.Numeric(6, 3), nullable=False, default=Decimal("1.000"))
+    approved_unit_price = db.Column(db.Numeric(12, 2), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    weighing_slip_no = db.Column(db.String(80), nullable=False)
+    weigh_in_time = db.Column(db.DateTime(timezone=True), nullable=False)
+    weigh_out_time = db.Column(db.DateTime(timezone=True), nullable=False)
+    security_officer_name = db.Column(db.String(120), nullable=False)
+    authorized_person_name = db.Column(db.String(120), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    supplier = db.relationship("Supplier", back_populates="mrns")
+    category = db.relationship("MaterialCategory", back_populates="mrns")
+    material_type = db.relationship("MaterialType", back_populates="mrns")
+    creator = db.relationship("User")
+
+    __table_args__ = (
+        CheckConstraint("qty_ton > 0", name="ck_mrn_qty_positive"),
+        CheckConstraint("unit_price >= 0", name="ck_mrn_unit_price_non_negative"),
+        CheckConstraint("wet_factor >= 0", name="ck_mrn_wet_factor_non_negative"),
+        CheckConstraint("approved_unit_price >= 0", name="ck_mrn_approved_unit_price_non_negative"),
+        CheckConstraint("amount >= 0", name="ck_mrn_amount_non_negative"),
+        CheckConstraint("weigh_out_time >= weigh_in_time", name="ck_mrn_weigh_out_after_in"),
+    )
 
 class MachineAsset(db.Model):
     id = db.Column(db.Integer, primary_key=True)

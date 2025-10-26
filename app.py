@@ -20,15 +20,32 @@ from models import (
     CustomerCreditTerm,
     CustomerTransportMode,
     CustomerType,
+    MaterialCategory,
+    MaterialType,
     MachineAsset,
     MachineIdleEvent,
+    MRNHeader,
     RoleEnum,
+    Supplier,
     SalesActualEntry,
     SalesForecastEntry,
     ProductionForecastEntry,
     User,
 )
-from routes import auth, jobs, quotation, labor, materials, machines, market, production, reports, team, ui
+from routes import (
+    auth,
+    jobs,
+    quotation,
+    labor,
+    materials,
+    machines,
+    market,
+    material_api,
+    production,
+    reports,
+    team,
+    ui,
+)
 
 
 if os.name != "nt":  # pragma: no cover - platform dependent import
@@ -161,6 +178,7 @@ def create_app():
     app.register_blueprint(quotation.bp)
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)
+    app.register_blueprint(material_api.bp)
     app.register_blueprint(machines.bp)
     app.register_blueprint(production.bp)
     app.register_blueprint(market.bp)
@@ -548,6 +566,18 @@ def seed_accessall(email, password, name):
             click.echo(f"✅ Accessall user updated: {normalized_email}")
         else:
             click.echo(f"ℹ️ Accessall user already up-to-date: {normalized_email}")
+
+
+@app.cli.command("seed-materials")
+def seed_materials() -> None:
+    """Seed material categories and their default types."""
+
+    from material import seed_material_defaults
+
+    with app.app_context():
+        seed_material_defaults()
+        click.echo("✅ Material categories and default types seeded.")
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=int(os.getenv("PORT", 5000)))

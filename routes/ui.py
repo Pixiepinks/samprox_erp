@@ -1,4 +1,7 @@
-from flask import Blueprint, redirect, render_template, url_for
+from flask import Blueprint, abort, redirect, render_template, url_for
+
+from material import MaterialValidationError, get_mrn_detail
+from models import MaterialCategory
 
 bp = Blueprint("ui", __name__)
 
@@ -43,6 +46,23 @@ def machines_page():
 def material_page():
     """Render the material tracking page."""
     return render_template("material.html")
+
+
+@bp.get("/material/mrn/new")
+def material_mrn_new_page():
+    """Render the Material Receipt Note capture form."""
+    categories = MaterialCategory.query.order_by(MaterialCategory.name).all()
+    return render_template("material/mrn_new.html", categories=categories)
+
+
+@bp.get("/material/mrn/<mrn_id>")
+def material_mrn_view_page(mrn_id: str):
+    """Render a read-only MRN summary page."""
+    try:
+        mrn = get_mrn_detail(mrn_id)
+    except MaterialValidationError:
+        abort(404)
+    return render_template("material/mrn_view.html", mrn=mrn)
 
 
 @bp.get("/market")

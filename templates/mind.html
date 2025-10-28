@@ -37,25 +37,6 @@
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <section class="section">
-            <section class="production-chart" aria-labelledby="purchases-chart-title">
-                <header class="production-chart__header">
-                    <div>
-                        <h2 id="purchases-chart-title">Monthly purchases</h2>
-                        <p>Stacked daily inbound volume grouped by key biomass materials.</p>
-                    </div>
-                </header>
-                <div class="production-chart__body">
-                    <div class="production-chart__summary" id="purchases-summary" aria-live="polite"></div>
-                    <div class="production-chart__canvas">
-                        <canvas
-                            id="purchases-chart"
-                            height="320"
-                            aria-label="Daily material purchases stacked bar chart"
-                            role="img"
-                        ></canvas>
-                    </div>
-                </div>
-            </section>
             <section class="production-chart" aria-labelledby="production-chart-title">
                 <header class="production-chart__header">
                     <div>
@@ -187,8 +168,6 @@
         const yearSelect = document.getElementById("production-year");
         const monthSelect = document.getElementById("production-month");
         const compareToggle = document.getElementById("production-compare-toggle");
-        const purchasesSummaryContainer = document.getElementById("purchases-summary");
-        const purchasesChartCanvas = document.getElementById("purchases-chart");
         const productionSummaryContainer = document.getElementById("production-summary");
         const productionChartCanvas = document.getElementById("production-chart");
         const productionPulseSummaryContainer = document.getElementById("production-pulse-summary");
@@ -273,13 +252,6 @@
             backgroundColor: "rgba(37, 99, 235, 0.25)",
         };
 
-        const PURCHASE_DATASET_COLORS = [
-            { background: "rgba(234, 179, 8, 0.75)", border: "rgb(217, 119, 6)" },
-            { background: "rgba(34, 197, 94, 0.75)", border: "rgb(22, 163, 74)" },
-            { background: "rgba(59, 130, 246, 0.65)", border: "rgb(37, 99, 235)" },
-            { background: "rgba(249, 115, 22, 0.7)", border: "rgb(234, 88, 12)" },
-        ];
-
         const SALES_DATASET_COLORS = [
             { background: "rgba(14, 165, 233, 0.75)", border: "rgb(14, 165, 233)" },
             { background: "rgba(99, 102, 241, 0.75)", border: "rgb(99, 102, 241)" },
@@ -298,18 +270,6 @@
         });
         const MIN_YEAR = 1900;
         const MAX_YEAR = 2100;
-
-        const showPurchasesSummaryError = (message) => {
-            if (!purchasesSummaryContainer) {
-                return;
-            }
-            purchasesSummaryContainer.innerHTML = `
-                <div class="production-chart__metric">
-                    <span class="production-chart__metric-label">Purchases data</span>
-                    <span class="production-chart__metric-value">${message}</span>
-                </div>
-            `;
-        };
 
         const populateYearOptions = (selectedYear) => {
             yearSelect.innerHTML = "";
@@ -372,7 +332,6 @@
             populateYearOptions(initialYear);
             if (yearSelect.disabled) {
                 showProductionSummaryError("No production periods available.");
-                showPurchasesSummaryError("No purchase periods available.");
                 showSalesSummaryError("No sales periods available.");
                 return false;
             }
@@ -386,7 +345,6 @@
             return periodKey ? periodKey : null;
         };
 
-        const purchasesPeriodCache = new Map();
         const productionPeriodCache = new Map();
         const productionPulsePeriodCache = new Map();
         const idleSummaryPeriodCache = new Map();
@@ -423,60 +381,6 @@
                 return "0";
             }
             return hoursFormatter.format(number);
-        };
-
-        const renderPurchasesSummary = (periodData) => {
-            if (!purchasesSummaryContainer) {
-                return;
-            }
-
-            const materials = Array.isArray(periodData?.materials)
-                ? periodData.materials
-                : [];
-            const totals = periodData?.totals ?? {};
-
-            if (materials.length === 0) {
-                showPurchasesSummaryError("No purchase data available.");
-                return;
-            }
-
-            const summaryCards = materials.map((material) => {
-                const stats = totals?.[material.field] ?? {};
-                const totalQuantity = Number(stats.total_quantity_tons ?? 0);
-                const totalAmount = Number(stats.total_amount ?? 0);
-                const averagePrice = Number(stats.average_unit_price ?? 0);
-                const topSupplier = stats.top_supplier ?? null;
-                const supplierText = topSupplier
-                    ? `${topSupplier.name} – Qty: ${formatTons(topSupplier.quantity_tons ?? 0)} tons (${formatCurrency(topSupplier.amount ?? 0)})`
-                    : "—";
-
-                return `
-                    <div class="production-chart__metric purchases-summary-card">
-                        <div class="purchases-summary-card__header">
-                            <span class="purchases-summary-card__label">${material.label}</span>
-                            <span class="purchases-summary-card__quantity">${formatTons(totalQuantity)} tons</span>
-                        </div>
-                        <div class="purchases-summary-card__stat">
-                            <span class="purchases-summary-card__stat-label">Total spend</span>
-                            <span class="purchases-summary-card__stat-value">${formatCurrency(
-                                totalAmount,
-                            )}</span>
-                        </div>
-                        <div class="purchases-summary-card__stat">
-                            <span class="purchases-summary-card__stat-label">Avg. price</span>
-                            <span class="purchases-summary-card__stat-value">${formatCurrency(
-                                averagePrice,
-                            )} / ton</span>
-                        </div>
-                        <div class="purchases-summary-card__stat">
-                            <span class="purchases-summary-card__stat-label">Top supplier</span>
-                            <span class="purchases-summary-card__stat-value purchases-summary-card__stat-value--muted">${supplierText}</span>
-                        </div>
-                    </div>
-                `;
-            });
-
-            purchasesSummaryContainer.innerHTML = summaryCards.join("");
         };
 
         const normalizeMachineCode = (code) => (code || "").trim().toUpperCase();
@@ -741,195 +645,6 @@
             const previousYear = date.getFullYear();
             const previousMonth = String(date.getMonth() + 1).padStart(2, "0");
             return `${previousYear}-${previousMonth}`;
-        };
-
-        const fetchPurchasesMonthlySummary = async (periodKey) => {
-            if (!periodKey) {
-                return null;
-            }
-
-            if (purchasesPeriodCache.has(periodKey)) {
-                return purchasesPeriodCache.get(periodKey);
-            }
-
-            const params = new URLSearchParams({ period: periodKey });
-            const response = await fetch(
-                `/api/reports/purchases/monthly-summary?${params.toString()}`,
-                { headers: authHeaders },
-            );
-
-            if (response.status === 401) {
-                logoutButton.click();
-                return null;
-            }
-
-            if (!response.ok) {
-                throw new Error("Failed to load purchase data.");
-            }
-
-            const data = await response.json();
-            purchasesPeriodCache.set(periodKey, data);
-            return data;
-        };
-
-        const buildPurchasesDataset = async (periodKey) => {
-            const periodData = await fetchPurchasesMonthlySummary(periodKey);
-            if (!periodData) {
-                return null;
-            }
-
-            renderPurchasesSummary(periodData);
-
-            const dailyTotals = Array.isArray(periodData.daily_totals)
-                ? periodData.daily_totals
-                : [];
-            const labels = dailyTotals.map((item) => item.day);
-            const materials = Array.isArray(periodData.materials)
-                ? periodData.materials
-                : [];
-
-            const datasets = materials.map((material, index, array) => {
-                const color = PURCHASE_DATASET_COLORS[index % PURCHASE_DATASET_COLORS.length];
-                const values = dailyTotals.map((item) => {
-                    const value = Number(item?.[material.field] ?? 0);
-                    return Number.isFinite(value) ? value : 0;
-                });
-
-                const isFirst = index === 0;
-                const isLast = index === array.length - 1;
-
-                return {
-                    label: material.label,
-                    data: values,
-                    backgroundColor: color.background,
-                    borderColor: color.border,
-                    borderWidth: 1,
-                    stack: "purchases",
-                    maxBarThickness: 18,
-                    borderSkipped: false,
-                    borderRadius: {
-                        topLeft: isLast ? 6 : 0,
-                        topRight: isLast ? 6 : 0,
-                        bottomLeft: isFirst ? 6 : 0,
-                        bottomRight: isFirst ? 6 : 0,
-                    },
-                };
-            });
-
-            return { labels, datasets };
-        };
-
-        const buildPurchasesChart = async () => {
-            if (!purchasesSummaryContainer || !purchasesChartCanvas) {
-                return;
-            }
-
-            purchasesSummaryContainer.innerHTML = `
-                <div class="production-chart__metric">
-                    <span class="production-chart__metric-label">Loading</span>
-                    <span class="production-chart__metric-value">…</span>
-                </div>
-            `;
-
-            try {
-                const periodKey = getSelectedPeriodKey();
-                const dataset = await buildPurchasesDataset(periodKey);
-                const hasDatasets = Array.isArray(dataset?.datasets) && dataset.datasets.length > 0;
-
-                if (!dataset || !hasDatasets) {
-                    showPurchasesSummaryError("No purchase data available.");
-                    if (window.purchasesChartInstance) {
-                        window.purchasesChartInstance.data.labels = [];
-                        window.purchasesChartInstance.data.datasets = [];
-                        window.purchasesChartInstance.update();
-                    }
-                    return;
-                }
-
-                if (window.purchasesChartInstance) {
-                    window.purchasesChartInstance.data.labels = dataset.labels;
-                    window.purchasesChartInstance.data.datasets = dataset.datasets;
-                    window.purchasesChartInstance.update();
-                    return;
-                }
-
-                window.purchasesChartInstance = new Chart(purchasesChartCanvas, {
-                    type: "bar",
-                    data: dataset,
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: {
-                                stacked: true,
-                                title: {
-                                    display: true,
-                                    text: "Day of month",
-                                },
-                                grid: {
-                                    display: false,
-                                },
-                                ticks: {
-                                    maxRotation: 0,
-                                    autoSkip: true,
-                                    maxTicksLimit: 15,
-                                },
-                            },
-                            y: {
-                                stacked: true,
-                                beginAtZero: true,
-                                title: {
-                                    display: true,
-                                    text: "Quantity (tons)",
-                                },
-                                ticks: {
-                                    callback: (value) => `${formatTons(value)} tons`,
-                                },
-                            },
-                        },
-                        interaction: {
-                            mode: "index",
-                            intersect: false,
-                        },
-                        plugins: {
-                            legend: {
-                                display: true,
-                                labels: {
-                                    usePointStyle: true,
-                                },
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => {
-                                        const label = context.dataset.label || "";
-                                        const value = Number(context.parsed.y ?? 0);
-                                        return `${label}: ${formatTons(value)} tons`;
-                                    },
-                                    footer: (contexts) => {
-                                        if (!Array.isArray(contexts) || contexts.length === 0) {
-                                            return "";
-                                        }
-                                        const stackContexts = contexts.filter(
-                                            (item) => item.dataset?.stack === "purchases",
-                                        );
-                                        if (stackContexts.length === 0) {
-                                            return "";
-                                        }
-                                        const total = stackContexts.reduce(
-                                            (sum, item) => sum + Number(item.parsed.y ?? 0),
-                                            0,
-                                        );
-                                        return `Total: ${formatTons(total)} tons`;
-                                    },
-                                },
-                            },
-                        },
-                    },
-                });
-            } catch (error) {
-                console.error(error);
-                showPurchasesSummaryError("Unable to load purchase data.");
-            }
         };
 
         const fetchProductionMonthlySummary = async (periodKey) => {
@@ -2021,13 +1736,6 @@
             }
         };
 
-        const refreshPurchasesChart = () => {
-            buildPurchasesChart().catch((error) => {
-                console.error(error);
-                showPurchasesSummaryError("Unable to load purchase data.");
-            });
-        };
-
         const refreshProductionChart = () => {
             buildProductionChart().catch((error) => {
                 console.error(error);
@@ -2057,7 +1765,6 @@
         };
 
         const refreshCharts = () => {
-            refreshPurchasesChart();
             refreshProductionChart();
             refreshProductionPulseChart();
             refreshIdleParetoChart();

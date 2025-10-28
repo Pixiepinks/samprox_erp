@@ -11,8 +11,6 @@ from models import (
     DailyProductionEntry,
     MachineAsset,
     MachineIdleEvent,
-    MaterialItem,
-    MRNHeader,
     ProductionForecastEntry,
     RoleEnum,
 )
@@ -35,13 +33,6 @@ IDLE_SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 IDLE_SUMMARY_SHIFT_START_HOUR = 7
 IDLE_SUMMARY_SHIFT_END_HOUR = 19
 IDLE_SUMMARY_SCHEDULED_MINUTES = 11 * 60
-
-MATERIAL_SUMMARY_SERIES = [
-    {"name": "Wood Shaving", "field": "WOOD_SHAVING"},
-    {"name": "Saw Dust", "field": "SAW_DUST"},
-    {"name": "Wood Powder", "field": "WOOD_POWDER"},
-    {"name": "Peanut Husk", "field": "PEANUT_HUSK"},
-]
 
 SRI_LANKA_FALLBACK_HOLIDAYS = {
     2024: [
@@ -888,111 +879,6 @@ def get_monthly_production_summary():
         "daily_totals": daily_totals,
         "total_production": total_production,
         "average_day_production": average_day_production,
-        "peak": peak,
-    }
-
-    return jsonify(response)
-
-
-@bp.get("/monthly/material-summary")
-@jwt_required()
-def get_monthly_material_summary():
-    if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
-    ):
-        return jsonify({"msg": "You do not have permission to view production."}), 403
-
-    try:
-        anchor = _parse_period_param(request.args.get("period"))
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
-
-    month_start, month_end, month_days = _month_range(anchor)
-
-    series = MATERIAL_SUMMARY_SERIES
-    series_lookup = {item["name"].lower(): item for item in series}
-
-    totals_query = (
-        db.session.query(
-            MRNHeader.date,
-            func.lower(MaterialItem.name),
-            func.coalesce(func.sum(MRNHeader.qty_ton), 0.0),
-        )
-        .join(MaterialItem, MRNHeader.item_id == MaterialItem.id)
-        .filter(
-            MRNHeader.date >= month_start,
-            MRNHeader.date <= month_end,
-            func.lower(MaterialItem.name).in_(series_lookup.keys()),
-        )
-        .group_by(MRNHeader.date, func.lower(MaterialItem.name))
-        .order_by(MRNHeader.date.asc())
-    )
-
-    totals_by_date: dict[dt_date, dict[str, float]] = {}
-
-    for date_value, name_value, total_value in totals_query.all():
-        if not isinstance(date_value, dt_date):
-            continue
-
-        lowered = (name_value or "").strip().lower()
-        if lowered not in series_lookup:
-            continue
-
-        try:
-            quantity = float(total_value or 0.0)
-        except (TypeError, ValueError):
-            quantity = 0.0
-
-        day_totals = totals_by_date.setdefault(date_value, {})
-        day_totals[lowered] = quantity
-
-    daily_totals: list[dict[str, object]] = []
-    total_material = 0.0
-
-    for day in range(1, month_days + 1):
-        current_date = dt_date(anchor.year, anchor.month, day)
-        material_values = totals_by_date.get(current_date, {})
-
-        payload: dict[str, object] = {
-            "day": day,
-            "date": current_date.isoformat(),
-        }
-
-        day_total = 0.0
-        for series_info in series:
-            key = series_info["name"].lower()
-            field_name = series_info["field"]
-            value = round(material_values.get(key, 0.0), 3)
-            payload[field_name] = value
-            day_total += value
-
-        day_total = round(day_total, 3)
-        payload["total_tons"] = day_total
-        total_material += day_total
-        daily_totals.append(payload)
-
-    total_material = round(total_material, 3)
-    average_day_material = round(total_material / month_days if month_days else 0.0, 3)
-
-    peak_day_payload = max(daily_totals, key=lambda item: item["total_tons"], default=None)
-    if peak_day_payload:
-        peak = {
-            "day": peak_day_payload["day"],
-            "total_tons": peak_day_payload["total_tons"],
-        }
-    else:
-        peak = {"day": None, "total_tons": 0.0}
-
-    response = {
-        "period": anchor.strftime("%Y-%m"),
-        "label": anchor.strftime("%B %Y"),
-        "start_date": month_start.isoformat(),
-        "end_date": month_end.isoformat(),
-        "days": month_days,
-        "material_names": [item["name"] for item in series],
-        "daily_totals": daily_totals,
-        "total_material": total_material,
-        "average_day_material": average_day_material,
         "peak": peak,
     }
 

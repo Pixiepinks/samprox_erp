@@ -1,7 +1,7 @@
 """Update MRN weight logic and constraint
 
 Revision ID: c40f6b5f1de8
-Revises: f73970f46c90
+Revises: f5d07c0a4b9b
 Create Date: 2024-09-19 00:00:00.000000
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "c40f6b5f1de8"
-down_revision = "f73970f46c90"
+down_revision = "f5d07c0a4b9b"
 branch_labels = None
 depends_on = None
 

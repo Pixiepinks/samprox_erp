@@ -310,7 +310,13 @@
                         </div>
                         <div class="field">
                             <label for="security-officer">Security Officer Name<span class="text-red"> *</span></label>
-                            <input id="security-officer" name="security_officer_name" type="text" required />
+                            <select id="security-officer" name="security_officer_name" required>
+                                <option value="" disabled selected hidden>Select security officer</option>
+                                <option value="Premasiri">Premasiri</option>
+                                <option value="Ananda">Ananda</option>
+                                <option value="Liyanage">Liyanage</option>
+                                <option value="Unknown">Unknown</option>
+                            </select>
                             <p class="error-text" data-error-for="security_officer_name"></p>
                         </div>
                         <div class="field">

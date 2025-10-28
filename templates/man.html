@@ -89,6 +89,7 @@
                                 <th scope="col">Nickname</th>
                                 <th scope="col">EPF</th>
                                 <th scope="col">Position</th>
+                                <th scope="col">Pay category</th>
                                 <th scope="col">Join date</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Created at</th>
@@ -173,6 +174,15 @@
                                     type="text"
                                     autocomplete="organization-title"
                                 />
+                            </div>
+                            <div class="edit-form__field">
+                                <label class="edit-form__label" for="team-pay-category">Pay category</label>
+                                <select class="edit-form__input" id="team-pay-category" name="payCategory">
+                                    <option value="Office" selected>Office</option>
+                                    <option value="Factory">Factory</option>
+                                    <option value="Casual">Casual</option>
+                                    <option value="Other">Other</option>
+                                </select>
                             </div>
                             <div class="edit-form__field">
                                 <label class="edit-form__label" for="team-join-date">Date of join</label>
@@ -566,6 +576,7 @@
                     ["Nickname", sanitizeText(member?.nickname)],
                     ["EPF", sanitizeText(member?.epf)],
                     ["Position", sanitizeText(member?.position)],
+                    ["Pay category", sanitizeText(member?.payCategory)],
                     ["Join date", formatJoinDate(member?.joinDate)],
                     ["Status", sanitizeText(member?.status)],
                     ["Created at", formatDateTime(member?.createdAt)],
@@ -711,6 +722,7 @@
                     "nickname",
                     "epf",
                     "position",
+                    "payCategory",
                     "image",
                     "personalDetail",
                     "assignments",

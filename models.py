@@ -324,6 +324,19 @@ class TeamMemberStatus(str, Enum):
         return self.value
 
 
+class PayCategory(str, Enum):
+    OFFICE = "Office"
+    FACTORY = "Factory"
+    CASUAL = "Casual"
+    OTHER = "Other"
+
+    @property
+    def label(self) -> str:
+        """Return a UI friendly label for the enum value."""
+
+        return self.value
+
+
 class TeamMember(db.Model):
     __tablename__ = "team_member"
 
@@ -333,6 +346,16 @@ class TeamMember(db.Model):
     nickname = db.Column(db.String(120))
     epf = db.Column(db.String(120))
     position = db.Column(db.String(120))
+    pay_category = db.Column(
+        db.Enum(
+            PayCategory,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            name="teammemberpaycategory",
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=PayCategory.OFFICE,
+    )
     join_date = db.Column(db.Date, nullable=False)
     status = db.Column(
         db.Enum(
@@ -369,6 +392,13 @@ class TeamMember(db.Model):
 
         position = (data.get("position") or "").strip()
         self.position = position or None
+
+        pay_category = (data.get("payCategory") or "").strip()
+        if pay_category:
+            try:
+                self.pay_category = PayCategory(pay_category)
+            except ValueError:
+                pass
 
         image = (data.get("image") or "").strip()
         self.image_url = image or None

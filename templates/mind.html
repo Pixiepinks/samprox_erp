@@ -40,8 +40,8 @@
             <section class="production-chart" aria-labelledby="production-chart-title">
                 <header class="production-chart__header">
                     <div>
-                        <h2 id="production-chart-title">Monthly production</h2>
-                        <p>Review day-by-day output and spot trends instantly.</p>
+                        <h2 id="production-chart-title">Monthly material intake</h2>
+                        <p>Track daily inbound tons by material to spot supply trends.</p>
                     </div>
                     <div class="production-chart__controls">
                         <label class="production-chart__select">
@@ -60,7 +60,12 @@
                 <div class="production-chart__body">
                     <div class="production-chart__summary" id="production-summary" aria-live="polite"></div>
                     <div class="production-chart__canvas">
-                        <canvas id="production-chart" height="320" aria-label="Daily production bar chart" role="img"></canvas>
+                        <canvas
+                            id="production-chart"
+                            height="320"
+                            aria-label="Daily material intake stacked bar chart"
+                            role="img"
+                        ></canvas>
                     </div>
                 </div>
             </section>
@@ -226,6 +231,33 @@
             borderColor: "rgb(148, 163, 184)",
         };
 
+        const MATERIAL_SERIES = [
+            {
+                field: "WOOD_SHAVING",
+                label: "Wood Shaving",
+                backgroundColor: "rgba(37, 99, 235, 0.75)",
+                borderColor: "rgb(37, 99, 235)",
+            },
+            {
+                field: "SAW_DUST",
+                label: "Saw Dust",
+                backgroundColor: "rgba(139, 92, 246, 0.75)",
+                borderColor: "rgb(139, 92, 246)",
+            },
+            {
+                field: "WOOD_POWDER",
+                label: "Wood Powder",
+                backgroundColor: "rgba(16, 185, 129, 0.75)",
+                borderColor: "rgb(16, 185, 129)",
+            },
+            {
+                field: "PEANUT_HUSK",
+                label: "Peanut Husk",
+                backgroundColor: "rgba(234, 179, 8, 0.75)",
+                borderColor: "rgb(234, 179, 8)",
+            },
+        ];
+
         const PULSE_MACHINE_SERIES = [
             {
                 field: "MCH1",
@@ -331,7 +363,7 @@
 
             populateYearOptions(initialYear);
             if (yearSelect.disabled) {
-                showProductionSummaryError("No production periods available.");
+                showMaterialSummaryError("No material periods available.");
                 showSalesSummaryError("No sales periods available.");
                 return false;
             }
@@ -345,7 +377,7 @@
             return periodKey ? periodKey : null;
         };
 
-        const productionPeriodCache = new Map();
+        const materialPeriodCache = new Map();
         const productionPulsePeriodCache = new Map();
         const idleSummaryPeriodCache = new Map();
         const idleParetoPeriodCache = new Map();
@@ -480,19 +512,23 @@
             return nextSelection;
         };
 
-        const renderProductionSummary = (periodData, comparisonData = null) => {
-            const total = Number(periodData?.total_production ?? 0);
-            const average = Number(periodData?.average_day_production ?? 0);
+        const renderMaterialSummary = (periodData, comparisonData = null) => {
+            const total = Number(
+                periodData?.total_material ?? periodData?.total_production ?? 0,
+            );
+            const average = Number(
+                periodData?.average_day_material ?? periodData?.average_day_production ?? 0,
+            );
             const peakDay = periodData?.peak?.day ?? null;
             const peakValue = Number(periodData?.peak?.total_tons ?? 0);
 
             const summaryMetrics = [
                 {
-                    label: "Total Production",
+                    label: "Total material intake",
                     value: formatTons(total),
                 },
                 {
-                    label: "Average Day Production",
+                    label: "Average daily intake",
                     value: formatTons(average),
                 },
                 {
@@ -505,7 +541,9 @@
             ];
 
             if (comparisonData) {
-                const compareTotal = Number(comparisonData.total_production ?? 0);
+                const compareTotal = Number(
+                    comparisonData.total_material ?? comparisonData.total_production ?? 0,
+                );
                 const delta = total - compareTotal;
                 const deltaSign = delta >= 0 ? "+" : "−";
                 const deltaAbsolute = formatTons(Math.abs(delta));
@@ -536,10 +574,10 @@
                 .join("");
         };
 
-        const showProductionSummaryError = (message) => {
+        const showMaterialSummaryError = (message) => {
             productionSummaryContainer.innerHTML = `
                 <div class="production-chart__metric">
-                    <span class="production-chart__metric-label">Production data</span>
+                    <span class="production-chart__metric-label">Material intake</span>
                     <span class="production-chart__metric-value">${message}</span>
                 </div>
             `;
@@ -647,18 +685,18 @@
             return `${previousYear}-${previousMonth}`;
         };
 
-        const fetchProductionMonthlySummary = async (periodKey) => {
+        const fetchMaterialMonthlySummary = async (periodKey) => {
             if (!periodKey) {
                 return null;
             }
 
-            if (productionPeriodCache.has(periodKey)) {
-                return productionPeriodCache.get(periodKey);
+            if (materialPeriodCache.has(periodKey)) {
+                return materialPeriodCache.get(periodKey);
             }
 
             const params = new URLSearchParams({ period: periodKey });
 
-            const response = await fetch(`/api/production/monthly/summary?${params.toString()}`, {
+            const response = await fetch(`/api/production/monthly/material-summary?${params.toString()}`, {
                 headers: authHeaders,
             });
 
@@ -668,22 +706,22 @@
             }
 
             if (!response.ok) {
-                throw new Error("Failed to load production data.");
+                throw new Error("Failed to load material data.");
             }
 
             const data = await response.json();
-            productionPeriodCache.set(periodKey, data);
+            materialPeriodCache.set(periodKey, data);
             return data;
         };
 
-        const buildProductionDataset = async (periodKey, includePrevious = false) => {
-            const periodData = await fetchProductionMonthlySummary(periodKey);
+        const buildMaterialDataset = async (periodKey, includePrevious = false) => {
+            const periodData = await fetchMaterialMonthlySummary(periodKey);
             if (!periodData) {
                 return null;
             }
 
             const labels = periodData.daily_totals.map((item) => item.day);
-            const datasets = MACHINE_SERIES.map((series, index, array) => {
+            const datasets = MATERIAL_SERIES.map((series, index, array) => {
                 const data = periodData.daily_totals.map((item) => {
                     const value = Number(item?.[series.field] ?? 0);
                     return Number.isFinite(value) ? value : 0;
@@ -716,7 +754,7 @@
             if (includePrevious) {
                 const previousKey = getPreviousPeriodKey(periodKey);
                 if (previousKey) {
-                    const previousPeriod = await fetchProductionMonthlySummary(previousKey);
+                    const previousPeriod = await fetchMaterialMonthlySummary(previousKey);
                     if (previousPeriod) {
                         comparisonData = previousPeriod;
                         const totalsByDay = new Map(
@@ -743,7 +781,7 @@
                 }
             }
 
-            renderProductionSummary(periodData, comparisonData);
+            renderMaterialSummary(periodData, comparisonData);
             return { labels, datasets };
         };
 
@@ -1377,7 +1415,7 @@
             }
         };
 
-        const buildProductionChart = async () => {
+        const buildMaterialChart = async () => {
             productionSummaryContainer.innerHTML = `
                 <div class="production-chart__metric">
                     <span class="production-chart__metric-label">Loading</span>
@@ -1388,9 +1426,9 @@
             try {
                 const periodKey = getSelectedPeriodKey();
                 const includePrevious = compareToggle.getAttribute("aria-pressed") === "true";
-                const dataset = await buildProductionDataset(periodKey, includePrevious);
+                const dataset = await buildMaterialDataset(periodKey, includePrevious);
                 if (!dataset) {
-                    showProductionSummaryError("No production data available.");
+                    showMaterialSummaryError("No material data available.");
                     return;
                 }
 
@@ -1428,7 +1466,7 @@
                                 beginAtZero: true,
                                 title: {
                                     display: true,
-                                    text: "Tons produced",
+                                    text: "Tons received",
                                 },
                                 ticks: {
                                     callback: (value) => formatTons(value),
@@ -1483,7 +1521,7 @@
                 });
             } catch (error) {
                 console.error(error);
-                showProductionSummaryError("Unable to load production data.");
+                showMaterialSummaryError("Unable to load material data.");
             }
         };
 
@@ -1736,10 +1774,10 @@
             }
         };
 
-        const refreshProductionChart = () => {
-            buildProductionChart().catch((error) => {
+        const refreshMaterialChart = () => {
+            buildMaterialChart().catch((error) => {
                 console.error(error);
-                showProductionSummaryError("Unable to load production data.");
+                showMaterialSummaryError("Unable to load material data.");
             });
         };
 
@@ -1765,7 +1803,7 @@
         };
 
         const refreshCharts = () => {
-            refreshProductionChart();
+            refreshMaterialChart();
             refreshProductionPulseChart();
             refreshIdleParetoChart();
             refreshSalesChart();

@@ -8,6 +8,14 @@ import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Dict, Optional
 
+
+DEFAULT_MATERIAL_ITEM_NAMES = [
+    "Wood Shaving",
+    "Saw Dust",
+    "Wood Powder",
+    "Peanut Husk",
+]
+
 from sqlalchemy import String, cast, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -580,14 +588,7 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
 def seed_material_defaults() -> None:
     """Ensure a baseline set of material items exists."""
 
-    default_items = [
-        "Wood Shaving",
-        "Saw Dust",
-        "Wood Powder",
-        "Peanut Husk",
-    ]
-
-    for name in default_items:
+    for name in DEFAULT_MATERIAL_ITEM_NAMES:
         exists = (
             MaterialItem.query.filter(func.lower(MaterialItem.name) == name.lower())
             .with_entities(MaterialItem.id)

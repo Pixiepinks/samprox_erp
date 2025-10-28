@@ -12,12 +12,27 @@ from models import (
     JobStatus,
     LaborEntry,
     MaterialEntry,
+    MaterialItem,
+    MRNHeader,
     SalesActualEntry,
     SalesForecastEntry,
 )
 
+from material.services import DEFAULT_MATERIAL_ITEM_NAMES
+
 
 bp = Blueprint("reports", __name__, url_prefix="/api/reports")
+
+
+DEFAULT_MATERIAL_FIELD_CONFIG = [
+    (name, f"material_{name.lower().replace(' ', '_')}")
+    for name in DEFAULT_MATERIAL_ITEM_NAMES
+]
+DEFAULT_MATERIAL_LOOKUP = {
+    name.lower(): (name, field) for name, field in DEFAULT_MATERIAL_FIELD_CONFIG
+}
+OTHER_MATERIAL_LABEL = "Other materials"
+OTHER_MATERIAL_FIELD = "material_other"
 
 
 @bp.get("/costs")
@@ -468,6 +483,161 @@ def monthly_sales_summary():
         "average_day_quantity_tons": average_day_quantity,
         "peak": peak,
         "top_customer": top_customer,
+    }
+
+    return jsonify(response)
+
+
+@bp.get("/materials/monthly-summary")
+@jwt_required()
+def monthly_material_summary():
+    period_param = request.args.get("period")
+    if period_param:
+        try:
+            anchor = datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+    else:
+        anchor = date.today().replace(day=1)
+
+    days_in_month = monthrange(anchor.year, anchor.month)[1]
+    month_start = date(anchor.year, anchor.month, 1)
+    month_end = date(anchor.year, anchor.month, days_in_month)
+
+    totals_query = (
+        db.session.query(
+            MRNHeader.date,
+            MaterialItem.name,
+            func.coalesce(func.sum(MRNHeader.qty_ton), 0.0),
+        )
+        .join(MaterialItem, MRNHeader.item)
+        .filter(MRNHeader.date >= month_start, MRNHeader.date <= month_end)
+        .group_by(MRNHeader.date, MaterialItem.name)
+        .order_by(MRNHeader.date.asc())
+    )
+
+    material_fields = [field for _, field in DEFAULT_MATERIAL_FIELD_CONFIG]
+    field_labels = {field: name for name, field in DEFAULT_MATERIAL_FIELD_CONFIG}
+    material_totals = {field: 0.0 for field in material_fields}
+
+    daily_totals = []
+    day_lookup = {}
+    for day in range(1, days_in_month + 1):
+        current_date = date(anchor.year, anchor.month, day)
+        payload = {
+            "day": day,
+            "date": current_date.isoformat(),
+            "total_quantity_tons": 0.0,
+        }
+        for field in material_fields:
+            payload[field] = 0.0
+        daily_totals.append(payload)
+        day_lookup[current_date] = payload
+
+    def ensure_other_field() -> None:
+        if OTHER_MATERIAL_FIELD in material_totals:
+            return
+        material_totals[OTHER_MATERIAL_FIELD] = 0.0
+        field_labels[OTHER_MATERIAL_FIELD] = OTHER_MATERIAL_LABEL
+        material_fields.append(OTHER_MATERIAL_FIELD)
+        for entry in daily_totals:
+            entry[OTHER_MATERIAL_FIELD] = 0.0
+
+    for entry_date, item_name, total_qty in totals_query.all():
+        if isinstance(entry_date, datetime):
+            entry_date = entry_date.date()
+        if not isinstance(entry_date, date):
+            continue
+
+        day_payload = day_lookup.get(entry_date)
+        if not day_payload:
+            continue
+
+        normalized_name = (item_name or "").strip().lower()
+        if normalized_name in DEFAULT_MATERIAL_LOOKUP:
+            label, field = DEFAULT_MATERIAL_LOOKUP[normalized_name]
+        else:
+            ensure_other_field()
+            label = OTHER_MATERIAL_LABEL
+            field = OTHER_MATERIAL_FIELD
+
+        value = float(total_qty or 0.0)
+        day_payload[field] = day_payload.get(field, 0.0) + value
+        day_payload["total_quantity_tons"] += value
+        material_totals[field] = material_totals.get(field, 0.0) + value
+        field_labels[field] = label
+
+    total_quantity = sum(material_totals.values())
+    average_day_quantity = (
+        total_quantity / days_in_month if days_in_month else 0.0
+    )
+
+    peak_day_entry = max(
+        daily_totals,
+        key=lambda entry: entry["total_quantity_tons"],
+        default=None,
+    )
+    if peak_day_entry and peak_day_entry["total_quantity_tons"] > 0:
+        peak = {
+            "day": peak_day_entry["day"],
+            "total_quantity_tons": round(peak_day_entry["total_quantity_tons"], 2),
+        }
+    else:
+        peak = {"day": None, "total_quantity_tons": 0.0}
+
+    top_material_field = None
+    top_material_total = 0.0
+    if material_totals:
+        top_material_field, top_material_total = max(
+            material_totals.items(), key=lambda item: item[1]
+        )
+
+    materials_metadata = []
+    for name, field in DEFAULT_MATERIAL_FIELD_CONFIG:
+        materials_metadata.append(
+            {
+                "name": name,
+                "field": field,
+                "total_quantity_tons": round(material_totals.get(field, 0.0), 2),
+            }
+        )
+
+    if (
+        OTHER_MATERIAL_FIELD in material_totals
+        and material_totals[OTHER_MATERIAL_FIELD] > 0
+    ):
+        materials_metadata.append(
+            {
+                "name": OTHER_MATERIAL_LABEL,
+                "field": OTHER_MATERIAL_FIELD,
+                "total_quantity_tons": round(material_totals[OTHER_MATERIAL_FIELD], 2),
+            }
+        )
+
+    for entry in daily_totals:
+        for field in material_fields:
+            entry[field] = round(entry.get(field, 0.0), 2)
+        entry["total_quantity_tons"] = round(entry["total_quantity_tons"], 2)
+
+    response = {
+        "period": anchor.strftime("%Y-%m"),
+        "label": anchor.strftime("%B %Y"),
+        "start_date": month_start.isoformat(),
+        "end_date": month_end.isoformat(),
+        "days": days_in_month,
+        "materials": materials_metadata,
+        "daily_totals": daily_totals,
+        "total_quantity_tons": round(total_quantity, 2),
+        "average_day_quantity_tons": round(average_day_quantity, 2),
+        "peak": peak,
+        "top_material": (
+            {
+                "name": field_labels.get(top_material_field, ""),
+                "quantity_tons": round(top_material_total, 2),
+            }
+            if top_material_field and top_material_total > 0
+            else None
+        ),
     }
 
     return jsonify(response)

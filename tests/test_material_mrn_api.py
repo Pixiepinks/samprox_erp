@@ -119,7 +119,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
 
     def test_create_mrn_validation_errors(self):
         payload = self._default_payload()
-        payload["mrn_no"] = ""
+        payload.pop("supplier_id", None)
         payload["weigh_out_weight_kg"] = 14000
         payload["weigh_out_time"] = datetime(2024, 8, 10, 8, 30, tzinfo=timezone.utc).isoformat()
 
@@ -127,7 +127,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertIn("errors", data)
-        self.assertIn("mrn_no", data["errors"])
+        self.assertIn("supplier_id", data["errors"])
         self.assertIn("weigh_out_weight_kg", data["errors"])
         self.assertNotIn("weigh_out_time", data["errors"])
 
@@ -138,6 +138,37 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertIn("weigh_out_time", data["errors"])
+
+    def test_missing_mrn_number_is_generated(self):
+        payload = self._default_payload()
+        payload.pop("mrn_no", None)
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertIn("mrn_no", data)
+        self.assertTrue(data["mrn_no"].isdigit())
+        self.assertGreaterEqual(int(data["mrn_no"]), 25197)
+
+        second_payload = self._default_payload()
+        second_payload.pop("mrn_no", None)
+        response = self.client.post("/api/material/mrn", json=second_payload)
+        self.assertEqual(response.status_code, 201)
+        second_data = response.get_json()
+        self.assertNotEqual(second_data["mrn_no"], data["mrn_no"])
+
+    def test_next_mrn_number_endpoint(self):
+        response = self.client.get("/api/material/mrn/next-number")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["mrn_no"], "25197")
+
+        self._create_mrn({"mrn_no": "25197"})
+
+        response = self.client.get("/api/material/mrn/next-number")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["mrn_no"], "25198")
 
     def test_mrn_number_must_be_unique(self):
         payload = self._default_payload()

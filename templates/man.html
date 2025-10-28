@@ -272,8 +272,222 @@
                         </div>
                     </form>
                 </section>
+                <section class="salary-section" aria-labelledby="salary-section-heading">
+                    <div class="salary-section__header">
+                        <h3 class="salary-section__title" id="salary-section-heading">Salary sheet</h3>
+                        <p class="salary-section__description">
+                            Record and review the monthly salary breakdown for every active employee.
+                        </p>
+                    </div>
+                    <div class="salary-section__controls">
+                        <label class="salary-section__month" for="salary-month-selector">
+                            Salary month
+                            <input
+                                class="salary-section__month-input edit-form__input"
+                                type="month"
+                                id="salary-month-selector"
+                                name="salaryMonth"
+                            />
+                        </label>
+                    </div>
+                    <div class="table-container">
+                        <table class="team-table salary-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Reg No</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Basic Salary</th>
+                                    <th scope="col">General Allowance</th>
+                                    <th scope="col">Transport Allowance</th>
+                                    <th scope="col">Attendance Allowance</th>
+                                    <th scope="col">Special Allowance</th>
+                                    <th scope="col">Performance Bonus</th>
+                                    <th scope="col">Production</th>
+                                    <th scope="col">Target Allowance</th>
+                                    <th scope="col">Overtime</th>
+                                    <th scope="col">Gross Salary</th>
+                                    <th scope="col">Provident Fund</th>
+                                    <th scope="col">Other Deduction</th>
+                                    <th scope="col">Salary Advance</th>
+                                    <th scope="col">No Pay</th>
+                                    <th scope="col">Total Deduction</th>
+                                    <th scope="col">Net Pay</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salary-table-body"></tbody>
+                        </table>
+                    </div>
+                    <p class="salary-section__empty" id="salary-empty-state" hidden>
+                        No active team members available for the selected month.
+                    </p>
+                </section>
             </section>
         </section>
+    </div>
+    <div class="modal" id="salary-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="salary-modal-title">
+            <header class="modal__header">
+                <h2 class="modal__title" id="salary-modal-title">Update salary</h2>
+                <button type="button" class="modal__close" id="salary-modal-close" aria-label="Close salary form">
+                    &times;
+                </button>
+            </header>
+            <div class="modal__body">
+                <form class="edit-form salary-form" id="salary-form">
+                    <div class="salary-form__summary">
+                        <p class="salary-form__summary-item">
+                            <span class="salary-form__summary-label">Employee</span>
+                            <span class="salary-form__summary-value" id="salary-form-member-name">—</span>
+                        </p>
+                        <p class="salary-form__summary-item">
+                            <span class="salary-form__summary-label">Reg No</span>
+                            <span class="salary-form__summary-value" id="salary-form-regno">—</span>
+                        </p>
+                    </div>
+                    <div class="edit-form__grid salary-form__grid">
+                        <div class="edit-form__field edit-form__field--full">
+                            <label class="edit-form__label" for="salary-form-month">Salary month</label>
+                            <input
+                                class="edit-form__input"
+                                type="month"
+                                id="salary-form-month"
+                                name="salaryMonth"
+                                required
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-basic-salary">Basic salary</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-basic-salary" name="basicSalary" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-general-allowance">General allowance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-general-allowance"
+                                name="generalAllowance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-transport-allowance">Transport allowance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-transport-allowance"
+                                name="transportAllowance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-attendance-allowance">Attendance allowance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-attendance-allowance"
+                                name="attendanceAllowance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-special-allowance">Special allowance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-special-allowance"
+                                name="specialAllowance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-performance-bonus">Performance bonus</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-performance-bonus"
+                                name="performanceBonus"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-production">Production</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-production" name="production" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-target-allowance">Target allowance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-target-allowance"
+                                name="targetAllowance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-overtime">Overtime</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-overtime" name="overtime" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-gross-salary">Gross salary</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-gross-salary" name="grossSalary" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-provident-fund">Provident fund</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-provident-fund"
+                                name="providentFund"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-other-deduction">Other deduction</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-other-deduction"
+                                name="otherDeduction"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-salary-advance">Salary advance</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-salary-advance"
+                                name="salaryAdvance"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-no-pay">No pay</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-no-pay" name="noPay" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-total-deduction">Total deduction</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-total-deduction"
+                                name="totalDeduction"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-net-pay">Net pay</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-net-pay" name="netPay" />
+                        </div>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="button button--ghost" id="salary-modal-cancel">Cancel</button>
+                        <button type="submit" class="button button--primary">Save salary</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -353,11 +567,125 @@
         const teamForm = document.getElementById("team-form");
         const teamFormError = document.getElementById("team-form-error");
         const teamFormSuccess = document.getElementById("team-form-success");
+        const salaryTableBody = document.getElementById("salary-table-body");
+        const salaryEmptyState = document.getElementById("salary-empty-state");
+        const salaryMonthSelector = document.getElementById("salary-month-selector");
+        const salaryModal = document.getElementById("salary-modal");
+        const salaryModalTitle = document.getElementById("salary-modal-title");
+        const salaryModalClose = document.getElementById("salary-modal-close");
+        const salaryModalCancel = document.getElementById("salary-modal-cancel");
+        const salaryForm = document.getElementById("salary-form");
+        const salaryFormMonth = document.getElementById("salary-form-month");
+        const salaryFormMemberName = document.getElementById("salary-form-member-name");
+        const salaryFormRegno = document.getElementById("salary-form-regno");
 
         const canManageMembers = ["admin", "production_manager"].includes(user?.role);
 
         if (!canManageMembers && formSection) {
             formSection.hidden = true;
+        }
+
+        const salaryFieldDefinitions = [
+            { name: "basicSalary", label: "Basic Salary" },
+            { name: "generalAllowance", label: "General Allowance" },
+            { name: "transportAllowance", label: "Transport Allowance" },
+            { name: "attendanceAllowance", label: "Attendance Allowance" },
+            { name: "specialAllowance", label: "Special Allowance" },
+            { name: "performanceBonus", label: "Performance Bonus" },
+            { name: "production", label: "Production" },
+            { name: "targetAllowance", label: "Target Allowance" },
+            { name: "overtime", label: "Overtime" },
+            { name: "grossSalary", label: "Gross Salary" },
+            { name: "providentFund", label: "Provident Fund" },
+            { name: "otherDeduction", label: "Other Deduction" },
+            { name: "salaryAdvance", label: "Salary Advance" },
+            { name: "noPay", label: "No Pay" },
+            { name: "totalDeduction", label: "Total Deduction" },
+            { name: "netPay", label: "Net Pay" },
+        ];
+
+        const salaryDataStore = Object.create(null);
+        let activeMembers = [];
+        let salaryModalContext = null;
+
+        const numberFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+
+        const getInitialSalaryMonth = () => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, "0");
+            return `${year}-${month}`;
+        };
+
+        const normalizeMonthValue = (value) => {
+            if (typeof value !== "string") {
+                return "";
+            }
+            const trimmed = value.trim();
+            const match = /^(\d{4})-(\d{2})$/.exec(trimmed);
+            if (!match) {
+                return "";
+            }
+            const month = Number(match[2]);
+            if (Number.isNaN(month) || month < 1 || month > 12) {
+                return "";
+            }
+            return `${match[1]}-${String(month).padStart(2, "0")}`;
+        };
+
+        const formatSalaryValue = (value) => {
+            if (value == null) {
+                return "—";
+            }
+            const stringValue = String(value).trim();
+            if (!stringValue) {
+                return "—";
+            }
+            const numeric = Number(stringValue);
+            if (Number.isFinite(numeric)) {
+                return numberFormatter.format(numeric);
+            }
+            return stringValue;
+        };
+
+        const computeMemberKey = (member, fallbackIndex = null) => {
+            if (!member || typeof member !== "object") {
+                return fallbackIndex != null ? `idx:${fallbackIndex}` : null;
+            }
+            if (member.id != null) {
+                return `id:${member.id}`;
+            }
+            if (member.regNumber != null) {
+                return `reg:${member.regNumber}`;
+            }
+            if (member.name) {
+                return `name:${member.name}`;
+            }
+            return fallbackIndex != null ? `idx:${fallbackIndex}` : null;
+        };
+
+        let currentSalaryMonth = getInitialSalaryMonth();
+
+        if (salaryMonthSelector) {
+            const normalizedExisting = normalizeMonthValue(salaryMonthSelector.value);
+            if (normalizedExisting) {
+                currentSalaryMonth = normalizedExisting;
+            } else {
+                salaryMonthSelector.value = currentSalaryMonth;
+            }
+
+            salaryMonthSelector.addEventListener("change", (event) => {
+                const nextValue = normalizeMonthValue(event.target.value);
+                if (!nextValue) {
+                    event.target.value = currentSalaryMonth;
+                    return;
+                }
+                currentSalaryMonth = nextValue;
+                renderSalarySheet();
+            });
         }
 
         const sanitizeText = (value, fallback = "—") => {
@@ -549,6 +877,246 @@
             return wrapper;
         };
 
+        const getSalaryRecord = (month, memberKey) => {
+            if (!month || !memberKey) {
+                return null;
+            }
+            return salaryDataStore[month]?.[memberKey] || null;
+        };
+
+        const setSalaryRecord = (month, memberKey, record) => {
+            if (!month || !memberKey) {
+                return;
+            }
+            if (!salaryDataStore[month]) {
+                salaryDataStore[month] = {};
+            }
+            salaryDataStore[month][memberKey] = record;
+        };
+
+        const removeSalaryRecord = (month, memberKey) => {
+            if (!month || !memberKey || !salaryDataStore[month]) {
+                return;
+            }
+            delete salaryDataStore[month][memberKey];
+            if (Object.keys(salaryDataStore[month]).length === 0) {
+                delete salaryDataStore[month];
+            }
+        };
+
+        const renderSalarySheet = () => {
+            if (!salaryTableBody) {
+                return;
+            }
+
+            salaryTableBody.innerHTML = "";
+
+            if (!Array.isArray(activeMembers) || activeMembers.length === 0) {
+                if (salaryEmptyState) {
+                    salaryEmptyState.hidden = false;
+                }
+                return;
+            }
+
+            if (salaryEmptyState) {
+                salaryEmptyState.hidden = true;
+            }
+
+            const monthStore = salaryDataStore[currentSalaryMonth] || {};
+
+            activeMembers.forEach((member, index) => {
+                const memberKey = computeMemberKey(member, index);
+                const record = memberKey ? monthStore[memberKey] || {} : {};
+                const row = document.createElement("tr");
+
+                row.appendChild(createCell("Reg No", sanitizeText(member?.regNumber)));
+
+                const nameButton = document.createElement("button");
+                nameButton.type = "button";
+                nameButton.className = "salary-table__name-button";
+                nameButton.textContent = getMemberDisplayName(member);
+                nameButton.addEventListener("click", () => {
+                    openSalaryModal(member, memberKey);
+                });
+                row.appendChild(createCell("Name", nameButton));
+
+                salaryFieldDefinitions.forEach(({ label, name }) => {
+                    row.appendChild(createCell(label, formatSalaryValue(record?.[name])));
+                });
+
+                salaryTableBody.appendChild(row);
+            });
+        };
+
+        const setActiveMembers = (members) => {
+            if (!Array.isArray(members)) {
+                activeMembers = [];
+                renderSalarySheet();
+                return;
+            }
+
+            activeMembers = members.filter(
+                (member) => normalizeStatus(member?.status) === "Active"
+            );
+            renderSalarySheet();
+        };
+
+        const populateSalaryFormFields = (record) => {
+            if (!salaryForm) {
+                return;
+            }
+
+            salaryFieldDefinitions.forEach(({ name }) => {
+                const input = salaryForm.elements[name];
+                if (input) {
+                    input.value = record?.[name] ?? "";
+                }
+            });
+        };
+
+        const closeSalaryModal = () => {
+            if (!salaryModal) {
+                return;
+            }
+            salaryModal.setAttribute("hidden", "");
+            salaryModal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+            if (salaryForm) {
+                salaryForm.reset();
+            }
+            if (salaryFormMonth) {
+                salaryFormMonth.value = currentSalaryMonth;
+            }
+            salaryModalContext = null;
+            if (salaryModal?.dataset) {
+                delete salaryModal.dataset.memberKey;
+            }
+        };
+
+        const openSalaryModal = (member, providedKey) => {
+            if (!salaryModal || !salaryForm) {
+                return;
+            }
+
+            const memberKey = providedKey ?? computeMemberKey(member);
+            if (!memberKey) {
+                return;
+            }
+
+            salaryModalContext = { member, memberKey };
+            salaryModal.removeAttribute("hidden");
+            salaryModal.setAttribute("aria-hidden", "false");
+            salaryModal.dataset.memberKey = memberKey;
+            document.body.classList.add("modal-open");
+
+            const displayName = getMemberDisplayName(member);
+            if (salaryModalTitle) {
+                salaryModalTitle.textContent = `Update salary for ${displayName}`;
+            }
+            if (salaryFormMemberName) {
+                salaryFormMemberName.textContent = displayName;
+            }
+            if (salaryFormRegno) {
+                salaryFormRegno.textContent = sanitizeText(member?.regNumber);
+            }
+            if (salaryFormMonth) {
+                salaryFormMonth.value = currentSalaryMonth;
+            }
+
+            populateSalaryFormFields(getSalaryRecord(currentSalaryMonth, memberKey));
+
+            window.requestAnimationFrame(() => {
+                const firstEditableField = salaryForm.querySelector(
+                    "input[name='basicSalary']"
+                );
+                if (firstEditableField) {
+                    firstEditableField.focus();
+                }
+            });
+        };
+
+        if (salaryModalClose) {
+            salaryModalClose.addEventListener("click", () => {
+                closeSalaryModal();
+            });
+        }
+
+        if (salaryModalCancel) {
+            salaryModalCancel.addEventListener("click", () => {
+                closeSalaryModal();
+            });
+        }
+
+        if (salaryModal) {
+            salaryModal.addEventListener("click", (event) => {
+                if (event.target?.dataset?.modalDismiss !== undefined) {
+                    closeSalaryModal();
+                }
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && salaryModal && !salaryModal.hasAttribute("hidden")) {
+                closeSalaryModal();
+            }
+        });
+
+        if (salaryFormMonth) {
+            salaryFormMonth.addEventListener("change", (event) => {
+                const normalized = normalizeMonthValue(event.target.value);
+                if (!normalized) {
+                    event.target.value = currentSalaryMonth;
+                    return;
+                }
+
+                const memberKey = salaryModalContext?.memberKey;
+                if (!memberKey) {
+                    return;
+                }
+
+                populateSalaryFormFields(getSalaryRecord(normalized, memberKey));
+            });
+        }
+
+        if (salaryForm) {
+            salaryForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+
+                if (!salaryModalContext?.memberKey) {
+                    closeSalaryModal();
+                    return;
+                }
+
+                const formData = new FormData(salaryForm);
+                const monthRaw = formData.get("salaryMonth");
+                const normalizedMonth = normalizeMonthValue(monthRaw) || currentSalaryMonth;
+                const record = {};
+
+                salaryFieldDefinitions.forEach(({ name }) => {
+                    const rawValue = formData.get(name);
+                    if (typeof rawValue === "string") {
+                        const trimmed = rawValue.trim();
+                        if (trimmed) {
+                            record[name] = trimmed;
+                        }
+                    }
+                });
+
+                if (Object.keys(record).length > 0) {
+                    setSalaryRecord(normalizedMonth, salaryModalContext.memberKey, record);
+                } else {
+                    removeSalaryRecord(normalizedMonth, salaryModalContext.memberKey);
+                }
+
+                currentSalaryMonth = normalizedMonth;
+                if (salaryMonthSelector) {
+                    salaryMonthSelector.value = currentSalaryMonth;
+                }
+                renderSalarySheet();
+                closeSalaryModal();
+            });
+        }
+
         const renderMembers = (members) => {
             if (!tableBody) {
                 return;
@@ -624,12 +1192,14 @@
 
                 const data = await response.json();
                 renderMembers(data);
+                setActiveMembers(data);
             } catch (error) {
                 console.error("Failed to load team members", error);
                 if (tableBody) {
                     tableBody.innerHTML = "";
                 }
                 renderEmptyState("Unable to load team members.");
+                setActiveMembers([]);
             }
         };
 

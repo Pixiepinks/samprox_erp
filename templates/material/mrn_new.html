@@ -479,6 +479,7 @@
             window.location.href = "/";
         });
 
+        const mrnNoInput = document.getElementById("mrn-no");
         const supplierInput = document.getElementById("supplier-search");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierMenu = document.getElementById("supplier-menu");
@@ -496,6 +497,29 @@
         const amountInput = document.getElementById("amount");
         const itemSelect = document.getElementById("item-select");
         let lastValidItemValue = "";
+
+        async function populateMrnNumber(force = false) {
+            if (!mrnNoInput) {
+                return;
+            }
+            if (mrnNoInput.value && !force) {
+                return;
+            }
+            try {
+                const response = await fetch("/api/material/mrn/next-number");
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+                const data = await response.json();
+                if (data?.mrn_no && (force || !mrnNoInput.value)) {
+                    mrnNoInput.value = data.mrn_no;
+                }
+            } catch (error) {
+                console.error("Failed to fetch next MRN number", error);
+            }
+        }
+
+        populateMrnNumber();
 
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalAlert = document.getElementById("supplier-modal-alert");
@@ -1142,6 +1166,9 @@
 
         resetBtn.addEventListener("click", () => {
             mrnForm.reset();
+            if (mrnNoInput) {
+                mrnNoInput.value = "";
+            }
             supplierInput.value = "";
             supplierIdInput.value = "";
             if (vehicleNoInput) {
@@ -1164,6 +1191,7 @@
             lastValidItemValue = "";
             clearErrors();
             updateQuantityFromWeights();
+            populateMrnNumber(true);
         });
 
         function validateForm() {

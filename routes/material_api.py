@@ -9,6 +9,7 @@ from material import (
     create_item,
     create_mrn,
     create_supplier,
+    get_next_mrn_number,
     get_next_supplier_registration_no,
     get_mrn_detail,
     list_material_items,
@@ -96,6 +97,12 @@ def create_mrn_entry():
     except MaterialValidationError as exc:
         return jsonify({"errors": exc.errors}), 400
     return jsonify(mrn_schema.dump(mrn)), 201
+
+
+@bp.get("/mrn/next-number")
+def mrn_next_number():
+    next_number = get_next_mrn_number()
+    return jsonify({"mrn_no": next_number})
 
 
 @bp.get("/mrn/<mrn_id>")

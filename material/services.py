@@ -35,6 +35,8 @@ class MaterialValidationError(Exception):
 
 SUPPLIER_REGISTRATION_PREFIX = "SR"
 
+MRN_NUMBER_START = 25197
+
 
 def _strip_or_none(value: Any) -> Optional[str]:
     if value is None:
@@ -65,6 +67,33 @@ def _format_registration_no(sequence: int) -> str:
 def get_next_supplier_registration_no() -> str:
     last_reg_no = db.session.query(func.max(Supplier.supplier_reg_no)).scalar()
     return _format_registration_no(_next_registration_sequence(last_reg_no))
+
+
+def _parse_numeric_mrn(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or not text.isdigit():
+        return None
+    try:
+        return int(text)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return None
+
+
+def get_next_mrn_number() -> str:
+    """Return the next sequential MRN number starting from ``MRN_NUMBER_START``."""
+
+    max_number = MRN_NUMBER_START - 1
+    for (value,) in db.session.query(MRNHeader.mrn_no).all():
+        parsed = _parse_numeric_mrn(value)
+        if parsed is not None and parsed > max_number:
+            max_number = parsed
+
+    next_number = max_number + 1
+    if next_number < MRN_NUMBER_START:
+        next_number = MRN_NUMBER_START
+    return str(next_number)
 
 
 def search_suppliers(query: Optional[str], limit: int = 20) -> list[Supplier]:
@@ -371,8 +400,10 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     errors: Dict[str, str] = {}
 
     mrn_no = (payload.get("mrn_no") or "").strip()
+    auto_generated_mrn = False
     if not mrn_no:
-        errors["mrn_no"] = "MRN number is required."
+        mrn_no = get_next_mrn_number()
+        auto_generated_mrn = True
 
     weighing_slip_no = (payload.get("weighing_slip_no") or "").strip()
     if not weighing_slip_no:
@@ -502,13 +533,27 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     mrn = MRNHeader(**mrn_kwargs)
 
     db.session.add(mrn)
-    try:
-        db.session.commit()
-    except IntegrityError as exc:  # pragma: no cover - depends on database backend
-        db.session.rollback()
-        if "mrn_no" in str(exc.orig).lower():
-            raise MaterialValidationError({"mrn_no": "MRN number already exists."}) from exc
-        raise
+
+    attempts = 0
+    while True:
+        try:
+            db.session.commit()
+            break
+        except IntegrityError as exc:  # pragma: no cover - depends on database backend
+            db.session.rollback()
+            if _is_unique_violation(exc, "mrn", "mrn_no"):
+                if auto_generated_mrn:
+                    attempts += 1
+                    if attempts >= 5:
+                        raise MaterialValidationError(
+                            {"mrn_no": "Unable to generate a unique MRN number. Please try again."}
+                        ) from exc
+                    mrn_no = get_next_mrn_number()
+                    mrn.mrn_no = mrn_no
+                    db.session.add(mrn)
+                    continue
+                raise MaterialValidationError({"mrn_no": "MRN number already exists."}) from exc
+            raise
 
     return mrn
 

@@ -18,10 +18,15 @@ class GUID(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):  # pragma: no cover - SQLAlchemy hook
-        if dialect.name == "postgresql":
-            from sqlalchemy.dialects.postgresql import UUID as PGUUID
-
-            return dialect.type_descriptor(PGUUID(as_uuid=True))
+        #
+        # The initial Alembic migrations for this project created UUID columns
+        # as VARCHAR(36) fields in the PostgreSQL database.  When SQLAlchemy's
+        # PostgreSQL UUID type is used against those columns it coerces bound
+        # parameters to ``::UUID`` which leads to ``operator does not exist:
+        # character varying = uuid`` errors at runtime.  Always binding the
+        # column as ``CHAR(36)`` keeps the ORM layer aligned with the actual
+        # database schema while still allowing UUID validation through
+        # ``process_bind_param``.
         return dialect.type_descriptor(CHAR(36))
 
     def process_bind_param(self, value, dialect):  # pragma: no cover - SQLAlchemy hook

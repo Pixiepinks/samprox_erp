@@ -72,6 +72,46 @@
                     </p>
                 </article>
             </div>
+            <div class="material-receipts-card supplier-registry-card">
+                <div class="material-receipts-card__header">
+                    <div>
+                        <h2 class="material-receipts-card__title">Supplier registry</h2>
+                        <p class="material-receipts-card__meta">
+                            Review registered suppliers and keep their contact details at your fingertips.
+                        </p>
+                    </div>
+                    <a class="button" href="{{ url_for('ui.material_mrn_new_page') }}">Register supplier</a>
+                </div>
+                <form class="material-receipts-card__search" id="supplier-search-form">
+                    <label class="sr-only" for="supplier-search-input">Search suppliers</label>
+                    <input
+                        id="supplier-search-input"
+                        type="search"
+                        name="q"
+                        placeholder="Search by supplier name, registration, or contact"
+                        autocomplete="off"
+                    />
+                    <div class="material-receipts-card__actions">
+                        <button type="submit" class="button button--secondary">Search</button>
+                        <button type="button" class="button button--ghost" id="supplier-clear-button">Clear</button>
+                    </div>
+                </form>
+                <p class="empty-state" id="supplier-empty-state">Loading suppliers…</p>
+                <div class="table-wrapper" id="supplier-table-wrapper" hidden>
+                    <table class="data-table" id="supplier-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Supplier</th>
+                                <th scope="col">Registration no.</th>
+                                <th scope="col">Category</th>
+                                <th scope="col">Primary phone</th>
+                                <th scope="col">Credit period</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supplier-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
             <div class="material-receipts-card">
                 <div class="material-receipts-card__header">
                     <div>
@@ -150,6 +190,13 @@
             window.location.href = "/";
         });
 
+        const supplierTableBody = document.getElementById("supplier-table-body");
+        const supplierTableWrapper = document.getElementById("supplier-table-wrapper");
+        const supplierEmptyState = document.getElementById("supplier-empty-state");
+        const supplierSearchForm = document.getElementById("supplier-search-form");
+        const supplierSearchInput = document.getElementById("supplier-search-input");
+        const supplierClearButton = document.getElementById("supplier-clear-button");
+
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
         const mrnEmptyState = document.getElementById("mrn-empty-state");
@@ -166,6 +213,85 @@
                 minimumFractionDigits: fractionDigits,
                 maximumFractionDigits: fractionDigits,
             });
+        }
+
+        function renderSupplierRows(items) {
+            if (!supplierTableBody || !supplierTableWrapper || !supplierEmptyState) {
+                return;
+            }
+
+            supplierTableBody.innerHTML = "";
+
+            if (!items || items.length === 0) {
+                supplierTableWrapper.hidden = true;
+                supplierEmptyState.hidden = false;
+                supplierEmptyState.textContent = "No suppliers registered yet.";
+                return;
+            }
+
+            items.forEach((item) => {
+                const row = document.createElement("tr");
+
+                const nameCell = document.createElement("td");
+                nameCell.textContent = item.name || "—";
+                row.appendChild(nameCell);
+
+                const regCell = document.createElement("td");
+                regCell.textContent = item.supplierRegNo || "—";
+                row.appendChild(regCell);
+
+                const categoryCell = document.createElement("td");
+                categoryCell.textContent = item.category || "—";
+                row.appendChild(categoryCell);
+
+                const phoneCell = document.createElement("td");
+                phoneCell.textContent = item.primaryPhone || item.phone || "—";
+                row.appendChild(phoneCell);
+
+                const creditCell = document.createElement("td");
+                creditCell.textContent = item.creditPeriod || "—";
+                row.appendChild(creditCell);
+
+                supplierTableBody.appendChild(row);
+            });
+
+            supplierEmptyState.hidden = true;
+            supplierTableWrapper.hidden = false;
+        }
+
+        async function loadSuppliers(query = "") {
+            if (!supplierTableBody || !supplierEmptyState) {
+                return;
+            }
+
+            supplierEmptyState.hidden = false;
+            supplierEmptyState.textContent = "Loading suppliers…";
+            if (supplierTableWrapper) {
+                supplierTableWrapper.hidden = true;
+            }
+
+            try {
+                const url = new URL("/api/material/suppliers", window.location.origin);
+                url.searchParams.set("limit", "15");
+                if (query && query.trim()) {
+                    url.searchParams.set("search", query.trim());
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error("Failed to load suppliers");
+                }
+                const data = await response.json();
+                if (!Array.isArray(data)) {
+                    renderSupplierRows([]);
+                    return;
+                }
+                renderSupplierRows(data);
+            } catch (error) {
+                console.error(error);
+                supplierEmptyState.hidden = false;
+                supplierEmptyState.textContent =
+                    "Unable to load suppliers right now. Please try again.";
+            }
         }
 
         function formatDate(value) {
@@ -185,6 +311,31 @@
                 year: "numeric",
                 month: "short",
                 day: "numeric",
+            });
+        }
+
+        if (supplierSearchForm) {
+            supplierSearchForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                const query = supplierSearchInput ? supplierSearchInput.value : "";
+                loadSuppliers(query);
+            });
+        }
+
+        if (supplierClearButton) {
+            supplierClearButton.addEventListener("click", () => {
+                if (supplierSearchInput) {
+                    supplierSearchInput.value = "";
+                }
+                loadSuppliers("");
+            });
+        }
+
+        if (supplierSearchInput) {
+            supplierSearchInput.addEventListener("input", () => {
+                if (supplierSearchInput.value.trim() === "") {
+                    loadSuppliers("");
+                }
             });
         }
 
@@ -300,6 +451,7 @@
             });
         }
 
+        loadSuppliers("");
         loadMrns("");
     </script>
 </body>

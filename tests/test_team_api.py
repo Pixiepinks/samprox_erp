@@ -73,6 +73,7 @@ class TeamApiTestCase(unittest.TestCase):
             "name": "Jane Doe",
             "joinDate": "2024-07-01",
             "status": "Active",
+            "payCategory": "Factory",
             "personalDetail": "Jane's personal detail",
             "assignments": "Line A",
             "trainingRecords": "Forklift certified",
@@ -90,6 +91,7 @@ class TeamApiTestCase(unittest.TestCase):
         member = response.get_json()
         self.assertEqual(member["regNumber"], payload["regNumber"])
         self.assertEqual(member["status"], "Active")
+        self.assertEqual(member["payCategory"], payload["payCategory"])
         self.assertEqual(member["personalDetail"], payload["personalDetail"])
         self.assertEqual(member["assignments"], payload["assignments"])
         self.assertEqual(member["trainingRecords"], payload["trainingRecords"])
@@ -106,6 +108,7 @@ class TeamApiTestCase(unittest.TestCase):
         stored = next((m for m in members if m["regNumber"] == payload["regNumber"]), None)
         self.assertIsNotNone(stored)
         self.assertEqual(stored["personalDetail"], payload["personalDetail"])
+        self.assertEqual(stored["payCategory"], payload["payCategory"])
 
     def test_production_manager_can_register_member(self):
         payload = {
@@ -125,6 +128,7 @@ class TeamApiTestCase(unittest.TestCase):
         body = response.get_json()
         self.assertEqual(body["regNumber"], payload["regNumber"])
         self.assertEqual(body["name"], payload["name"])
+        self.assertEqual(body["payCategory"], "Office")
 
     def test_list_members_recovers_from_legacy_status_values(self):
         payload = {
@@ -253,6 +257,7 @@ class TeamApiTestCase(unittest.TestCase):
                 "position": "Shift Lead",
                 "assignments": "Updated assignment",
                 "personalDetail": "Updated detail",
+                "payCategory": "Casual",
             },
         )
         self.assertEqual(update_response.status_code, 200)
@@ -261,6 +266,7 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(updated["position"], "Shift Lead")
         self.assertEqual(updated["assignments"], "Updated assignment")
         self.assertEqual(updated["personalDetail"], "Updated detail")
+        self.assertEqual(updated["payCategory"], "Casual")
 
         # Fetch list to ensure persistence
         list_response = self.client.get(
@@ -275,6 +281,7 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(stored["position"], "Shift Lead")
         self.assertEqual(stored["assignments"], "Updated assignment")
         self.assertEqual(stored["personalDetail"], "Updated detail")
+        self.assertEqual(stored["payCategory"], "Casual")
 
     def test_update_member_validates_field_lengths(self):
         payload = {

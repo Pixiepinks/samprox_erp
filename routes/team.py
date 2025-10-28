@@ -8,7 +8,7 @@ from sqlalchemy import types as sqltypes
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import RoleEnum, TeamMember, TeamMemberStatus  # keep import; not strictly required now
+from models import PayCategory, RoleEnum, TeamMember, TeamMemberStatus  # keep import; not strictly required now
 from routes.jobs import require_role
 from schemas import TeamMemberSchema
 
@@ -41,11 +41,21 @@ def _ensure_schema():
     column_types = {c["name"]: c.get("type") for c in column_info}
     statements: list[str] = []
     status_fixes: list[str] = []
+    pay_category_fixes: list[str] = []
 
     if "image_url" not in columns:
         statements.append("ALTER TABLE team_member ADD COLUMN image_url VARCHAR(500)")
 
     dialect = engine.dialect.name
+
+    if "pay_category" not in columns:
+        if dialect == "sqlite":
+            statements.append("ALTER TABLE team_member ADD COLUMN pay_category VARCHAR(50)")
+        else:
+            statements.append("ALTER TABLE team_member ADD COLUMN pay_category VARCHAR(50) DEFAULT 'Office'")
+        if dialect != "sqlite":
+            statements.append("ALTER TABLE team_member ALTER COLUMN pay_category SET NOT NULL")
+            statements.append("ALTER TABLE team_member ALTER COLUMN pay_category DROP DEFAULT")
 
     if "status" in columns:
         status_type = column_types.get("status")
@@ -104,18 +114,58 @@ def _ensure_schema():
         if name not in columns:
             statements.append(f"ALTER TABLE team_member ADD COLUMN {name} {typ}")
 
-    if statements or status_fixes:
+    if "pay_category" in columns:
+        pay_category_expression = "pay_category::text" if dialect == "postgresql" else "pay_category"
+        trimmed_pay_category = f"TRIM({pay_category_expression})"
+        lowered_pay_category = f"LOWER({trimmed_pay_category})"
+        normalized_pay_category = "CASE " \
+            f"WHEN {lowered_pay_category} IN ('office', '') THEN 'Office' " \
+            f"WHEN {lowered_pay_category} = 'factory' THEN 'Factory' " \
+            f"WHEN {lowered_pay_category} = 'casual' THEN 'Casual' " \
+            f"WHEN {lowered_pay_category} = 'other' THEN 'Other' " \
+            f"ELSE 'Office' END"
+        pay_category_fixes.extend(
+            [
+                f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE {trimmed_pay_category} IS NULL OR {trimmed_pay_category} = ''",
+                f"UPDATE team_member SET pay_category = 'Office' WHERE {lowered_pay_category} NOT IN ('office', 'factory', 'casual', 'other')",
+            ]
+        )
+
+    pay_category_expression = "pay_category::text" if dialect == "postgresql" else "pay_category"
+    trimmed_pay_category = f"TRIM({pay_category_expression})"
+    lowered_pay_category = f"LOWER({trimmed_pay_category})"
+    normalized_pay_category = (
+        "CASE "
+        f"WHEN {lowered_pay_category} IN ('office', '') THEN 'Office' "
+        f"WHEN {lowered_pay_category} = 'factory' THEN 'Factory' "
+        f"WHEN {lowered_pay_category} = 'casual' THEN 'Casual' "
+        f"WHEN {lowered_pay_category} = 'other' THEN 'Other' "
+        "ELSE 'Office' END"
+    )
+    pay_category_fixes.extend(
+        [
+            f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE pay_category IS NULL",
+            f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE {lowered_pay_category} NOT IN ('office', 'factory', 'casual', 'other')",
+        ]
+    )
+
+    if statements or status_fixes or pay_category_fixes:
         with engine.begin() as conn:
-            for stmt in status_fixes:
-                try:
-                    conn.execute(text(stmt))
-                except (ProgrammingError, OperationalError, DataError):
-                    current_app.logger.debug("Status normalization statement failed or already applied: %s", stmt)
             for stmt in statements:
                 try:
                     conn.execute(text(stmt))
                 except (ProgrammingError, OperationalError, DataError):
                     current_app.logger.debug("Schema statement likely already applied: %s", stmt)
+            for stmt in status_fixes:
+                try:
+                    conn.execute(text(stmt))
+                except (ProgrammingError, OperationalError, DataError):
+                    current_app.logger.debug("Status normalization statement failed or already applied: %s", stmt)
+            for stmt in pay_category_fixes:
+                try:
+                    conn.execute(text(stmt))
+                except (ProgrammingError, OperationalError, DataError):
+                    current_app.logger.debug("Pay category normalization skipped or already applied: %s", stmt)
 
 
 def _clean_string(value) -> str:
@@ -147,6 +197,13 @@ _STATUS_MAP = {
     "on-leave": TeamMemberStatus.ON_LEAVE,
 }
 
+_PAY_CATEGORY_MAP = {
+    "office": PayCategory.OFFICE,
+    "factory": PayCategory.FACTORY,
+    "casual": PayCategory.CASUAL,
+    "other": PayCategory.OTHER,
+}
+
 
 def _normalize_status(value) -> TeamMemberStatus:
     """Return the TeamMemberStatus enum that matches the provided value."""
@@ -174,6 +231,25 @@ def _normalize_status(value) -> TeamMemberStatus:
             return TeamMemberStatus(canonical)
         except ValueError:
             return TeamMemberStatus.ACTIVE
+
+
+def _normalize_pay_category(value) -> PayCategory:
+    if isinstance(value, PayCategory):
+        return value
+
+    if value is None:
+        return PayCategory.OFFICE
+
+    text_value = str(value).strip()
+    if not text_value:
+        return PayCategory.OFFICE
+
+    normalized = _PAY_CATEGORY_MAP.get(text_value.lower())
+    if normalized:
+        return normalized
+
+    canonical = re.sub(r"[\s_-]+", " ", text_value).strip().title()
+    return _PAY_CATEGORY_MAP.get(canonical.lower(), PayCategory.OFFICE)
 
 
 def _parse_join_date(value, *, required: bool) -> date | None:
@@ -332,6 +408,7 @@ def create_member():
 
     # ✅ IMPORTANT: normalize to the TeamMemberStatus enum so the DB receives a valid value
     status_value = _normalize_status(payload.get("status"))
+    pay_category_value = _normalize_pay_category(payload.get("payCategory"))
 
     # --- Create model ---
     member = TeamMember(
@@ -340,6 +417,7 @@ def create_member():
         nickname=nickname,
         epf=epf,
         position=position,
+        pay_category=pay_category_value,
         join_date=join_date,
         status=status_value,
         image_url=image_url,
@@ -411,6 +489,9 @@ def update_member(member_id: int):
                 "trainingRecords": "training_records",
                 "employmentLog": "employment_log",
             }[attr] if attr in {"personalDetail", "trainingRecords", "employmentLog"} else attr, value)
+
+    if "payCategory" in payload:
+        member.pay_category = _normalize_pay_category(payload.get("payCategory"))
 
     if "joinDate" in payload:
         try:

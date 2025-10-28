@@ -1,6 +1,8 @@
+import re
+
 from marshmallow import Schema, fields
 
-from models import TeamMemberStatus
+from models import PayCategory, TeamMemberStatus
 
 class UserSchema(Schema):
     id = fields.Int()
@@ -22,6 +24,13 @@ VALID_STATUSES = {
     "on_leave": "On Leave",
     "on-leave": "On Leave",
 }
+
+VALID_PAY_CATEGORIES = {value.lower(): value for value in (
+    PayCategory.OFFICE.value,
+    PayCategory.FACTORY.value,
+    PayCategory.CASUAL.value,
+    PayCategory.OTHER.value,
+)}
 
 def _parse_flexible_date(v):
     """Return a date object from either YYYY-MM-DD or MM/DD/YYYY; None if empty."""
@@ -45,6 +54,22 @@ def _normalize_status(s):
         return "Active"
     return VALID_STATUSES.get(str(s).strip().lower(), "Active")
 
+
+def _normalize_pay_category(value):
+    if not value:
+        return PayCategory.OFFICE.value
+
+    text = str(value).strip()
+    if not text:
+        return PayCategory.OFFICE.value
+
+    direct = VALID_PAY_CATEGORIES.get(text.lower())
+    if direct:
+        return direct
+
+    normalized = re.sub(r"[\s_-]+", " ", text).strip().title()
+    return VALID_PAY_CATEGORIES.get(normalized.lower(), PayCategory.OFFICE.value)
+
 # --- READ schema (what you send back to the UI) ---------------------------
 
 class TeamMemberSchema(Schema):
@@ -57,6 +82,7 @@ class TeamMemberSchema(Schema):
     nickname = fields.Str(allow_none=True)
     epf = fields.Str(allow_none=True)
     position = fields.Str(allow_none=True)
+    pay_category = fields.Method("get_pay_category", data_key="payCategory")
 
     join_date = fields.Date(data_key="joinDate")
 
@@ -93,6 +119,15 @@ class TeamMemberSchema(Schema):
 
         return value
 
+    def get_pay_category(self, obj):
+        value = getattr(obj, "pay_category", None)
+        if isinstance(value, PayCategory):
+            return value.value
+        if isinstance(value, str):
+            normalized = VALID_PAY_CATEGORIES.get(value.strip().lower())
+            return normalized or value
+        return value
+
 # --- CREATE/UPDATE schema (what you accept from the UI) -------------------
 
 class TeamMemberCreateSchema(Schema):
@@ -105,6 +140,7 @@ class TeamMemberCreateSchema(Schema):
     nickname = fields.Str(allow_none=True)
     epf      = fields.Str(allow_none=True)
     position = fields.Str(allow_none=True)
+    pay_category = fields.Str(allow_none=True, data_key="payCategory")
 
     # Accept from UI as "joinDate" (string), then we coerce to date in pre_load
     join_date = fields.Date(allow_none=True, data_key="joinDate")
@@ -135,6 +171,9 @@ class TeamMemberCreateSchema(Schema):
         if "status" in data:
             data["status"] = _normalize_status(data.get("status"))
 
+        if "payCategory" in data:
+            data["payCategory"] = _normalize_pay_category(data.get("payCategory"))
+
         # normalize join date: accept 'YYYY-MM-DD' or 'MM/DD/YYYY'
         jd = data.get("joinDate")
         if jd:
@@ -147,6 +186,13 @@ class TeamMemberCreateSchema(Schema):
     def validate_status_member(self, value):
         if value not in {"Active", "Inactive", "On Leave"}:
             raise ValidationError("Status must be one of: Active, On Leave, Inactive.")
+
+    @validates("pay_category")
+    def validate_pay_category(self, value):
+        if value is None:
+            return
+        if value not in VALID_PAY_CATEGORIES.values():
+            raise ValidationError("Pay category must be one of: Office, Factory, Casual, Other.")
 
 
 

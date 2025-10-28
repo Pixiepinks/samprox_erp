@@ -2,6 +2,10 @@ import importlib
 import os
 import sys
 import unittest
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
+
+from material import seed_material_defaults
 
 
 class ProductionApiTestCase(unittest.TestCase):
@@ -363,6 +367,99 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(data["peak"]["total_tons"], 7.0)
         self.assertIn("MCH-0001", data["machine_codes"])
         self.assertIn("MCH-0002", data["machine_codes"])
+
+    def test_material_monthly_summary_returns_daily_totals(self):
+        db = self.app_module.db
+        MRNHeader = self.app_module.MRNHeader
+        MaterialItem = self.app_module.MaterialItem
+
+        seed_material_defaults()
+
+        materials = {
+            item.name: item
+            for item in MaterialItem.query.filter(
+                MaterialItem.name.in_(
+                    [
+                        "Wood Shaving",
+                        "Saw Dust",
+                        "Wood Powder",
+                        "Peanut Husk",
+                    ]
+                )
+            )
+        }
+
+        self.assertEqual(len(materials), 4)
+
+        def add_mrn(material_name, day, quantity):
+            material = materials[material_name]
+            entry_date = date(2024, 5, day)
+            mrn = MRNHeader(
+                mrn_no=f"MRN-{material_name[:2]}-{day}-{quantity}",
+                date=entry_date,
+                item=material,
+                qty_ton=Decimal(str(quantity)),
+                unit_price=Decimal("100.00"),
+                wet_factor=Decimal("1.000"),
+                approved_unit_price=Decimal("95.00"),
+                amount=Decimal(str(quantity)) * Decimal("95.00"),
+                weighing_slip_no=f"SLIP-{material_name[:2]}-{day}",
+                weigh_in_time=datetime.combine(entry_date, time(8, 0, tzinfo=timezone.utc)),
+                weigh_out_time=datetime.combine(entry_date, time(8, 30, tzinfo=timezone.utc)),
+                security_officer_name="Guard",
+                authorized_person_name="Supervisor",
+            )
+            db.session.add(mrn)
+
+        add_mrn("Wood Shaving", 1, 5.25)
+        add_mrn("Saw Dust", 1, 3.5)
+        add_mrn("Wood Powder", 2, 2.75)
+        add_mrn("Peanut Husk", 2, 1.25)
+        add_mrn("Wood Shaving", 15, 4.0)
+        add_mrn("Peanut Husk", 20, 2.0)
+
+        db.session.commit()
+
+        response = self.client.get(
+            "/api/production/monthly/material-summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-05"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertEqual(len(data["daily_totals"]), 31)
+        self.assertEqual(
+            data["material_names"],
+            ["Wood Shaving", "Saw Dust", "Wood Powder", "Peanut Husk"],
+        )
+
+        totals_by_day = {item["day"]: item for item in data["daily_totals"]}
+
+        may_first = totals_by_day[1]
+        self.assertAlmostEqual(may_first["WOOD_SHAVING"], 5.25)
+        self.assertAlmostEqual(may_first["SAW_DUST"], 3.5)
+        self.assertAlmostEqual(may_first["WOOD_POWDER"], 0.0)
+        self.assertAlmostEqual(may_first["PEANUT_HUSK"], 0.0)
+        self.assertAlmostEqual(may_first["total_tons"], 8.75)
+
+        may_second = totals_by_day[2]
+        self.assertAlmostEqual(may_second["WOOD_POWDER"], 2.75)
+        self.assertAlmostEqual(may_second["PEANUT_HUSK"], 1.25)
+        self.assertAlmostEqual(may_second["total_tons"], 4.0)
+
+        may_fifteenth = totals_by_day[15]
+        self.assertAlmostEqual(may_fifteenth["WOOD_SHAVING"], 4.0)
+        self.assertAlmostEqual(may_fifteenth["total_tons"], 4.0)
+
+        may_twentieth = totals_by_day[20]
+        self.assertAlmostEqual(may_twentieth["PEANUT_HUSK"], 2.0)
+        self.assertAlmostEqual(may_twentieth["total_tons"], 2.0)
+
+        self.assertAlmostEqual(data["total_material"], 18.75)
+        self.assertAlmostEqual(data["average_day_material"], 18.75 / 31, places=3)
 
 
     def test_hourly_pulse_returns_hourly_series(self):

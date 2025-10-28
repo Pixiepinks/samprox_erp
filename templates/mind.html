@@ -127,6 +127,25 @@
                     </div>
                 </div>
             </section>
+            <section class="production-chart" aria-labelledby="material-chart-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="material-chart-title">Monthly material inflow</h2>
+                        <p>Stacked daily receipts across the month for core raw materials.</p>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="material-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas
+                            id="material-chart"
+                            height="320"
+                            aria-label="Daily material receipt stacked bar chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
         </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -177,6 +196,8 @@
         const idleParetoChartCanvas = document.getElementById("idle-pareto-chart");
         const salesSummaryContainer = document.getElementById("sales-summary");
         const salesChartCanvas = document.getElementById("sales-chart");
+        const materialSummaryContainer = document.getElementById("material-summary");
+        const materialChartCanvas = document.getElementById("material-chart");
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
@@ -259,6 +280,21 @@
             { background: "rgba(234, 179, 8, 0.75)", border: "rgb(234, 179, 8)" },
             { background: "rgba(236, 72, 153, 0.75)", border: "rgb(236, 72, 153)" },
             { background: "rgba(148, 163, 184, 0.65)", border: "rgb(148, 163, 184)" },
+        ];
+
+        const MATERIAL_STACK_COLORS = {
+            "Wood Shaving": { background: "rgba(245, 158, 11, 0.75)", border: "rgb(245, 158, 11)" },
+            "Saw Dust": { background: "rgba(217, 119, 6, 0.75)", border: "rgb(217, 119, 6)" },
+            "Wood Powder": { background: "rgba(59, 130, 246, 0.75)", border: "rgb(59, 130, 246)" },
+            "Peanut Husk": { background: "rgba(16, 185, 129, 0.75)", border: "rgb(16, 185, 129)" },
+            "Other materials": { background: "rgba(148, 163, 184, 0.65)", border: "rgb(148, 163, 184)" },
+        };
+
+        const MATERIAL_COLOR_PALETTE = [
+            { background: "rgba(56, 189, 248, 0.75)", border: "rgb(56, 189, 248)" },
+            { background: "rgba(96, 165, 250, 0.75)", border: "rgb(96, 165, 250)" },
+            { background: "rgba(45, 212, 191, 0.75)", border: "rgb(45, 212, 191)" },
+            { background: "rgba(129, 140, 248, 0.75)", border: "rgb(129, 140, 248)" },
         ];
 
         const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
@@ -350,6 +386,7 @@
         const idleSummaryPeriodCache = new Map();
         const idleParetoPeriodCache = new Map();
         const salesPeriodCache = new Map();
+        const materialPeriodCache = new Map();
 
         const formatTons = (value) => {
             const number = Number(value);
@@ -417,6 +454,17 @@
                     (series) => series.field === fieldName || series.label === machineCode,
                 ) || DEFAULT_MACHINE_STACK_STYLE
             );
+        };
+
+        const getMaterialStackStyle = (materialName, index = 0) => {
+            const normalizedName = (materialName || "").trim();
+            if (normalizedName && MATERIAL_STACK_COLORS[normalizedName]) {
+                return MATERIAL_STACK_COLORS[normalizedName];
+            }
+            if (MATERIAL_COLOR_PALETTE.length > 0) {
+                return MATERIAL_COLOR_PALETTE[index % MATERIAL_COLOR_PALETTE.length];
+            }
+            return MATERIAL_STACK_COLORS["Other materials"];
         };
 
         const updateMachineQueryParam = () => {
@@ -1736,6 +1784,247 @@
             }
         };
 
+        const renderMaterialSummary = (periodData) => {
+            if (!materialSummaryContainer) {
+                return;
+            }
+
+            const totalQuantity = Number(periodData?.total_quantity_tons ?? 0);
+            const averageQuantity = Number(periodData?.average_day_quantity_tons ?? 0);
+            const peakDay = periodData?.peak?.day ?? null;
+            const peakQuantity = Number(periodData?.peak?.total_quantity_tons ?? 0);
+            const topMaterialName = periodData?.top_material?.name ?? null;
+            const topMaterialQuantity = Number(periodData?.top_material?.quantity_tons ?? 0);
+
+            const summaryMetrics = [
+                {
+                    label: "Total received",
+                    valueText: `${formatTons(totalQuantity)} tons`,
+                },
+                {
+                    label: "Average daily received",
+                    valueText: `${formatTons(averageQuantity)} tons`,
+                },
+                {
+                    label: "Peak day",
+                    valueText:
+                        peakDay !== null
+                            ? `Day ${peakDay} – ${formatTons(peakQuantity)} tons`
+                            : "—",
+                },
+            ];
+
+            if (topMaterialName) {
+                summaryMetrics.push({
+                    label: "Top material",
+                    valueText: `${topMaterialName} – ${formatTons(topMaterialQuantity)} tons`,
+                });
+            }
+
+            materialSummaryContainer.innerHTML = summaryMetrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.valueText}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const showMaterialSummaryError = (message) => {
+            if (!materialSummaryContainer) {
+                return;
+            }
+            materialSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Material data</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const fetchMaterialMonthlySummary = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (materialPeriodCache.has(periodKey)) {
+                return materialPeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey });
+            const response = await fetch(
+                `/api/reports/materials/monthly-summary?${params.toString()}`,
+                { headers: authHeaders },
+            );
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load material data.");
+            }
+
+            const data = await response.json();
+            materialPeriodCache.set(periodKey, data);
+            return data;
+        };
+
+        const buildMaterialDataset = async (periodKey) => {
+            const periodData = await fetchMaterialMonthlySummary(periodKey);
+            if (!periodData) {
+                return null;
+            }
+
+            const labels = Array.isArray(periodData.daily_totals)
+                ? periodData.daily_totals.map((item) => item.day)
+                : [];
+
+            const materials = Array.isArray(periodData.materials) ? periodData.materials : [];
+
+            const datasets = materials.map((material, index, array) => {
+                const values = (periodData.daily_totals || []).map((item) => {
+                    const value = Number(item?.[material.field] ?? 0);
+                    return Number.isFinite(value) ? value : 0;
+                });
+
+                const style = getMaterialStackStyle(material.name, index);
+                const isFirst = index === 0;
+                const isLast = index === array.length - 1;
+
+                return {
+                    label: material.name,
+                    data: values,
+                    backgroundColor: style.background,
+                    borderColor: style.border,
+                    borderWidth: 1,
+                    stack: "materials",
+                    maxBarThickness: 18,
+                    borderSkipped: false,
+                    borderRadius: {
+                        topLeft: isLast ? 6 : 0,
+                        topRight: isLast ? 6 : 0,
+                        bottomLeft: isFirst ? 6 : 0,
+                        bottomRight: isFirst ? 6 : 0,
+                    },
+                    order: 1,
+                };
+            });
+
+            renderMaterialSummary(periodData);
+            return { labels, datasets };
+        };
+
+        const buildMaterialChart = async () => {
+            if (!materialSummaryContainer || !materialChartCanvas) {
+                return;
+            }
+
+            materialSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Loading</span>
+                    <span class="production-chart__metric-value">…</span>
+                </div>
+            `;
+
+            try {
+                const periodKey = getSelectedPeriodKey();
+                const dataset = await buildMaterialDataset(periodKey);
+                if (!dataset) {
+                    showMaterialSummaryError("No material data available.");
+                    return;
+                }
+
+                if (window.materialChartInstance) {
+                    window.materialChartInstance.data.labels = dataset.labels;
+                    window.materialChartInstance.data.datasets = dataset.datasets;
+                    window.materialChartInstance.update();
+                    return;
+                }
+
+                window.materialChartInstance = new Chart(materialChartCanvas, {
+                    type: "bar",
+                    data: dataset,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: "Day of month",
+                                },
+                                grid: {
+                                    display: false,
+                                },
+                                ticks: {
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 15,
+                                },
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: "Quantity (tons)",
+                                },
+                                ticks: {
+                                    callback: (value) => `${formatTons(value)} tons`,
+                                },
+                            },
+                        },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    usePointStyle: true,
+                                },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => {
+                                        const label = context.dataset.label || "";
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${label}: ${formatTons(value)} tons`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const stackContexts = contexts.filter(
+                                            (item) => item.dataset?.stack === "materials",
+                                        );
+                                        if (stackContexts.length === 0) {
+                                            return "";
+                                        }
+                                        const total = stackContexts.reduce(
+                                            (sum, item) => sum + Number(item.parsed.y ?? 0),
+                                            0,
+                                        );
+                                        return `Total: ${formatTons(total)} tons`;
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            } catch (error) {
+                console.error(error);
+                showMaterialSummaryError("Unable to load material data.");
+            }
+        };
+
         const refreshProductionChart = () => {
             buildProductionChart().catch((error) => {
                 console.error(error);
@@ -1764,11 +2053,19 @@
             });
         };
 
+        const refreshMaterialChart = () => {
+            buildMaterialChart().catch((error) => {
+                console.error(error);
+                showMaterialSummaryError("Unable to load material data.");
+            });
+        };
+
         const refreshCharts = () => {
             refreshProductionChart();
             refreshProductionPulseChart();
             refreshIdleParetoChart();
             refreshSalesChart();
+            refreshMaterialChart();
         };
 
         const selectorsInitialized = initializePeriodSelectors();

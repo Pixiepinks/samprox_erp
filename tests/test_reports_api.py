@@ -2,7 +2,8 @@ import importlib
 import os
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 
 class ReportsApiTestCase(unittest.TestCase):
@@ -422,3 +423,110 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertEqual(top_customer["name"], "Customer 1")
         self.assertAlmostEqual(top_customer["sales_value"], 350.0)
         self.assertAlmostEqual(top_customer["quantity_tons"], 35.0)
+
+    def test_material_monthly_summary_returns_daily_stacks(self):
+        from material import seed_material_defaults
+
+        seed_material_defaults()
+
+        MaterialItem = self.app_module.MaterialItem
+        MRNHeader = self.app_module.MRNHeader
+        db = self.app_module.db
+
+        default_names = [
+            "Wood Shaving",
+            "Saw Dust",
+            "Wood Powder",
+            "Peanut Husk",
+        ]
+
+        items = {
+            item.name: item
+            for item in MaterialItem.query.filter(MaterialItem.name.in_(default_names)).all()
+        }
+
+        self.assertEqual(len(items), len(default_names))
+
+        other_item = MaterialItem(name="Rice Husk", is_active=True)
+        db.session.add(other_item)
+        db.session.commit()
+
+        def add_mrn(day, item, qty):
+            mrn = MRNHeader(
+                mrn_no=f"MRN-{item.name[:3].upper()}-{day}",
+                date=date(2024, 5, day),
+                item=item,
+                qty_ton=Decimal(str(qty)),
+                unit_price=Decimal("100.00"),
+                wet_factor=Decimal("1.000"),
+                approved_unit_price=Decimal("100.00"),
+                amount=Decimal("100.00"),
+                weighing_slip_no=f"WS-{day:02d}",
+                weigh_in_time=datetime(2024, 5, day, 8, 0, tzinfo=timezone.utc),
+                weigh_out_time=datetime(2024, 5, day, 9, 0, tzinfo=timezone.utc),
+                security_officer_name="Guard",
+                authorized_person_name="Manager",
+            )
+            db.session.add(mrn)
+
+        add_mrn(1, items["Wood Shaving"], 10)
+        add_mrn(1, items["Saw Dust"], 5)
+        add_mrn(2, items["Wood Powder"], 7)
+        add_mrn(2, items["Peanut Husk"], 3)
+        add_mrn(2, other_item, 2)
+        add_mrn(3, items["Wood Shaving"], 4)
+
+        db.session.commit()
+
+        response = self.client.get(
+            "/api/reports/materials/monthly-summary",
+            headers=self._auth_headers(),
+            query_string={"period": "2024-05"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertEqual(len(data["daily_totals"]), 31)
+
+        materials_by_name = {item["name"]: item for item in data["materials"]}
+        self.assertIn("Wood Shaving", materials_by_name)
+        self.assertIn("Saw Dust", materials_by_name)
+        self.assertIn("Wood Powder", materials_by_name)
+        self.assertIn("Peanut Husk", materials_by_name)
+        self.assertIn("Other materials", materials_by_name)
+
+        self.assertAlmostEqual(materials_by_name["Wood Shaving"]["total_quantity_tons"], 14.0)
+        self.assertAlmostEqual(materials_by_name["Saw Dust"]["total_quantity_tons"], 5.0)
+        self.assertAlmostEqual(materials_by_name["Wood Powder"]["total_quantity_tons"], 7.0)
+        self.assertAlmostEqual(materials_by_name["Peanut Husk"]["total_quantity_tons"], 3.0)
+        self.assertAlmostEqual(materials_by_name["Other materials"]["total_quantity_tons"], 2.0)
+
+        field_map = {item["name"]: item["field"] for item in data["materials"]}
+
+        day1 = next(entry for entry in data["daily_totals"] if entry["day"] == 1)
+        self.assertAlmostEqual(day1[field_map["Wood Shaving"]], 10.0)
+        self.assertAlmostEqual(day1[field_map["Saw Dust"]], 5.0)
+        self.assertAlmostEqual(day1["total_quantity_tons"], 15.0)
+
+        day2 = next(entry for entry in data["daily_totals"] if entry["day"] == 2)
+        self.assertAlmostEqual(day2[field_map["Wood Powder"]], 7.0)
+        self.assertAlmostEqual(day2[field_map["Peanut Husk"]], 3.0)
+        self.assertAlmostEqual(day2.get(field_map.get("Other materials", ""), 0.0), 2.0)
+        self.assertAlmostEqual(day2["total_quantity_tons"], 12.0)
+
+        day4 = next(entry for entry in data["daily_totals"] if entry["day"] == 4)
+        self.assertAlmostEqual(day4["total_quantity_tons"], 0.0)
+
+        self.assertAlmostEqual(data["total_quantity_tons"], 31.0)
+        self.assertAlmostEqual(data["average_day_quantity_tons"], round(31.0 / 31, 2))
+
+        self.assertEqual(data["peak"]["day"], 1)
+        self.assertAlmostEqual(data["peak"]["total_quantity_tons"], 15.0)
+
+        top_material = data["top_material"]
+        self.assertIsNotNone(top_material)
+        self.assertEqual(top_material["name"], "Wood Shaving")
+        self.assertAlmostEqual(top_material["quantity_tons"], 14.0)

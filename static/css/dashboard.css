@@ -2224,6 +2224,12 @@ body {
     color: #0f172a;
 }
 
+.production-chart__metric-value--currency {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: #475569;
+}
+
 .production-chart__canvas {
     position: relative;
     width: 100%;

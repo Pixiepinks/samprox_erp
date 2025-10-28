@@ -1493,34 +1493,42 @@
             }
 
             const total = Number(periodData?.total_sales ?? 0);
+            const totalQuantity = Number(periodData?.total_quantity_tons ?? 0);
             const average = Number(periodData?.average_day_sales ?? 0);
+            const averageQuantity = Number(periodData?.average_day_quantity_tons ?? 0);
             const peakDay = periodData?.peak?.day ?? null;
             const peakValue = Number(periodData?.peak?.total_value ?? 0);
+            const peakQuantity = Number(periodData?.peak?.total_quantity_tons ?? 0);
             const topCustomerName = periodData?.top_customer?.name ?? null;
             const topCustomerValue = Number(periodData?.top_customer?.sales_value ?? 0);
+            const topCustomerQuantity = Number(periodData?.top_customer?.quantity_tons ?? 0);
 
             const summaryMetrics = [
                 {
                     label: "Total Sales",
-                    value: formatCurrency(total),
+                    quantityText: `Qty: ${formatTons(totalQuantity)} tons`,
+                    valueText: formatCurrency(total),
                 },
                 {
                     label: "Average Daily Sales",
-                    value: formatCurrency(average),
+                    quantityText: `Qty: ${formatTons(averageQuantity)} tons`,
+                    valueText: formatCurrency(average),
                 },
                 {
                     label: "Peak day",
-                    value:
+                    quantityText:
                         peakDay !== null
-                            ? `Day ${peakDay} – ${formatCurrency(peakValue)}`
-                            : "—",
+                            ? `Day ${peakDay} – Qty: ${formatTons(peakQuantity)} tons`
+                            : "Qty: —",
+                    valueText: peakDay !== null ? formatCurrency(peakValue) : "—",
                 },
             ];
 
             if (topCustomerName) {
                 summaryMetrics.push({
                     label: "Top customer",
-                    value: `${topCustomerName} (${formatCurrency(topCustomerValue)})`,
+                    quantityText: `${topCustomerName} – Qty: ${formatTons(topCustomerQuantity)} tons`,
+                    valueText: formatCurrency(topCustomerValue),
                 });
             }
 
@@ -1529,7 +1537,10 @@
                     (metric) => `
                         <div class="production-chart__metric">
                             <span class="production-chart__metric-label">${metric.label}</span>
-                            <span class="production-chart__metric-value">${metric.value}</span>
+                            <span class="production-chart__metric-value">${metric.quantityText ?? metric.valueText}</span>
+                            <span class="production-chart__metric-value production-chart__metric-value--currency">${
+                                metric.valueText ?? metric.value
+                            }</span>
                         </div>
                     `,
                 )

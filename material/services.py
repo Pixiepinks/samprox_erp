@@ -386,8 +386,6 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     if not authorized_person_name:
         errors["authorized_person_name"] = "Authorized person name is required."
 
-    supplier_name_free = (payload.get("supplier_name_free") or "").strip() or None
-
     supplier_id = payload.get("supplier_id")
     supplier_uuid = None
     supplier = None
@@ -397,8 +395,10 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
             supplier = Supplier.query.get(supplier_uuid)
             if not supplier:
                 errors["supplier_id"] = "Supplier not found."
-    if not supplier_uuid and not supplier_name_free:
-        errors["supplier_id"] = "Select a supplier or enter a name."
+    else:
+        errors["supplier_id"] = "Select a supplier."
+
+    vehicle_no = (payload.get("vehicle_no") or "").strip() or None
 
     item_uuid = _parse_uuid(payload.get("item_id"), "item_id", errors)
     item: Optional[MaterialItem] = None
@@ -446,14 +446,14 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     if (
         weigh_in_weight_kg is not None
         and weigh_out_weight_kg is not None
-        and weigh_out_weight_kg <= weigh_in_weight_kg
+        and weigh_in_weight_kg <= weigh_out_weight_kg
     ):
-        errors["weigh_out_weight_kg"] = "Out weight must be greater than in weight."
+        errors["weigh_out_weight_kg"] = "Second weight must be less than first weight."
 
     if errors:
         raise MaterialValidationError(errors)
 
-    net_weight_kg = (weigh_out_weight_kg - weigh_in_weight_kg).quantize(
+    net_weight_kg = (weigh_in_weight_kg - weigh_out_weight_kg).quantize(
         Decimal("0.001"), rounding=ROUND_HALF_UP
     )
     if net_weight_kg <= Decimal("0"):
@@ -479,7 +479,7 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         mrn_no=mrn_no,
         date=mrn_date,
         supplier=supplier,
-        supplier_name_free=supplier_name_free if not supplier else None,
+        vehicle_no=vehicle_no,
         item_id=item_uuid,
         qty_ton=qty_ton,
         unit_price=unit_price,

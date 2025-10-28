@@ -240,7 +240,7 @@ class MRNSchema(Schema):
     mrn_no = fields.Str(required=True)
     date = fields.Date(required=True)
     supplier_id = fields.UUID(allow_none=True)
-    supplier_name_free = fields.Str(allow_none=True)
+    vehicle_no = fields.Str(allow_none=True)
     item_id = fields.UUID(required=True)
     qty_ton = fields.Decimal(as_string=True)
     unit_price = fields.Decimal(as_string=True)

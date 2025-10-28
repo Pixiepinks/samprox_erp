@@ -139,7 +139,11 @@
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Supplier</span>
-                        <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else mrn.supplier_name_free }}</span>
+                        <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Vehicle No</span>
+                        <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Item Name</span>
@@ -170,7 +174,7 @@
                         <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label">In Weight (Kg)</span>
+                        <span class="summary-label">First Weight (Kg)</span>
                         <span class="summary-value">
                             {% if mrn.weigh_in_weight_kg is not none %}
                                 {{ '%.3f'|format(mrn.weigh_in_weight_kg) }}
@@ -180,7 +184,7 @@
                         </span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label">Out Weight (Kg)</span>
+                        <span class="summary-label">Second Weight (Kg)</span>
                         <span class="summary-value">
                             {% if mrn.weigh_out_weight_kg is not none %}
                                 {{ '%.3f'|format(mrn.weigh_out_weight_kg) }}

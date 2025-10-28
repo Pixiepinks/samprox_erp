@@ -181,7 +181,7 @@ class MRNHeader(db.Model):
     mrn_no = db.Column(db.String(60), nullable=False, unique=True)
     date = db.Column(db.Date, nullable=False)
     supplier_id = db.Column(GUID(), db.ForeignKey("suppliers.id"))
-    supplier_name_free = db.Column(db.String(255))
+    vehicle_no = db.Column("supplier_name_free", db.String(255))
     item_id = db.Column(GUID(), db.ForeignKey("material_items.id"), nullable=False)
     qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
@@ -210,8 +210,8 @@ class MRNHeader(db.Model):
         CheckConstraint("approved_unit_price >= 0", name="ck_mrn_approved_unit_price_non_negative"),
         CheckConstraint("amount >= 0", name="ck_mrn_amount_non_negative"),
         CheckConstraint(
-            "weigh_out_weight_kg IS NULL OR weigh_in_weight_kg IS NULL OR weigh_out_weight_kg > weigh_in_weight_kg",
-            name="ck_mrn_out_weight_greater_than_in",
+            "weigh_in_weight_kg IS NULL OR weigh_out_weight_kg IS NULL OR weigh_in_weight_kg > weigh_out_weight_kg",
+            name="ck_mrn_first_weight_greater_than_second",
         ),
         CheckConstraint("weigh_out_time >= weigh_in_time", name="ck_mrn_weigh_out_after_in"),
     )

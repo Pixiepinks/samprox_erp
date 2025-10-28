@@ -389,6 +389,7 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(day1[fields_by_name["Customer 5"]], 40.0)
         self.assertAlmostEqual(day1[other_field], 25.0)
         self.assertAlmostEqual(day1["total_value"], 455.0)
+        self.assertAlmostEqual(day1["total_quantity_tons"], 45.5)
 
         day3 = next(item for item in data["daily_totals"] if item["day"] == 3)
         self.assertAlmostEqual(day3[fields_by_name["Customer 1"]], 130.0)
@@ -400,16 +401,24 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(day4.get(fields_by_name["Customer 1"], 0.0), 0.0)
 
         total_expected = 455.0 + 520.0 + 380.0
+        total_quantity_expected = (455.0 + 520.0 + 380.0) / 10.0
         self.assertAlmostEqual(data["total_sales"], total_expected)
         self.assertAlmostEqual(
             data["average_day_sales"], round(total_expected / 31, 2)
+        )
+        self.assertAlmostEqual(data["total_quantity_tons"], round(total_quantity_expected, 2))
+        self.assertAlmostEqual(
+            data["average_day_quantity_tons"],
+            round(total_quantity_expected / 31, 2),
         )
 
         peak = data["peak"]
         self.assertEqual(peak["day"], 2)
         self.assertAlmostEqual(peak["total_value"], 520.0)
+        self.assertAlmostEqual(peak["total_quantity_tons"], 52.0)
 
         top_customer = data["top_customer"]
         self.assertIsNotNone(top_customer)
         self.assertEqual(top_customer["name"], "Customer 1")
         self.assertAlmostEqual(top_customer["sales_value"], 350.0)
+        self.assertAlmostEqual(top_customer["quantity_tons"], 35.0)

@@ -242,9 +242,9 @@
                             <p class="error-text" data-error-for="supplier_id"></p>
                         </div>
                         <div class="field">
-                            <label for="supplier-name-free">Supplier name (ad-hoc)</label>
-                            <input id="supplier-name-free" type="text" placeholder="If supplier isn't in the list" />
-                            <p class="error-text" data-error-for="supplier_name_free"></p>
+                            <label for="vehicle-no">Vehicle No</label>
+                            <input id="vehicle-no" name="vehicle_no" type="text" placeholder="Enter vehicle number" />
+                            <p class="error-text" data-error-for="vehicle_no"></p>
                         </div>
                         <div class="field">
                             <label for="item-select">Item Name<span class="text-red"> *</span></label>
@@ -258,19 +258,19 @@
                             <p class="error-text" data-error-for="item_id"></p>
                         </div>
                         <div class="field">
-                            <label for="weigh-in-weight">In Weight (Kg)<span class="text-red"> *</span></label>
+                            <label for="weigh-in-weight">First Weight (Kg)<span class="text-red"> *</span></label>
                             <input id="weigh-in-weight" name="weigh_in_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
                             <p class="error-text" data-error-for="weigh_in_weight_kg"></p>
                         </div>
                         <div class="field">
-                            <label for="weigh-out-weight">Out Weight (Kg)<span class="text-red"> *</span></label>
+                            <label for="weigh-out-weight">Second Weight (Kg)<span class="text-red"> *</span></label>
                             <input id="weigh-out-weight" name="weigh_out_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
                             <p class="error-text" data-error-for="weigh_out_weight_kg"></p>
                         </div>
                         <div class="field">
                             <label for="qty-ton">Qty (Ton)<span class="text-red"> *</span></label>
                             <input id="qty-ton" name="qty_ton" type="number" min="0" step="0.001" placeholder="0.000" readonly required />
-                            <p class="helper">Automatically calculated from Out Weight − In Weight.</p>
+                            <p class="helper">Automatically calculated from First Weight − Second Weight.</p>
                             <p class="error-text" data-error-for="qty_ton"></p>
                         </div>
                         <div class="field">
@@ -476,7 +476,7 @@
         const supplierInput = document.getElementById("supplier-search");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierMenu = document.getElementById("supplier-menu");
-        const supplierNameFreeInput = document.getElementById("supplier-name-free");
+        const vehicleNoInput = document.getElementById("vehicle-no");
         const mrnForm = document.getElementById("mrn-form");
         const submitBtn = document.getElementById("submit-btn");
         const formAlert = document.getElementById("form-alert");
@@ -721,14 +721,14 @@
             if (!weighInWeightInput || !weighOutWeightInput || !qtyInput) {
                 return;
             }
-            const inWeight = parseFloat(weighInWeightInput.value);
-            const outWeight = parseFloat(weighOutWeightInput.value);
-            if (!Number.isFinite(inWeight) || !Number.isFinite(outWeight)) {
+            const firstWeight = parseFloat(weighInWeightInput.value);
+            const secondWeight = parseFloat(weighOutWeightInput.value);
+            if (!Number.isFinite(firstWeight) || !Number.isFinite(secondWeight)) {
                 qtyInput.value = "";
                 updateAmount();
                 return;
             }
-            const netKg = outWeight - inWeight;
+            const netKg = firstWeight - secondWeight;
             if (netKg <= 0) {
                 qtyInput.value = "";
                 updateAmount();
@@ -866,7 +866,6 @@
                 option.addEventListener("click", () => {
                     supplierInput.value = supplier.name;
                     supplierIdInput.value = supplier.id;
-                    supplierNameFreeInput.value = "";
                     toggleSupplierMenu(false);
                 });
                 supplierMenu.appendChild(option);
@@ -890,12 +889,6 @@
             }
         });
 
-        supplierNameFreeInput.addEventListener("input", () => {
-            if (supplierNameFreeInput.value.trim()) {
-                supplierIdInput.value = "";
-                supplierInput.value = "";
-            }
-        });
 
         function openSupplierModal() {
             supplierModal.classList.add("active");
@@ -1052,7 +1045,6 @@
                 }
                 supplierInput.value = supplierRecord.name || values.name;
                 supplierIdInput.value = supplierRecord.id || "";
-                supplierNameFreeInput.value = "";
                 fetchSuppliers(supplierRecord.name || "");
                 closeSupplierModal();
             } catch (error) {
@@ -1146,7 +1138,9 @@
             mrnForm.reset();
             supplierInput.value = "";
             supplierIdInput.value = "";
-            supplierNameFreeInput.value = "";
+            if (vehicleNoInput) {
+                vehicleNoInput.value = "";
+            }
             approvedUnitPriceInput.value = "0.00";
             amountInput.value = "0.00";
             if (weighInWeightInput) {
@@ -1192,8 +1186,8 @@
                 errors["item_id"] = "Select an item.";
             }
 
-            if (!supplierIdInput.value && !(supplierNameFreeInput.value || "").trim()) {
-                errors["supplier_id"] = "Select a supplier or enter a name.";
+            if (!supplierIdInput.value) {
+                errors["supplier_id"] = "Select a supplier.";
             }
 
             if (!Number.isFinite(weighInWeightValue) || weighInWeightValue < 0) {
@@ -1205,9 +1199,9 @@
             if (
                 Number.isFinite(weighInWeightValue) &&
                 Number.isFinite(weighOutWeightValue) &&
-                weighOutWeightValue <= weighInWeightValue
+                weighInWeightValue <= weighOutWeightValue
             ) {
-                errors["weigh_out_weight_kg"] = "Out weight must be greater than in weight.";
+                errors["weigh_out_weight_kg"] = "Second weight must be less than first weight.";
             }
 
             if (Number.isNaN(qtyValue) || qtyValue <= 0) {
@@ -1255,7 +1249,7 @@
             payload.weigh_in_time = normalizeDateValue(payload.weigh_in_time);
             payload.weigh_out_time = normalizeDateValue(payload.weigh_out_time);
             payload.supplier_id = supplierIdInput.value || undefined;
-            payload.supplier_name_free = (supplierNameFreeInput.value || "").trim() || undefined;
+            payload.vehicle_no = (vehicleNoInput?.value || "").trim() || undefined;
             if (payload.item_id === "__create__") {
                 payload.item_id = undefined;
             }

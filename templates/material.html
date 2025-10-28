@@ -219,7 +219,7 @@
 
                 const supplierCell = document.createElement("td");
                 supplierCell.textContent =
-                    (item.supplier && item.supplier.name) || item.supplier_name_free || "—";
+                    (item.supplier && item.supplier.name) || item.vehicle_no || "—";
                 row.appendChild(supplierCell);
 
                 const materialCell = document.createElement("td");

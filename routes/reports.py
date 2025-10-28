@@ -1,4 +1,5 @@
 from calendar import monthrange
+from collections import defaultdict
 from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
@@ -12,12 +13,52 @@ from models import (
     JobStatus,
     LaborEntry,
     MaterialEntry,
+    MaterialItem,
+    MRNHeader,
     SalesActualEntry,
     SalesForecastEntry,
+    Supplier,
 )
 
 
 bp = Blueprint("reports", __name__, url_prefix="/api/reports")
+
+
+def _normalize_material_key(value: str) -> str:
+    return "".join(ch for ch in (value or "").upper() if ch.isalnum())
+
+
+_PURCHASE_MATERIAL_DEFINITIONS = [
+    ("SAWDUST", "Sawdust", ["SAWDUST", "SAW DUST"]),
+    (
+        "WOODHSAVING",
+        "Woodhsaving",
+        ["WOODHSAVING", "WOOD SHAVING", "WOOD SHAVINGS", "WOODSHAVING"],
+    ),
+    ("WOODPOWDER", "Wood powder", ["WOOD POWDER", "WOODPOWDER"]),
+    (
+        "PEANUTHUSK",
+        "Peanut husk",
+        ["PEANUT HUSK", "PEANUT HUSKS", "GROUNDNUT HUSK", "GROUNDNUT HUSKS"],
+    ),
+]
+
+PURCHASE_MATERIALS = [
+    {"field": field, "label": label} for field, label, _ in _PURCHASE_MATERIAL_DEFINITIONS
+]
+PURCHASE_FIELDS = [material["field"] for material in PURCHASE_MATERIALS]
+
+_purchase_alias_filters: set[str] = set()
+PURCHASE_ALIAS_LOOKUP: dict[str, str] = {}
+
+for field, _label, aliases in _PURCHASE_MATERIAL_DEFINITIONS:
+    for alias in aliases:
+        normalized = _normalize_material_key(alias)
+        if normalized:
+            PURCHASE_ALIAS_LOOKUP[normalized] = field
+        _purchase_alias_filters.add(alias.upper())
+
+PURCHASE_ALIAS_FILTERS = sorted(_purchase_alias_filters)
 
 
 @bp.get("/costs")
@@ -278,6 +319,164 @@ def sales_summary():
     }
 
     return jsonify(payload)
+
+
+@bp.get("/purchases/monthly-summary")
+@jwt_required()
+def monthly_purchases_summary():
+    period_param = request.args.get("period")
+    if not period_param:
+        return jsonify({"msg": "period query parameter is required"}), 400
+
+    try:
+        anchor = datetime.strptime(f"{period_param}-01", "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+
+    days_in_month = monthrange(anchor.year, anchor.month)[1]
+    month_start = date(anchor.year, anchor.month, 1)
+    month_end = date(anchor.year, anchor.month, days_in_month)
+
+    daily_template = {
+        **{field: 0.0 for field in PURCHASE_FIELDS},
+        "total_quantity_tons": 0.0,
+    }
+    daily_totals = {
+        day: daily_template.copy() for day in range(1, days_in_month + 1)
+    }
+    material_totals = {
+        field: {"quantity": 0.0, "amount": 0.0} for field in PURCHASE_FIELDS
+    }
+    supplier_totals = {
+        field: defaultdict(lambda: {"quantity": 0.0, "amount": 0.0})
+        for field in PURCHASE_FIELDS
+    }
+
+    overall_quantity = 0.0
+    overall_amount = 0.0
+
+    query = (
+        db.session.query(
+            MRNHeader.date,
+            MRNHeader.qty_ton,
+            MRNHeader.amount,
+            Supplier.name.label("supplier_name"),
+            MaterialItem.name.label("item_name"),
+        )
+        .join(MaterialItem, MRNHeader.item_id == MaterialItem.id)
+        .outerjoin(Supplier, MRNHeader.supplier_id == Supplier.id)
+        .filter(MRNHeader.date >= month_start, MRNHeader.date <= month_end)
+    )
+
+    if PURCHASE_ALIAS_FILTERS:
+        query = query.filter(func.upper(MaterialItem.name).in_(PURCHASE_ALIAS_FILTERS))
+
+    for row in query.all():
+        if not isinstance(row.date, date):
+            continue
+
+        material_key = PURCHASE_ALIAS_LOOKUP.get(
+            _normalize_material_key(row.item_name)
+        )
+        if not material_key:
+            continue
+
+        quantity = float(row.qty_ton or 0.0)
+        amount = float(row.amount or 0.0)
+        day = row.date.day
+
+        if 1 <= day <= days_in_month:
+            bucket = daily_totals.get(day)
+            if bucket is None:
+                bucket = daily_template.copy()
+                daily_totals[day] = bucket
+            bucket[material_key] = bucket.get(material_key, 0.0) + quantity
+            bucket["total_quantity_tons"] = bucket.get("total_quantity_tons", 0.0) + quantity
+
+        material_bucket = material_totals.get(material_key)
+        if material_bucket is None:
+            material_bucket = {"quantity": 0.0, "amount": 0.0}
+            material_totals[material_key] = material_bucket
+        material_bucket["quantity"] += quantity
+        material_bucket["amount"] += amount
+
+        supplier_name = (row.supplier_name or "Unknown supplier").strip() or "Unknown supplier"
+        supplier_bucket = supplier_totals.setdefault(
+            material_key, defaultdict(lambda: {"quantity": 0.0, "amount": 0.0})
+        )[supplier_name]
+        supplier_bucket["quantity"] += quantity
+        supplier_bucket["amount"] += amount
+
+        overall_quantity += quantity
+        overall_amount += amount
+
+    totals_payload = {}
+    for material in PURCHASE_MATERIALS:
+        field = material["field"]
+        totals = material_totals.get(field, {"quantity": 0.0, "amount": 0.0})
+        quantity_total = float(totals.get("quantity", 0.0))
+        amount_total = float(totals.get("amount", 0.0))
+        average_price = amount_total / quantity_total if quantity_total else 0.0
+
+        top_supplier_name = None
+        top_supplier_stats = None
+        for supplier_name, stats in supplier_totals.get(field, {}).items():
+            if top_supplier_stats is None:
+                top_supplier_name = supplier_name
+                top_supplier_stats = stats
+                continue
+
+            if stats["quantity"] > top_supplier_stats["quantity"]:
+                top_supplier_name = supplier_name
+                top_supplier_stats = stats
+            elif (
+                stats["quantity"] == top_supplier_stats["quantity"]
+                and stats["amount"] > top_supplier_stats["amount"]
+            ):
+                top_supplier_name = supplier_name
+                top_supplier_stats = stats
+
+        if top_supplier_stats is not None:
+            top_supplier_payload = {
+                "name": top_supplier_name,
+                "quantity_tons": round(float(top_supplier_stats["quantity"]), 3),
+                "amount": round(float(top_supplier_stats["amount"]), 2),
+            }
+        else:
+            top_supplier_payload = None
+
+        totals_payload[field] = {
+            "label": material["label"],
+            "total_quantity_tons": round(quantity_total, 3),
+            "total_amount": round(amount_total, 2),
+            "average_unit_price": round(average_price, 2),
+            "top_supplier": top_supplier_payload,
+        }
+
+    daily_totals_payload = []
+    for day in range(1, days_in_month + 1):
+        bucket = daily_totals.get(day, daily_template.copy())
+        entry = {
+            "day": day,
+            "total_quantity_tons": round(float(bucket.get("total_quantity_tons", 0.0)), 3),
+        }
+        for field in PURCHASE_FIELDS:
+            entry[field] = round(float(bucket.get(field, 0.0)), 3)
+        daily_totals_payload.append(entry)
+
+    response_payload = {
+        "period": period_param,
+        "label": anchor.strftime("%B %Y"),
+        "materials": PURCHASE_MATERIALS,
+        "daily_totals": daily_totals_payload,
+        "totals": totals_payload,
+        "overall": {
+            "total_quantity_tons": round(overall_quantity, 3),
+            "total_amount": round(overall_amount, 2),
+        },
+    }
+
+    return jsonify(response_payload)
 
 
 @bp.get("/sales/monthly-summary")

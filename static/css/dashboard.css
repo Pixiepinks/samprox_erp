@@ -411,6 +411,29 @@ body {
     border-radius: 6px;
 }
 
+.salary-table__action-button {
+    background-color: rgba(37, 99, 235, 0.1);
+    border: none;
+    color: #1d4ed8;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.salary-table__action-button:hover,
+.salary-table__action-button:focus {
+    background-color: rgba(37, 99, 235, 0.2);
+    color: #1e3a8a;
+    outline: none;
+}
+
+.salary-table__action-button:focus-visible {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
 .modal {
     position: fixed;
     inset: 0;
@@ -513,6 +536,25 @@ body {
     font-weight: 600;
     color: #0f172a;
     word-break: break-word;
+}
+
+.attendance-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.attendance-table-container {
+    max-height: 360px;
+    overflow: auto;
+}
+
+.attendance-table {
+    min-width: 420px;
+}
+
+.attendance-table__time-input {
+    width: 100%;
 }
 
 .salary-form__grid {

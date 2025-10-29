@@ -203,8 +203,10 @@ def _ensure_admin_user(
     *,
     email: Optional[str] = None,
     password: Optional[str] = None,
+    name: Optional[str] = None,
     ensure_if_missing: bool = True,
     force_reset: bool = False,
+    allow_multiple: bool = False,
 ) -> Tuple[str, str]:
     """Ensure an admin user exists and optionally reset its password.
 
@@ -218,6 +220,8 @@ def _ensure_admin_user(
 
     normalized_email = _normalize_email(email or os.getenv("ADMIN_EMAIL", "admin@samprox.lk"))
     password = password or os.getenv("ADMIN_PASSWORD", "Admin@123")
+    provided_name = name if name is not None else os.getenv("ADMIN_NAME")
+    target_name = (provided_name or "").strip() or None
 
     with target_app.app_context():
         try:
@@ -231,6 +235,9 @@ def _ensure_admin_user(
             if admin.role != RoleEnum.admin:
                 admin.role = RoleEnum.admin
                 status = "updated"
+            if target_name and admin.name != target_name:
+                admin.name = target_name
+                status = "updated"
             if force_reset:
                 admin.set_password(password)
                 status = "reset"
@@ -242,13 +249,18 @@ def _ensure_admin_user(
         if not ensure_if_missing:
             return "skipped", normalized_email
 
-        if not force_reset:
+        if not force_reset and not allow_multiple:
             # Avoid creating duplicate admins when one already exists
             existing_admin = User.query.filter_by(role=RoleEnum.admin).first()
             if existing_admin:
                 return "skipped", normalized_email
 
-        admin = User(name="Admin", email=normalized_email, role=RoleEnum.admin, active=True)
+        admin = User(
+            name=target_name or "Admin",
+            email=normalized_email,
+            role=RoleEnum.admin,
+            active=True,
+        )
         admin.set_password(password)
         db.session.add(admin)
         db.session.commit()
@@ -342,9 +354,29 @@ def _bootstrap_accessall_user(flask_app=None):
         print(f"✅ Accessall password reset: {normalized_email}")
     elif status == "updated":
         print(f"✅ Accessall user updated: {normalized_email}")
+
+
+def _bootstrap_rainbows_admin_user(flask_app=None):
+    status, normalized_email = _ensure_admin_user(
+        flask_app=flask_app,
+        email=os.getenv("RAINBOWS_ADMIN_EMAIL", "uresha@rainbowsholdings.com"),
+        password=os.getenv("RAINBOWS_ADMIN_PASSWORD", "123"),
+        name=os.getenv("RAINBOWS_ADMIN_NAME", "Uresha"),
+        allow_multiple=True,
+        force_reset=os.getenv("RUN_SEED_RAINBOWS_ADMIN") == "1",
+    )
+    if status == "created":
+        print(f"✅ Rainbow admin created: {normalized_email}")
+    elif status == "reset":
+        print(f"✅ Rainbow admin password reset: {normalized_email}")
+    elif status == "updated":
+        print(f"✅ Rainbow admin updated: {normalized_email}")
+
+
 # Call the hooks at startup (idempotent)
 _bootstrap_admin_user(flask_app=app)
 _bootstrap_accessall_user(flask_app=app)
+_bootstrap_rainbows_admin_user(flask_app=app)
 
 
 def _ensure_asset(code: str, *, name: str, location: str, status: str) -> MachineAsset:
@@ -519,13 +551,15 @@ def seed_idle_demo(period):
 @app.cli.command("seed-admin")
 @click.option("--email", default="admin@samprox.lk", help="Admin email")
 @click.option("--password", default="Admin@123", help="Admin password")
-def seed_admin(email, password):
+@click.option("--name", default="Admin", help="Admin display name")
+def seed_admin(email, password, name):
     """Create or reset the admin user."""
     with app.app_context():
         status, normalized_email = _ensure_admin_user(
             flask_app=app,
             email=email,
             password=password,
+            name=name,
             ensure_if_missing=True,
             force_reset=True,
         )
@@ -565,6 +599,34 @@ def seed_accessall(email, password, name):
             click.echo(f"✅ Accessall user updated: {normalized_email}")
         else:
             click.echo(f"ℹ️ Accessall user already up-to-date: {normalized_email}")
+
+
+@app.cli.command("seed-rainbows-admin")
+@click.option("--email", default="uresha@rainbowsholdings.com", help="Rainbow admin email")
+@click.option("--password", default="123", help="Rainbow admin password")
+@click.option("--name", default="Uresha", help="Rainbow admin display name")
+def seed_rainbows_admin(email, password, name):
+    """Create or reset the Rainbow Holdings admin user."""
+
+    with app.app_context():
+        status, normalized_email = _ensure_admin_user(
+            flask_app=app,
+            email=email,
+            password=password,
+            name=name,
+            ensure_if_missing=True,
+            force_reset=True,
+            allow_multiple=True,
+        )
+
+        if status == "created":
+            click.echo(f"✅ Rainbow admin created: {normalized_email}")
+        elif status == "reset":
+            click.echo(f"✅ Rainbow admin password reset: {normalized_email}")
+        elif status == "updated":
+            click.echo(f"✅ Rainbow admin updated: {normalized_email}")
+        else:
+            click.echo(f"ℹ️ Rainbow admin already up-to-date: {normalized_email}")
 
 
 @app.cli.command("seed-materials")

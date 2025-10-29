@@ -20,15 +20,19 @@ def upgrade():
         "mrn_headers",
         sa.Column("weigh_out_weight_kg", sa.Numeric(12, 3), nullable=True),
     )
-    op.create_check_constraint(
-        "ck_mrn_out_weight_greater_than_in",
-        "mrn_headers",
-        "weigh_out_weight_kg IS NULL OR weigh_in_weight_kg IS NULL OR weigh_out_weight_kg > weigh_in_weight_kg",
-    )
+    bind = op.get_bind()
+    if bind.dialect.name != "sqlite":
+        op.create_check_constraint(
+            "ck_mrn_out_weight_greater_than_in",
+            "mrn_headers",
+            "weigh_out_weight_kg IS NULL OR weigh_in_weight_kg IS NULL OR weigh_out_weight_kg > weigh_in_weight_kg",
+        )
 
 
 def downgrade():
-    op.drop_constraint("ck_mrn_out_weight_greater_than_in", "mrn_headers", type_="check")
+    bind = op.get_bind()
+    if bind.dialect.name != "sqlite":
+        op.drop_constraint("ck_mrn_out_weight_greater_than_in", "mrn_headers", type_="check")
     op.drop_column("mrn_headers", "weigh_out_weight_kg")
     op.drop_column("mrn_headers", "weigh_in_weight_kg")
 

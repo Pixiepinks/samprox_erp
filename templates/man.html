@@ -136,6 +136,7 @@
                                 <th scope="col">Employment log</th>
                                 <th scope="col">Files</th>
                                 <th scope="col">Assets</th>
+                                <th scope="col" id="team-update-column-header">Update</th>
                             </tr>
                         </thead>
                         <tbody id="team-table-body"></tbody>
@@ -148,6 +149,12 @@
                     <h3 class="team-form__title">Register a team member</h3>
                     <p class="team-form__description">
                         Keep the roster current by logging new colleagues as soon as they join the team.
+                    </p>
+                    <p class="team-form__editing" id="team-form-editing" hidden>
+                        Editing <strong id="team-form-editing-name"></strong>
+                        <button type="button" class="button button--ghost button--small" id="team-form-cancel-edit">
+                            Cancel
+                        </button>
                     </p>
                     <div class="team-form__feedback">
                         <p class="alert alert--error" id="team-form-error" hidden></p>
@@ -304,7 +311,10 @@
                             </div>
                         </div>
                         <div class="edit-form__actions">
-                            <button type="submit" class="button button--primary">Save member</button>
+                            <button type="submit" class="button button--primary team-form__submit">Save member</button>
+                            <button type="button" class="button button--ghost team-form__cancel" id="team-form-cancel-edit-footer" hidden>
+                                Cancel edit
+                            </button>
                         </div>
                     </form>
                 </section>
@@ -733,6 +743,31 @@
         const teamForm = document.getElementById("team-form");
         const teamFormError = document.getElementById("team-form-error");
         const teamFormSuccess = document.getElementById("team-form-success");
+        const teamFormSubmitButton = teamForm?.querySelector(".team-form__submit");
+        const teamFormEditingBanner = document.getElementById("team-form-editing");
+        const teamFormEditingName = document.getElementById("team-form-editing-name");
+        const teamFormCancelEditBanner = document.getElementById("team-form-cancel-edit");
+        const teamFormCancelEditFooter = document.getElementById(
+            "team-form-cancel-edit-footer"
+        );
+        const updateColumnHeader = document.getElementById(
+            "team-update-column-header"
+        );
+        const regNumberInput = document.getElementById("team-reg-number");
+        const joinDateInput = document.getElementById("team-join-date");
+        const payCategorySelect = document.getElementById("team-pay-category");
+        const statusSelect = document.getElementById("team-status");
+        const nameInput = document.getElementById("team-name");
+        const nicknameInput = document.getElementById("team-nickname");
+        const epfInput = document.getElementById("team-epf");
+        const positionInput = document.getElementById("team-position");
+        const imageInput = document.getElementById("team-image");
+        const personalDetailInput = document.getElementById("team-personal-detail");
+        const assignmentsInput = document.getElementById("team-assignments");
+        const trainingInput = document.getElementById("team-training");
+        const employmentLogInput = document.getElementById("team-employment-log");
+        const filesInput = document.getElementById("team-files");
+        const assetsInput = document.getElementById("team-assets");
         const salaryTableBody = document.getElementById("salary-table-body");
         const salaryEmptyState = document.getElementById("salary-empty-state");
         const salaryMonthSelector = document.getElementById("salary-month-selector");
@@ -774,6 +809,10 @@
             formSection.hidden = true;
         }
 
+        if (!canManageMembers && updateColumnHeader) {
+            updateColumnHeader.remove();
+        }
+
         const salaryFieldDefinitions = [
             { name: "basicSalary", label: "Basic Salary" },
             { name: "generalAllowance", label: "General Allowance" },
@@ -799,6 +838,7 @@
         const workCalendarStore = new Map();
         const memberKeyById = new Map();
         let activeMembers = [];
+        let editingMemberId = null;
         let salaryModalContext = null;
         let attendanceModalContext = null;
         let workdayModalContext = null;
@@ -3246,6 +3286,195 @@
             });
         }
 
+        const isEditingMember = () => editingMemberId != null;
+
+        const setSelectValue = (select, value) => {
+            if (!select) {
+                return;
+            }
+
+            const options = Array.from(select.options || []);
+            const normalized =
+                typeof value === "string"
+                    ? value
+                    : value != null
+                    ? String(value)
+                    : "";
+
+            const match = options.find((option) => option.value === normalized);
+
+            if (match) {
+                select.value = match.value;
+            } else if (options.length > 0) {
+                select.value = options[0].value;
+            } else {
+                select.value = "";
+            }
+        };
+
+        const setFieldValue = (field, value) => {
+            if (!field) {
+                return;
+            }
+
+            if (typeof value === "string") {
+                field.value = value;
+                return;
+            }
+
+            if (value == null) {
+                field.value = "";
+                return;
+            }
+
+            field.value = String(value);
+        };
+
+        const exitEditMode = () => {
+            editingMemberId = null;
+
+            if (teamForm?.dataset) {
+                delete teamForm.dataset.mode;
+                delete teamForm.dataset.memberId;
+            }
+
+            if (teamForm) {
+                teamForm.reset();
+            }
+
+            if (regNumberInput) {
+                regNumberInput.disabled = false;
+            }
+
+            if (teamFormSubmitButton) {
+                teamFormSubmitButton.textContent = "Save member";
+            }
+
+            if (teamFormEditingBanner) {
+                teamFormEditingBanner.hidden = true;
+            }
+
+            if (teamFormEditingName) {
+                teamFormEditingName.textContent = "";
+            }
+
+            if (teamFormCancelEditFooter) {
+                teamFormCancelEditFooter.hidden = true;
+                teamFormCancelEditFooter.disabled = false;
+            }
+
+            if (teamFormCancelEditBanner) {
+                teamFormCancelEditBanner.disabled = false;
+            }
+
+            window.requestAnimationFrame(() => {
+                if (teamForm) {
+                    const firstField = teamForm.querySelector(
+                        "input:not([type='hidden']):not([disabled]), textarea, select"
+                    );
+                    firstField?.focus();
+                }
+            });
+        };
+
+        const enterEditMode = (member) => {
+            if (!teamForm || !canManageMembers) {
+                return;
+            }
+
+            const memberId = parseMemberId(member?.id);
+
+            if (memberId == null) {
+                return;
+            }
+
+            editingMemberId = memberId;
+
+            if (teamForm.dataset) {
+                teamForm.dataset.mode = "edit";
+                teamForm.dataset.memberId = String(memberId);
+            }
+
+            resetFormFeedback();
+
+            const displayName = getMemberDisplayName(member);
+
+            setFieldValue(regNumberInput, member?.regNumber);
+
+            if (regNumberInput) {
+                regNumberInput.disabled = true;
+            }
+
+            setFieldValue(nameInput, member?.name);
+            setFieldValue(nicknameInput, member?.nickname);
+            setFieldValue(epfInput, member?.epf);
+            setFieldValue(positionInput, member?.position);
+            setSelectValue(payCategorySelect, member?.payCategory);
+
+            const normalizedJoinDate = toYyyyMmDd(member?.joinDate);
+            if (joinDateInput) {
+                joinDateInput.value = normalizedJoinDate ?? "";
+            }
+
+            setSelectValue(statusSelect, normalizeStatus(member?.status));
+            const imageValue = member?.image ?? member?.imageUrl ?? member?.image_url;
+            setFieldValue(imageInput, imageValue);
+            setFieldValue(personalDetailInput, member?.personalDetail);
+            setFieldValue(assignmentsInput, member?.assignments);
+            setFieldValue(trainingInput, member?.trainingRecords);
+            setFieldValue(employmentLogInput, member?.employmentLog);
+            setFieldValue(filesInput, member?.files);
+            setFieldValue(assetsInput, member?.assets);
+
+            if (teamFormSubmitButton) {
+                teamFormSubmitButton.textContent = "Update member";
+            }
+
+            if (teamFormEditingBanner) {
+                teamFormEditingBanner.hidden = false;
+            }
+
+            if (teamFormEditingName) {
+                teamFormEditingName.textContent = displayName;
+            }
+
+            if (teamFormCancelEditFooter) {
+                teamFormCancelEditFooter.hidden = false;
+                teamFormCancelEditFooter.disabled = false;
+            }
+
+            if (teamFormCancelEditBanner) {
+                teamFormCancelEditBanner.disabled = false;
+            }
+
+            if (teamForm) {
+                teamForm.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+
+            window.requestAnimationFrame(() => {
+                if (nameInput && !nameInput.disabled) {
+                    nameInput.focus();
+                }
+            });
+        };
+
+        const cancelEditing = () => {
+            if (!isEditingMember()) {
+                return;
+            }
+
+            exitEditMode();
+            resetFormFeedback();
+        };
+
+        if (teamFormCancelEditBanner) {
+            teamFormCancelEditBanner.addEventListener("click", cancelEditing);
+        }
+
+        if (teamFormCancelEditFooter) {
+            teamFormCancelEditFooter.addEventListener("click", cancelEditing);
+        }
+
         const renderMembers = (members) => {
             if (!tableBody) {
                 return;
@@ -3295,6 +3524,28 @@
 
                     row.appendChild(cell);
                 });
+
+                if (canManageMembers) {
+                    const actionCell = document.createElement("td");
+                    actionCell.classList.add("team-table__cell--actions");
+                    actionCell.setAttribute("data-label", "Update");
+
+                    const updateButton = document.createElement("button");
+                    updateButton.type = "button";
+                    updateButton.className =
+                        "button button--secondary button--small team-table__update-button";
+                    updateButton.textContent = "Update";
+                    updateButton.setAttribute(
+                        "aria-label",
+                        `Update ${getMemberDisplayName(member)}`
+                    );
+                    updateButton.addEventListener("click", () => {
+                        enterEditMode(member);
+                    });
+
+                    actionCell.appendChild(updateButton);
+                    row.appendChild(actionCell);
+                }
 
                 tableBody.appendChild(row);
             });
@@ -3375,6 +3626,10 @@
             Array.from(teamForm.elements || []).forEach((element) => {
                 element.disabled = disabled;
             });
+
+            if (teamFormCancelEditBanner) {
+                teamFormCancelEditBanner.disabled = disabled;
+            }
         };
 
         if (teamForm && canManageMembers) {
@@ -3391,32 +3646,50 @@
                 const formData = new FormData(teamForm);
                 const payload = {};
 
-                const requiredFields = ["regNumber", "name"];
-                for (const field of requiredFields) {
-                    const rawValue = formData.get(field);
-                    const value = typeof rawValue === "string" ? rawValue.trim() : "";
-                    if (!value) {
+                const editing = isEditingMember();
+                const memberId = editingMemberId;
+
+                if (editing && memberId == null) {
+                    showFormError(
+                        "Unable to determine which member to update. Please refresh and try again."
+                    );
+                    return;
+                }
+
+                if (!editing) {
+                    const regRaw = formData.get("regNumber");
+                    const regNumber = typeof regRaw === "string" ? regRaw.trim() : "";
+                    if (!regNumber) {
                         showFormError("Registration number and name are required.");
                         return;
                     }
-                    payload[field] = value;
+                    payload.regNumber = regNumber;
                 }
 
-                // Normalize joinDate and status
-                  const joinDateRaw = formData.get("joinDate");
-                  const normalizedDate = toYyyyMmDd(joinDateRaw);
+                const nameRaw = formData.get("name");
+                const nameValue = typeof nameRaw === "string" ? nameRaw.trim() : "";
+                if (!nameValue) {
+                    showFormError("Registration number and name are required.");
+                    return;
+                }
+                payload.name = nameValue;
 
-                    if (joinDateRaw && !normalizedDate) {
-              showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
-                  return;
-                    }
+                const joinDateRaw = formData.get("joinDate");
+                const normalizedDate = toYyyyMmDd(joinDateRaw);
+
+                if (joinDateRaw && !normalizedDate) {
+                    showFormError("Invalid date for join date. Please use YYYY-MM-DD.");
+                    return;
+                }
 
                 if (normalizedDate) {
-              payload.joinDate = normalizedDate; // ✅ correct for your backend schema
-                    }
+                    payload.joinDate = normalizedDate;
+                }
 
                 const statusRaw = formData.get("status");
-                if (statusRaw) payload.status = normalizeStatus(statusRaw);
+                if (typeof statusRaw === "string" && statusRaw.trim()) {
+                    payload.status = normalizeStatus(statusRaw);
+                }
 
                 const optionalFields = [
                     "nickname",
@@ -3434,25 +3707,41 @@
 
                 optionalFields.forEach((field) => {
                     const rawValue = formData.get(field);
-                    if (typeof rawValue === "string") {
-                        const trimmed = rawValue.trim();
-                        if (trimmed) {
-                            payload[field] = trimmed;
-                        }
+                    if (typeof rawValue !== "string") {
+                        return;
+                    }
+                    const trimmed = rawValue.trim();
+                    if (trimmed) {
+                        payload[field] = trimmed;
+                    } else if (editing) {
+                        payload[field] = "";
                     }
                 });
 
                 setFormDisabled(true);
 
                 try {
-                    const response = await fetch("/api/team/members", {
-                        method: "POST",
-                        headers: {
-                            ...authHeaders,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(payload),
-                    });
+                    let response;
+
+                    if (editing) {
+                        response = await fetch(`/api/team/members/${memberId}`, {
+                            method: "PATCH",
+                            headers: {
+                                ...authHeaders,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(payload),
+                        });
+                    } else {
+                        response = await fetch("/api/team/members", {
+                            method: "POST",
+                            headers: {
+                                ...authHeaders,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(payload),
+                        });
+                    }
 
                     if (response.status === 401) {
                         logoutButton.click();
@@ -3462,16 +3751,28 @@
                     const body = await response.json().catch(() => ({}));
 
                     if (!response.ok) {
-                        const message = body?.msg || "Unable to register team member.";
+                        const defaultMessage = editing
+                            ? "Unable to update team member."
+                            : "Unable to register team member.";
+                        const message = body?.msg || defaultMessage;
                         showFormError(message);
                         return;
                     }
 
-                    showFormSuccess("Team member registered successfully.");
-                    teamForm.reset();
+                    if (editing) {
+                        showFormSuccess("Team member updated successfully.");
+                        exitEditMode();
+                    } else {
+                        showFormSuccess("Team member registered successfully.");
+                        teamForm.reset();
+                    }
+
                     await loadTeamMembers();
                 } catch (error) {
-                    showFormError(error.message || "Unable to register team member.");
+                    const defaultMessage = editing
+                        ? "Unable to update team member."
+                        : "Unable to register team member.";
+                    showFormError(error?.message || defaultMessage);
                 } finally {
                     setFormDisabled(false);
                 }

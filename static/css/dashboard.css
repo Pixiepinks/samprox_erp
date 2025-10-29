@@ -515,6 +515,28 @@ body {
     margin: 0;
 }
 
+.team-form__editing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: rgba(191, 219, 254, 0.35);
+    color: #1d4ed8;
+    font-size: 0.9rem;
+}
+
+.team-form__editing strong {
+    font-weight: 600;
+}
+
+.team-form__cancel {
+    margin-left: auto;
+}
+
 .button--small {
     padding: 0.45rem 0.9rem;
     font-size: 0.85rem;
@@ -1194,6 +1216,16 @@ body.modal-open {
     margin: 0;
     font-weight: 600;
     font-size: 1rem;
+}
+
+.team-table__cell--actions {
+    white-space: nowrap;
+}
+
+.team-table__update-button {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 999px;
 }
 
 .tile__description {

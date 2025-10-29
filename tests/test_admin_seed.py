@@ -7,7 +7,16 @@ import unittest
 class AdminSeedTestCase(unittest.TestCase):
     def setUp(self):
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-        for var in ("RUN_SEED_ADMIN", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+        for var in (
+            "RUN_SEED_ADMIN",
+            "ADMIN_EMAIL",
+            "ADMIN_PASSWORD",
+            "ADMIN_NAME",
+            "RUN_SEED_RAINBOWS_ADMIN",
+            "RAINBOWS_ADMIN_EMAIL",
+            "RAINBOWS_ADMIN_PASSWORD",
+            "RAINBOWS_ADMIN_NAME",
+        ):
             os.environ.pop(var, None)
 
         if "app" in sys.modules:
@@ -24,7 +33,17 @@ class AdminSeedTestCase(unittest.TestCase):
         self.app_module.db.session.remove()
         self.app_module.db.drop_all()
         self.ctx.pop()
-        for var in ("DATABASE_URL", "RUN_SEED_ADMIN", "ADMIN_EMAIL", "ADMIN_PASSWORD"):
+        for var in (
+            "DATABASE_URL",
+            "RUN_SEED_ADMIN",
+            "ADMIN_EMAIL",
+            "ADMIN_PASSWORD",
+            "ADMIN_NAME",
+            "RUN_SEED_RAINBOWS_ADMIN",
+            "RAINBOWS_ADMIN_EMAIL",
+            "RAINBOWS_ADMIN_PASSWORD",
+            "RAINBOWS_ADMIN_NAME",
+        ):
             os.environ.pop(var, None)
         if "app" in sys.modules:
             del sys.modules["app"]
@@ -65,6 +84,32 @@ class AdminSeedTestCase(unittest.TestCase):
 
         refreshed = self.app_module.db.session.get(self.app_module.User, admin.id)
         self.assertTrue(refreshed.check_password("NewPassword!2"))
+
+    def test_allow_multiple_admins_created_with_custom_name(self):
+        status, email = self.app_module._ensure_admin_user(flask_app=self.app)
+        self.assertEqual(status, "created")
+        self.assertEqual(email, "admin@samprox.lk")
+
+        status, second_email = self.app_module._ensure_admin_user(
+            flask_app=self.app,
+            email="uresha@rainbowsholdings.com",
+            password="123",
+            name="Uresha",
+            allow_multiple=True,
+        )
+
+        self.assertEqual(status, "created")
+        self.assertEqual(second_email, "uresha@rainbowsholdings.com")
+
+        admins = (
+            self.app_module.User.query.filter_by(role=self.app_module.RoleEnum.admin)
+            .order_by(self.app_module.User.email)
+            .all()
+        )
+        self.assertEqual(len(admins), 2)
+        additional = next(user for user in admins if user.email == second_email)
+        self.assertTrue(additional.check_password("123"))
+        self.assertEqual(additional.name, "Uresha")
 
 
 if __name__ == "__main__":

@@ -795,6 +795,7 @@
 
         const salaryDataStore = Object.create(null);
         const attendanceDataStore = Object.create(null);
+        const computedAttendanceAllowanceStore = Object.create(null);
         const workCalendarStore = new Map();
         const memberKeyById = new Map();
         let activeMembers = [];
@@ -1701,6 +1702,200 @@
             }
         };
 
+        const ATTENDANCE_ALLOWANCE_AMOUNTS = {
+            0: 11000,
+            1: 9000,
+            2: 7500,
+            3: 5500,
+        };
+        const ATTENDANCE_ALLOWANCE_DAILY_RATE = 5500 / 22;
+        const MIN_ATTENDANCE_ALLOWANCE_WORK_DAYS = 18;
+
+        const getMonthParts = (value) => {
+            const normalized = normalizeMonthValue(value);
+            if (!normalized) {
+                return null;
+            }
+
+            const [yearStr, monthStr] = normalized.split("-");
+            const year = Number.parseInt(yearStr, 10);
+            const month = Number.parseInt(monthStr, 10);
+
+            if (!Number.isFinite(year) || !Number.isFinite(month)) {
+                return null;
+            }
+
+            return { normalized, year, month };
+        };
+
+        const getMemberPayCategory = (member) => {
+            if (!member || typeof member !== "object") {
+                return "";
+            }
+            const raw = member.payCategory ?? member.pay_category;
+            if (typeof raw !== "string") {
+                return "";
+            }
+            return raw.trim();
+        };
+
+        const isFactoryPayCategory = (member) =>
+            getMemberPayCategory(member).toLowerCase() === "factory";
+
+        const getWorkCalendarSummaryForMonth = async (month) => {
+            const parts = getMonthParts(month);
+            if (!parts) {
+                return null;
+            }
+
+            let store = getWorkCalendarMonthStore(parts.year, parts.month);
+            if (!store) {
+                try {
+                    store = await ensureWorkCalendarMonthData(parts.year, parts.month);
+                } catch (error) {
+                    console.error(
+                        "Unable to load work calendar for attendance allowance calculations",
+                        error,
+                    );
+                    store = getWorkCalendarMonthStore(parts.year, parts.month);
+                }
+            }
+
+            if (!store) {
+                store = new Map();
+            }
+
+            const workDaySet = new Set();
+            const daysInMonth = new Date(parts.year, parts.month, 0).getDate();
+
+            for (let day = 1; day <= daysInMonth; day += 1) {
+                const iso = formatIsoDate(parts.year, parts.month, day);
+                const entry = store.get(iso);
+                const isWorkDay = entry ? entry.isWorkDay !== false : true;
+                if (isWorkDay) {
+                    workDaySet.add(iso);
+                }
+            }
+
+            return { workDaySet, totalWorkDays: workDaySet.size };
+        };
+
+        const countWorkedDaysForRecord = (record, workDaySet) => {
+            if (!record || typeof record !== "object") {
+                return 0;
+            }
+
+            let count = 0;
+            Object.entries(record).forEach(([iso, entry]) => {
+                if (workDaySet && workDaySet.size > 0 && !workDaySet.has(iso)) {
+                    return;
+                }
+                if (!entry || typeof entry !== "object") {
+                    return;
+                }
+                const on = typeof entry.onTime === "string" ? entry.onTime.trim() : "";
+                const off = typeof entry.offTime === "string" ? entry.offTime.trim() : "";
+                if (on || off) {
+                    count += 1;
+                }
+            });
+            return count;
+        };
+
+        const computeAttendanceAllowanceAmount = (workedDays, totalWorkDays) => {
+            if (!Number.isFinite(workedDays) || !Number.isFinite(totalWorkDays)) {
+                return null;
+            }
+
+            if (totalWorkDays <= 0) {
+                return null;
+            }
+
+            if (workedDays < MIN_ATTENDANCE_ALLOWANCE_WORK_DAYS) {
+                return 0;
+            }
+
+            const absences = Math.max(totalWorkDays - workedDays, 0);
+
+            if (Object.prototype.hasOwnProperty.call(ATTENDANCE_ALLOWANCE_AMOUNTS, absences)) {
+                return ATTENDANCE_ALLOWANCE_AMOUNTS[absences];
+            }
+
+            if (absences >= 4) {
+                const computed = ATTENDANCE_ALLOWANCE_DAILY_RATE * workedDays;
+                const rounded = Math.round((computed + Number.EPSILON) * 100) / 100;
+                return rounded;
+            }
+
+            return null;
+        };
+
+        const getComputedAttendanceAllowance = (month, memberKey) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized || !memberKey) {
+                return null;
+            }
+
+            const monthStore = computedAttendanceAllowanceStore[normalized];
+            if (!monthStore) {
+                return null;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(monthStore, memberKey)) {
+                return monthStore[memberKey];
+            }
+
+            return null;
+        };
+
+        const updateComputedAttendanceAllowances = async (month) => {
+            const parts = getMonthParts(month);
+            if (!parts) {
+                return;
+            }
+
+            computedAttendanceAllowanceStore[parts.normalized] = {};
+
+            if (!Array.isArray(activeMembers) || activeMembers.length === 0) {
+                return;
+            }
+
+            const calendarSummary = await getWorkCalendarSummaryForMonth(parts.normalized);
+            if (!calendarSummary || calendarSummary.totalWorkDays <= 0) {
+                return;
+            }
+
+            const monthAttendanceStore = attendanceDataStore[parts.normalized] || {};
+            const allowances = Object.create(null);
+
+            activeMembers.forEach((member, index) => {
+                if (!isFactoryPayCategory(member)) {
+                    return;
+                }
+
+                const memberKey = computeMemberKey(member, index);
+                if (!memberKey) {
+                    return;
+                }
+
+                const record = monthAttendanceStore[memberKey] || {};
+                const workedDays = countWorkedDaysForRecord(
+                    record,
+                    calendarSummary.workDaySet,
+                );
+                const computedValue = computeAttendanceAllowanceAmount(
+                    workedDays,
+                    calendarSummary.totalWorkDays,
+                );
+
+                if (computedValue != null) {
+                    allowances[memberKey] = computedValue;
+                }
+            });
+
+            computedAttendanceAllowanceStore[parts.normalized] = allowances;
+        };
+
         const refreshMonthData = async (month = currentSalaryMonth) => {
             const normalized = normalizeMonthValue(month);
             if (!normalized) {
@@ -1712,8 +1907,24 @@
                 fetchSalaryRecords(normalized),
             ]);
 
+            await updateComputedAttendanceAllowances(normalized);
+
             renderSalarySheet();
             refreshAttendanceModalContents();
+
+            if (
+                salaryModalContext?.memberKey &&
+                normalizeMonthValue(salaryFormMonth?.value || normalized) === normalized
+            ) {
+                populateSalaryFormFields(
+                    getSalaryRecord(normalized, salaryModalContext.memberKey),
+                    {
+                        memberKey: salaryModalContext.memberKey,
+                        month: normalized,
+                        member: salaryModalContext.member,
+                    },
+                );
+            }
         };
 
         const getMonthDateEntries = (month) => {
@@ -1782,6 +1993,16 @@
                 return numberFormatter.format(numeric);
             }
             return stringValue;
+        };
+
+        const formatNumberForInput = (value) => {
+            if (!Number.isFinite(value)) {
+                return "";
+            }
+
+            const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+            const normalized = Math.abs(rounded) < 0.005 ? 0 : rounded;
+            return normalized.toFixed(2);
         };
 
         const computeMemberKey = (member, fallbackIndex = null) => {
@@ -2354,6 +2575,25 @@
             activeMembers.forEach((member, index) => {
                 const memberKey = computeMemberKey(member, index);
                 const record = memberKey ? monthStore[memberKey] || {} : {};
+                const isFactoryMember = isFactoryPayCategory(member);
+                const computedAllowance = isFactoryMember
+                    ? getComputedAttendanceAllowance(currentSalaryMonth, memberKey)
+                    : null;
+                let displayRecord = record;
+
+                if (isFactoryMember) {
+                    if (computedAllowance != null) {
+                        displayRecord = {
+                            ...record,
+                            attendanceAllowance: computedAllowance,
+                        };
+                    }
+                } else if (record?.attendanceAllowance != null) {
+                    displayRecord = {
+                        ...record,
+                        attendanceAllowance: null,
+                    };
+                }
                 const row = document.createElement("tr");
 
                 row.appendChild(createCell("Reg No", sanitizeText(member?.regNumber)));
@@ -2368,7 +2608,9 @@
                 row.appendChild(createCell("Name", nameButton));
 
                 salaryFieldDefinitions.forEach(({ label, name }) => {
-                    row.appendChild(createCell(label, formatSalaryValue(record?.[name])));
+                    row.appendChild(
+                        createCell(label, formatSalaryValue(displayRecord?.[name])),
+                    );
                 });
 
                 const attendanceButton = document.createElement("button");
@@ -2416,15 +2658,42 @@
             renderSalarySheet();
         };
 
-        const populateSalaryFormFields = (record) => {
+        const populateSalaryFormFields = (record, { memberKey, month, member } = {}) => {
             if (!salaryForm) {
                 return;
             }
 
+            const contextMember = member ?? salaryModalContext?.member ?? null;
+            const targetMemberKey = memberKey ?? salaryModalContext?.memberKey ?? null;
+            const targetMonth =
+                normalizeMonthValue(month) ||
+                normalizeMonthValue(salaryFormMonth?.value) ||
+                normalizeMonthValue(currentSalaryMonth) ||
+                currentSalaryMonth;
+            const isFactoryMember = isFactoryPayCategory(contextMember);
+            const computedAllowance = isFactoryMember
+                ? getComputedAttendanceAllowance(targetMonth, targetMemberKey)
+                : null;
+
             salaryFieldDefinitions.forEach(({ name }) => {
                 const input = salaryForm.elements[name];
                 if (input) {
-                    input.value = record?.[name] ?? "";
+                    let value = record?.[name] ?? "";
+
+                    if (name === "attendanceAllowance") {
+                        input.disabled = !isFactoryMember;
+
+                        if (!isFactoryMember) {
+                            input.value = "";
+                            return;
+                        }
+
+                        if (computedAllowance != null) {
+                            value = formatNumberForInput(computedAllowance);
+                        }
+                    }
+
+                    input.value = value ?? "";
                 }
             });
         };
@@ -2485,7 +2754,11 @@
                 salaryFormMonth.value = currentSalaryMonth;
             }
 
-            populateSalaryFormFields(getSalaryRecord(currentSalaryMonth, memberKey));
+            populateSalaryFormFields(getSalaryRecord(currentSalaryMonth, memberKey), {
+                memberKey,
+                month: currentSalaryMonth,
+                member,
+            });
 
             window.requestAnimationFrame(() => {
                 const firstEditableField = salaryForm.querySelector(
@@ -2645,6 +2918,44 @@
                         `Saved calendar settings for ${label}.`,
                         "success",
                     );
+
+                    const isoParts = parseIsoDate(iso);
+                    if (isoParts) {
+                        const normalizedMonth = normalizeMonthValue(
+                            getMonthKey(isoParts.year, isoParts.month),
+                        );
+
+                        if (normalizedMonth) {
+                            try {
+                                await updateComputedAttendanceAllowances(normalizedMonth);
+                            } catch (error) {
+                                console.error(
+                                    "Failed to refresh attendance allowance after calendar update",
+                                    error,
+                                );
+                            }
+
+                            if (
+                                normalizeMonthValue(currentSalaryMonth) === normalizedMonth
+                            ) {
+                                renderSalarySheet();
+
+                                if (salaryModalContext?.memberKey) {
+                                    populateSalaryFormFields(
+                                        getSalaryRecord(
+                                            normalizedMonth,
+                                            salaryModalContext.memberKey,
+                                        ),
+                                        {
+                                            memberKey: salaryModalContext.memberKey,
+                                            month: normalizedMonth,
+                                            member: salaryModalContext.member,
+                                        },
+                                    );
+                                }
+                            }
+                        }
+                    }
                 } catch (error) {
                     console.error("Failed to save work calendar day", error);
                     if (workdayFormError) {
@@ -2753,6 +3064,32 @@
                     removeAttendanceRecord(normalizedMonth, memberKey);
                 }
 
+                try {
+                    await updateComputedAttendanceAllowances(normalizedMonth);
+                } catch (error) {
+                    console.error(
+                        "Failed to update attendance allowance after attendance save",
+                        error,
+                    );
+                }
+
+                renderSalarySheet();
+
+                if (
+                    salaryModalContext?.memberKey &&
+                    normalizeMonthValue(salaryFormMonth?.value || currentSalaryMonth) ===
+                        normalizedMonth
+                ) {
+                    populateSalaryFormFields(
+                        getSalaryRecord(normalizedMonth, salaryModalContext.memberKey),
+                        {
+                            memberKey: salaryModalContext.memberKey,
+                            month: normalizedMonth,
+                            member: salaryModalContext.member,
+                        },
+                    );
+                }
+
                 closeAttendanceModal();
             });
         }
@@ -2770,7 +3107,11 @@
                     return;
                 }
 
-                populateSalaryFormFields(getSalaryRecord(normalized, memberKey));
+                populateSalaryFormFields(getSalaryRecord(normalized, memberKey), {
+                    memberKey,
+                    month: normalized,
+                    member: salaryModalContext?.member,
+                });
             });
         }
 
@@ -2797,6 +3138,10 @@
                         }
                     }
                 });
+
+                if (!isFactoryPayCategory(salaryModalContext?.member)) {
+                    delete record.attendanceAllowance;
+                }
 
                 const { memberId, memberKey } = salaryModalContext;
                 let responseData = null;

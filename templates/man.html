@@ -398,6 +398,13 @@
                         >
                             Cancel
                         </button>
+                        <button
+                            type="button"
+                            class="button button--secondary"
+                            id="attendance-modal-print"
+                        >
+                            Print
+                        </button>
                         <button type="submit" class="button button--primary">Save attendance</button>
                     </div>
                 </form>
@@ -653,6 +660,7 @@
         const attendanceModal = document.getElementById("attendance-modal");
         const attendanceModalClose = document.getElementById("attendance-modal-close");
         const attendanceModalCancel = document.getElementById("attendance-modal-cancel");
+        const attendanceModalPrint = document.getElementById("attendance-modal-print");
         const attendanceForm = document.getElementById("attendance-form");
         const attendanceTableBody = document.getElementById("attendance-table-body");
         const attendanceFormMemberName = document.getElementById("attendance-form-member-name");
@@ -714,6 +722,10 @@
         const attendanceMonthFormatter = new Intl.DateTimeFormat(undefined, {
             year: "numeric",
             month: "long",
+        });
+        const attendancePrintTimestampFormatter = new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
         });
 
         const getInitialSalaryMonth = () => {
@@ -1210,6 +1222,19 @@
             return stringValue || fallback;
         };
 
+        const escapeHtml = (value) => {
+            if (value == null) {
+                return "";
+            }
+
+            return String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        };
+
         const resolveImageUrl = (value) => {
             if (typeof value !== "string") {
                 return "";
@@ -1554,6 +1579,229 @@
             });
         };
 
+        const buildAttendancePrintMarkup = () => {
+            if (!attendanceForm) {
+                return "";
+            }
+
+            const summaryData = [
+                ["Employee", attendanceFormMemberName?.textContent ?? ""],
+                ["Reg No", attendanceFormRegno?.textContent ?? ""],
+                ["Month", attendanceSummaryMonth?.textContent ?? ""],
+            ].map(([label, value]) => [label, sanitizeText(value)]);
+
+            const rowElements = attendanceTableBody
+                ? Array.from(attendanceTableBody.querySelectorAll("tr"))
+                : [];
+
+            const rows = [];
+
+            rowElements.forEach((rowElement) => {
+                const cells = rowElement.querySelectorAll("td");
+                if (cells.length < 5) {
+                    const message = sanitizeText(
+                        cells[0]?.textContent ?? "No attendance entries available."
+                    );
+                    rows.push({ type: "message", message });
+                    return;
+                }
+
+                const date = sanitizeText(cells[0]?.textContent ?? "");
+                const onValue = sanitizeText(cells[1]?.querySelector("input")?.value ?? "");
+                const offValue = sanitizeText(cells[2]?.querySelector("input")?.value ?? "");
+                const actualValue = sanitizeText(
+                    cells[3]?.querySelector(".attendance-table__hours-value")?.textContent ?? ""
+                );
+                const payValue = sanitizeText(
+                    cells[4]?.querySelector(".attendance-table__hours-value")?.textContent ?? ""
+                );
+
+                rows.push({
+                    type: "data",
+                    date,
+                    onValue,
+                    offValue,
+                    actualValue,
+                    payValue,
+                });
+            });
+
+            if (rows.length === 0) {
+                rows.push({
+                    type: "message",
+                    message: "No attendance entries available.",
+                });
+            }
+
+            const summaryHtml = summaryData
+                .map(
+                    ([label, value]) => `
+                <div class="attendance-print__summary-item">
+                    <span class="attendance-print__summary-label">${escapeHtml(label)}</span>
+                    <span class="attendance-print__summary-value">${escapeHtml(value)}</span>
+                </div>`
+                )
+                .join("");
+
+            const rowsHtml = rows
+                .map((row) => {
+                    if (row.type === "message") {
+                        return `
+                    <tr>
+                        <td class="attendance-print__table-message" colspan="5">${escapeHtml(
+                            row.message
+                        )}</td>
+                    </tr>`;
+                    }
+
+                    return `
+                    <tr>
+                        <td>${escapeHtml(row.date)}</td>
+                        <td>${escapeHtml(row.onValue)}</td>
+                        <td>${escapeHtml(row.offValue)}</td>
+                        <td>${escapeHtml(row.actualValue)}</td>
+                        <td>${escapeHtml(row.payValue)}</td>
+                    </tr>`;
+                })
+                .join("");
+
+            const styles = `
+                :root {
+                    color-scheme: light;
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
+                body {
+                    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                    margin: 24px;
+                    color: #111827;
+                    background-color: #ffffff;
+                }
+
+                .attendance-print__header {
+                    margin-bottom: 24px;
+                }
+
+                .attendance-print__title {
+                    margin: 0;
+                    font-size: 24px;
+                    font-weight: 600;
+                }
+
+                .attendance-print__meta {
+                    margin: 8px 0 0;
+                    font-size: 14px;
+                    color: #6b7280;
+                }
+
+                .attendance-print__summary {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 12px;
+                    margin-bottom: 24px;
+                }
+
+                .attendance-print__summary-item {
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+
+                .attendance-print__summary-label {
+                    display: block;
+                    margin-bottom: 4px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    letter-spacing: 0.05em;
+                    text-transform: uppercase;
+                    color: #6b7280;
+                }
+
+                .attendance-print__summary-value {
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+
+                .attendance-print__table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+
+                .attendance-print__table th,
+                .attendance-print__table td {
+                    border: 1px solid #d1d5db;
+                    padding: 8px 12px;
+                    text-align: left;
+                    font-size: 14px;
+                }
+
+                .attendance-print__table th {
+                    background-color: #f3f4f6;
+                    font-weight: 600;
+                }
+
+                .attendance-print__table tbody tr:nth-child(even) td {
+                    background-color: #f9fafb;
+                }
+
+                .attendance-print__table-message {
+                    text-align: center;
+                    font-style: italic;
+                }
+            `;
+
+            const generatedAt = attendancePrintTimestampFormatter.format(new Date());
+            const employeeSummary = summaryData[0]?.[1];
+            const documentTitle =
+                employeeSummary && employeeSummary !== "—"
+                    ? `Attendance record - ${employeeSummary}`
+                    : "Attendance record";
+
+            return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(documentTitle)}</title>
+    <style>${styles}</style>
+</head>
+<body>
+    <header class="attendance-print__header">
+        <h1 class="attendance-print__title">Attendance record</h1>
+        <p class="attendance-print__meta">Generated ${escapeHtml(generatedAt)}</p>
+    </header>
+    <section class="attendance-print__summary">
+        ${summaryHtml}
+    </section>
+    <table class="attendance-print__table">
+        <thead>
+            <tr>
+                <th scope="col">Date</th>
+                <th scope="col">On time</th>
+                <th scope="col">Off time</th>
+                <th scope="col">Actual hours</th>
+                <th scope="col">Pay hours</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${rowsHtml}
+        </tbody>
+    </table>
+    <script>
+        window.addEventListener('load', () => {
+            window.focus();
+            window.print();
+        });
+        window.addEventListener('afterprint', () => {
+            window.close();
+        });
+    </script>
+</body>
+</html>`;
+        };
+
         const refreshAttendanceModalContents = () => {
             if (!attendanceModal || attendanceModal.hasAttribute("hidden")) {
                 return;
@@ -1808,6 +2056,34 @@
         if (attendanceModalCancel) {
             attendanceModalCancel.addEventListener("click", () => {
                 closeAttendanceModal();
+            });
+        }
+
+        if (attendanceModalPrint) {
+            attendanceModalPrint.addEventListener("click", () => {
+                if (!attendanceModalContext?.memberKey) {
+                    return;
+                }
+
+                const printMarkup = buildAttendancePrintMarkup();
+                if (!printMarkup) {
+                    window.alert("Attendance information is not available to print.");
+                    return;
+                }
+
+                const printWindow = window.open("", "_blank");
+                if (!printWindow) {
+                    window.alert(
+                        "Unable to open the print preview. Please allow pop-ups for this site."
+                    );
+                    return;
+                }
+
+                printWindow.opener = null;
+                printWindow.document.open();
+                printWindow.document.write(printMarkup);
+                printWindow.document.close();
+                printWindow.focus();
             });
         }
 

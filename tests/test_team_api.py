@@ -335,6 +335,65 @@ class TeamApiTestCase(unittest.TestCase):
         updated = update_response.get_json()
         self.assertEqual(updated["status"], "On Leave")
 
+    def test_work_calendar_admin_can_update_and_fetch_day(self):
+        target_date = "2024-02-04"
+
+        response = self.client.put(
+            f"/api/team/work-calendar/{target_date}",
+            headers=self._auth_headers(self.admin_token),
+            json={"isWorkDay": False, "holidayName": "Independence Day"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertFalse(payload["isWorkDay"])
+        self.assertEqual(payload["holidayName"], "Independence Day")
+
+        list_response = self.client.get(
+            "/api/team/work-calendar?year=2024&month=2",
+            headers=self._auth_headers(self.admin_token),
+        )
+        self.assertEqual(list_response.status_code, 200)
+        body = list_response.get_json()
+        entries = {entry["date"]: entry for entry in body["days"]}
+        self.assertIn(target_date, entries)
+        self.assertFalse(entries[target_date]["isWorkDay"])
+        self.assertEqual(entries[target_date]["holidayName"], "Independence Day")
+
+        reset_response = self.client.put(
+            f"/api/team/work-calendar/{target_date}",
+            headers=self._auth_headers(self.admin_token),
+            json={"isWorkDay": True},
+        )
+        self.assertEqual(reset_response.status_code, 200)
+        reset_payload = reset_response.get_json()
+        self.assertTrue(reset_payload["isWorkDay"])
+        self.assertIsNone(reset_payload["holidayName"])
+
+        refreshed = self.client.get(
+            "/api/team/work-calendar?year=2024&month=2",
+            headers=self._auth_headers(self.admin_token),
+        )
+        refreshed_entries = {entry["date"]: entry for entry in refreshed.get_json()["days"]}
+        self.assertNotIn(target_date, refreshed_entries)
+
+    def test_work_calendar_requires_status_field(self):
+        response = self.client.put(
+            "/api/team/work-calendar/2024-02-05",
+            headers=self._auth_headers(self.admin_token),
+            json={"holidayName": "Test"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Work status is required", response.get_json()["msg"])
+
+    def test_work_calendar_view_allowed_for_managers(self):
+        response = self.client.get(
+            "/api/team/work-calendar?year=2024&month=3",
+            headers=self._auth_headers(self.maintenance_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("days", data)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -255,8 +255,27 @@
                                     placeholder="https://example.com/profile.jpg"
                                 />
                             </div>
-                            <div class="edit-form__field">
+                            <div class="edit-form__field edit-form__field--full">
                                 <label class="edit-form__label" for="team-personal-detail">Personal detail</label>
+                                <div class="team-form__bank-actions">
+                                    <button
+                                        type="button"
+                                        class="button button--primary button--small"
+                                        id="team-bank-detail-button"
+                                    >
+                                        Personal Detail
+                                    </button>
+                                    <p
+                                        class="team-form__bank-summary team-form__bank-summary--empty"
+                                        id="team-bank-detail-summary"
+                                    >
+                                        No personal detail added yet.
+                                    </p>
+                                </div>
+                                <input type="hidden" id="team-bank-account-name" name="bankAccountName" />
+                                <input type="hidden" id="team-bank-name" name="bankName" />
+                                <input type="hidden" id="team-branch-name" name="branchName" />
+                                <input type="hidden" id="team-bank-account-number" name="bankAccountNumber" />
                                 <textarea
                                     class="edit-form__input"
                                     id="team-personal-detail"
@@ -665,6 +684,93 @@
             </div>
         </div>
     </div>
+    <div class="modal" id="bank-detail-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div
+            class="modal__content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bank-detail-modal-title"
+        >
+            <header class="modal__header modal__header--with-actions">
+                <h2 class="modal__title" id="bank-detail-modal-title">Personal detail</h2>
+                <div class="modal__header-actions">
+                    <button
+                        type="button"
+                        class="button button--ghost button--small"
+                        id="bank-detail-edit-toggle"
+                        hidden
+                    >
+                        Edit
+                    </button>
+                    <button
+                        type="button"
+                        class="modal__close"
+                        id="bank-detail-modal-close"
+                        aria-label="Close personal detail editor"
+                    >
+                        &times;
+                    </button>
+                </div>
+            </header>
+            <div class="modal__body">
+                <form class="edit-form" id="bank-detail-form">
+                    <p class="modal__hint" id="bank-detail-modal-hint"></p>
+                    <p class="alert alert--error" id="bank-detail-error" hidden></p>
+                    <p class="alert alert--success" id="bank-detail-success" hidden></p>
+                    <div class="edit-form__grid">
+                        <div class="edit-form__field edit-form__field--full">
+                            <label class="edit-form__label" for="bank-detail-account-name">Bank account name</label>
+                            <input
+                                class="edit-form__input"
+                                id="bank-detail-account-name"
+                                name="bankAccountName"
+                                type="text"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="bank-detail-bank-name">Bank name</label>
+                            <input
+                                class="edit-form__input"
+                                id="bank-detail-bank-name"
+                                name="bankName"
+                                type="text"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="bank-detail-branch-name">Branch name</label>
+                            <input
+                                class="edit-form__input"
+                                id="bank-detail-branch-name"
+                                name="branchName"
+                                type="text"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="bank-detail-account-number">Bank account number</label>
+                            <input
+                                class="edit-form__input"
+                                id="bank-detail-account-number"
+                                name="bankAccountNumber"
+                                type="text"
+                                inputmode="numeric"
+                                autocomplete="off"
+                            />
+                        </div>
+                    </div>
+                    <div class="modal__actions">
+                        <button type="button" class="button button--ghost" id="bank-detail-modal-cancel">Cancel</button>
+                        <button type="submit" class="button button--primary" id="bank-detail-save-button">
+                            Save details
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -763,11 +869,36 @@
         const positionInput = document.getElementById("team-position");
         const imageInput = document.getElementById("team-image");
         const personalDetailInput = document.getElementById("team-personal-detail");
+        const bankDetailButton = document.getElementById("team-bank-detail-button");
+        const bankDetailSummary = document.getElementById("team-bank-detail-summary");
+        const bankAccountNameHidden = document.getElementById("team-bank-account-name");
+        const bankNameHidden = document.getElementById("team-bank-name");
+        const branchNameHidden = document.getElementById("team-branch-name");
+        const bankAccountNumberHidden = document.getElementById("team-bank-account-number");
         const assignmentsInput = document.getElementById("team-assignments");
         const trainingInput = document.getElementById("team-training");
         const employmentLogInput = document.getElementById("team-employment-log");
         const filesInput = document.getElementById("team-files");
         const assetsInput = document.getElementById("team-assets");
+        const bankDetailModal = document.getElementById("bank-detail-modal");
+        const bankDetailModalClose = document.getElementById("bank-detail-modal-close");
+        const bankDetailModalCancel = document.getElementById("bank-detail-modal-cancel");
+        const bankDetailEditToggle = document.getElementById("bank-detail-edit-toggle");
+        const bankDetailForm = document.getElementById("bank-detail-form");
+        const bankDetailError = document.getElementById("bank-detail-error");
+        const bankDetailSuccess = document.getElementById("bank-detail-success");
+        const bankDetailHint = document.getElementById("bank-detail-modal-hint");
+        const bankDetailSaveButton = document.getElementById("bank-detail-save-button");
+        const bankDetailAccountNameInput = document.getElementById("bank-detail-account-name");
+        const bankDetailBankNameInput = document.getElementById("bank-detail-bank-name");
+        const bankDetailBranchNameInput = document.getElementById("bank-detail-branch-name");
+        const bankDetailAccountNumberInput = document.getElementById("bank-detail-account-number");
+        const bankDetailFieldInputs = {
+            bankAccountName: bankDetailAccountNameInput,
+            bankName: bankDetailBankNameInput,
+            branchName: bankDetailBranchNameInput,
+            bankAccountNumber: bankDetailAccountNumberInput,
+        };
         const salaryTableBody = document.getElementById("salary-table-body");
         const salaryEmptyState = document.getElementById("salary-empty-state");
         const salaryMonthSelector = document.getElementById("salary-month-selector");
@@ -841,6 +972,7 @@
         let editingMemberId = null;
         let salaryModalContext = null;
         let attendanceModalContext = null;
+        let bankDetailModalState = null;
         let workdayModalContext = null;
         let workCalendarState = { year: null, month: null, loading: false };
 
@@ -2213,6 +2345,106 @@
             return stringValue || fallback;
         };
 
+        const BANK_DETAIL_FIELDS = [
+            "bankAccountName",
+            "bankName",
+            "branchName",
+            "bankAccountNumber",
+        ];
+
+        const getBankDetailValues = (source = {}) => {
+            const values = {};
+            BANK_DETAIL_FIELDS.forEach((field) => {
+                const value = source?.[field];
+                if (typeof value === "string") {
+                    values[field] = value.trim();
+                } else if (value == null) {
+                    values[field] = "";
+                } else {
+                    values[field] = String(value).trim();
+                }
+            });
+            return values;
+        };
+
+        const getMemberBankDetails = (member) =>
+            getBankDetailValues({
+                bankAccountName: member?.bankAccountName ?? member?.bank_account_name,
+                bankName: member?.bankName ?? member?.bank_name,
+                branchName: member?.branchName ?? member?.branch_name,
+                bankAccountNumber: member?.bankAccountNumber ?? member?.bank_account_number,
+            });
+
+        const hasBankDetail = (detail) => {
+            if (!detail) {
+                return false;
+            }
+            return BANK_DETAIL_FIELDS.some((field) => {
+                const value = detail[field];
+                return typeof value === "string" && value.trim();
+            });
+        };
+
+        const getHiddenBankDetailValues = () =>
+            getBankDetailValues({
+                bankAccountName: bankAccountNameHidden?.value ?? "",
+                bankName: bankNameHidden?.value ?? "",
+                branchName: branchNameHidden?.value ?? "",
+                bankAccountNumber: bankAccountNumberHidden?.value ?? "",
+            });
+
+        const formatBankDetailSummary = (values) => {
+            const parts = [];
+            const namePart = values.bankAccountName?.trim();
+            if (namePart) {
+                parts.push(namePart);
+            }
+            const bankParts = [values.bankName, values.branchName]
+                .map((part) => (typeof part === "string" ? part.trim() : ""))
+                .filter(Boolean);
+            if (bankParts.length) {
+                parts.push(bankParts.join(" – "));
+            }
+            const numberPart = values.bankAccountNumber?.trim();
+            if (numberPart) {
+                parts.push(`Acc: ${numberPart}`);
+            }
+            return parts.join(" • ") || "";
+        };
+
+        const updateBankDetailSummary = () => {
+            if (!bankDetailSummary) {
+                return;
+            }
+            const values = getHiddenBankDetailValues();
+            if (hasBankDetail(values)) {
+                bankDetailSummary.textContent = formatBankDetailSummary(values);
+                bankDetailSummary.classList.remove("team-form__bank-summary--empty");
+            } else {
+                bankDetailSummary.textContent = "No personal detail added yet.";
+                bankDetailSummary.classList.add("team-form__bank-summary--empty");
+            }
+        };
+
+        const setHiddenBankDetailValues = (values = {}) => {
+            const resolved = getBankDetailValues(values);
+            if (bankAccountNameHidden) {
+                bankAccountNameHidden.value = resolved.bankAccountName;
+            }
+            if (bankNameHidden) {
+                bankNameHidden.value = resolved.bankName;
+            }
+            if (branchNameHidden) {
+                branchNameHidden.value = resolved.branchName;
+            }
+            if (bankAccountNumberHidden) {
+                bankAccountNumberHidden.value = resolved.bankAccountNumber;
+            }
+            updateBankDetailSummary();
+        };
+
+        updateBankDetailSummary();
+
         const resolveImageUrl = (value) => {
             if (typeof value !== "string") {
                 return "";
@@ -2386,6 +2618,41 @@
             wrapper.title = `${displayName}'s profile`;
 
             return wrapper;
+        };
+
+        const createPersonalDetailCell = (member) => {
+            const container = document.createElement("div");
+            container.className = "team-table__personal-detail";
+
+            const detailValues = getMemberBankDetails(member);
+            const hasDetail = hasBankDetail(detailValues);
+
+            const actionButton = document.createElement("button");
+            actionButton.type = "button";
+            actionButton.className =
+                "button button--secondary button--small team-table__personal-detail-button";
+            actionButton.textContent = hasDetail ? "View" : "Add";
+            actionButton.setAttribute(
+                "aria-label",
+                `${hasDetail ? "View" : "Add"} personal detail for ${getMemberDisplayName(member)}`
+            );
+            actionButton.addEventListener("click", () => {
+                openBankDetailModalForMember(member);
+            });
+            container.appendChild(actionButton);
+
+            const personalDetailText =
+                typeof member?.personalDetail === "string"
+                    ? member.personalDetail.trim()
+                    : "";
+            if (personalDetailText) {
+                const note = document.createElement("div");
+                note.className = "team-table__personal-detail-note";
+                note.textContent = personalDetailText;
+                container.appendChild(note);
+            }
+
+            return container;
         };
 
         const getAttendanceRecord = (month, memberKey) => {
@@ -2854,6 +3121,304 @@
             });
         };
 
+        const setBankDetailFormValues = (values = {}) => {
+            const resolved = getBankDetailValues(values);
+            Object.entries(bankDetailFieldInputs).forEach(([field, input]) => {
+                if (!input) {
+                    return;
+                }
+                input.value = resolved[field];
+            });
+        };
+
+        const getBankDetailFormValues = () => {
+            const values = {};
+            Object.entries(bankDetailFieldInputs).forEach(([field, input]) => {
+                values[field] = input?.value ?? "";
+            });
+            return getBankDetailValues(values);
+        };
+
+        const resetBankDetailFeedback = () => {
+            if (bankDetailError) {
+                bankDetailError.hidden = true;
+                bankDetailError.textContent = "";
+            }
+            if (bankDetailSuccess) {
+                bankDetailSuccess.hidden = true;
+                bankDetailSuccess.textContent = "";
+            }
+        };
+
+        const showBankDetailError = (message) => {
+            if (!bankDetailError) {
+                return;
+            }
+            bankDetailError.textContent = message;
+            bankDetailError.hidden = false;
+            if (bankDetailSuccess) {
+                bankDetailSuccess.hidden = true;
+                bankDetailSuccess.textContent = "";
+            }
+        };
+
+        const showBankDetailSuccess = (message) => {
+            if (!bankDetailSuccess) {
+                return;
+            }
+            bankDetailSuccess.textContent = message;
+            bankDetailSuccess.hidden = false;
+            if (bankDetailError) {
+                bankDetailError.hidden = true;
+                bankDetailError.textContent = "";
+            }
+        };
+
+        const setBankDetailHint = (text) => {
+            if (!bankDetailHint) {
+                return;
+            }
+            const normalized = typeof text === "string" ? text.trim() : "";
+            if (normalized) {
+                bankDetailHint.textContent = normalized;
+                bankDetailHint.hidden = false;
+            } else {
+                bankDetailHint.textContent = "";
+                bankDetailHint.hidden = true;
+            }
+        };
+
+        const setBankDetailFieldsDisabled = (disabled) => {
+            Object.values(bankDetailFieldInputs).forEach((input) => {
+                if (input) {
+                    input.disabled = disabled;
+                }
+            });
+        };
+
+        const updateBankDetailControls = () => {
+            const contextType = bankDetailModalState?.context?.type;
+            const editing =
+                contextType === "form" || bankDetailModalState?.editing === true;
+            const loading = bankDetailModalState?.loading === true;
+
+            if (bankDetailEditToggle) {
+                if (contextType === "member") {
+                    bankDetailEditToggle.hidden = false;
+                    bankDetailEditToggle.textContent = editing
+                        ? "Cancel edit"
+                        : "Edit";
+                    bankDetailEditToggle.disabled = loading;
+                } else {
+                    bankDetailEditToggle.hidden = true;
+                    bankDetailEditToggle.disabled = false;
+                }
+            }
+
+            if (bankDetailSaveButton) {
+                const disableSave = loading || (contextType === "member" && !editing);
+                bankDetailSaveButton.disabled = disableSave;
+            }
+        };
+
+        const setBankDetailEditing = (editing, { focusField = true } = {}) => {
+            if (!bankDetailModalState) {
+                return;
+            }
+            const contextType = bankDetailModalState.context?.type;
+            if (contextType === "form") {
+                editing = true;
+            }
+
+            bankDetailModalState = {
+                ...bankDetailModalState,
+                editing,
+            };
+
+            const disableFields = contextType === "member" ? !editing : false;
+            setBankDetailFieldsDisabled(disableFields);
+
+            if (!editing && bankDetailModalState.values) {
+                setBankDetailFormValues(bankDetailModalState.values);
+            }
+
+            updateBankDetailControls();
+
+            if (editing && focusField) {
+                window.requestAnimationFrame(() => {
+                    bankDetailAccountNameInput?.focus();
+                });
+            }
+        };
+
+        const setBankDetailLoading = (loading) => {
+            if (!bankDetailModalState) {
+                return;
+            }
+            bankDetailModalState = {
+                ...bankDetailModalState,
+                loading,
+            };
+
+            if (loading) {
+                setBankDetailFieldsDisabled(true);
+            } else {
+                const contextType = bankDetailModalState.context?.type;
+                const disableFields = contextType === "member" ? !bankDetailModalState.editing : false;
+                setBankDetailFieldsDisabled(disableFields);
+            }
+
+            updateBankDetailControls();
+        };
+
+        const closeBankDetailModal = () => {
+            if (!bankDetailModal) {
+                return;
+            }
+            bankDetailModal.classList.remove("modal--open");
+            bankDetailModal.setAttribute("hidden", "");
+            bankDetailModal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+            if (bankDetailForm) {
+                bankDetailForm.reset();
+            }
+            if (bankDetailModal?.dataset) {
+                delete bankDetailModal.dataset.memberId;
+            }
+            resetBankDetailFeedback();
+            setBankDetailHint("");
+            bankDetailModalState = null;
+        };
+
+        const openBankDetailModalForForm = () => {
+            if (!bankDetailModal || !bankDetailForm) {
+                return;
+            }
+
+            if (attendanceModal && !attendanceModal.hasAttribute("hidden")) {
+                closeAttendanceModal();
+            }
+            if (salaryModal && !salaryModal.hasAttribute("hidden")) {
+                closeSalaryModal();
+            }
+
+            const values = getHiddenBankDetailValues();
+            bankDetailModalState = {
+                context: { type: "form" },
+                editing: true,
+                loading: false,
+                values,
+            };
+
+            resetBankDetailFeedback();
+            setBankDetailHint("These details will be submitted with the team member.");
+            setBankDetailFormValues(values);
+            setBankDetailFieldsDisabled(false);
+            updateBankDetailControls();
+
+            bankDetailModal.removeAttribute("hidden");
+            bankDetailModal.setAttribute("aria-hidden", "false");
+            bankDetailModal.classList.add("modal--open");
+            document.body.classList.add("modal-open");
+
+            window.requestAnimationFrame(() => {
+                bankDetailAccountNameInput?.focus();
+            });
+        };
+
+        const openBankDetailModalForMember = async (member) => {
+            if (!bankDetailModal || !bankDetailForm) {
+                return;
+            }
+
+            const memberId = parseMemberId(member?.id);
+            if (memberId == null) {
+                return;
+            }
+
+            if (attendanceModal && !attendanceModal.hasAttribute("hidden")) {
+                closeAttendanceModal();
+            }
+            if (salaryModal && !salaryModal.hasAttribute("hidden")) {
+                closeSalaryModal();
+            }
+
+            const displayName = getMemberDisplayName(member);
+            bankDetailModalState = {
+                context: { type: "member", memberId, member, displayName },
+                editing: false,
+                loading: true,
+                values: getBankDetailValues({}),
+            };
+
+            resetBankDetailFeedback();
+            setBankDetailHint(`Loading personal detail for ${displayName}…`);
+            setBankDetailFormValues({});
+            setBankDetailFieldsDisabled(true);
+            updateBankDetailControls();
+
+            bankDetailModal.removeAttribute("hidden");
+            bankDetailModal.setAttribute("aria-hidden", "false");
+            bankDetailModal.classList.add("modal--open");
+            document.body.classList.add("modal-open");
+            bankDetailModal.dataset.memberId = String(memberId);
+
+            try {
+                const response = await fetch(
+                    `/api/team/members/${memberId}/personal-detail`,
+                    {
+                        headers: authHeaders,
+                    }
+                );
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => null);
+                    const message = errorBody?.msg || `Request failed with status ${response.status}`;
+                    throw new Error(message);
+                }
+
+                const data = await response.json();
+                const values = getBankDetailValues(data);
+                const hasExisting = hasBankDetail(values);
+
+                bankDetailModalState = {
+                    context: { type: "member", memberId, member, displayName },
+                    editing: hasExisting ? false : true,
+                    loading: false,
+                    values,
+                };
+
+                setBankDetailFormValues(values);
+                setBankDetailHint(
+                    hasExisting
+                        ? `Viewing personal detail for ${displayName}.`
+                        : `Add personal detail for ${displayName}.`
+                );
+                setBankDetailEditing(bankDetailModalState.editing, { focusField: hasExisting === false });
+            } catch (error) {
+                console.error("Failed to load personal detail", error);
+                bankDetailModalState = {
+                    context: { type: "member", memberId, member, displayName },
+                    editing: false,
+                    loading: false,
+                    values: getBankDetailValues({}),
+                };
+                setBankDetailFormValues({});
+                setBankDetailFieldsDisabled(true);
+                updateBankDetailControls();
+                showBankDetailError(
+                    error?.message || "Unable to load personal detail. Please try again."
+                );
+                setBankDetailHint(`Personal detail is unavailable for ${displayName}.`);
+            }
+        };
+
+
         if (workdayModalClose) {
             workdayModalClose.addEventListener("click", () => {
                 closeWorkdayModal();
@@ -2914,6 +3479,51 @@
             });
         }
 
+        if (bankDetailModalClose) {
+            bankDetailModalClose.addEventListener("click", () => {
+                closeBankDetailModal();
+            });
+        }
+
+        if (bankDetailModalCancel) {
+            bankDetailModalCancel.addEventListener("click", () => {
+                closeBankDetailModal();
+            });
+        }
+
+        if (bankDetailModal) {
+            bankDetailModal.addEventListener("click", (event) => {
+                if (event.target?.dataset?.modalDismiss !== undefined) {
+                    closeBankDetailModal();
+                }
+            });
+        }
+
+        if (bankDetailEditToggle) {
+            bankDetailEditToggle.addEventListener("click", () => {
+                if (!bankDetailModalState || bankDetailModalState.context?.type !== "member") {
+                    return;
+                }
+
+                const currentlyEditing = bankDetailModalState.editing === true;
+                resetBankDetailFeedback();
+
+                if (currentlyEditing) {
+                    setBankDetailEditing(false, { focusField: false });
+                    const displayName = bankDetailModalState.context?.displayName;
+                    if (displayName) {
+                        setBankDetailHint(`Viewing personal detail for ${displayName}.`);
+                    }
+                } else {
+                    setBankDetailEditing(true);
+                    const displayName = bankDetailModalState.context?.displayName;
+                    if (displayName) {
+                        setBankDetailHint(`Editing personal detail for ${displayName}.`);
+                    }
+                }
+            });
+        }
+
         document.addEventListener("keydown", (event) => {
             if (event.key !== "Escape") {
                 return;
@@ -2926,6 +3536,11 @@
 
             if (attendanceModal && !attendanceModal.hasAttribute("hidden")) {
                 closeAttendanceModal();
+                return;
+            }
+
+            if (bankDetailModal && !bankDetailModal.hasAttribute("hidden")) {
+                closeBankDetailModal();
                 return;
             }
 
@@ -3178,6 +3793,89 @@
             });
         }
 
+        if (bankDetailForm) {
+            bankDetailForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                if (!bankDetailModalState) {
+                    closeBankDetailModal();
+                    return;
+                }
+
+                resetBankDetailFeedback();
+
+                const values = getBankDetailFormValues();
+                const contextType = bankDetailModalState.context?.type;
+
+                if (contextType === "form") {
+                    setHiddenBankDetailValues(values);
+                    closeBankDetailModal();
+                    return;
+                }
+
+                const memberId = bankDetailModalState.context?.memberId;
+                if (memberId == null) {
+                    showBankDetailError(
+                        "Unable to determine which member to update. Please close and try again."
+                    );
+                    return;
+                }
+
+                setBankDetailLoading(true);
+
+                try {
+                    const response = await fetch(
+                        `/api/team/members/${memberId}/personal-detail`,
+                        {
+                            method: "PATCH",
+                            headers: {
+                                ...authHeaders,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(values),
+                        }
+                    );
+
+                    if (response.status === 401) {
+                        logoutButton.click();
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        const errorBody = await response.json().catch(() => null);
+                        const message =
+                            errorBody?.msg || `Request failed with status ${response.status}`;
+                        throw new Error(message);
+                    }
+
+                    const payload = await response.json();
+                    const savedValues = getBankDetailValues(payload);
+                    bankDetailModalState = {
+                        ...bankDetailModalState,
+                        values: savedValues,
+                        editing: false,
+                        loading: false,
+                    };
+                    setBankDetailFormValues(savedValues);
+                    setBankDetailFieldsDisabled(true);
+                    updateBankDetailControls();
+                    const displayName = bankDetailModalState.context?.displayName;
+                    if (displayName) {
+                        setBankDetailHint(`Viewing personal detail for ${displayName}.`);
+                    }
+                    showBankDetailSuccess("Personal detail saved.");
+                    await loadTeamMembers();
+                } catch (error) {
+                    console.error("Failed to update personal detail", error);
+                    showBankDetailError(
+                        error?.message || "Unable to save personal detail."
+                    );
+                } finally {
+                    setBankDetailLoading(false);
+                }
+            });
+        }
+
         if (salaryFormMonth) {
             salaryFormMonth.addEventListener("change", (event) => {
                 const normalized = normalizeMonthValue(event.target.value);
@@ -3342,6 +4040,8 @@
                 teamForm.reset();
             }
 
+            setHiddenBankDetailValues({});
+
             if (regNumberInput) {
                 regNumberInput.disabled = false;
             }
@@ -3419,6 +4119,7 @@
             setSelectValue(statusSelect, normalizeStatus(member?.status));
             const imageValue = member?.image ?? member?.imageUrl ?? member?.image_url;
             setFieldValue(imageInput, imageValue);
+            setHiddenBankDetailValues(getMemberBankDetails(member));
             setFieldValue(personalDetailInput, member?.personalDetail);
             setFieldValue(assignmentsInput, member?.assignments);
             setFieldValue(trainingInput, member?.trainingRecords);
@@ -3475,6 +4176,12 @@
             teamFormCancelEditFooter.addEventListener("click", cancelEditing);
         }
 
+        if (bankDetailButton && canManageMembers) {
+            bankDetailButton.addEventListener("click", () => {
+                openBankDetailModalForForm();
+            });
+        }
+
         const renderMembers = (members) => {
             if (!tableBody) {
                 return;
@@ -3493,6 +4200,7 @@
                 const row = document.createElement("tr");
 
                 const avatarElement = createAvatarElement(member);
+                const personalDetailCell = createPersonalDetailCell(member);
 
                 const cells = [
                     ["ID", sanitizeText(member?.id)],
@@ -3507,7 +4215,7 @@
                     ["Status", sanitizeText(member?.status)],
                     ["Created at", formatDateTime(member?.createdAt)],
                     ["Updated at", formatDateTime(member?.updatedAt)],
-                    ["Personal detail", sanitizeText(member?.personalDetail)],
+                    ["Personal detail", personalDetailCell],
                     ["Assignments", sanitizeText(member?.assignments)],
                     ["Training records", sanitizeText(member?.trainingRecords)],
                     ["Employment log", sanitizeText(member?.employmentLog)],
@@ -3697,6 +4405,10 @@
                     "position",
                     "payCategory",
                     "image",
+                    "bankAccountName",
+                    "bankName",
+                    "branchName",
+                    "bankAccountNumber",
                     "personalDetail",
                     "assignments",
                     "trainingRecords",

@@ -537,6 +537,23 @@ body {
     margin-left: auto;
 }
 
+.team-form__bank-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.team-form__bank-summary {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+}
+
+.team-form__bank-summary--empty {
+    color: #94a3b8;
+}
+
 .button--small {
     padding: 0.45rem 0.9rem;
     font-size: 0.85rem;
@@ -610,6 +627,28 @@ body {
 
 .team-table__cell--avatar .team-table__avatar {
     margin: 0 auto;
+}
+
+.team-table__personal-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+}
+
+.team-table__personal-detail-button {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+}
+
+.team-table__personal-detail-note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+    max-width: 22rem;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
 .salary-section {
@@ -792,6 +831,16 @@ body {
     border-bottom: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.modal__header--with-actions {
+    gap: 1rem;
+}
+
+.modal__header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .modal__title {
     margin: 0;
     font-size: 1.35rem;
@@ -817,6 +866,12 @@ body {
 
 .modal__body {
     padding: 1.5rem;
+}
+
+.modal__hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.9rem;
+    color: #475569;
 }
 
 .modal__actions {

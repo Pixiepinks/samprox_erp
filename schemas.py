@@ -97,6 +97,10 @@ class TeamMemberSchema(Schema):
     employment_log   = fields.Str(attribute="employment_log",   data_key="employmentLog",   allow_none=True)
     files            = fields.Str(allow_none=True)
     assets           = fields.Str(allow_none=True)
+    bank_account_name   = fields.Str(attribute="bank_account_name",   data_key="bankAccountName",   allow_none=True)
+    bank_name           = fields.Str(attribute="bank_name",           data_key="bankName",           allow_none=True)
+    branch_name         = fields.Str(attribute="branch_name",         data_key="branchName",         allow_none=True)
+    bank_account_number = fields.Str(attribute="bank_account_number", data_key="bankAccountNumber", allow_none=True)
 
     created_at = fields.DateTime(data_key="createdAt", dump_only=True)
     updated_at = fields.DateTime(data_key="updatedAt", dump_only=True)
@@ -155,6 +159,18 @@ class TeamMemberCreateSchema(Schema):
     employment_log   = fields.Str(attribute="employment_log",   data_key="employmentLog",   allow_none=True)
     files            = fields.Str(allow_none=True)
     assets           = fields.Str(allow_none=True)
+    bank_account_name   = fields.Str(attribute="bank_account_name",   data_key="bankAccountName",   allow_none=True)
+    bank_name           = fields.Str(attribute="bank_name",           data_key="bankName",           allow_none=True)
+    branch_name         = fields.Str(attribute="branch_name",         data_key="branchName",         allow_none=True)
+    bank_account_number = fields.Str(attribute="bank_account_number", data_key="bankAccountNumber", allow_none=True)
+
+
+class TeamMemberBankDetailSchema(Schema):
+    member_id = fields.Int(attribute="id", data_key="memberId")
+    bank_account_name   = fields.Str(attribute="bank_account_name",   data_key="bankAccountName",   allow_none=True)
+    bank_name           = fields.Str(attribute="bank_name",           data_key="bankName",           allow_none=True)
+    branch_name         = fields.Str(attribute="branch_name",         data_key="branchName",         allow_none=True)
+    bank_account_number = fields.Str(attribute="bank_account_number", data_key="bankAccountNumber", allow_none=True)
 
     class Meta:
         ordered = True

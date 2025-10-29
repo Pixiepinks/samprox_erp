@@ -47,6 +47,7 @@ class TeamApiTestCase(unittest.TestCase):
         self.admin_token = self._login("admin@example.com")
         self.production_token = self._login("pm@example.com")
         self.maintenance_token = self._login("maint@example.com")
+        self.member_counter = 0
 
     def tearDown(self):
         self.app_module.db.session.remove()
@@ -67,6 +68,26 @@ class TeamApiTestCase(unittest.TestCase):
     def _auth_headers(self, token):
         return {"Authorization": f"Bearer {token}"}
 
+    def _create_member(self, payload=None, token=None):
+        self.member_counter += 1
+        default_reg = f"AUTO-{self.member_counter:03d}"
+        data = {
+            "regNumber": default_reg,
+            "name": f"Auto Member {self.member_counter:03d}",
+            "joinDate": "2024-07-01",
+            "status": "Active",
+        }
+        if payload:
+            data.update(payload)
+
+        response = self.client.post(
+            "/api/team/members",
+            headers=self._auth_headers(token or self.admin_token),
+            json=data,
+        )
+        self.assertEqual(response.status_code, 201)
+        return response.get_json()
+
     def test_admin_can_register_and_list_team_members(self):
         payload = {
             "regNumber": "TM-001",
@@ -80,6 +101,10 @@ class TeamApiTestCase(unittest.TestCase):
             "employmentLog": "Joined 2020",
             "files": "ID copy",
             "assets": "Safety kit",
+            "bankAccountName": "Jane Doe",
+            "bankName": "ABC Bank",
+            "branchName": "Main Branch",
+            "bankAccountNumber": "1234567890",
         }
 
         response = self.client.post(
@@ -98,6 +123,10 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(member["employmentLog"], payload["employmentLog"])
         self.assertEqual(member["files"], payload["files"])
         self.assertEqual(member["assets"], payload["assets"])
+        self.assertEqual(member["bankAccountName"], payload["bankAccountName"])
+        self.assertEqual(member["bankName"], payload["bankName"])
+        self.assertEqual(member["branchName"], payload["branchName"])
+        self.assertEqual(member["bankAccountNumber"], payload["bankAccountNumber"])
 
         list_response = self.client.get(
             "/api/team/members",
@@ -109,6 +138,10 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(stored["personalDetail"], payload["personalDetail"])
         self.assertEqual(stored["payCategory"], payload["payCategory"])
+        self.assertEqual(stored["bankAccountName"], payload["bankAccountName"])
+        self.assertEqual(stored["bankName"], payload["bankName"])
+        self.assertEqual(stored["branchName"], payload["branchName"])
+        self.assertEqual(stored["bankAccountNumber"], payload["bankAccountNumber"])
 
     def test_production_manager_can_register_member(self):
         payload = {
@@ -214,6 +247,87 @@ class TeamApiTestCase(unittest.TestCase):
                 self.assertEqual(response.status_code, 201)
                 body = response.get_json()
                 self.assertEqual(body["joinDate"], expected)
+
+    def test_admin_can_update_personal_detail(self):
+        member = self._create_member({"regNumber": "TM-200"})
+        member_id = member["id"]
+
+        patch_payload = {
+            "bankAccountName": "John Doe",
+            "bankName": "XYZ Bank",
+            "branchName": "City Branch",
+            "bankAccountNumber": "9988776655",
+        }
+
+        patch_response = self.client.patch(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.admin_token),
+            json=patch_payload,
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        updated = patch_response.get_json()
+        self.assertEqual(updated["bankAccountName"], patch_payload["bankAccountName"])
+        self.assertEqual(updated["bankName"], patch_payload["bankName"])
+        self.assertEqual(updated["branchName"], patch_payload["branchName"])
+        self.assertEqual(updated["bankAccountNumber"], patch_payload["bankAccountNumber"])
+
+        get_response = self.client.get(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.admin_token),
+        )
+        self.assertEqual(get_response.status_code, 200)
+        body = get_response.get_json()
+        self.assertEqual(body["bankAccountName"], patch_payload["bankAccountName"])
+
+        clear_response = self.client.patch(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.admin_token),
+            json={"bankAccountName": ""},
+        )
+        self.assertEqual(clear_response.status_code, 200)
+        cleared = clear_response.get_json()
+        self.assertIsNone(cleared["bankAccountName"])
+
+    def test_production_manager_can_manage_personal_detail(self):
+        member = self._create_member({"regNumber": "TM-201"})
+        member_id = member["id"]
+        payload = {
+            "bankAccountName": "Production User",
+            "bankName": "Production Bank",
+        }
+
+        patch_response = self.client.patch(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.production_token),
+            json=payload,
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        stored = patch_response.get_json()
+        self.assertEqual(stored["bankAccountName"], payload["bankAccountName"])
+        self.assertEqual(stored["bankName"], payload["bankName"])
+
+        get_response = self.client.get(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.production_token),
+        )
+        self.assertEqual(get_response.status_code, 200)
+
+    def test_non_privileged_roles_cannot_access_personal_detail(self):
+        member = self._create_member({"regNumber": "TM-202"})
+        member_id = member["id"]
+
+        get_response = self.client.get(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.maintenance_token),
+        )
+        self.assertEqual(get_response.status_code, 403)
+
+        patch_response = self.client.patch(
+            f"/api/team/members/{member_id}/personal-detail",
+            headers=self._auth_headers(self.maintenance_token),
+            json={"bankAccountName": "Hacker"},
+        )
+        self.assertEqual(patch_response.status_code, 403)
 
     def test_register_member_rejects_overlong_fields(self):
         payload = {

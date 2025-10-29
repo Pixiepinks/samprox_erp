@@ -374,6 +374,10 @@ class TeamMember(db.Model):
     employment_log = db.Column(db.Text)
     files = db.Column(db.Text)
     assets = db.Column(db.Text)
+    bank_account_name = db.Column(db.String(200))
+    bank_name = db.Column(db.String(200))
+    branch_name = db.Column(db.String(200))
+    bank_account_number = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -417,6 +421,18 @@ class TeamMember(db.Model):
 
         files = (data.get("files") or "").strip()
         self.files = files or None
+
+        bank_account_name = (data.get("bankAccountName") or "").strip()
+        self.bank_account_name = bank_account_name or None
+
+        bank_name = (data.get("bankName") or "").strip()
+        self.bank_name = bank_name or None
+
+        branch_name = (data.get("branchName") or "").strip()
+        self.branch_name = branch_name or None
+
+        account_number = (data.get("bankAccountNumber") or "").strip()
+        self.bank_account_number = account_number or None
 
         assets = (data.get("assets") or "").strip()
         self.assets = assets or None

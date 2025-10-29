@@ -22,6 +22,7 @@ from routes.jobs import require_role
 from schemas import (
     AttendanceRecordSchema,
     SalaryRecordSchema,
+    TeamMemberBankDetailSchema,
     TeamMemberSchema,
     WorkCalendarDaySchema,
 )
@@ -36,6 +37,7 @@ salary_record_schema = SalaryRecordSchema()
 salary_records_schema = SalaryRecordSchema(many=True)
 work_calendar_day_schema = WorkCalendarDaySchema()
 work_calendar_days_schema = WorkCalendarDaySchema(many=True)
+bank_detail_schema = TeamMemberBankDetailSchema()
 
 COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
 
@@ -133,6 +135,16 @@ def _ensure_schema():
         "assets": "TEXT",
     }
     for name, typ in optional_text_columns.items():
+        if name not in columns:
+            statements.append(f"ALTER TABLE team_member ADD COLUMN {name} {typ}")
+
+    bank_detail_columns = {
+        "bank_account_name": "VARCHAR(200)",
+        "bank_name": "VARCHAR(200)",
+        "branch_name": "VARCHAR(200)",
+        "bank_account_number": "VARCHAR(120)",
+    }
+    for name, typ in bank_detail_columns.items():
         if name not in columns:
             statements.append(f"ALTER TABLE team_member ADD COLUMN {name} {typ}")
 
@@ -586,6 +598,16 @@ def create_member():
         employment_log = _extract_string(payload.get("employmentLog"), label="Employment log")
         files_value = _extract_string(payload.get("files"), label="Files")
         assets_value = _extract_string(payload.get("assets"), label="Controlled assets")
+        bank_account_name = _extract_string(
+            payload.get("bankAccountName"), label="Bank account name", max_length=200
+        )
+        bank_name_value = _extract_string(payload.get("bankName"), label="Bank name", max_length=200)
+        branch_name_value = _extract_string(
+            payload.get("branchName"), label="Branch name", max_length=200
+        )
+        bank_account_number = _extract_string(
+            payload.get("bankAccountNumber"), label="Bank account number", max_length=120
+        )
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
@@ -618,6 +640,10 @@ def create_member():
         employment_log=employment_log,
         files=files_value,
         assets=assets_value,
+        bank_account_name=bank_account_name,
+        bank_name=bank_name_value,
+        branch_name=branch_name_value,
+        bank_account_number=bank_account_number,
     )
 
     db.session.add(member)
@@ -657,29 +683,30 @@ def update_member(member_id: int):
         except ValueError as exc:
             return jsonify({"msg": str(exc)}), 400
 
-    for key, label, maxlen in [
-        ("nickname", "Nickname", 120),
-        ("epf", "EPF number", 120),
-        ("position", "Position", 120),
-        ("image", "Profile image URL", 500),
-        ("personalDetail", "Personal detail", None),
-        ("assignments", "Assignments", None),
-        ("trainingRecords", "Training records", None),
-        ("employmentLog", "Employment log", None),
-        ("files", "Files", None),
-        ("assets", "Controlled assets", None),
-    ]:
+    field_definitions = [
+        ("nickname", "Nickname", 120, "nickname"),
+        ("epf", "EPF number", 120, "epf"),
+        ("position", "Position", 120, "position"),
+        ("image", "Profile image URL", 500, "image_url"),
+        ("personalDetail", "Personal detail", None, "personal_detail"),
+        ("assignments", "Assignments", None, "assignments"),
+        ("trainingRecords", "Training records", None, "training_records"),
+        ("employmentLog", "Employment log", None, "employment_log"),
+        ("files", "Files", None, "files"),
+        ("assets", "Controlled assets", None, "assets"),
+        ("bankAccountName", "Bank account name", 200, "bank_account_name"),
+        ("bankName", "Bank name", 200, "bank_name"),
+        ("branchName", "Branch name", 200, "branch_name"),
+        ("bankAccountNumber", "Bank account number", 120, "bank_account_number"),
+    ]
+
+    for key, label, maxlen, attr in field_definitions:
         if key in payload:
             try:
                 value = _extract_string(payload.get(key), label=label, max_length=maxlen)
             except ValueError as exc:
                 return jsonify({"msg": str(exc)}), 400
-            attr = "image_url" if key == "image" else key
-            setattr(member, attr if attr not in {"personalDetail", "trainingRecords", "employmentLog"} else {
-                "personalDetail": "personal_detail",
-                "trainingRecords": "training_records",
-                "employmentLog": "employment_log",
-            }[attr] if attr in {"personalDetail", "trainingRecords", "employmentLog"} else attr, value)
+            setattr(member, attr, value)
 
     if "payCategory" in payload:
         member.pay_category = _normalize_pay_category(payload.get("payCategory"))
@@ -709,6 +736,75 @@ def update_member(member_id: int):
         db.session.commit()
 
     return jsonify(member_schema.dump(member))
+
+
+@bp.get("/members/<int:member_id>/personal-detail")
+@jwt_required()
+def get_member_personal_detail(member_id: int):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return (
+            jsonify({"msg": "Only administrators or production managers can view personal details."}),
+            403,
+        )
+
+    _ensure_schema()
+    member = TeamMember.query.get_or_404(member_id)
+    return jsonify(bank_detail_schema.dump(member))
+
+
+@bp.patch("/members/<int:member_id>/personal-detail")
+@jwt_required()
+def update_member_personal_detail(member_id: int):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return (
+            jsonify({"msg": "Only administrators or production managers can update personal details."}),
+            403,
+        )
+
+    _ensure_schema()
+    member = TeamMember.query.get_or_404(member_id)
+    payload = request.get_json() or {}
+
+    field_definitions = [
+        ("bankAccountName", "Bank account name", 200, "bank_account_name"),
+        ("bankName", "Bank name", 200, "bank_name"),
+        ("branchName", "Branch name", 200, "branch_name"),
+        ("bankAccountNumber", "Bank account number", 120, "bank_account_number"),
+    ]
+
+    updates: dict[str, str | None] = {}
+
+    for key, label, maxlen, attr in field_definitions:
+        if key in payload:
+            try:
+                updates[attr] = _extract_string(payload.get(key), label=label, max_length=maxlen)
+            except ValueError as exc:
+                return jsonify({"msg": str(exc)}), 400
+
+    if not updates:
+        return jsonify(bank_detail_schema.dump(member))
+
+    for attr, value in updates.items():
+        setattr(member, attr, value)
+
+    try:
+        db.session.commit()
+    except DataError as exc:
+        db.session.rollback()
+        message = _data_error_message(
+            exc,
+            fallback="Unable to update personal detail. One or more fields exceed the allowed length.",
+        )
+        current_app.logger.warning("Failed to update personal detail due to data error: %s", exc)
+        return jsonify({"msg": message}), 400
+    except (ProgrammingError, OperationalError):
+        db.session.rollback()
+        current_app.logger.exception("Failed to update personal detail due to schema issues.")
+        _ensure_schema()
+        db.session.add(member)
+        db.session.commit()
+
+    return jsonify(bank_detail_schema.dump(member))
 
 
 @bp.get("/work-calendar")

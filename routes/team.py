@@ -681,6 +681,35 @@ def upsert_attendance_record(member_id: int):
     return jsonify({"status": "deleted", "memberId": member.id, "month": month})
 
 
+_CARRY_FORWARD_COMPONENT_KEYS = frozenset(
+    {
+        "basicSalary",
+        "generalAllowance",
+        "transportAllowance",
+        "specialAllowance",
+    }
+)
+
+
+def _extract_carry_forward_components(components: dict | None) -> dict[str, str]:
+    """Return only the salary fields that should carry forward between months."""
+
+    if not isinstance(components, dict):
+        return {}
+
+    carry_forward: dict[str, str] = {}
+
+    for key in _CARRY_FORWARD_COMPONENT_KEYS:
+        if key not in components:
+            continue
+
+        value = _clean_string(components.get(key))
+        if value:
+            carry_forward[key] = value
+
+    return carry_forward
+
+
 @bp.get("/salary")
 @jwt_required()
 def list_salary_records():
@@ -697,7 +726,45 @@ def list_salary_records():
         .all()
     )
 
-    return jsonify({"month": month, "records": salary_records_schema.dump(records)})
+    serialized_records = salary_records_schema.dump(records)
+
+    existing_member_ids = {record.team_member_id for record in records}
+    prefilled_payloads: list[dict[str, object]] = []
+
+    previous_records = (
+        TeamSalaryRecord.query.filter(TeamSalaryRecord.month < month)
+        .order_by(TeamSalaryRecord.team_member_id.asc(), TeamSalaryRecord.month.desc())
+        .all()
+    )
+
+    seen_prefills: set[int] = set()
+
+    for previous in previous_records:
+        member_id = previous.team_member_id
+
+        if member_id in existing_member_ids or member_id in seen_prefills:
+            continue
+
+        carry_components = _extract_carry_forward_components(previous.components)
+        if not carry_components:
+            continue
+
+        prefilled_payloads.append(
+            {
+                "memberId": member_id,
+                "month": month,
+                "components": carry_components,
+                "prefilled": True,
+            }
+        )
+        seen_prefills.add(member_id)
+
+    return jsonify(
+        {
+            "month": month,
+            "records": serialized_records + prefilled_payloads,
+        }
+    )
 
 
 @bp.put("/salary/<int:member_id>")

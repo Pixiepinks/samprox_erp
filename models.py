@@ -464,19 +464,6 @@ class TeamSalaryRecord(db.Model):
     )
 
 
-class TeamWorkCalendarDay(db.Model):
-    """Store work day overrides for the workforce calendar."""
-
-    __tablename__ = "team_work_calendar_day"
-
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, nullable=False, unique=True, index=True)
-    is_work_day = db.Column(db.Boolean, nullable=False, default=True)
-    holiday_name = db.Column(db.String(120))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-
 class DailyProductionEntry(db.Model):
     __table_args__ = (
         db.UniqueConstraint("date", "asset_id", "hour_no", name="uq_daily_production_entry_day_asset_hour"),

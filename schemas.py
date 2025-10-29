@@ -212,13 +212,6 @@ class AttendanceRecordSchema(Schema):
     updated_at = fields.DateTime(data_key="updatedAt")
 
 
-class WorkCalendarDaySchema(Schema):
-    date = fields.Date()
-    is_work_day = fields.Bool(attribute="is_work_day", data_key="isWorkDay")
-    holiday_name = fields.Str(attribute="holiday_name", allow_none=True, data_key="holidayName")
-    updated_at = fields.DateTime(attribute="updated_at", allow_none=True, data_key="updatedAt")
-
-
 class SalaryRecordSchema(Schema):
     member_id = fields.Int(attribute="team_member_id", data_key="memberId")
     month = fields.Str()

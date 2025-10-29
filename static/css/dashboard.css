@@ -370,6 +370,10 @@ body {
     z-index: 1;
 }
 
+.work-calendar__loading[hidden] {
+    display: none !important;
+}
+
 .work-calendar__message {
     margin: 0;
     padding: 0.85rem 1.2rem;

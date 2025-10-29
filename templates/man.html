@@ -1000,6 +1000,7 @@
 
             if (workCalendarLoading) {
                 workCalendarLoading.hidden = !isLoading;
+                workCalendarLoading.style.display = isLoading ? "flex" : "none";
             }
             if (workCalendarGrid) {
                 workCalendarGrid.setAttribute("aria-busy", isLoading ? "true" : "false");

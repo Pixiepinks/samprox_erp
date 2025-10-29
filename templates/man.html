@@ -1300,6 +1300,7 @@
                 return;
             }
 
+            attendanceModal.classList.remove("modal--open");
             attendanceModal.setAttribute("hidden", "");
             attendanceModal.setAttribute("aria-hidden", "true");
             document.body.classList.remove("modal-open");
@@ -1342,6 +1343,7 @@
             attendanceModalContext = { member, memberKey, memberId };
             attendanceModal.removeAttribute("hidden");
             attendanceModal.setAttribute("aria-hidden", "false");
+            attendanceModal.classList.add("modal--open");
             attendanceModal.dataset.memberKey = memberKey;
             document.body.classList.add("modal-open");
 
@@ -1452,6 +1454,7 @@
             }
             salaryModal.setAttribute("hidden", "");
             salaryModal.setAttribute("aria-hidden", "true");
+            salaryModal.classList.remove("modal--open");
             document.body.classList.remove("modal-open");
             if (salaryForm) {
                 salaryForm.reset();
@@ -1483,6 +1486,7 @@
             salaryModalContext = { member, memberKey, memberId };
             salaryModal.removeAttribute("hidden");
             salaryModal.setAttribute("aria-hidden", "false");
+            salaryModal.classList.add("modal--open");
             salaryModal.dataset.memberKey = memberKey;
             document.body.classList.add("modal-open");
 

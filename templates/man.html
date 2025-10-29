@@ -312,6 +312,7 @@
                                     <th scope="col">No Pay</th>
                                     <th scope="col">Total Deduction</th>
                                     <th scope="col">Net Pay</th>
+                                    <th scope="col">Record Attendance</th>
                                     <th scope="col">Manage Salary</th>
                                 </tr>
                             </thead>
@@ -1391,13 +1392,22 @@
                 nameButton.className = "salary-table__name-button";
                 nameButton.textContent = getMemberDisplayName(member);
                 nameButton.addEventListener("click", () => {
-                    openAttendanceModal(member, memberKey);
+                    openSalaryModal(member, memberKey);
                 });
                 row.appendChild(createCell("Name", nameButton));
 
                 salaryFieldDefinitions.forEach(({ label, name }) => {
                     row.appendChild(createCell(label, formatSalaryValue(record?.[name])));
                 });
+
+                const attendanceButton = document.createElement("button");
+                attendanceButton.type = "button";
+                attendanceButton.className = "salary-table__action-button";
+                attendanceButton.textContent = "Record attendance";
+                attendanceButton.addEventListener("click", () => {
+                    openAttendanceModal(member, memberKey);
+                });
+                row.appendChild(createCell("Record Attendance", attendanceButton));
 
                 const salaryButton = document.createElement("button");
                 salaryButton.type = "button";

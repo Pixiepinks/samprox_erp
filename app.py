@@ -30,7 +30,6 @@ from models import (
     SalesForecastEntry,
     ProductionForecastEntry,
     User,
-    TeamWorkCalendarDay,
 )
 from routes import (
     auth,

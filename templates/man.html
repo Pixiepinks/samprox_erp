@@ -383,6 +383,8 @@
                                     <th scope="col">Date</th>
                                     <th scope="col">On time</th>
                                     <th scope="col">Off time</th>
+                                    <th scope="col">Actual hours</th>
+                                    <th scope="col">Pay hours</th>
                                 </tr>
                             </thead>
                             <tbody id="attendance-table-body"></tbody>
@@ -796,6 +798,164 @@
             }
 
             return "";
+        };
+
+        const MINUTES_PER_DAY = 24 * 60;
+
+        const parseTimeToMinutes = (value) => {
+            if (typeof value !== "string") {
+                return null;
+            }
+
+            const match = /^(\d{1,2}):([0-5]\d)$/.exec(value.trim());
+            if (!match) {
+                return null;
+            }
+
+            const hours = Number.parseInt(match[1], 10);
+            const minutes = Number.parseInt(match[2], 10);
+
+            if (
+                Number.isNaN(hours) ||
+                Number.isNaN(minutes) ||
+                hours < 0 ||
+                hours > 23 ||
+                minutes < 0 ||
+                minutes > 59
+            ) {
+                return null;
+            }
+
+            return hours * 60 + minutes;
+        };
+
+        const buildTimeAdjustments = (rules) =>
+            rules
+                .map(({ start, end, target }) => {
+                    const startMinutes = parseTimeToMinutes(start);
+                    const endMinutes = parseTimeToMinutes(end);
+                    const targetMinutes = parseTimeToMinutes(target);
+
+                    if (
+                        startMinutes == null ||
+                        endMinutes == null ||
+                        targetMinutes == null
+                    ) {
+                        return null;
+                    }
+
+                    return {
+                        start: Math.min(startMinutes, endMinutes),
+                        end: Math.max(startMinutes, endMinutes),
+                        target: targetMinutes,
+                    };
+                })
+                .filter(Boolean);
+
+        const ON_TIME_ADJUSTMENTS = buildTimeAdjustments([
+            { start: "06:36", end: "07:04", target: "07:00" },
+            { start: "07:05", end: "07:16", target: "07:15" },
+            { start: "07:17", end: "07:31", target: "07:30" },
+            { start: "07:32", end: "07:46", target: "07:45" },
+            { start: "07:46", end: "08:04", target: "08:00" },
+        ]);
+
+        const OFF_TIME_ADJUSTMENTS = buildTimeAdjustments([
+            { start: "18:59", end: "19:14", target: "19:00" },
+            { start: "18:44", end: "18:58", target: "18:45" },
+            { start: "18:29", end: "18:43", target: "18:30" },
+            { start: "18:14", end: "18:28", target: "18:15" },
+            { start: "17:58", end: "18:13", target: "18:00" },
+        ]);
+
+        const applyTimeAdjustment = (minutes, adjustments) => {
+            if (!Number.isFinite(minutes)) {
+                return null;
+            }
+
+            for (const adjustment of adjustments) {
+                if (minutes >= adjustment.start && minutes <= adjustment.end) {
+                    return adjustment.target;
+                }
+            }
+
+            return minutes;
+        };
+
+        const formatMinutesAsDuration = (minutes) => {
+            if (!Number.isFinite(minutes) || minutes < 0) {
+                return "—";
+            }
+
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+
+            return `${String(hours).padStart(2, "0")}:${String(remainingMinutes).padStart(
+                2,
+                "0"
+            )}`;
+        };
+
+        const computeDurationMinutes = (startMinutes, endMinutes) => {
+            if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+                return null;
+            }
+
+            let difference = endMinutes - startMinutes;
+            if (difference < 0) {
+                difference += MINUTES_PER_DAY;
+            }
+
+            if (difference < 0) {
+                return null;
+            }
+
+            return difference;
+        };
+
+        const computeActualMinutes = (onValue, offValue) => {
+            const onMinutes = parseTimeToMinutes(onValue);
+            const offMinutes = parseTimeToMinutes(offValue);
+
+            if (onMinutes == null || offMinutes == null) {
+                return null;
+            }
+
+            return computeDurationMinutes(onMinutes, offMinutes);
+        };
+
+        const computePayMinutes = (onValue, offValue) => {
+            const onMinutes = parseTimeToMinutes(onValue);
+            const offMinutes = parseTimeToMinutes(offValue);
+
+            if (onMinutes == null || offMinutes == null) {
+                return null;
+            }
+
+            const adjustedOn = applyTimeAdjustment(onMinutes, ON_TIME_ADJUSTMENTS);
+            const adjustedOff = applyTimeAdjustment(offMinutes, OFF_TIME_ADJUSTMENTS);
+
+            if (adjustedOn == null || adjustedOff == null) {
+                return null;
+            }
+
+            return computeDurationMinutes(adjustedOn, adjustedOff);
+        };
+
+        const updateAttendanceHoursDisplay = (onInput, offInput, actualNode, payNode) => {
+            if (!onInput || !offInput || !actualNode || !payNode) {
+                return;
+            }
+
+            const normalizedOn = normalizeTimeValue(onInput.value ?? "");
+            const normalizedOff = normalizeTimeValue(offInput.value ?? "");
+
+            const actualMinutes = computeActualMinutes(normalizedOn, normalizedOff);
+            const payMinutes = computePayMinutes(normalizedOn, normalizedOff);
+
+            actualNode.textContent =
+                actualMinutes != null ? formatMinutesAsDuration(actualMinutes) : "—";
+            payNode.textContent = payMinutes != null ? formatMinutesAsDuration(payMinutes) : "—";
         };
 
         const parseMemberId = (value) => {
@@ -1311,7 +1471,7 @@
             if (entries.length === 0) {
                 const row = document.createElement("tr");
                 const cell = document.createElement("td");
-                cell.colSpan = 3;
+                cell.colSpan = 5;
                 cell.textContent = "No calendar days available for the selected month.";
                 row.appendChild(cell);
                 attendanceTableBody.appendChild(row);
@@ -1362,8 +1522,33 @@
                     offInput.value = normalizedOffTime;
                 }
 
+                const actualValue = document.createElement("span");
+                actualValue.className = "attendance-table__hours-value";
+                actualValue.textContent = "—";
+
+                const payValue = document.createElement("span");
+                payValue.className = "attendance-table__hours-value";
+                payValue.textContent = "—";
+
                 row.appendChild(createCell("On time", onInput));
                 row.appendChild(createCell("Off time", offInput));
+
+                const actualCell = createCell("Actual hours", actualValue);
+                actualCell.classList.add("attendance-table__hours-cell");
+                row.appendChild(actualCell);
+
+                const payCell = createCell("Pay hours", payValue);
+                payCell.classList.add("attendance-table__hours-cell");
+                row.appendChild(payCell);
+
+                const refreshHours = () => {
+                    updateAttendanceHoursDisplay(onInput, offInput, actualValue, payValue);
+                };
+
+                onInput.addEventListener("input", refreshHours);
+                offInput.addEventListener("input", refreshHours);
+
+                refreshHours();
 
                 attendanceTableBody.appendChild(row);
             });

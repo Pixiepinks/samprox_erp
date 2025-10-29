@@ -559,40 +559,6 @@
                             <input class="edit-form__input" type="number" step="0.01" id="salary-net-pay" name="netPay" />
                         </div>
                     </div>
-                    <div class="salary-form__divider" aria-hidden="true"></div>
-                    <section
-                        class="salary-attendance"
-                        id="salary-attendance-section"
-                        aria-labelledby="salary-attendance-title"
-                    >
-                        <header class="salary-attendance__header">
-                            <h3 class="salary-attendance__title" id="salary-attendance-title">
-                                Previous attendance
-                            </h3>
-                            <p class="salary-attendance__description">
-                                Review the on and off times recorded for this salary month.
-                            </p>
-                        </header>
-                        <div
-                            class="table-container salary-attendance__table-container"
-                            id="salary-attendance-container"
-                            hidden
-                        >
-                            <table class="team-table salary-attendance__table">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Date</th>
-                                        <th scope="col">On time</th>
-                                        <th scope="col">Off time</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="salary-attendance-body"></tbody>
-                            </table>
-                        </div>
-                        <p class="salary-attendance__empty" id="salary-attendance-empty" hidden>
-                            Attendance has not been recorded for this month yet.
-                        </p>
-                    </section>
                     <div class="modal__actions">
                         <button type="button" class="button button--ghost" id="salary-modal-cancel">Cancel</button>
                         <button type="submit" class="button button--primary">Save salary</button>
@@ -698,13 +664,6 @@
         const salaryFormMonth = document.getElementById("salary-form-month");
         const salaryFormMemberName = document.getElementById("salary-form-member-name");
         const salaryFormRegno = document.getElementById("salary-form-regno");
-        const salaryAttendanceContainer = document.getElementById("salary-attendance-container");
-        const salaryAttendanceBody = document.getElementById("salary-attendance-body");
-        const salaryAttendanceEmpty = document.getElementById("salary-attendance-empty");
-        const salaryAttendanceMessages = {
-            unavailable: "Attendance data is unavailable.",
-            empty: "Attendance has not been recorded for this month yet.",
-        };
 
         const canManageMembers = ["admin", "production_manager"].includes(user?.role);
 
@@ -902,9 +861,6 @@
 
             renderSalarySheet();
             refreshAttendanceModalContents();
-            if (salaryModalContext?.memberKey) {
-                renderSalaryAttendanceHistory(salaryModalContext.memberKey);
-            }
         };
 
         const getMonthDateEntries = (month) => {
@@ -959,55 +915,6 @@
 
             return attendanceMonthFormatter.format(date);
         };
-
-        function renderSalaryAttendanceHistory(memberKey, month = null) {
-            if (!salaryAttendanceBody || !salaryAttendanceContainer || !salaryAttendanceEmpty) {
-                return;
-            }
-
-            salaryAttendanceBody.innerHTML = "";
-
-            const selectedMonth =
-                month ?? normalizeMonthValue(salaryFormMonth?.value || "") || currentSalaryMonth;
-            const normalizedMonth = normalizeMonthValue(selectedMonth) || selectedMonth;
-
-            if (!memberKey || !normalizedMonth) {
-                salaryAttendanceContainer.hidden = true;
-                salaryAttendanceEmpty.hidden = false;
-                salaryAttendanceEmpty.textContent = salaryAttendanceMessages.unavailable;
-                return;
-            }
-
-            const record = getAttendanceRecord(normalizedMonth, memberKey);
-            const entries =
-                record && typeof record === "object"
-                    ? Object.entries(record).filter(([, value]) => value && (value.onTime || value.offTime))
-                    : [];
-
-            if (entries.length === 0) {
-                salaryAttendanceContainer.hidden = true;
-                salaryAttendanceEmpty.hidden = false;
-                salaryAttendanceEmpty.textContent = salaryAttendanceMessages.empty;
-                return;
-            }
-
-            const displayMap = new Map(
-                getMonthDateEntries(normalizedMonth).map(({ iso, display }) => [iso, display])
-            );
-
-            entries
-                .sort(([a], [b]) => a.localeCompare(b))
-                .forEach(([iso, value]) => {
-                    const row = document.createElement("tr");
-                    row.appendChild(createCell("Date", displayMap.get(iso) || iso));
-                    row.appendChild(createCell("On time", formatTimeDisplay(value?.onTime)));
-                    row.appendChild(createCell("Off time", formatTimeDisplay(value?.offTime)));
-                    salaryAttendanceBody.appendChild(row);
-                });
-
-            salaryAttendanceContainer.hidden = false;
-            salaryAttendanceEmpty.hidden = true;
-        }
 
         const formatSalaryValue = (value) => {
             if (value == null) {
@@ -1192,15 +1099,6 @@
             return cell;
         };
 
-        const formatTimeDisplay = (value) => {
-            if (typeof value !== "string") {
-                return "—";
-            }
-
-            const trimmed = value.trim();
-            return trimmed || "—";
-        };
-
         const getMemberDisplayName = (member) => {
             const candidates = [member?.name, member?.nickname, member?.regNumber];
 
@@ -1278,20 +1176,6 @@
                 attendanceDataStore[month] = {};
             }
             attendanceDataStore[month][memberKey] = record;
-
-            const normalizedMonth = normalizeMonthValue(month) || month;
-            const activeSalaryMonth =
-                normalizeMonthValue(salaryFormMonth?.value || "") || currentSalaryMonth;
-
-            if (
-                salaryModal &&
-                !salaryModal.hasAttribute("hidden") &&
-                salaryModalContext?.memberKey === memberKey &&
-                normalizedMonth &&
-                normalizedMonth === activeSalaryMonth
-            ) {
-                renderSalaryAttendanceHistory(memberKey, normalizedMonth);
-            }
         };
 
         const removeAttendanceRecord = (month, memberKey) => {
@@ -1301,20 +1185,6 @@
             delete attendanceDataStore[month][memberKey];
             if (Object.keys(attendanceDataStore[month]).length === 0) {
                 delete attendanceDataStore[month];
-            }
-
-            const normalizedMonth = normalizeMonthValue(month) || month;
-            const activeSalaryMonth =
-                normalizeMonthValue(salaryFormMonth?.value || "") || currentSalaryMonth;
-
-            if (
-                salaryModal &&
-                !salaryModal.hasAttribute("hidden") &&
-                salaryModalContext?.memberKey === memberKey &&
-                normalizedMonth &&
-                normalizedMonth === activeSalaryMonth
-            ) {
-                renderSalaryAttendanceHistory(memberKey, normalizedMonth);
             }
         };
 
@@ -1602,16 +1472,6 @@
             if (salaryFormMonth) {
                 salaryFormMonth.value = currentSalaryMonth;
             }
-            if (salaryAttendanceBody) {
-                salaryAttendanceBody.innerHTML = "";
-            }
-            if (salaryAttendanceContainer) {
-                salaryAttendanceContainer.hidden = true;
-            }
-            if (salaryAttendanceEmpty) {
-                salaryAttendanceEmpty.hidden = false;
-                salaryAttendanceEmpty.textContent = salaryAttendanceMessages.empty;
-            }
             salaryModalContext = null;
             if (salaryModal?.dataset) {
                 delete salaryModal.dataset.memberKey;
@@ -1655,7 +1515,6 @@
             }
 
             populateSalaryFormFields(getSalaryRecord(currentSalaryMonth, memberKey));
-            renderSalaryAttendanceHistory(memberKey);
 
             window.requestAnimationFrame(() => {
                 const firstEditableField = salaryForm.querySelector(
@@ -1803,7 +1662,7 @@
         }
 
         if (salaryFormMonth) {
-            salaryFormMonth.addEventListener("change", async (event) => {
+            salaryFormMonth.addEventListener("change", (event) => {
                 const normalized = normalizeMonthValue(event.target.value);
                 if (!normalized) {
                     event.target.value = currentSalaryMonth;
@@ -1815,13 +1674,7 @@
                     return;
                 }
 
-                await Promise.all([
-                    fetchSalaryRecords(normalized),
-                    fetchAttendanceRecords(normalized),
-                ]);
-
                 populateSalaryFormFields(getSalaryRecord(normalized, memberKey));
-                renderSalaryAttendanceHistory(memberKey, normalized);
             });
         }
 

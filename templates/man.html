@@ -1430,47 +1430,6 @@
             return "";
         };
 
-        const formatAttendanceTimeInput = (input, { finalize = false } = {}) => {
-            if (!(input instanceof HTMLInputElement)) {
-                return;
-            }
-
-            const digits = input.value.replace(/\D/g, "").slice(0, 4);
-
-            if (!digits) {
-                input.value = "";
-                return;
-            }
-
-            let normalized = normalizeTimeValue(digits);
-
-            if (!normalized && finalize && digits.length <= 2) {
-                normalized = normalizeTimeValue(`${digits.padStart(2, "0")}00`);
-            }
-
-            if (normalized) {
-                if (input.value !== normalized) {
-                    input.value = normalized;
-                }
-
-                if (!finalize && document.activeElement === input) {
-                    const caretPosition = input.value.length;
-                    input.setSelectionRange(caretPosition, caretPosition);
-                }
-
-                return;
-            }
-
-            if (input.value !== digits) {
-                input.value = digits;
-
-                if (!finalize && document.activeElement === input) {
-                    const caretPosition = input.value.length;
-                    input.setSelectionRange(caretPosition, caretPosition);
-                }
-            }
-        };
-
         const MINUTES_PER_DAY = 24 * 60;
 
         const parseTimeToMinutes = (value) => {
@@ -2549,28 +2508,8 @@
                     updateAttendanceHoursDisplay(onInput, offInput, actualValue, payValue);
                 };
 
-                const handleOnInput = () => {
-                    formatAttendanceTimeInput(onInput);
-                    refreshHours();
-                };
-
-                const handleOffInput = () => {
-                    formatAttendanceTimeInput(offInput);
-                    refreshHours();
-                };
-
-                onInput.addEventListener("input", handleOnInput);
-                offInput.addEventListener("input", handleOffInput);
-
-                onInput.addEventListener("blur", () => {
-                    formatAttendanceTimeInput(onInput, { finalize: true });
-                    refreshHours();
-                });
-
-                offInput.addEventListener("blur", () => {
-                    formatAttendanceTimeInput(offInput, { finalize: true });
-                    refreshHours();
-                });
+                onInput.addEventListener("input", refreshHours);
+                offInput.addEventListener("input", refreshHours);
 
                 refreshHours();
 

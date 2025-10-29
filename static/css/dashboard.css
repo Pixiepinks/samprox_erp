@@ -550,11 +550,21 @@ body {
 }
 
 .attendance-table {
-    min-width: 420px;
+    min-width: 600px;
 }
 
 .attendance-table__time-input {
     width: 100%;
+}
+
+.attendance-table__hours-cell {
+    text-align: right;
+}
+
+.attendance-table__hours-value {
+    display: inline-block;
+    min-width: 4ch;
+    font-variant-numeric: tabular-nums;
 }
 
 .salary-form__grid {

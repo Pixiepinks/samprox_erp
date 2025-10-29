@@ -422,6 +422,48 @@ class TeamMember(db.Model):
         self.assets = assets or None
 
 
+class TeamAttendanceRecord(db.Model):
+    """Store per-day attendance entries for a team member and month."""
+
+    __tablename__ = "team_attendance_record"
+    __table_args__ = (
+        UniqueConstraint("team_member_id", "month", name="uq_team_attendance_record_member_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_member_id = db.Column(db.Integer, db.ForeignKey("team_member.id"), nullable=False, index=True)
+    month = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    entries = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    team_member = db.relationship(
+        "TeamMember",
+        backref=db.backref("attendance_records", cascade="all,delete-orphan"),
+    )
+
+
+class TeamSalaryRecord(db.Model):
+    """Store monthly salary breakdowns for a team member."""
+
+    __tablename__ = "team_salary_record"
+    __table_args__ = (
+        UniqueConstraint("team_member_id", "month", name="uq_team_salary_record_member_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_member_id = db.Column(db.Integer, db.ForeignKey("team_member.id"), nullable=False, index=True)
+    month = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    components = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    team_member = db.relationship(
+        "TeamMember",
+        backref=db.backref("salary_records", cascade="all,delete-orphan"),
+    )
+
+
 class DailyProductionEntry(db.Model):
     __table_args__ = (
         db.UniqueConstraint("date", "asset_id", "hour_no", name="uq_daily_production_entry_day_asset_hour"),

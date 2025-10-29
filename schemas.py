@@ -196,6 +196,29 @@ class TeamMemberCreateSchema(Schema):
 
 
 
+class AttendanceEntrySchema(Schema):
+    onTime = fields.Str(allow_none=True)
+    offTime = fields.Str(allow_none=True)
+
+
+class AttendanceRecordSchema(Schema):
+    member_id = fields.Int(attribute="team_member_id", data_key="memberId")
+    month = fields.Str()
+    entries = fields.Dict(
+        keys=fields.Str(),
+        values=fields.Nested(AttendanceEntrySchema),
+        allow_none=True,
+    )
+    updated_at = fields.DateTime(data_key="updatedAt")
+
+
+class SalaryRecordSchema(Schema):
+    member_id = fields.Int(attribute="team_member_id", data_key="memberId")
+    month = fields.Str()
+    components = fields.Dict(keys=fields.Str(), values=fields.Raw(), allow_none=True)
+    updated_at = fields.DateTime(data_key="updatedAt")
+
+
 class QuotationSchema(Schema):
     id = fields.Int()
     job_id = fields.Int()

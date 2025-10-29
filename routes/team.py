@@ -8,14 +8,25 @@ from sqlalchemy import types as sqltypes
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import PayCategory, RoleEnum, TeamMember, TeamMemberStatus  # keep import; not strictly required now
+from models import (
+    PayCategory,
+    RoleEnum,
+    TeamAttendanceRecord,
+    TeamMember,
+    TeamMemberStatus,
+    TeamSalaryRecord,
+)  # keep import; not strictly required now
 from routes.jobs import require_role
-from schemas import TeamMemberSchema
+from schemas import AttendanceRecordSchema, SalaryRecordSchema, TeamMemberSchema
 
 bp = Blueprint("team", __name__, url_prefix="/api/team")
 
 member_schema = TeamMemberSchema()
 members_schema = TeamMemberSchema(many=True)
+attendance_record_schema = AttendanceRecordSchema()
+attendance_records_schema = AttendanceRecordSchema(many=True)
+salary_record_schema = SalaryRecordSchema()
+salary_records_schema = SalaryRecordSchema(many=True)
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +177,93 @@ def _ensure_schema():
                     conn.execute(text(stmt))
                 except (ProgrammingError, OperationalError, DataError):
                     current_app.logger.debug("Pay category normalization skipped or already applied: %s", stmt)
+
+
+_MONTH_PATTERN = re.compile(r"^(\d{4})-(\d{2})$")
+_DATE_PATTERN = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+
+
+def _ensure_tracking_tables():
+    """Ensure the attendance & salary tables exist."""
+
+    try:
+        engine = db.engine
+    except RuntimeError:
+        return
+
+    for model in (TeamAttendanceRecord, TeamSalaryRecord):
+        model.__table__.create(bind=engine, checkfirst=True)
+
+
+def _normalize_month(value: str | None) -> str | None:
+    text_value = _clean_string(value)
+    if not text_value:
+        return None
+
+    match = _MONTH_PATTERN.match(text_value)
+    if not match:
+        return None
+
+    year, month = match.groups()
+    try:
+        month_number = int(month)
+    except ValueError:
+        return None
+
+    if month_number < 1 or month_number > 12:
+        return None
+
+    return f"{year}-{month_number:02d}"
+
+
+def _normalize_attendance_entries(entries: dict | None, *, month: str) -> dict[str, dict[str, str]]:
+    if not isinstance(entries, dict):
+        return {}
+
+    normalized: dict[str, dict[str, str]] = {}
+
+    for raw_date, raw_entry in entries.items():
+        date_key = _clean_string(raw_date)
+        if not date_key or not _DATE_PATTERN.match(date_key):
+            continue
+
+        if month and not date_key.startswith(month):
+            continue
+
+        if not isinstance(raw_entry, dict):
+            continue
+
+        on_time = _clean_string(raw_entry.get("onTime"))
+        off_time = _clean_string(raw_entry.get("offTime"))
+
+        entry_payload: dict[str, str] = {}
+        if on_time:
+            entry_payload["onTime"] = on_time
+        if off_time:
+            entry_payload["offTime"] = off_time
+
+        if entry_payload:
+            normalized[date_key] = entry_payload
+
+    return normalized
+
+
+def _normalize_salary_components(components: dict | None) -> dict[str, str]:
+    if not isinstance(components, dict):
+        return {}
+
+    normalized: dict[str, str] = {}
+
+    for raw_key, raw_value in components.items():
+        key = _clean_string(raw_key)
+        if not key:
+            continue
+
+        value = _clean_string(raw_value)
+        if value:
+            normalized[key] = value
+
+    return normalized
 
 
 def _clean_string(value) -> str:
@@ -518,3 +616,129 @@ def update_member(member_id: int):
         db.session.commit()
 
     return jsonify(member_schema.dump(member))
+
+
+@bp.get("/attendance")
+@jwt_required()
+def list_attendance_records():
+    month = _normalize_month(request.args.get("month"))
+    if not month:
+        return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
+
+    _ensure_schema()
+    _ensure_tracking_tables()
+
+    records = (
+        TeamAttendanceRecord.query.filter_by(month=month)
+        .order_by(TeamAttendanceRecord.team_member_id.asc())
+        .all()
+    )
+
+    return jsonify({"month": month, "records": attendance_records_schema.dump(records)})
+
+
+@bp.put("/attendance/<int:member_id>")
+@jwt_required()
+def upsert_attendance_record(member_id: int):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return jsonify({"msg": "Only administrators or production managers can update attendance."}), 403
+
+    _ensure_schema()
+    _ensure_tracking_tables()
+
+    member = TeamMember.query.get_or_404(member_id)
+    payload = request.get_json() or {}
+    month = _normalize_month(payload.get("month"))
+    if not month:
+        return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
+
+    entries_payload = payload.get("entries")
+    normalized_entries = _normalize_attendance_entries(entries_payload, month=month)
+
+    record = TeamAttendanceRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
+
+    if normalized_entries:
+        if record is None:
+            record = TeamAttendanceRecord(team_member=member, month=month, entries=normalized_entries)
+            db.session.add(record)
+        else:
+            record.entries = normalized_entries
+
+        try:
+            db.session.commit()
+        except (DataError, IntegrityError, ProgrammingError, OperationalError) as exc:
+            db.session.rollback()
+            current_app.logger.warning("Failed to save attendance record: %s", exc)
+            return jsonify({"msg": "Unable to save attendance for the selected month."}), 400
+
+        return jsonify(attendance_record_schema.dump(record))
+
+    if record is None:
+        return jsonify({"status": "deleted", "memberId": member.id, "month": month})
+
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"status": "deleted", "memberId": member.id, "month": month})
+
+
+@bp.get("/salary")
+@jwt_required()
+def list_salary_records():
+    month = _normalize_month(request.args.get("month"))
+    if not month:
+        return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
+
+    _ensure_schema()
+    _ensure_tracking_tables()
+
+    records = (
+        TeamSalaryRecord.query.filter_by(month=month)
+        .order_by(TeamSalaryRecord.team_member_id.asc())
+        .all()
+    )
+
+    return jsonify({"month": month, "records": salary_records_schema.dump(records)})
+
+
+@bp.put("/salary/<int:member_id>")
+@jwt_required()
+def upsert_salary_record(member_id: int):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return jsonify({"msg": "Only administrators or production managers can update salary details."}), 403
+
+    _ensure_schema()
+    _ensure_tracking_tables()
+
+    member = TeamMember.query.get_or_404(member_id)
+    payload = request.get_json() or {}
+    month = _normalize_month(payload.get("month"))
+    if not month:
+        return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
+
+    components_payload = payload.get("components")
+    normalized_components = _normalize_salary_components(components_payload)
+
+    record = TeamSalaryRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
+
+    if normalized_components:
+        if record is None:
+            record = TeamSalaryRecord(team_member=member, month=month, components=normalized_components)
+            db.session.add(record)
+        else:
+            record.components = normalized_components
+
+        try:
+            db.session.commit()
+        except (DataError, IntegrityError, ProgrammingError, OperationalError) as exc:
+            db.session.rollback()
+            current_app.logger.warning("Failed to save salary record: %s", exc)
+            return jsonify({"msg": "Unable to save salary for the selected month."}), 400
+
+        return jsonify(salary_record_schema.dump(record))
+
+    if record is None:
+        return jsonify({"status": "deleted", "memberId": member.id, "month": month})
+
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"status": "deleted", "memberId": member.id, "month": month})

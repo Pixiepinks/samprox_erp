@@ -691,6 +691,7 @@
 
         const salaryDataStore = Object.create(null);
         const attendanceDataStore = Object.create(null);
+        const memberKeyById = new Map();
         let activeMembers = [];
         let salaryModalContext = null;
         let attendanceModalContext = null;
@@ -730,6 +731,135 @@
                 return "";
             }
             return `${match[1]}-${String(month).padStart(2, "0")}`;
+        };
+
+        const parseMemberId = (value) => {
+            if (typeof value === "number" && Number.isFinite(value)) {
+                return value;
+            }
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (trimmed) {
+                    const parsed = Number.parseInt(trimmed, 10);
+                    if (Number.isFinite(parsed)) {
+                        return parsed;
+                    }
+                }
+            }
+            return null;
+        };
+
+        const fetchAttendanceRecords = async (month) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/team/attendance?month=${encodeURIComponent(normalized)}`, {
+                    headers: authHeaders,
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const body = await response.json().catch(() => ({}));
+                const records = Array.isArray(body?.records) ? body.records : [];
+                const monthStore = Object.create(null);
+
+                records.forEach((record) => {
+                    const memberId = parseMemberId(record?.memberId);
+                    if (memberId == null) {
+                        return;
+                    }
+                    const storeKey = memberKeyById.get(memberId);
+                    if (!storeKey) {
+                        return;
+                    }
+                    const entries = record?.entries;
+                    if (
+                        entries &&
+                        typeof entries === "object" &&
+                        Object.keys(entries).length > 0
+                    ) {
+                        monthStore[storeKey] = entries;
+                    }
+                });
+
+                attendanceDataStore[normalized] = monthStore;
+            } catch (error) {
+                console.error("Failed to load attendance records", error);
+            }
+        };
+
+        const fetchSalaryRecords = async (month) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/team/salary?month=${encodeURIComponent(normalized)}`, {
+                    headers: authHeaders,
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const body = await response.json().catch(() => ({}));
+                const records = Array.isArray(body?.records) ? body.records : [];
+                const monthStore = Object.create(null);
+
+                records.forEach((record) => {
+                    const memberId = parseMemberId(record?.memberId);
+                    if (memberId == null) {
+                        return;
+                    }
+                    const storeKey = memberKeyById.get(memberId);
+                    if (!storeKey) {
+                        return;
+                    }
+                    const components = record?.components;
+                    if (
+                        components &&
+                        typeof components === "object" &&
+                        Object.keys(components).length > 0
+                    ) {
+                        monthStore[storeKey] = components;
+                    }
+                });
+
+                salaryDataStore[normalized] = monthStore;
+            } catch (error) {
+                console.error("Failed to load salary records", error);
+            }
+        };
+
+        const refreshMonthData = async (month = currentSalaryMonth) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized) {
+                return;
+            }
+
+            await Promise.all([
+                fetchAttendanceRecords(normalized),
+                fetchSalaryRecords(normalized),
+            ]);
+
+            renderSalarySheet();
+            refreshAttendanceModalContents();
         };
 
         const getMonthDateEntries = (month) => {
@@ -826,15 +956,18 @@
                 salaryMonthSelector.value = currentSalaryMonth;
             }
 
-            salaryMonthSelector.addEventListener("change", (event) => {
+            salaryMonthSelector.addEventListener("change", async (event) => {
                 const nextValue = normalizeMonthValue(event.target.value);
                 if (!nextValue) {
                     event.target.value = currentSalaryMonth;
                     return;
                 }
                 currentSalaryMonth = nextValue;
-                renderSalarySheet();
-                refreshAttendanceModalContents();
+                try {
+                    await refreshMonthData(currentSalaryMonth);
+                } catch (error) {
+                    console.error("Failed to refresh monthly data", error);
+                }
             });
         }
 
@@ -1205,7 +1338,8 @@
                 return;
             }
 
-            attendanceModalContext = { member, memberKey };
+            const memberId = parseMemberId(member?.id);
+            attendanceModalContext = { member, memberKey, memberId };
             attendanceModal.removeAttribute("hidden");
             attendanceModal.setAttribute("aria-hidden", "false");
             attendanceModal.dataset.memberKey = memberKey;
@@ -1279,6 +1413,7 @@
         const setActiveMembers = (members) => {
             if (!Array.isArray(members)) {
                 activeMembers = [];
+                memberKeyById.clear();
                 renderSalarySheet();
                 return;
             }
@@ -1286,6 +1421,15 @@
             activeMembers = members.filter(
                 (member) => normalizeStatus(member?.status) === "Active"
             );
+
+            memberKeyById.clear();
+            activeMembers.forEach((member, index) => {
+                const key = computeMemberKey(member, index);
+                const memberId = parseMemberId(member?.id);
+                if (key && memberId != null) {
+                    memberKeyById.set(memberId, key);
+                }
+            });
             renderSalarySheet();
         };
 
@@ -1335,7 +1479,8 @@
                 return;
             }
 
-            salaryModalContext = { member, memberKey };
+            const memberId = parseMemberId(member?.id);
+            salaryModalContext = { member, memberKey, memberId };
             salaryModal.removeAttribute("hidden");
             salaryModal.setAttribute("aria-hidden", "false");
             salaryModal.dataset.memberKey = memberKey;
@@ -1423,7 +1568,7 @@
         });
 
         if (attendanceForm) {
-            attendanceForm.addEventListener("submit", (event) => {
+            attendanceForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
 
                 if (!attendanceModalContext?.memberKey) {
@@ -1431,8 +1576,14 @@
                     return;
                 }
 
+                const normalizedMonth = normalizeMonthValue(currentSalaryMonth) || currentSalaryMonth;
+                if (!normalizedMonth) {
+                    window.alert("Select a valid month before saving attendance.");
+                    return;
+                }
+
                 const formData = new FormData(attendanceForm);
-                const entries = getMonthDateEntries(currentSalaryMonth);
+                const entries = getMonthDateEntries(normalizedMonth);
                 const record = {};
 
                 entries.forEach(({ iso }) => {
@@ -1449,10 +1600,47 @@
                     }
                 });
 
+                const { memberId, memberKey } = attendanceModalContext;
+                let responseData = null;
+
+                if (memberId != null) {
+                    try {
+                        const response = await fetch(`/api/team/attendance/${memberId}`, {
+                            method: "PUT",
+                            headers: {
+                                ...authHeaders,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ month: normalizedMonth, entries: record }),
+                        });
+
+                        if (response.status === 401) {
+                            logoutButton.click();
+                            return;
+                        }
+
+                        responseData = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const message = responseData?.msg || "Unable to save attendance.";
+                            window.alert(message);
+                            return;
+                        }
+                    } catch (error) {
+                        console.error("Failed to save attendance", error);
+                        window.alert("Unable to save attendance. Please try again.");
+                        return;
+                    }
+                }
+
                 if (Object.keys(record).length > 0) {
-                    setAttendanceRecord(currentSalaryMonth, attendanceModalContext.memberKey, record);
+                    const payload =
+                        responseData?.entries && typeof responseData.entries === "object"
+                            ? responseData.entries
+                            : record;
+                    setAttendanceRecord(normalizedMonth, memberKey, payload);
                 } else {
-                    removeAttendanceRecord(currentSalaryMonth, attendanceModalContext.memberKey);
+                    removeAttendanceRecord(normalizedMonth, memberKey);
                 }
 
                 closeAttendanceModal();
@@ -1477,7 +1665,7 @@
         }
 
         if (salaryForm) {
-            salaryForm.addEventListener("submit", (event) => {
+            salaryForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
 
                 if (!salaryModalContext?.memberKey) {
@@ -1500,18 +1688,62 @@
                     }
                 });
 
+                const { memberId, memberKey } = salaryModalContext;
+                let responseData = null;
+
+                if (memberId != null) {
+                    try {
+                        const response = await fetch(`/api/team/salary/${memberId}`, {
+                            method: "PUT",
+                            headers: {
+                                ...authHeaders,
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ month: normalizedMonth, components: record }),
+                        });
+
+                        if (response.status === 401) {
+                            logoutButton.click();
+                            return;
+                        }
+
+                        responseData = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            const message = responseData?.msg || "Unable to save salary details.";
+                            window.alert(message);
+                            return;
+                        }
+                    } catch (error) {
+                        console.error("Failed to save salary record", error);
+                        window.alert("Unable to save salary. Please try again.");
+                        return;
+                    }
+                }
+
                 if (Object.keys(record).length > 0) {
-                    setSalaryRecord(normalizedMonth, salaryModalContext.memberKey, record);
+                    const payload =
+                        responseData?.components && typeof responseData.components === "object"
+                            ? responseData.components
+                            : record;
+                    setSalaryRecord(normalizedMonth, memberKey, payload);
                 } else {
-                    removeSalaryRecord(normalizedMonth, salaryModalContext.memberKey);
+                    removeSalaryRecord(normalizedMonth, memberKey);
                 }
 
                 currentSalaryMonth = normalizedMonth;
                 if (salaryMonthSelector) {
                     salaryMonthSelector.value = currentSalaryMonth;
                 }
-                renderSalarySheet();
+
                 closeSalaryModal();
+
+                try {
+                    await refreshMonthData(currentSalaryMonth);
+                } catch (error) {
+                    console.error("Failed to refresh monthly data after salary update", error);
+                    renderSalarySheet();
+                }
             });
         }
 
@@ -1591,6 +1823,7 @@
                 const data = await response.json();
                 renderMembers(data);
                 setActiveMembers(data);
+                await refreshMonthData(currentSalaryMonth);
             } catch (error) {
                 console.error("Failed to load team members", error);
                 if (tableBody) {

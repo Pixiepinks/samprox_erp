@@ -490,6 +490,26 @@
                                 —
                             </span>
                         </p>
+                        <div class="attendance-summary__totals">
+                            <span class="attendance-summary__totals-label">Total Pay Hours</span>
+                            <span class="attendance-summary__totals-main" id="attendance-total-pay-hours"
+                                >00:00</span
+                            >
+                            <div class="attendance-summary__totals-detail">
+                                <span class="attendance-summary__totals-sub-label">Regular Hours</span>
+                                <span
+                                    class="attendance-summary__totals-sub-value"
+                                    id="attendance-total-regular-hours"
+                                >00:00</span>
+                            </div>
+                            <div class="attendance-summary__totals-detail">
+                                <span class="attendance-summary__totals-sub-label">OT Hours</span>
+                                <span
+                                    class="attendance-summary__totals-sub-value"
+                                    id="attendance-total-ot-hours"
+                                >00:00</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="table-container attendance-table-container">
                         <table class="team-table attendance-table">
@@ -500,6 +520,7 @@
                                     <th scope="col">Off time</th>
                                     <th scope="col">Actual hours</th>
                                     <th scope="col">Pay hours</th>
+                                    <th scope="col">OT hours</th>
                                 </tr>
                             </thead>
                             <tbody id="attendance-table-body"></tbody>
@@ -910,6 +931,11 @@
         const attendanceFormMemberName = document.getElementById("attendance-form-member-name");
         const attendanceFormRegno = document.getElementById("attendance-form-regno");
         const attendanceSummaryMonth = document.getElementById("attendance-summary-month");
+        const attendanceTotalPayHours = document.getElementById("attendance-total-pay-hours");
+        const attendanceTotalRegularHours = document.getElementById(
+            "attendance-total-regular-hours",
+        );
+        const attendanceTotalOvertimeHours = document.getElementById("attendance-total-ot-hours");
         const salaryModal = document.getElementById("salary-modal");
         const salaryModalTitle = document.getElementById("salary-modal-title");
         const salaryModalClose = document.getElementById("salary-modal-close");
@@ -1744,8 +1770,179 @@
             return computeDurationMinutes(adjustedOn, adjustedOff);
         };
 
-        const updateAttendanceHoursDisplay = (onInput, offInput, actualNode, payNode) => {
-            if (!onInput || !offInput || !actualNode || !payNode) {
+        const MEAL_BREAK_START_MINUTES = parseTimeToMinutes("12:45") ?? 12 * 60 + 45;
+        const MEAL_BREAK_END_MINUTES = parseTimeToMinutes("13:45") ?? 13 * 60 + 45;
+
+        const getWorkCalendarDayInfo = (iso) => {
+            const parts = parseIsoDate(iso);
+            if (!parts) {
+                return { isWorkDay: true, parts: null };
+            }
+
+            const store = getWorkCalendarMonthStore(parts.year, parts.month);
+            const entry = store?.get(iso);
+
+            return {
+                isWorkDay: entry ? entry.isWorkDay !== false : true,
+                parts,
+            };
+        };
+
+        const doesPeriodIncludeMealBreak = (startMinutes, endMinutes) => {
+            if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes)) {
+                return false;
+            }
+
+            let adjustedEnd = endMinutes;
+            if (adjustedEnd <= startMinutes) {
+                adjustedEnd += MINUTES_PER_DAY;
+            }
+
+            const intervals = [
+                [MEAL_BREAK_START_MINUTES, MEAL_BREAK_END_MINUTES],
+                [
+                    MEAL_BREAK_START_MINUTES + MINUTES_PER_DAY,
+                    MEAL_BREAK_END_MINUTES + MINUTES_PER_DAY,
+                ],
+            ];
+
+            return intervals.some(
+                ([mealStart, mealEnd]) => startMinutes < mealEnd && adjustedEnd > mealStart,
+            );
+        };
+
+        const computeRegularAndOvertimeMinutes = (iso, onValue, offValue, payMinutes) => {
+            if (!iso || !Number.isFinite(payMinutes) || payMinutes < 0) {
+                return { regularMinutes: null, overtimeMinutes: null };
+            }
+
+            const info = getWorkCalendarDayInfo(iso);
+            if (!info.parts) {
+                return {
+                    regularMinutes: payMinutes,
+                    overtimeMinutes: 0,
+                };
+            }
+
+            if (!info.isWorkDay) {
+                const onMinutes = parseTimeToMinutes(onValue);
+                const offMinutes = parseTimeToMinutes(offValue);
+                let overtimeMinutes = payMinutes;
+
+                if (
+                    Number.isFinite(onMinutes) &&
+                    Number.isFinite(offMinutes) &&
+                    doesPeriodIncludeMealBreak(onMinutes, offMinutes) &&
+                    overtimeMinutes > 0
+                ) {
+                    overtimeMinutes = Math.max(overtimeMinutes - 60, 0);
+                }
+
+                return {
+                    regularMinutes: 0,
+                    overtimeMinutes,
+                };
+            }
+
+            const date = new Date(Date.UTC(info.parts.year, info.parts.month - 1, info.parts.day));
+            const dayOfWeek = date.getUTCDay();
+            let regularLimitMinutes = 9 * 60;
+            if (dayOfWeek === 6) {
+                regularLimitMinutes = 5 * 60;
+            }
+
+            const overtimeMinutes = Math.max(payMinutes - regularLimitMinutes, 0);
+            const regularMinutes = Math.max(Math.min(payMinutes, regularLimitMinutes), 0);
+
+            return { regularMinutes, overtimeMinutes };
+        };
+
+        const setAttendanceRowMinutes = (row, key, minutes) => {
+            if (!row || !row.dataset || !key) {
+                return;
+            }
+
+            if (Number.isFinite(minutes) && minutes >= 0) {
+                row.dataset[key] = String(Math.round(minutes));
+            } else if (Object.prototype.hasOwnProperty.call(row.dataset, key)) {
+                delete row.dataset[key];
+            }
+        };
+
+        const refreshAttendanceTotals = () => {
+            if (!attendanceTableBody) {
+                return;
+            }
+
+            const rows = Array.from(attendanceTableBody.querySelectorAll("tr[data-date]")) || [];
+            let totalPay = 0;
+            let totalRegular = 0;
+            let totalOvertime = 0;
+            let hasPay = false;
+            let hasRegular = false;
+            let hasOvertime = false;
+
+            rows.forEach((row) => {
+                const pay = Number.parseInt(row.dataset.payMinutes ?? "", 10);
+                if (Number.isFinite(pay)) {
+                    totalPay += pay;
+                    hasPay = true;
+                }
+
+                const regular = Number.parseInt(row.dataset.regularMinutes ?? "", 10);
+                if (Number.isFinite(regular)) {
+                    totalRegular += regular;
+                    hasRegular = true;
+                }
+
+                const overtime = Number.parseInt(row.dataset.overtimeMinutes ?? "", 10);
+                if (Number.isFinite(overtime)) {
+                    totalOvertime += overtime;
+                    hasOvertime = true;
+                }
+            });
+
+            if (attendanceTotalPayHours) {
+                attendanceTotalPayHours.textContent = hasPay
+                    ? formatMinutesAsDuration(totalPay)
+                    : "00:00";
+            }
+
+            if (attendanceTotalRegularHours) {
+                attendanceTotalRegularHours.textContent = hasRegular
+                    ? formatMinutesAsDuration(totalRegular)
+                    : "00:00";
+            }
+
+            if (attendanceTotalOvertimeHours) {
+                attendanceTotalOvertimeHours.textContent = hasOvertime
+                    ? formatMinutesAsDuration(totalOvertime)
+                    : "00:00";
+            }
+        };
+
+        const resetAttendanceTotals = () => {
+            if (attendanceTotalPayHours) {
+                attendanceTotalPayHours.textContent = "00:00";
+            }
+            if (attendanceTotalRegularHours) {
+                attendanceTotalRegularHours.textContent = "00:00";
+            }
+            if (attendanceTotalOvertimeHours) {
+                attendanceTotalOvertimeHours.textContent = "00:00";
+            }
+        };
+
+        const updateAttendanceHoursDisplay = (
+            row,
+            iso,
+            onInput,
+            offInput,
+            actualNode,
+            payNode,
+            overtimeNode,
+        ) => {
+            if (!row || !iso || !onInput || !offInput || !actualNode || !payNode || !overtimeNode) {
                 return;
             }
 
@@ -1755,9 +1952,31 @@
             const actualMinutes = computeActualMinutes(normalizedOn, normalizedOff);
             const payMinutes = computePayMinutes(normalizedOn, normalizedOff);
 
+            let regularMinutes = null;
+            let overtimeMinutes = null;
+
+            if (Number.isFinite(payMinutes)) {
+                const result = computeRegularAndOvertimeMinutes(
+                    iso,
+                    normalizedOn,
+                    normalizedOff,
+                    payMinutes,
+                );
+                regularMinutes = result.regularMinutes;
+                overtimeMinutes = result.overtimeMinutes;
+            }
+
             actualNode.textContent =
                 actualMinutes != null ? formatMinutesAsDuration(actualMinutes) : "—";
             payNode.textContent = payMinutes != null ? formatMinutesAsDuration(payMinutes) : "—";
+            overtimeNode.textContent =
+                overtimeMinutes != null ? formatMinutesAsDuration(overtimeMinutes) : "—";
+
+            setAttendanceRowMinutes(row, "payMinutes", payMinutes);
+            setAttendanceRowMinutes(row, "regularMinutes", regularMinutes);
+            setAttendanceRowMinutes(row, "overtimeMinutes", overtimeMinutes);
+
+            refreshAttendanceTotals();
         };
 
         const parseMemberId = (value) => {
@@ -2729,6 +2948,7 @@
             }
 
             attendanceTableBody.innerHTML = "";
+            resetAttendanceTotals();
 
             const memberKey = attendanceModalContext?.memberKey;
             if (!memberKey) {
@@ -2741,10 +2961,11 @@
             if (entries.length === 0) {
                 const row = document.createElement("tr");
                 const cell = document.createElement("td");
-                cell.colSpan = 5;
+                cell.colSpan = 6;
                 cell.textContent = "No calendar days available for the selected month.";
                 row.appendChild(cell);
                 attendanceTableBody.appendChild(row);
+                resetAttendanceTotals();
                 return;
             }
 
@@ -2800,6 +3021,10 @@
                 payValue.className = "attendance-table__hours-value";
                 payValue.textContent = "—";
 
+                const overtimeValue = document.createElement("span");
+                overtimeValue.className = "attendance-table__hours-value";
+                overtimeValue.textContent = "—";
+
                 row.appendChild(createCell("On time", onInput));
                 row.appendChild(createCell("Off time", offInput));
 
@@ -2811,8 +3036,20 @@
                 payCell.classList.add("attendance-table__hours-cell");
                 row.appendChild(payCell);
 
+                const overtimeCell = createCell("OT hours", overtimeValue);
+                overtimeCell.classList.add("attendance-table__hours-cell");
+                row.appendChild(overtimeCell);
+
                 const refreshHours = () => {
-                    updateAttendanceHoursDisplay(onInput, offInput, actualValue, payValue);
+                    updateAttendanceHoursDisplay(
+                        row,
+                        iso,
+                        onInput,
+                        offInput,
+                        actualValue,
+                        payValue,
+                        overtimeValue,
+                    );
                 };
 
                 onInput.addEventListener("input", refreshHours);
@@ -2851,6 +3088,7 @@
             }
             if (attendanceTableBody) {
                 attendanceTableBody.innerHTML = "";
+                resetAttendanceTotals();
             }
             if (attendanceFormMemberName) {
                 attendanceFormMemberName.textContent = "—";

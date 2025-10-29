@@ -701,6 +701,9 @@
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
+        const TIME_24_HOUR_PATTERN = /^(\d{1,2}):([0-5]\d)$/;
+        const TIME_12_HOUR_PATTERN = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i;
+        const TIME_COMPACT_PATTERN = /^(\d{1,2})([0-5]\d)$/;
         const attendanceDateFormatter = new Intl.DateTimeFormat(undefined, {
             year: "numeric",
             month: "short",
@@ -732,6 +735,67 @@
                 return "";
             }
             return `${match[1]}-${String(month).padStart(2, "0")}`;
+        };
+
+        const normalizeTimeValue = (value) => {
+            if (typeof value !== "string") {
+                return "";
+            }
+
+            let text = value.trim();
+            if (!text) {
+                return "";
+            }
+
+            text = text.replace(/[.]/g, ":").replace(/\s+/g, " ");
+
+            const twelveHourMatch = TIME_12_HOUR_PATTERN.exec(text);
+            if (twelveHourMatch) {
+                let [_, hours, minutes, meridiem] = twelveHourMatch;
+                let hourNumber = Number.parseInt(hours, 10);
+                if (Number.isNaN(hourNumber)) {
+                    return "";
+                }
+
+                meridiem = meridiem.toUpperCase();
+                if (meridiem === "AM") {
+                    if (hourNumber === 12) {
+                        hourNumber = 0;
+                    }
+                } else if (meridiem === "PM") {
+                    if (hourNumber !== 12) {
+                        hourNumber += 12;
+                    }
+                }
+
+                if (hourNumber < 0 || hourNumber > 23) {
+                    return "";
+                }
+
+                return `${String(hourNumber).padStart(2, "0")}:${minutes}`;
+            }
+
+            const twentyFourHourMatch = TIME_24_HOUR_PATTERN.exec(text);
+            if (twentyFourHourMatch) {
+                const [, hours, minutes] = twentyFourHourMatch;
+                const hourNumber = Number.parseInt(hours, 10);
+
+                if (!Number.isNaN(hourNumber) && hourNumber >= 0 && hourNumber <= 23) {
+                    return `${String(hourNumber).padStart(2, "0")}:${minutes}`;
+                }
+            }
+
+            const compactMatch = TIME_COMPACT_PATTERN.exec(text);
+            if (compactMatch) {
+                const [, hours, minutes] = compactMatch;
+                const hourNumber = Number.parseInt(hours, 10);
+
+                if (!Number.isNaN(hourNumber) && hourNumber >= 0 && hourNumber <= 23) {
+                    return `${String(hourNumber).padStart(2, "0")}:${minutes}`;
+                }
+            }
+
+            return "";
         };
 
         const parseMemberId = (value) => {
@@ -1261,19 +1325,41 @@
                 row.appendChild(createCell("Date", display));
 
                 const onInput = document.createElement("input");
-                onInput.type = "time";
+                onInput.type = "text";
                 onInput.name = `on-${iso}`;
                 onInput.className = "attendance-table__time-input edit-form__input";
-                if (record?.[iso]?.onTime) {
-                    onInput.value = record[iso].onTime;
+                onInput.placeholder = "HH:MM";
+                onInput.pattern = "^(?:[01]?\\d|2[0-3]):[0-5]\\d$";
+                onInput.inputMode = "numeric";
+                onInput.autocomplete = "off";
+                onInput.spellcheck = false;
+                onInput.maxLength = 5;
+                onInput.setAttribute(
+                    "aria-label",
+                    `On time for ${display} (24-hour format)`
+                );
+                const normalizedOnTime = normalizeTimeValue(record?.[iso]?.onTime ?? "");
+                if (normalizedOnTime) {
+                    onInput.value = normalizedOnTime;
                 }
 
                 const offInput = document.createElement("input");
-                offInput.type = "time";
+                offInput.type = "text";
                 offInput.name = `off-${iso}`;
                 offInput.className = "attendance-table__time-input edit-form__input";
-                if (record?.[iso]?.offTime) {
-                    offInput.value = record[iso].offTime;
+                offInput.placeholder = "HH:MM";
+                offInput.pattern = "^(?:[01]?\\d|2[0-3]):[0-5]\\d$";
+                offInput.inputMode = "numeric";
+                offInput.autocomplete = "off";
+                offInput.spellcheck = false;
+                offInput.maxLength = 5;
+                offInput.setAttribute(
+                    "aria-label",
+                    `Off time for ${display} (24-hour format)`
+                );
+                const normalizedOffTime = normalizeTimeValue(record?.[iso]?.offTime ?? "");
+                if (normalizedOffTime) {
+                    offInput.value = normalizedOffTime;
                 }
 
                 row.appendChild(createCell("On time", onInput));
@@ -1353,7 +1439,9 @@
             renderAttendanceTableRows();
 
             window.requestAnimationFrame(() => {
-                const firstField = attendanceTableBody?.querySelector("input[type='time']");
+                const firstField = attendanceTableBody?.querySelector(
+                    ".attendance-table__time-input"
+                );
                 if (firstField) {
                     firstField.focus();
                 }
@@ -1585,6 +1673,11 @@
             attendanceForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
 
+                if (!attendanceForm.checkValidity()) {
+                    attendanceForm.reportValidity();
+                    return;
+                }
+
                 if (!attendanceModalContext?.memberKey) {
                     closeAttendanceModal();
                     return;
@@ -1603,14 +1696,22 @@
                 entries.forEach(({ iso }) => {
                     const onValueRaw = formData.get(`on-${iso}`);
                     const offValueRaw = formData.get(`off-${iso}`);
-                    const onValue = typeof onValueRaw === "string" ? onValueRaw.trim() : "";
-                    const offValue = typeof offValueRaw === "string" ? offValueRaw.trim() : "";
+                    const onValue = normalizeTimeValue(
+                        typeof onValueRaw === "string" ? onValueRaw : ""
+                    );
+                    const offValue = normalizeTimeValue(
+                        typeof offValueRaw === "string" ? offValueRaw : ""
+                    );
 
                     if (onValue || offValue) {
-                        record[iso] = {
-                            onTime: onValue,
-                            offTime: offValue,
-                        };
+                        const entry = {};
+                        if (onValue) {
+                            entry.onTime = onValue;
+                        }
+                        if (offValue) {
+                            entry.offTime = offValue;
+                        }
+                        record[iso] = entry;
                     }
                 });
 

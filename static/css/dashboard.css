@@ -374,6 +374,12 @@ body {
     min-width: 180px;
 }
 
+.salary-section .table-container {
+    max-height: 24rem;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
 .salary-section__empty {
     margin: 0.75rem 0 0;
     font-size: 0.95rem;

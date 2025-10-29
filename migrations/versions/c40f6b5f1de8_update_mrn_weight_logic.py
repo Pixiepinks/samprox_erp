@@ -24,6 +24,8 @@ def _constraint_names(table_name: str) -> set[str]:
 def upgrade():
     table_name = "mrn_headers"
     constraint_names = _constraint_names(table_name)
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == "sqlite"
 
     if "ck_mrn_out_weight_greater_than_in" in constraint_names:
         op.drop_constraint("ck_mrn_out_weight_greater_than_in", table_name, type_="check")
@@ -41,7 +43,7 @@ def upgrade():
         )
     )
 
-    if "ck_mrn_first_weight_greater_than_second" not in constraint_names:
+    if not is_sqlite and "ck_mrn_first_weight_greater_than_second" not in constraint_names:
         op.create_check_constraint(
             "ck_mrn_first_weight_greater_than_second",
             table_name,
@@ -52,8 +54,10 @@ def upgrade():
 def downgrade():
     table_name = "mrn_headers"
     constraint_names = _constraint_names(table_name)
+    bind = op.get_bind()
+    is_sqlite = bind.dialect.name == "sqlite"
 
-    if "ck_mrn_first_weight_greater_than_second" in constraint_names:
+    if not is_sqlite and "ck_mrn_first_weight_greater_than_second" in constraint_names:
         op.drop_constraint("ck_mrn_first_weight_greater_than_second", table_name, type_="check")
 
     op.execute(
@@ -69,7 +73,7 @@ def downgrade():
         )
     )
 
-    if "ck_mrn_out_weight_greater_than_in" not in constraint_names:
+    if not is_sqlite and "ck_mrn_out_weight_greater_than_in" not in constraint_names:
         op.create_check_constraint(
             "ck_mrn_out_weight_greater_than_in",
             table_name,

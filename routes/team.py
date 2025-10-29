@@ -1,5 +1,6 @@
 from datetime import date, datetime
 import re
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -15,9 +16,15 @@ from models import (
     TeamMember,
     TeamMemberStatus,
     TeamSalaryRecord,
+    TeamWorkCalendarDay,
 )  # keep import; not strictly required now
 from routes.jobs import require_role
-from schemas import AttendanceRecordSchema, SalaryRecordSchema, TeamMemberSchema
+from schemas import (
+    AttendanceRecordSchema,
+    SalaryRecordSchema,
+    TeamMemberSchema,
+    WorkCalendarDaySchema,
+)
 
 bp = Blueprint("team", __name__, url_prefix="/api/team")
 
@@ -27,6 +34,10 @@ attendance_record_schema = AttendanceRecordSchema()
 attendance_records_schema = AttendanceRecordSchema(many=True)
 salary_record_schema = SalaryRecordSchema()
 salary_records_schema = SalaryRecordSchema(many=True)
+work_calendar_day_schema = WorkCalendarDaySchema()
+work_calendar_days_schema = WorkCalendarDaySchema(many=True)
+
+COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +206,17 @@ def _ensure_tracking_tables():
         model.__table__.create(bind=engine, checkfirst=True)
 
 
+def _ensure_work_calendar_table():
+    """Ensure the work calendar overrides table exists."""
+
+    try:
+        engine = db.engine
+    except RuntimeError:
+        return
+
+    TeamWorkCalendarDay.__table__.create(bind=engine, checkfirst=True)
+
+
 def _normalize_month(value: str | None) -> str | None:
     text_value = _clean_string(value)
     if not text_value:
@@ -272,6 +294,77 @@ def _clean_string(value) -> str:
     if isinstance(value, str):
         return value.strip()
     return str(value).strip()
+
+
+def _current_colombo_year_month() -> tuple[int, int]:
+    """Return the current year and month in the Asia/Colombo timezone."""
+
+    now = datetime.now(COLOMBO_ZONE)
+    return now.year, now.month
+
+
+def _normalize_year_month_params(year_value, month_value) -> tuple[int, int]:
+    """Parse year/month query parameters with Colombo defaults."""
+
+    default_year, default_month = _current_colombo_year_month()
+
+    try:
+        year = int(year_value)
+    except (TypeError, ValueError):
+        year = default_year
+    else:
+        if year < 1 or year > 9999:
+            year = default_year
+
+    try:
+        month = int(month_value)
+    except (TypeError, ValueError):
+        month = default_month
+    else:
+        if month < 1 or month > 12:
+            month = default_month
+
+    return year, month
+
+
+def _parse_iso_date(value: str) -> date:
+    """Parse YYYY-MM-DD strings and raise ValueError if invalid."""
+
+    text_value = _clean_string(value)
+    if not text_value:
+        raise ValueError("Provide a date in YYYY-MM-DD format.")
+
+    try:
+        parsed = date.fromisoformat(text_value)
+    except ValueError as exc:
+        raise ValueError("Provide a date in YYYY-MM-DD format.") from exc
+
+    return parsed
+
+
+def _normalize_bool(value, *, label: str) -> bool:
+    """Interpret booleans from payloads."""
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+
+    raise ValueError(f"{label} must be true or false.")
+
+
+def _sanitize_holiday_name(value) -> str | None:
+    text_value = _clean_string(value)
+    if not text_value:
+        return None
+    if len(text_value) > 120:
+        text_value = text_value[:120].rstrip()
+    return text_value or None
 
 
 def _extract_string(value, *, label: str, required: bool = False, max_length: int | None = None) -> str | None:
@@ -616,6 +709,120 @@ def update_member(member_id: int):
         db.session.commit()
 
     return jsonify(member_schema.dump(member))
+
+
+@bp.get("/work-calendar")
+@jwt_required()
+def list_work_calendar():
+    if not require_role(
+        RoleEnum.admin,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
+    ):
+        return (
+            jsonify({"msg": "Only administrators or managers can view the work calendar."}),
+            403,
+        )
+
+    _ensure_schema()
+    _ensure_work_calendar_table()
+
+    year, month = _normalize_year_month_params(
+        request.args.get("year"),
+        request.args.get("month"),
+    )
+
+    start_day = date(year, month, 1)
+    if month == 12:
+        end_day = date(year + 1, 1, 1)
+    else:
+        end_day = date(year, month + 1, 1)
+
+    records = (
+        TeamWorkCalendarDay.query.filter(
+            TeamWorkCalendarDay.date >= start_day,
+            TeamWorkCalendarDay.date < end_day,
+        )
+        .order_by(TeamWorkCalendarDay.date.asc())
+        .all()
+    )
+
+    return jsonify(
+        {
+            "year": year,
+            "month": month,
+            "days": work_calendar_days_schema.dump(records),
+        }
+    )
+
+
+@bp.put("/work-calendar/<string:date_iso>")
+@jwt_required()
+def upsert_work_calendar_day(date_iso: str):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return (
+            jsonify({"msg": "Only administrators or production managers can update the work calendar."}),
+            403,
+        )
+
+    try:
+        target_date = _parse_iso_date(date_iso)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    payload = request.get_json(silent=True) or {}
+    if "isWorkDay" not in payload:
+        return jsonify({"msg": "Work status is required."}), 400
+
+    try:
+        is_work_day = _normalize_bool(payload.get("isWorkDay"), label="Work status")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    holiday_name = None
+    if not is_work_day:
+        holiday_name = _sanitize_holiday_name(payload.get("holidayName"))
+
+    _ensure_schema()
+    _ensure_work_calendar_table()
+
+    record = TeamWorkCalendarDay.query.filter_by(date=target_date).one_or_none()
+
+    if is_work_day and holiday_name is None:
+        if record is not None:
+            try:
+                db.session.delete(record)
+                db.session.commit()
+            except Exception as exc:  # pragma: no cover - defensive
+                db.session.rollback()
+                current_app.logger.exception("Failed to clear work calendar day", exc_info=exc)
+                return jsonify({"msg": "Unable to reset the selected day."}), 400
+        return jsonify(
+            {
+                "date": target_date.isoformat(),
+                "isWorkDay": True,
+                "holidayName": None,
+                "updatedAt": None,
+            }
+        )
+
+    if record is None:
+        record = TeamWorkCalendarDay(date=target_date)
+
+    record.is_work_day = is_work_day
+    record.holiday_name = holiday_name
+    record.updated_at = datetime.utcnow()
+
+    db.session.add(record)
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("Failed to save work calendar day", exc_info=exc)
+        return jsonify({"msg": "Unable to save the selected day."}), 400
+
+    return jsonify(work_calendar_day_schema.dump(record))
 
 
 @bp.get("/attendance")

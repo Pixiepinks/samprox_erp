@@ -389,10 +389,40 @@ body {
 
 .salary-table {
     min-width: 980px;
+    --salary-first-column-width: 6.75rem;
+    --salary-second-column-width: 14rem;
 }
 
 .salary-table th {
     white-space: nowrap;
+}
+
+.salary-table th:first-child,
+.salary-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: var(--salary-first-column-width);
+    min-width: var(--salary-first-column-width);
+    background: #fff;
+    box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.35);
+}
+
+.salary-table th:nth-child(2),
+.salary-table td:nth-child(2) {
+    position: sticky;
+    left: var(--salary-first-column-width);
+    z-index: 2;
+    width: var(--salary-second-column-width);
+    min-width: var(--salary-second-column-width);
+    background: #fff;
+    box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.35);
+}
+
+.salary-table th:first-child,
+.salary-table th:nth-child(2) {
+    z-index: 3;
+    background: rgba(226, 232, 240, 0.4);
 }
 
 .salary-table__name-button {

@@ -1,5 +1,6 @@
 from datetime import date, datetime
 import re
+from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, request
@@ -295,6 +296,12 @@ def _normalize_salary_components(components: dict | None) -> dict[str, str]:
 
         value = _clean_string(raw_value)
         if value:
+            if key in _NUMERIC_SALARY_COMPONENT_KEYS:
+                try:
+                    Decimal(value)
+                except (InvalidOperation, ValueError):
+                    label = _SALARY_COMPONENT_LABELS.get(key, key)
+                    raise ValueError(f"{label} must be a numeric value.")
             normalized[key] = value
 
     return normalized
@@ -984,9 +991,32 @@ def upsert_attendance_record(member_id: int):
     return jsonify({"status": "deleted", "memberId": member.id, "month": month})
 
 
+_SALARY_COMPONENT_LABELS = {
+    "basicSalary": "Basic salary",
+    "daySalary": "Day salary",
+    "generalAllowance": "General allowance",
+    "transportAllowance": "Transport allowance",
+    "attendanceAllowance": "Attendance allowance",
+    "specialAllowance": "Special allowance",
+    "performanceBonus": "Performance bonus",
+    "production": "Production",
+    "targetAllowance": "Target allowance",
+    "overtime": "Overtime",
+    "grossSalary": "Gross salary",
+    "providentFund": "Provident fund",
+    "otherDeduction": "Other deduction",
+    "salaryAdvance": "Salary advance",
+    "noPay": "No pay",
+    "totalDeduction": "Total deduction",
+    "netPay": "Net pay",
+}
+
+_NUMERIC_SALARY_COMPONENT_KEYS = frozenset(_SALARY_COMPONENT_LABELS.keys())
+
 _CARRY_FORWARD_COMPONENT_KEYS = frozenset(
     {
         "basicSalary",
+        "daySalary",
         "generalAllowance",
         "transportAllowance",
         "specialAllowance",
@@ -1086,7 +1116,10 @@ def upsert_salary_record(member_id: int):
         return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
 
     components_payload = payload.get("components")
-    normalized_components = _normalize_salary_components(components_payload)
+    try:
+        normalized_components = _normalize_salary_components(components_payload)
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
 
     record = TeamSalaryRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
 

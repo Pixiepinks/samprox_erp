@@ -362,6 +362,7 @@
                                     <th scope="col">Reg No</th>
                                     <th scope="col">Name</th>
                                     <th scope="col">Basic Salary</th>
+                                    <th scope="col">Day Salary</th>
                                     <th scope="col">General Allowance</th>
                                     <th scope="col">Transport Allowance</th>
                                     <th scope="col">Attendance Allowance</th>
@@ -575,6 +576,10 @@
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="salary-basic-salary">Basic salary</label>
                             <input class="edit-form__input" type="number" step="0.01" id="salary-basic-salary" name="basicSalary" />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-day-salary">Day salary</label>
+                            <input class="edit-form__input" type="number" step="0.01" id="salary-day-salary" name="daySalary" />
                         </div>
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="salary-general-allowance">General allowance</label>
@@ -972,6 +977,7 @@
 
         const salaryFieldDefinitions = [
             { name: "basicSalary", label: "Basic Salary" },
+            { name: "daySalary", label: "Day Salary" },
             { name: "generalAllowance", label: "General Allowance" },
             { name: "transportAllowance", label: "Transport Allowance" },
             { name: "attendanceAllowance", label: "Attendance Allowance" },

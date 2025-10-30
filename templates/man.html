@@ -1072,6 +1072,7 @@
         const salaryDataStore = Object.create(null);
         const attendanceDataStore = Object.create(null);
         const computedAttendanceAllowanceStore = Object.create(null);
+        const computedTargetAllowanceStore = Object.create(null);
         const attendanceLeaveSummaryStore = Object.create(null);
         const workCalendarStore = new Map();
         const memberKeyById = new Map();
@@ -2578,8 +2579,49 @@
                 });
 
                 salaryDataStore[normalized] = monthStore;
+
+                const targetAllowances =
+                    body && typeof body === "object" ? body.targetAllowances : null;
+                if (targetAllowances && typeof targetAllowances === "object") {
+                    const allowanceStore = Object.create(null);
+
+                    Object.entries(targetAllowances).forEach(([memberIdValue, rawValue]) => {
+                        const memberId = parseMemberId(memberIdValue);
+                        if (memberId == null) {
+                            return;
+                        }
+                        const storeKey = memberKeyById.get(memberId);
+                        if (!storeKey) {
+                            return;
+                        }
+
+                        let numericValue = null;
+                        if (typeof rawValue === "number") {
+                            numericValue = rawValue;
+                        } else if (typeof rawValue === "string") {
+                            const trimmed = rawValue.trim();
+                            if (!trimmed) {
+                                numericValue = 0;
+                            } else {
+                                const parsed = Number.parseFloat(trimmed);
+                                if (Number.isFinite(parsed)) {
+                                    numericValue = parsed;
+                                }
+                            }
+                        }
+
+                        if (Number.isFinite(numericValue)) {
+                            allowanceStore[storeKey] = numericValue;
+                        }
+                    });
+
+                    computedTargetAllowanceStore[normalized] = allowanceStore;
+                } else {
+                    delete computedTargetAllowanceStore[normalized];
+                }
             } catch (error) {
                 console.error("Failed to load salary records", error);
+                delete computedTargetAllowanceStore[normalized];
             }
         };
 
@@ -2738,6 +2780,24 @@
             }
 
             const monthStore = computedAttendanceAllowanceStore[normalized];
+            if (!monthStore) {
+                return null;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(monthStore, memberKey)) {
+                return monthStore[memberKey];
+            }
+
+            return null;
+        };
+
+        const getComputedTargetAllowance = (month, memberKey) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized || !memberKey) {
+                return null;
+            }
+
+            const monthStore = computedTargetAllowanceStore[normalized];
             if (!monthStore) {
                 return null;
             }
@@ -3825,6 +3885,9 @@
                 const computedAllowance = isFactoryMember
                     ? getComputedAttendanceAllowance(currentSalaryMonth, memberKey)
                     : null;
+                const computedTargetAllowance = isFactoryMember
+                    ? getComputedTargetAllowance(currentSalaryMonth, memberKey)
+                    : null;
                 let displayRecord = record;
 
                 if (isFactoryMember) {
@@ -3834,10 +3897,28 @@
                             attendanceAllowance: computedAllowance,
                         };
                     }
+                    if (computedTargetAllowance != null) {
+                        if (displayRecord && typeof displayRecord === "object") {
+                            displayRecord = {
+                                ...displayRecord,
+                                targetAllowance: computedTargetAllowance,
+                            };
+                        } else {
+                            displayRecord = { targetAllowance: computedTargetAllowance };
+                        }
+                    }
                 } else if (record?.attendanceAllowance != null) {
                     displayRecord = {
                         ...record,
                         attendanceAllowance: null,
+                    };
+                    if (record?.targetAllowance != null) {
+                        displayRecord.targetAllowance = null;
+                    }
+                } else if (record?.targetAllowance != null) {
+                    displayRecord = {
+                        ...record,
+                        targetAllowance: null,
                     };
                 }
 
@@ -3937,6 +4018,9 @@
             const computedAllowance = isFactoryMember
                 ? getComputedAttendanceAllowance(targetMonth, targetMemberKey)
                 : null;
+            const computedTargetAllowance = isFactoryMember
+                ? getComputedTargetAllowance(targetMonth, targetMemberKey)
+                : null;
 
             salaryFieldDefinitions.forEach(({ name }) => {
                 const input = salaryForm.elements[name];
@@ -3945,6 +4029,7 @@
 
                     input.readOnly = false;
                     input.removeAttribute("aria-readonly");
+                    input.disabled = false;
 
                     if (name === "attendanceAllowance") {
                         input.disabled = !isFactoryMember;
@@ -3956,6 +4041,17 @@
 
                         if (computedAllowance != null) {
                             value = formatNumberForInput(computedAllowance);
+                        }
+                    } else if (name === "targetAllowance") {
+                        input.disabled = !isFactoryMember;
+
+                        if (!isFactoryMember) {
+                            input.value = "";
+                            return;
+                        }
+
+                        if (computedTargetAllowance != null) {
+                            value = formatNumberForInput(computedTargetAllowance);
                         }
                     } else if (name === "overtime") {
                         input.disabled = false;

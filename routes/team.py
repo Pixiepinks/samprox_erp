@@ -1,3 +1,4 @@
+import calendar
 from datetime import date, datetime
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -5,12 +6,14 @@ from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import jwt_required
-from sqlalchemy import inspect, text
+from sqlalchemy import func, inspect, text
 from sqlalchemy import types as sqltypes
 from sqlalchemy.exc import DataError, IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
 from models import (
+    DailyProductionEntry,
+    MachineAsset,
     PayCategory,
     RoleEnum,
     TeamAttendanceRecord,
@@ -327,6 +330,25 @@ def _normalize_month(value: str | None) -> str | None:
         return None
 
     return f"{year}-{month_number:02d}"
+
+
+def _get_month_bounds(month: str) -> tuple[date, date, int] | None:
+    if not month or not _MONTH_PATTERN.match(month):
+        return None
+
+    try:
+        year = int(month[:4])
+        month_number = int(month[5:7])
+    except (TypeError, ValueError):
+        return None
+
+    if month_number < 1 or month_number > 12:
+        return None
+
+    month_start = date(year, month_number, 1)
+    days_in_month = calendar.monthrange(year, month_number)[1]
+    month_end = date(year, month_number, days_in_month)
+    return month_start, month_end, days_in_month
 
 
 def _normalize_day_status(value: str | None) -> str | None:
@@ -935,12 +957,167 @@ def _apply_computed_overtime_component(
     return normalized_components, amount
 
 
+def _resolve_target_allowance_base(total_tons: Decimal, *, is_special: bool) -> Decimal:
+    if total_tons is None:
+        return Decimal("0")
+
+    for lower_bound, upper_bound, regular_value, special_value in _TARGET_ALLOWANCE_SLABS:
+        if total_tons >= lower_bound and total_tons < upper_bound:
+            return special_value if is_special else regular_value
+
+    if _TARGET_ALLOWANCE_SLABS:
+        _, last_upper, _, _ = _TARGET_ALLOWANCE_SLABS[-1]
+    else:
+        last_upper = Decimal("0")
+
+    if total_tons >= last_upper:
+        regular_top, special_top = _TARGET_ALLOWANCE_TOP_VALUES
+        return special_top if is_special else regular_top
+
+    return Decimal("0")
+
+
+def _compute_target_allowance_amounts(month: str) -> dict[int, Decimal]:
+    bounds = _get_month_bounds(month)
+    if not bounds:
+        return {}
+
+    month_start, month_end, days_in_month = bounds
+    today = date.today()
+    is_current_month = today.year == month_start.year and today.month == month_start.month
+
+    query_end = month_end
+    if is_current_month:
+        query_end = min(today, month_end)
+
+    totals_query = (
+        db.session.query(
+            DailyProductionEntry.date,
+            func.coalesce(func.sum(DailyProductionEntry.quantity_tons), 0.0),
+        )
+        .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
+        .filter(
+            DailyProductionEntry.date >= month_start,
+            DailyProductionEntry.date <= query_end,
+            MachineAsset.code.in_(_TARGET_ALLOWANCE_MACHINE_CODES),
+        )
+        .group_by(DailyProductionEntry.date)
+        .all()
+    )
+
+    total_tons = Decimal("0")
+    production_days = 0
+
+    for date_value, total_value in totals_query:
+        if not isinstance(date_value, date):
+            continue
+        day_total = _decimal_from_value(total_value)
+        total_tons += day_total
+        if day_total > Decimal("0"):
+            production_days += 1
+
+    remaining_days = 0
+    if is_current_month:
+        remaining_days = max(days_in_month - min(today.day, days_in_month), 0)
+
+    effective_production_days = production_days
+    if remaining_days and days_in_month > 0:
+        effective_production_days = min(production_days + remaining_days, days_in_month)
+
+    attendance_records = TeamAttendanceRecord.query.filter_by(month=month).all()
+    attendance_lookup = {
+        record.team_member_id: record.entries if isinstance(record.entries, dict) else {}
+        for record in attendance_records
+    }
+    leave_balances = TeamLeaveBalance.query.filter_by(month=month).all()
+    leave_workdays_lookup = {
+        balance.team_member_id: int(balance.work_days or 0) for balance in leave_balances
+    }
+
+    members = (
+        TeamMember.query.filter(TeamMember.status == TeamMemberStatus.ACTIVE)
+        .order_by(TeamMember.id.asc())
+        .all()
+    )
+
+    allowances: dict[int, Decimal] = {}
+
+    for member in members:
+        pay_category = _resolve_pay_category(member)
+        if pay_category != PayCategory.FACTORY:
+            continue
+
+        reg_number = _clean_string(getattr(member, "reg_number", ""))
+        is_special = reg_number.upper() == _TARGET_ALLOWANCE_SPECIAL_REG_NO
+
+        base_amount = _resolve_target_allowance_base(total_tons, is_special=is_special)
+        if base_amount <= 0:
+            allowances[member.id] = Decimal("0")
+            continue
+
+        leave_work_days = leave_workdays_lookup.get(member.id)
+        if leave_work_days is not None:
+            actual_attendance_days = min(max(leave_work_days, 0), days_in_month)
+        else:
+            entries = attendance_lookup.get(member.id)
+            actual_attendance_days = _count_attendance_days(entries, month=month)
+
+        effective_attendance_days = actual_attendance_days
+        adjusted_production_days = effective_production_days
+
+        if is_current_month and days_in_month > 0:
+            effective_attendance_days = min(
+                actual_attendance_days + remaining_days,
+                days_in_month,
+            )
+            adjusted_production_days = max(
+                0,
+                min(production_days + remaining_days, days_in_month),
+            )
+
+        if effective_attendance_days < _TARGET_ALLOWANCE_MIN_ATTENDANCE_DAYS:
+            allowances[member.id] = Decimal("0")
+            continue
+
+        if adjusted_production_days <= 0:
+            allowances[member.id] = Decimal("0")
+            continue
+
+        ratio = Decimal(effective_attendance_days) / Decimal(adjusted_production_days)
+        allowance_value = (base_amount * ratio).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        allowances[member.id] = allowance_value
+
+    return allowances
+
+
 def _clean_string(value) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
         return value.strip()
     return str(value).strip()
+
+
+def _count_attendance_days(entries: dict | None, *, month: str) -> int:
+    if not isinstance(entries, dict) or not month:
+        return 0
+
+    total = 0
+    for iso, entry in entries.items():
+        if not isinstance(iso, str) or not iso.startswith(month):
+            continue
+        if not isinstance(entry, dict):
+            continue
+
+        on_value = _clean_string(entry.get("onTime"))
+        off_value = _clean_string(entry.get("offTime"))
+
+        if on_value or off_value:
+            total += 1
+
+    return total
 
 
 def _current_colombo_year_month() -> tuple[int, int]:
@@ -1736,6 +1913,20 @@ _SALARY_COMPONENT_LABELS = {
 
 _NUMERIC_SALARY_COMPONENT_KEYS = frozenset(_SALARY_COMPONENT_LABELS.keys())
 
+_TARGET_ALLOWANCE_SPECIAL_REG_NO = "E005"
+_TARGET_ALLOWANCE_SLABS: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = (
+    (Decimal("300"), Decimal("350"), Decimal("4000"), Decimal("6000")),
+    (Decimal("350"), Decimal("400"), Decimal("6000"), Decimal("7000")),
+    (Decimal("400"), Decimal("450"), Decimal("8000"), Decimal("9000")),
+    (Decimal("450"), Decimal("500"), Decimal("10000"), Decimal("11000")),
+    (Decimal("500"), Decimal("550"), Decimal("12000"), Decimal("13000")),
+    (Decimal("550"), Decimal("600"), Decimal("14000"), Decimal("15000")),
+    (Decimal("600"), Decimal("650"), Decimal("16000"), Decimal("17000")),
+)
+_TARGET_ALLOWANCE_TOP_VALUES = (Decimal("16000"), Decimal("17000"))
+_TARGET_ALLOWANCE_MIN_ATTENDANCE_DAYS = 18
+_TARGET_ALLOWANCE_MACHINE_CODES: tuple[str, ...] = ("MCH-0001", "MCH-0002")
+
 _CARRY_FORWARD_COMPONENT_KEYS = frozenset(
     {
         "basicSalary",
@@ -1861,7 +2052,19 @@ def list_salary_records():
             updated["overtime"] = overtime_value
             payload["components"] = updated
 
-    return jsonify({"month": month, "records": serialized_records + prefilled_payloads})
+    target_allowances = _compute_target_allowance_amounts(month)
+    allowance_payload = {
+        str(member_id): _format_decimal_amount(amount)
+        for member_id, amount in target_allowances.items()
+    }
+
+    return jsonify(
+        {
+            "month": month,
+            "records": serialized_records + prefilled_payloads,
+            "targetAllowances": allowance_payload,
+        }
+    )
 
 
 @bp.put("/salary/<int:member_id>")

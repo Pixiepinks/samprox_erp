@@ -2934,6 +2934,120 @@
             }
         };
 
+        const parseNumericValue = (value) => {
+            if (typeof value === "number" && Number.isFinite(value)) {
+                return value;
+            }
+            if (typeof value === "string") {
+                const normalized = value.replace(/,/g, "").trim();
+                if (!normalized) {
+                    return 0;
+                }
+                const parsed = Number.parseFloat(normalized);
+                if (Number.isFinite(parsed)) {
+                    return parsed;
+                }
+            }
+            return 0;
+        };
+
+        const roundCurrencyValue = (value) => {
+            if (!Number.isFinite(value)) {
+                return 0;
+            }
+            const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+            return Math.abs(rounded) < 0.005 ? 0 : rounded;
+        };
+
+        const computeOvertimeMinutesForEntry = (iso, entry) => {
+            if (!iso || !entry || typeof entry !== "object") {
+                return 0;
+            }
+
+            const onValue = typeof entry.onTime === "string" ? entry.onTime : "";
+            const offValue = typeof entry.offTime === "string" ? entry.offTime : "";
+
+            if (!onValue && !offValue) {
+                return 0;
+            }
+
+            const payMinutes = computePayMinutes(onValue, offValue);
+            if (!Number.isFinite(payMinutes)) {
+                return 0;
+            }
+
+            const { overtimeMinutes } = computeRegularAndOvertimeMinutes(
+                iso,
+                onValue,
+                offValue,
+                payMinutes,
+            );
+
+            return Number.isFinite(overtimeMinutes) ? overtimeMinutes : 0;
+        };
+
+        const getMonthlyOvertimeMinutes = (month, memberKey) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized || !memberKey) {
+                return 0;
+            }
+
+            const record = getAttendanceRecord(normalized, memberKey);
+            if (!record || typeof record !== "object") {
+                return 0;
+            }
+
+            let total = 0;
+            Object.entries(record).forEach(([iso, entry]) => {
+                if (typeof iso !== "string" || !iso.startsWith(normalized)) {
+                    return;
+                }
+                const minutes = computeOvertimeMinutesForEntry(iso, entry);
+                if (Number.isFinite(minutes)) {
+                    total += minutes;
+                }
+            });
+
+            return total;
+        };
+
+        const getComputedOvertimeAmount = (month, memberKey, member, overrides = {}) => {
+            const normalized = normalizeMonthValue(month);
+            if (!normalized || !memberKey) {
+                return 0;
+            }
+
+            const totalMinutes = getMonthlyOvertimeMinutes(normalized, memberKey);
+            if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
+                return 0;
+            }
+
+            const totalHours = totalMinutes / 60;
+            if (!Number.isFinite(totalHours) || totalHours <= 0) {
+                return 0;
+            }
+
+            const payCategory = getMemberPayCategory(member).toLowerCase();
+            if (payCategory === "factory") {
+                const salaryRecord = getSalaryRecord(normalized, memberKey) || {};
+                const overrideBasicSalary =
+                    overrides && Object.prototype.hasOwnProperty.call(overrides, "basicSalary")
+                        ? overrides.basicSalary
+                        : salaryRecord?.basicSalary;
+                const basicSalary = parseNumericValue(overrideBasicSalary);
+                if (!Number.isFinite(basicSalary) || basicSalary <= 0) {
+                    return 0;
+                }
+                return roundCurrencyValue((basicSalary / 200) * 1.5 * totalHours);
+            }
+
+            if (payCategory === "casual") {
+                return roundCurrencyValue(120 * totalHours);
+            }
+
+            return 0;
+        };
+
         const updateAttendanceSummary = (member) => {
             if (attendanceFormMemberName) {
                 attendanceFormMemberName.textContent = getMemberDisplayName(member);
@@ -3189,6 +3303,23 @@
                         attendanceAllowance: null,
                     };
                 }
+
+                const computedOvertimeAmount = getComputedOvertimeAmount(
+                    currentSalaryMonth,
+                    memberKey,
+                    member,
+                );
+                if (Number.isFinite(computedOvertimeAmount)) {
+                    const formattedOvertime = formatNumberForInput(computedOvertimeAmount);
+                    if (displayRecord && typeof displayRecord === "object") {
+                        displayRecord = {
+                            ...displayRecord,
+                            overtime: formattedOvertime,
+                        };
+                    } else {
+                        displayRecord = { overtime: formattedOvertime };
+                    }
+                }
                 const row = document.createElement("tr");
 
                 row.appendChild(createCell("Reg No", sanitizeText(member?.regNumber)));
@@ -3275,6 +3406,9 @@
                 if (input) {
                     let value = record?.[name] ?? "";
 
+                    input.readOnly = false;
+                    input.removeAttribute("aria-readonly");
+
                     if (name === "attendanceAllowance") {
                         input.disabled = !isFactoryMember;
 
@@ -3286,12 +3420,74 @@
                         if (computedAllowance != null) {
                             value = formatNumberForInput(computedAllowance);
                         }
+                    } else if (name === "overtime") {
+                        input.disabled = false;
+                        input.readOnly = true;
+                        input.setAttribute("aria-readonly", "true");
+
+                        const overtimeAmount = getComputedOvertimeAmount(
+                            targetMonth,
+                            targetMemberKey,
+                            contextMember,
+                            record || {},
+                        );
+                        if (Number.isFinite(overtimeAmount)) {
+                            value = formatNumberForInput(overtimeAmount);
+                        } else {
+                            value = "";
+                        }
                     }
 
                     input.value = value ?? "";
                 }
             });
+
+            refreshSalaryFormOvertime();
         };
+
+        const refreshSalaryFormOvertime = () => {
+            if (!salaryForm) {
+                return;
+            }
+
+            const overtimeInput = salaryForm.elements?.overtime;
+            if (!overtimeInput) {
+                return;
+            }
+
+            const member = salaryModalContext?.member ?? null;
+            const memberKey = salaryModalContext?.memberKey ?? null;
+            const normalizedMonth =
+                normalizeMonthValue(salaryFormMonth?.value) ||
+                normalizeMonthValue(currentSalaryMonth) ||
+                currentSalaryMonth;
+
+            const overrides = {};
+            const basicSalaryInput = salaryForm.elements?.basicSalary;
+            if (basicSalaryInput && typeof basicSalaryInput.value === "string") {
+                overrides.basicSalary = basicSalaryInput.value;
+            }
+
+            const amount = getComputedOvertimeAmount(
+                normalizedMonth,
+                memberKey,
+                member,
+                overrides,
+            );
+
+            overtimeInput.value = Number.isFinite(amount)
+                ? formatNumberForInput(amount)
+                : "";
+        };
+
+        if (salaryForm?.elements?.basicSalary) {
+            salaryForm.elements.basicSalary.addEventListener(
+                "input",
+                () => {
+                    refreshSalaryFormOvertime();
+                },
+            );
+        }
 
         const closeSalaryModal = () => {
             if (!salaryModal) {
@@ -4168,6 +4364,8 @@
                 if (!isFactoryPayCategory(salaryModalContext?.member)) {
                     delete record.attendanceAllowance;
                 }
+
+                delete record.overtime;
 
                 const { memberId, memberKey } = salaryModalContext;
                 let responseData = null;

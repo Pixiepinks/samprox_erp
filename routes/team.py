@@ -1,6 +1,6 @@
 from datetime import date, datetime
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, request
@@ -305,6 +305,379 @@ def _normalize_salary_components(components: dict | None) -> dict[str, str]:
             normalized[key] = value
 
     return normalized
+
+
+_MINUTES_PER_DAY = 24 * 60
+_MEAL_BREAK_START_MINUTES = 12 * 60 + 45
+_MEAL_BREAK_END_MINUTES = 13 * 60 + 45
+
+
+def _parse_time_to_minutes(value: str | None) -> int | None:
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip()
+    if not text:
+        return None
+
+    parts = text.split(":", 1)
+    if len(parts) != 2:
+        return None
+
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+    except (TypeError, ValueError):
+        return None
+
+    if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+        return None
+
+    return hours * 60 + minutes
+
+
+def _build_time_adjustments(rules: list[dict[str, str]]) -> list[tuple[int, int, int]]:
+    adjustments: list[tuple[int, int, int]] = []
+
+    for rule in rules:
+        start = _parse_time_to_minutes(rule.get("start"))
+        end = _parse_time_to_minutes(rule.get("end"))
+        target = _parse_time_to_minutes(rule.get("target"))
+
+        if start is None or end is None or target is None:
+            continue
+
+        adjustments.append((min(start, end), max(start, end), target))
+
+    return adjustments
+
+
+_ON_TIME_ADJUSTMENTS = _build_time_adjustments(
+    [
+        {"start": "06:36", "end": "07:04", "target": "07:00"},
+        {"start": "07:05", "end": "07:16", "target": "07:15"},
+        {"start": "07:17", "end": "07:31", "target": "07:30"},
+        {"start": "07:32", "end": "07:46", "target": "07:45"},
+        {"start": "07:46", "end": "08:04", "target": "08:00"},
+    ]
+)
+
+_OFF_TIME_ADJUSTMENTS = _build_time_adjustments(
+    [
+        {"start": "18:59", "end": "19:14", "target": "19:00"},
+        {"start": "18:44", "end": "18:58", "target": "18:45"},
+        {"start": "18:29", "end": "18:43", "target": "18:30"},
+        {"start": "18:14", "end": "18:28", "target": "18:15"},
+        {"start": "17:58", "end": "18:13", "target": "18:00"},
+    ]
+)
+
+
+def _apply_time_adjustment(minutes: int | None, adjustments: list[tuple[int, int, int]]) -> int | None:
+    if minutes is None:
+        return None
+
+    for start, end, target in adjustments:
+        if start <= minutes <= end:
+            return target
+
+    return minutes
+
+
+def _compute_duration_minutes(start_minutes: int | None, end_minutes: int | None) -> int | None:
+    if start_minutes is None or end_minutes is None:
+        return None
+
+    difference = end_minutes - start_minutes
+    if difference < 0:
+        difference += _MINUTES_PER_DAY
+
+    if difference < 0:
+        return None
+
+    return difference
+
+
+def _compute_pay_minutes(on_value: str | None, off_value: str | None) -> int | None:
+    on_minutes = _parse_time_to_minutes(on_value)
+    off_minutes = _parse_time_to_minutes(off_value)
+
+    if on_minutes is None or off_minutes is None:
+        return None
+
+    adjusted_on = _apply_time_adjustment(on_minutes, _ON_TIME_ADJUSTMENTS)
+    adjusted_off = _apply_time_adjustment(off_minutes, _OFF_TIME_ADJUSTMENTS)
+
+    if adjusted_on is None or adjusted_off is None:
+        return None
+
+    return _compute_duration_minutes(adjusted_on, adjusted_off)
+
+
+def _does_period_include_meal_break(on_minutes: int | None, off_minutes: int | None) -> bool:
+    if on_minutes is None or off_minutes is None:
+        return False
+
+    adjusted_end = off_minutes
+    if adjusted_end <= on_minutes:
+        adjusted_end += _MINUTES_PER_DAY
+
+    intervals = [
+        (_MEAL_BREAK_START_MINUTES, _MEAL_BREAK_END_MINUTES),
+        (
+            _MEAL_BREAK_START_MINUTES + _MINUTES_PER_DAY,
+            _MEAL_BREAK_END_MINUTES + _MINUTES_PER_DAY,
+        ),
+    ]
+
+    return any(on_minutes < end and adjusted_end > start for start, end in intervals)
+
+
+def _build_work_calendar_lookup(month: str) -> dict[str, bool]:
+    if not month or len(month) != 7 or month[4] != "-":
+        return {}
+
+    try:
+        year = int(month[:4])
+        month_number = int(month[5:])
+    except ValueError:
+        return {}
+
+    if month_number < 1 or month_number > 12:
+        return {}
+
+    start_date = date(year, month_number, 1)
+    if month_number == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month_number + 1, 1)
+
+    records = (
+        TeamWorkCalendarDay.query.filter(TeamWorkCalendarDay.date >= start_date)
+        .filter(TeamWorkCalendarDay.date < next_month)
+        .all()
+    )
+
+    return {record.date.isoformat(): record.is_work_day is not False for record in records}
+
+
+def _compute_regular_and_overtime_minutes(
+    iso: str,
+    on_value: str | None,
+    off_value: str | None,
+    pay_minutes: int | None,
+    work_calendar_lookup: dict[str, bool],
+) -> tuple[int | None, int | None]:
+    if not iso or pay_minutes is None or pay_minutes < 0:
+        return None, None
+
+    is_work_day = work_calendar_lookup.get(iso)
+    if is_work_day is None:
+        is_work_day = True
+
+    if not is_work_day:
+        on_minutes = _parse_time_to_minutes(on_value)
+        off_minutes = _parse_time_to_minutes(off_value)
+        overtime_minutes = pay_minutes
+
+        if (
+            overtime_minutes > 0
+            and _does_period_include_meal_break(on_minutes, off_minutes)
+        ):
+            overtime_minutes = max(overtime_minutes - 60, 0)
+
+        return 0, overtime_minutes
+
+    try:
+        day = date.fromisoformat(iso)
+    except ValueError:
+        return pay_minutes, 0
+
+    regular_limit = 9 * 60
+    if day.weekday() == 5:
+        regular_limit = 5 * 60
+
+    overtime_minutes = max(pay_minutes - regular_limit, 0)
+    regular_minutes = max(min(pay_minutes, regular_limit), 0)
+
+    return regular_minutes, overtime_minutes
+
+
+def _calculate_entry_overtime_minutes(
+    iso: str, entry: dict, work_calendar_lookup: dict[str, bool]
+) -> int:
+    if not isinstance(entry, dict):
+        return 0
+
+    on_value = entry.get("onTime")
+    off_value = entry.get("offTime")
+
+    if not on_value and not off_value:
+        return 0
+
+    pay_minutes = _compute_pay_minutes(on_value, off_value)
+    if pay_minutes is None:
+        return 0
+
+    _, overtime_minutes = _compute_regular_and_overtime_minutes(
+        iso, on_value, off_value, pay_minutes, work_calendar_lookup
+    )
+
+    if overtime_minutes is None:
+        return 0
+
+    return int(overtime_minutes)
+
+
+def _calculate_monthly_overtime_minutes(
+    entries: dict | None, month: str, work_calendar_lookup: dict[str, bool]
+) -> int:
+    if not isinstance(entries, dict) or not month:
+        return 0
+
+    total = 0
+    for iso, entry in entries.items():
+        if not isinstance(iso, str) or not iso.startswith(month):
+            continue
+
+        total += _calculate_entry_overtime_minutes(iso, entry, work_calendar_lookup)
+
+    return total
+
+
+def _decimal_from_value(value) -> Decimal:
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        text = value.replace(",", "").strip()
+        if not text:
+            return Decimal("0")
+        try:
+            return Decimal(text)
+        except InvalidOperation:
+            return Decimal("0")
+    return Decimal("0")
+
+
+def _format_decimal_amount(value: Decimal | None) -> str:
+    if value is None:
+        value = Decimal("0")
+
+    quantized = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return format(quantized, "f")
+
+
+def _resolve_pay_category(member: TeamMember | None) -> PayCategory | None:
+    if member is None:
+        return None
+
+    pay_category = getattr(member, "pay_category", None)
+    if isinstance(pay_category, PayCategory):
+        return pay_category
+    if isinstance(pay_category, str):
+        try:
+            return PayCategory(pay_category)
+        except ValueError:
+            return None
+    return None
+
+
+def _compute_overtime_amount_for_member(
+    member: TeamMember | None,
+    components: dict | None,
+    entries: dict | None,
+    month: str,
+    work_calendar_lookup: dict[str, bool],
+) -> Decimal:
+    pay_category = _resolve_pay_category(member)
+    if pay_category not in {PayCategory.FACTORY, PayCategory.CASUAL}:
+        return Decimal("0")
+
+    total_minutes = _calculate_monthly_overtime_minutes(entries, month, work_calendar_lookup)
+    if total_minutes <= 0:
+        return Decimal("0")
+
+    total_hours = Decimal(total_minutes) / Decimal(60)
+
+    if pay_category == PayCategory.CASUAL:
+        amount = Decimal("120") * total_hours
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    basic_salary = _decimal_from_value((components or {}).get("basicSalary"))
+    if basic_salary <= 0:
+        return Decimal("0")
+
+    hourly_rate = (basic_salary / Decimal("200")) * Decimal("1.5")
+    amount = hourly_rate * total_hours
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _compute_monthly_overtime_amounts(
+    month: str, component_sources: dict[int, dict | None]
+) -> dict[int, str]:
+    if not component_sources:
+        return {}
+
+    member_ids = [member_id for member_id in component_sources.keys() if isinstance(member_id, int)]
+    if not member_ids:
+        return {}
+
+    attendance_records = (
+        TeamAttendanceRecord.query.filter(TeamAttendanceRecord.month == month)
+        .filter(TeamAttendanceRecord.team_member_id.in_(member_ids))
+        .all()
+    )
+    attendance_lookup = {
+        record.team_member_id: record.entries if isinstance(record.entries, dict) else {}
+        for record in attendance_records
+    }
+
+    members = TeamMember.query.filter(TeamMember.id.in_(member_ids)).all()
+    member_lookup = {member.id: member for member in members}
+
+    work_calendar_lookup = _build_work_calendar_lookup(month)
+
+    result: dict[int, str] = {}
+    for member_id in member_ids:
+        member = member_lookup.get(member_id)
+        components = component_sources.get(member_id) or {}
+        entries = attendance_lookup.get(member_id, {})
+        amount = _compute_overtime_amount_for_member(
+            member, components, entries, month, work_calendar_lookup
+        )
+        result[member_id] = _format_decimal_amount(amount)
+
+    return result
+
+
+def _apply_computed_overtime_component(
+    member: TeamMember | None, month: str, components: dict | None
+) -> tuple[dict[str, str], Decimal]:
+    normalized_components: dict[str, str] = {}
+    if isinstance(components, dict):
+        normalized_components = dict(components)
+
+    if not member or member.id is None or not month:
+        normalized_components["overtime"] = _format_decimal_amount(Decimal("0"))
+        return normalized_components, Decimal("0")
+
+    attendance_record = TeamAttendanceRecord.query.filter_by(
+        team_member_id=member.id, month=month
+    ).one_or_none()
+    if attendance_record and isinstance(attendance_record.entries, dict):
+        entries = attendance_record.entries
+    else:
+        entries = {}
+
+    work_calendar_lookup = _build_work_calendar_lookup(month)
+    amount = _compute_overtime_amount_for_member(
+        member, normalized_components, entries, month, work_calendar_lookup
+    )
+    normalized_components["overtime"] = _format_decimal_amount(amount)
+
+    return normalized_components, amount
 
 
 def _clean_string(value) -> str:
@@ -1092,12 +1465,53 @@ def list_salary_records():
         )
         seen_prefills.add(member_id)
 
-    return jsonify(
-        {
-            "month": month,
-            "records": serialized_records + prefilled_payloads,
-        }
-    )
+    component_sources: dict[int, dict | None] = {
+        record.team_member_id: record.components for record in records
+    }
+
+    for payload in prefilled_payloads:
+        member_id = payload.get("memberId")
+        if isinstance(member_id, int):
+            component_sources.setdefault(member_id, payload.get("components"))
+
+    overtime_amounts = _compute_monthly_overtime_amounts(month, component_sources)
+
+    if overtime_amounts:
+        for record_payload in serialized_records:
+            member_id = record_payload.get("memberId")
+            if not isinstance(member_id, int):
+                continue
+
+            overtime_value = overtime_amounts.get(member_id)
+            if overtime_value is None:
+                continue
+
+            components = record_payload.get("components")
+            if isinstance(components, dict):
+                updated = dict(components)
+            else:
+                updated = {}
+            updated["overtime"] = overtime_value
+            record_payload["components"] = updated
+
+        for payload in prefilled_payloads:
+            member_id = payload.get("memberId")
+            if not isinstance(member_id, int):
+                continue
+
+            overtime_value = overtime_amounts.get(member_id)
+            if overtime_value is None:
+                continue
+
+            components = payload.get("components")
+            if isinstance(components, dict):
+                updated = dict(components)
+            else:
+                updated = {}
+            updated["overtime"] = overtime_value
+            payload["components"] = updated
+
+    return jsonify({"month": month, "records": serialized_records + prefilled_payloads})
 
 
 @bp.put("/salary/<int:member_id>")
@@ -1120,6 +1534,16 @@ def upsert_salary_record(member_id: int):
         normalized_components = _normalize_salary_components(components_payload)
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
+
+    provided_keys = {key for key in normalized_components.keys() if key != "overtime"}
+    computed_components, computed_overtime = _apply_computed_overtime_component(
+        member, month, normalized_components
+    )
+
+    if provided_keys or computed_overtime > Decimal("0"):
+        normalized_components = computed_components
+    else:
+        normalized_components = {}
 
     record = TeamSalaryRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
 

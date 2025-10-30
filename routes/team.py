@@ -404,17 +404,21 @@ def _normalize_salary_components(components: dict | None) -> dict[str, str]:
 
     for raw_key, raw_value in components.items():
         key = _clean_string(raw_key)
-        if not key:
+        if not key or key == "grossSalary":
             continue
 
         value = _clean_string(raw_value)
-        if value:
-            if key in _NUMERIC_SALARY_COMPONENT_KEYS:
-                try:
-                    Decimal(value)
-                except (InvalidOperation, ValueError):
-                    label = _SALARY_COMPONENT_LABELS.get(key, key)
-                    raise ValueError(f"{label} must be a numeric value.")
+        if not value:
+            continue
+
+        if key in _NUMERIC_SALARY_COMPONENT_KEYS:
+            try:
+                numeric_value = Decimal(value.replace(",", ""))
+            except (InvalidOperation, ValueError):  # pragma: no cover - defensive
+                label = _SALARY_COMPONENT_LABELS.get(key, key)
+                raise ValueError(f"{label} must be a numeric value.")
+            normalized[key] = _format_decimal_amount(numeric_value)
+        else:
             normalized[key] = value
 
     return normalized
@@ -680,6 +684,56 @@ def _format_decimal_amount(value: Decimal | None) -> str:
 
     quantized = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return format(quantized, "f")
+
+
+def _normalize_numeric_component_map(components: dict | None) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+
+    if not isinstance(components, dict):
+        return normalized
+
+    for raw_key, raw_value in components.items():
+        if not isinstance(raw_key, str):
+            continue
+
+        if raw_key in _NUMERIC_SALARY_COMPONENT_KEYS:
+            normalized[raw_key] = _format_decimal_amount(_decimal_from_value(raw_value))
+        else:
+            normalized[raw_key] = raw_value
+
+    return normalized
+
+
+def _get_gross_component_keys(pay_category: PayCategory | None) -> tuple[str, ...]:
+    if isinstance(pay_category, PayCategory):
+        keys = _GROSS_COMPONENT_KEY_MAP.get(pay_category)
+        if keys:
+            return keys
+
+    return _GROSS_COMPONENT_KEY_MAP[PayCategory.OFFICE]
+
+
+def _compute_gross_salary_amount(
+    member: TeamMember | None, components: dict | None
+) -> Decimal:
+    pay_category = _resolve_pay_category(member)
+    component_keys = _get_gross_component_keys(pay_category)
+    values = components if isinstance(components, dict) else {}
+
+    total = Decimal("0.00")
+    for key in component_keys:
+        total += _decimal_from_value(values.get(key))
+
+    return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _apply_computed_gross_component(
+    member: TeamMember | None, components: dict | None
+) -> tuple[dict[str, object], Decimal]:
+    normalized = _normalize_numeric_component_map(components)
+    gross_amount = _compute_gross_salary_amount(member, normalized)
+    normalized["grossSalary"] = _format_decimal_amount(gross_amount)
+    return normalized, gross_amount
 
 
 def _resolve_pay_category(member: TeamMember | None) -> PayCategory | None:
@@ -1914,6 +1968,40 @@ _SALARY_COMPONENT_LABELS = {
 
 _NUMERIC_SALARY_COMPONENT_KEYS = frozenset(_SALARY_COMPONENT_LABELS.keys())
 
+_GROSS_COMPONENT_KEY_MAP = {
+    PayCategory.OFFICE: (
+        "basicSalary",
+        "generalAllowance",
+        "transportAllowance",
+        "attendanceAllowance",
+        "specialAllowance",
+        "performanceBonus",
+        "targetAllowance",
+        "overtime",
+    ),
+    PayCategory.FACTORY: (
+        "basicSalary",
+        "generalAllowance",
+        "transportAllowance",
+        "attendanceAllowance",
+        "specialAllowance",
+        "performanceBonus",
+        "production",
+        "targetAllowance",
+        "overtime",
+    ),
+    PayCategory.CASUAL: (
+        "production",
+        "generalAllowance",
+        "transportAllowance",
+        "attendanceAllowance",
+        "specialAllowance",
+        "performanceBonus",
+        "targetAllowance",
+        "overtime",
+    ),
+}
+
 _TARGET_ALLOWANCE_SPECIAL_REG_NO = "E005"
 _TARGET_ALLOWANCE_SLABS: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = (
     (Decimal("300"), Decimal("350"), Decimal("4000"), Decimal("6000")),
@@ -1974,8 +2062,6 @@ def list_salary_records():
         .all()
     )
 
-    serialized_records = salary_records_schema.dump(records)
-
     existing_member_ids = {record.team_member_id for record in records}
     prefilled_payloads: list[dict[str, object]] = []
 
@@ -2007,6 +2093,35 @@ def list_salary_records():
         )
         seen_prefills.add(member_id)
 
+    member_lookup: dict[int, TeamMember] = {}
+    if existing_member_ids:
+        members = TeamMember.query.filter(TeamMember.id.in_(existing_member_ids)).all()
+        member_lookup = {member.id: member for member in members}
+
+    records_changed = False
+    for record in records:
+        member = member_lookup.get(record.team_member_id, getattr(record, "team_member", None))
+        updated_components, _ = _apply_computed_gross_component(member, record.components)
+        original_components = record.components if isinstance(record.components, dict) else {}
+        if original_components != updated_components:
+            record.components = updated_components
+            records_changed = True
+
+    if records_changed:
+        try:
+            db.session.commit()
+        except (DataError, IntegrityError, ProgrammingError, OperationalError) as exc:
+            db.session.rollback()
+            current_app.logger.warning(
+                "Failed to persist gross salary updates: %s", exc
+            )
+            records = (
+                TeamSalaryRecord.query.filter_by(month=month)
+                .order_by(TeamSalaryRecord.team_member_id.asc())
+                .all()
+            )
+            existing_member_ids = {record.team_member_id for record in records}
+
     component_sources: dict[int, dict | None] = {
         record.team_member_id: record.components for record in records
     }
@@ -2015,6 +2130,20 @@ def list_salary_records():
         member_id = payload.get("memberId")
         if isinstance(member_id, int):
             component_sources.setdefault(member_id, payload.get("components"))
+
+    all_member_ids = set(existing_member_ids)
+    for payload in prefilled_payloads:
+        member_id = payload.get("memberId")
+        if isinstance(member_id, int):
+            all_member_ids.add(member_id)
+
+    if all_member_ids:
+        members = TeamMember.query.filter(TeamMember.id.in_(all_member_ids)).all()
+        response_member_lookup = {member.id: member for member in members}
+    else:
+        response_member_lookup = {}
+
+    serialized_records = salary_records_schema.dump(records)
 
     overtime_amounts = _compute_monthly_overtime_amounts(month, component_sources)
 
@@ -2053,6 +2182,22 @@ def list_salary_records():
             updated["overtime"] = overtime_value
             payload["components"] = updated
 
+    def _update_payload_gross(
+        payloads: list[dict[str, object]], member_lookup: dict[int, TeamMember]
+    ) -> None:
+        for payload in payloads:
+            member_id = payload.get("memberId")
+            if not isinstance(member_id, int):
+                continue
+
+            member = member_lookup.get(member_id)
+            components = payload.get("components")
+            updated_components, _ = _apply_computed_gross_component(member, components)
+            payload["components"] = updated_components
+
+    _update_payload_gross(serialized_records, response_member_lookup)
+    _update_payload_gross(prefilled_payloads, response_member_lookup)
+
     target_allowances = _compute_target_allowance_amounts(month)
     allowance_payload = {
         str(member_id): _format_decimal_amount(amount)
@@ -2089,7 +2234,9 @@ def upsert_salary_record(member_id: int):
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
 
-    provided_keys = {key for key in normalized_components.keys() if key != "overtime"}
+    provided_keys = {
+        key for key in normalized_components.keys() if key not in {"overtime", "grossSalary"}
+    }
     computed_components, computed_overtime = _apply_computed_overtime_component(
         member, month, normalized_components
     )
@@ -2098,6 +2245,11 @@ def upsert_salary_record(member_id: int):
         normalized_components = computed_components
     else:
         normalized_components = {}
+
+    if normalized_components:
+        normalized_components, _ = _apply_computed_gross_component(
+            member, normalized_components
+        )
 
     record = TeamSalaryRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
 

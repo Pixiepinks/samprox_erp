@@ -927,8 +927,17 @@ body {
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
     align-items: flex-end;
     text-align: right;
-    justify-self: end;
+    justify-self: stretch;
     min-width: 220px;
+}
+
+
+.attendance-summary__cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 1rem;
+    grid-column: span 2;
+    align-items: stretch;
 }
 
 .attendance-summary__totals-label {
@@ -981,6 +990,69 @@ body {
 
     .attendance-summary__totals-main {
         font-size: 1.9rem;
+    }
+}
+
+.attendance-summary__leave {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    min-width: 240px;
+}
+
+.attendance-summary__leave-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.attendance-summary__leave-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1.2rem;
+    margin: 0;
+}
+
+.attendance-summary__leave-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.attendance-summary__leave-term {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+
+.attendance-summary__leave-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+    .attendance-summary__cards {
+        grid-template-columns: 1fr;
+        grid-column: span 1;
+    }
+
+    .attendance-summary__leave {
+        min-width: 0;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+    }
+
+    .attendance-summary__leave-list {
+        grid-template-columns: 1fr;
     }
 }
 

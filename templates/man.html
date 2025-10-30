@@ -2990,6 +2990,51 @@
             return normalized.toFixed(2);
         };
 
+        const memberHasEpfNumber = (member) => {
+            if (!member || typeof member !== "object") {
+                return false;
+            }
+
+            const value = member.epf;
+            if (typeof value === "string") {
+                return value.trim().length > 0;
+            }
+
+            return value != null;
+        };
+
+        const parseNumericAmount = (value) => {
+            if (typeof value === "number") {
+                return Number.isFinite(value) ? value : null;
+            }
+
+            if (typeof value === "string") {
+                const normalized = value.replace(/,/g, "").trim();
+                if (!normalized) {
+                    return null;
+                }
+
+                const parsed = Number.parseFloat(normalized);
+                return Number.isFinite(parsed) ? parsed : null;
+            }
+
+            return null;
+        };
+
+        const computeProvidentFundAmount = (member, basicSalaryValue) => {
+            if (!memberHasEpfNumber(member)) {
+                return null;
+            }
+
+            const numericBasic = parseNumericAmount(basicSalaryValue);
+            if (!Number.isFinite(numericBasic)) {
+                return null;
+            }
+
+            const amount = numericBasic * 0.08;
+            return Math.round((amount + Number.EPSILON) * 100) / 100;
+        };
+
         const computeMemberKey = (member, fallbackIndex = null) => {
             if (!member || typeof member !== "object") {
                 return fallbackIndex != null ? `idx:${fallbackIndex}` : null;
@@ -3951,6 +3996,36 @@
                 });
                 row.appendChild(createCell("Name", nameButton));
 
+                const computedProvidentFundAmount = computeProvidentFundAmount(
+                    member,
+                    displayRecord &&
+                        typeof displayRecord === "object" &&
+                        displayRecord.basicSalary != null
+                        ? displayRecord.basicSalary
+                        : record?.basicSalary,
+                );
+
+                if (computedProvidentFundAmount != null) {
+                    const formattedProvidentFund = formatNumberForInput(
+                        computedProvidentFundAmount,
+                    );
+
+                    if (displayRecord && typeof displayRecord === "object") {
+                        displayRecord = {
+                            ...displayRecord,
+                            providentFund: formattedProvidentFund,
+                        };
+                    } else {
+                        displayRecord = { providentFund: formattedProvidentFund };
+                    }
+                } else if (
+                    displayRecord &&
+                    typeof displayRecord === "object" &&
+                    displayRecord.providentFund != null
+                ) {
+                    displayRecord = { ...displayRecord, providentFund: null };
+                }
+
                 salaryFieldDefinitions.forEach(({ label, name }) => {
                     row.appendChild(
                         createCell(label, formatSalaryValue(displayRecord?.[name])),
@@ -4069,6 +4144,23 @@
                         } else {
                             value = "";
                         }
+                    } else if (name === "providentFund") {
+                        input.readOnly = true;
+                        input.setAttribute("aria-readonly", "true");
+
+                        const computedAmount = computeProvidentFundAmount(
+                            contextMember,
+                            record?.basicSalary ??
+                                salaryForm.elements?.basicSalary?.value ??
+                                value,
+                        );
+
+                        if (computedAmount == null) {
+                            input.value = "";
+                            return;
+                        }
+
+                        value = formatNumberForInput(computedAmount);
                     }
 
                     input.value = value ?? "";
@@ -4076,6 +4168,7 @@
             });
 
             refreshSalaryFormOvertime();
+            refreshSalaryFormProvidentFund({ basicSalary: record?.basicSalary });
         };
 
         const refreshSalaryFormOvertime = () => {
@@ -4113,11 +4206,47 @@
                 : "";
         };
 
+        const refreshSalaryFormProvidentFund = (overrides = {}) => {
+            if (!salaryForm) {
+                return;
+            }
+
+            const providentFundInput = salaryForm.elements?.providentFund;
+            if (!providentFundInput) {
+                return;
+            }
+
+            providentFundInput.readOnly = true;
+            providentFundInput.setAttribute("aria-readonly", "true");
+
+            const member = salaryModalContext?.member ?? null;
+            const basicOverride = overrides?.basicSalary;
+            const basicValue =
+                basicOverride != null
+                    ? basicOverride
+                    : salaryForm.elements?.basicSalary?.value;
+
+            const amount = computeProvidentFundAmount(member, basicValue);
+
+            if (amount == null) {
+                providentFundInput.value = "";
+                return;
+            }
+
+            providentFundInput.value = formatNumberForInput(amount);
+        };
+
         if (salaryForm?.elements?.basicSalary) {
             salaryForm.elements.basicSalary.addEventListener(
                 "input",
-                () => {
+                (event) => {
                     refreshSalaryFormOvertime();
+                    refreshSalaryFormProvidentFund({
+                        basicSalary:
+                            typeof event?.target?.value === "string"
+                                ? event.target.value
+                                : undefined,
+                    });
                 },
             );
         }

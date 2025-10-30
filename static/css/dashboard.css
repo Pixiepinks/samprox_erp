@@ -990,11 +990,16 @@ body {
 }
 
 .attendance-table {
-    min-width: 600px;
+    min-width: 720px;
 }
 
 .attendance-table__time-input {
     width: 100%;
+}
+
+.attendance-table__status-select {
+    width: 100%;
+    min-width: 0;
 }
 
 .attendance-table__hours-cell {

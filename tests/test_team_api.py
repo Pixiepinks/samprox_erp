@@ -196,6 +196,101 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(stored["status"], "On Leave")
 
+    def test_get_attendance_summary_defaults_to_entitlements(self):
+        member = self._create_member()
+
+        response = self.client.get(
+            f"/api/team/attendance/{member['id']}/summary",
+            query_string={"month": "2025-01"},
+            headers=self._auth_headers(self.admin_token),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["memberId"], member["id"])
+        summary = data["leaveSummary"]
+        self.assertEqual(summary["workDays"], 0)
+        self.assertEqual(summary["noPayDays"], 0)
+        self.assertEqual(summary["annual"]["broughtForward"], 14)
+        self.assertEqual(summary["annual"]["thisMonth"], 0)
+        self.assertEqual(summary["annual"]["balance"], 14)
+        self.assertEqual(summary["medical"]["broughtForward"], 7)
+        self.assertEqual(summary["medical"]["thisMonth"], 0)
+        self.assertEqual(summary["medical"]["balance"], 7)
+
+    def test_seeded_leave_balance_used_for_october(self):
+        member = self._create_member({"regNumber": "E008"})
+
+        response = self.client.get(
+            f"/api/team/attendance/{member['id']}/summary",
+            query_string={"month": "2025-10"},
+            headers=self._auth_headers(self.admin_token),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        summary = response.get_json()["leaveSummary"]
+        self.assertEqual(summary["annual"]["broughtForward"], 12)
+        self.assertEqual(summary["medical"]["broughtForward"], 7)
+
+    def test_upsert_attendance_record_updates_leave_balances(self):
+        member = self._create_member()
+        TeamLeaveBalance = self.app_module.TeamLeaveBalance
+
+        seed_balance = TeamLeaveBalance(
+            team_member_id=member["id"],
+            month="2025-09",
+            work_days=0,
+            no_pay_days=0,
+            annual_brought_forward=12,
+            annual_taken=0,
+            annual_balance=12,
+            medical_brought_forward=7,
+            medical_taken=0,
+            medical_balance=7,
+        )
+        self.app_module.db.session.add(seed_balance)
+        self.app_module.db.session.commit()
+
+        payload = {
+            "month": "2025-10",
+            "entries": {
+                "2025-10-01": {"onTime": "07:00", "offTime": "17:00"},
+                "2025-10-02": {"dayStatus": "Annual Leave"},
+                "2025-10-03": {"dayStatus": "Medical Leave"},
+                "2025-10-04": {"dayStatus": "No Pay Leave"},
+            },
+        }
+
+        response = self.client.put(
+            f"/api/team/attendance/{member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        summary = data["leaveSummary"]
+        self.assertEqual(summary["workDays"], 1)
+        self.assertEqual(summary["noPayDays"], 1)
+        self.assertEqual(summary["annual"]["broughtForward"], 12)
+        self.assertEqual(summary["annual"]["thisMonth"], 1)
+        self.assertEqual(summary["annual"]["balance"], 11)
+        self.assertEqual(summary["medical"]["broughtForward"], 7)
+        self.assertEqual(summary["medical"]["thisMonth"], 1)
+        self.assertEqual(summary["medical"]["balance"], 6)
+
+        stored_balance = TeamLeaveBalance.query.filter_by(
+            team_member_id=member["id"], month="2025-10"
+        ).one()
+        self.assertEqual(stored_balance.work_days, 1)
+        self.assertEqual(stored_balance.no_pay_days, 1)
+        self.assertEqual(stored_balance.annual_brought_forward, 12)
+        self.assertEqual(stored_balance.annual_taken, 1)
+        self.assertEqual(stored_balance.annual_balance, 11)
+        self.assertEqual(stored_balance.medical_brought_forward, 7)
+        self.assertEqual(stored_balance.medical_taken, 1)
+        self.assertEqual(stored_balance.medical_balance, 6)
+
     def test_non_privileged_roles_cannot_register_member(self):
         payload = {
             "regNumber": "TM-002",

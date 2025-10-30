@@ -215,6 +215,20 @@ class TeamMemberBankDetailSchema(Schema):
 class AttendanceEntrySchema(Schema):
     onTime = fields.Str(allow_none=True)
     offTime = fields.Str(allow_none=True)
+    dayStatus = fields.Str(allow_none=True)
+
+
+class LeaveSummaryBucketSchema(Schema):
+    brought_forward = fields.Int(data_key="broughtForward")
+    this_month = fields.Int(data_key="thisMonth")
+    balance = fields.Int()
+
+
+class LeaveSummarySchema(Schema):
+    work_days = fields.Int(data_key="workDays")
+    no_pay_days = fields.Int(data_key="noPayDays")
+    annual = fields.Nested(LeaveSummaryBucketSchema)
+    medical = fields.Nested(LeaveSummaryBucketSchema)
 
 
 class AttendanceRecordSchema(Schema):
@@ -225,6 +239,7 @@ class AttendanceRecordSchema(Schema):
         values=fields.Nested(AttendanceEntrySchema),
         allow_none=True,
     )
+    leave_summary = fields.Nested(LeaveSummarySchema, data_key="leaveSummary", allow_none=True)
     updated_at = fields.DateTime(data_key="updatedAt")
 
 

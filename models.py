@@ -459,6 +459,39 @@ class TeamAttendanceRecord(db.Model):
     )
 
 
+class TeamLeaveBalance(db.Model):
+    """Store monthly leave utilisation and balances for a team member."""
+
+    __tablename__ = "team_leave_balance"
+    __table_args__ = (
+        UniqueConstraint("team_member_id", "month", name="uq_team_leave_balance_member_month"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_member_id = db.Column(db.Integer, db.ForeignKey("team_member.id"), nullable=False, index=True)
+    month = db.Column(db.String(7), nullable=False)  # YYYY-MM
+    work_days = db.Column(db.Integer, nullable=False, default=0)
+    no_pay_days = db.Column(db.Integer, nullable=False, default=0)
+    annual_brought_forward = db.Column(db.Integer, nullable=False, default=0)
+    annual_taken = db.Column(db.Integer, nullable=False, default=0)
+    annual_balance = db.Column(db.Integer, nullable=False, default=0)
+    medical_brought_forward = db.Column(db.Integer, nullable=False, default=0)
+    medical_taken = db.Column(db.Integer, nullable=False, default=0)
+    medical_balance = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    team_member = db.relationship(
+        "TeamMember",
+        backref=db.backref("leave_balances", cascade="all,delete-orphan"),
+    )
+
+
 class TeamSalaryRecord(db.Model):
     """Store monthly salary breakdowns for a team member."""
 

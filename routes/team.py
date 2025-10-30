@@ -14,6 +14,7 @@ from models import (
     PayCategory,
     RoleEnum,
     TeamAttendanceRecord,
+    TeamLeaveBalance,
     TeamMember,
     TeamMemberStatus,
     TeamSalaryRecord,
@@ -22,6 +23,7 @@ from models import (
 from routes.jobs import require_role
 from schemas import (
     AttendanceRecordSchema,
+    LeaveSummarySchema,
     SalaryRecordSchema,
     TeamMemberBankDetailSchema,
     TeamMemberSchema,
@@ -34,6 +36,7 @@ member_schema = TeamMemberSchema()
 members_schema = TeamMemberSchema(many=True)
 attendance_record_schema = AttendanceRecordSchema()
 attendance_records_schema = AttendanceRecordSchema(many=True)
+leave_summary_schema = LeaveSummarySchema()
 salary_record_schema = SalaryRecordSchema()
 salary_records_schema = SalaryRecordSchema(many=True)
 work_calendar_day_schema = WorkCalendarDaySchema()
@@ -206,6 +209,30 @@ def _ensure_schema():
 _MONTH_PATTERN = re.compile(r"^(\d{4})-(\d{2})$")
 _DATE_PATTERN = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
+_ATTENDANCE_DAY_STATUS_VALUES = frozenset(
+    [
+        "Work Day",
+        "Not Work Day",
+        "Annual Leave",
+        "Medical Leave",
+        "Special Company Holiday",
+        "No Pay Leave",
+    ]
+)
+_LEAVE_ELIGIBLE_PAY_CATEGORIES = frozenset({PayCategory.OFFICE, PayCategory.FACTORY})
+_ANNUAL_LEAVE_ENTITLEMENT = 14
+_MEDICAL_LEAVE_ENTITLEMENT = 7
+_LEAVE_BALANCE_SEED_MONTH = "2025-09"
+_LEAVE_BALANCE_SEEDS = (
+    ("E008", 12, 7),
+    ("E005", 14, 7),
+    ("E007", 12, 7),
+    ("E006", 10, 7),
+    ("E011", 14, 7),
+    ("E009", 8, 7),
+    ("E010", 0, 7),
+)
+
 
 def _ensure_tracking_tables():
     """Ensure the attendance & salary tables exist."""
@@ -215,8 +242,59 @@ def _ensure_tracking_tables():
     except RuntimeError:
         return
 
-    for model in (TeamAttendanceRecord, TeamSalaryRecord):
+    for model in (TeamAttendanceRecord, TeamSalaryRecord, TeamLeaveBalance):
         model.__table__.create(bind=engine, checkfirst=True)
+
+    _seed_initial_leave_balances()
+
+
+def _seed_initial_leave_balances():
+    """Populate opening leave balances once for known members."""
+
+    if not _LEAVE_BALANCE_SEEDS or not _LEAVE_BALANCE_SEED_MONTH:
+        return
+
+    try:
+        session = db.session
+    except RuntimeError:  # pragma: no cover - defensive
+        return
+
+    inserted = False
+
+    for reg_number, annual_balance, medical_balance in _LEAVE_BALANCE_SEEDS:
+        member = TeamMember.query.filter_by(reg_number=reg_number).one_or_none()
+        if member is None or member.id is None:
+            continue
+
+        existing = TeamLeaveBalance.query.filter_by(
+            team_member_id=member.id,
+            month=_LEAVE_BALANCE_SEED_MONTH,
+        ).one_or_none()
+
+        if existing is not None:
+            continue
+
+        record = TeamLeaveBalance(
+            team_member=member,
+            month=_LEAVE_BALANCE_SEED_MONTH,
+            work_days=0,
+            no_pay_days=0,
+            annual_brought_forward=int(annual_balance),
+            annual_taken=0,
+            annual_balance=int(annual_balance),
+            medical_brought_forward=int(medical_balance),
+            medical_taken=0,
+            medical_balance=int(medical_balance),
+        )
+        session.add(record)
+        inserted = True
+
+    if inserted:
+        try:
+            session.commit()
+        except Exception as exc:  # pragma: no cover - defensive safety net
+            session.rollback()
+            current_app.logger.warning("Failed to seed initial leave balances: %s", exc)
 
 
 def _ensure_work_calendar_table():
@@ -251,6 +329,15 @@ def _normalize_month(value: str | None) -> str | None:
     return f"{year}-{month_number:02d}"
 
 
+def _normalize_day_status(value: str | None) -> str | None:
+    text_value = _clean_string(value)
+    if not text_value:
+        return None
+    if text_value not in _ATTENDANCE_DAY_STATUS_VALUES:
+        return None
+    return text_value
+
+
 def _normalize_attendance_entries(entries: dict | None, *, month: str) -> dict[str, dict[str, str]]:
     if not isinstance(entries, dict):
         return {}
@@ -276,6 +363,10 @@ def _normalize_attendance_entries(entries: dict | None, *, month: str) -> dict[s
             entry_payload["onTime"] = on_time
         if off_time:
             entry_payload["offTime"] = off_time
+
+        day_status = _normalize_day_status(raw_entry.get("dayStatus"))
+        if day_status:
+            entry_payload["dayStatus"] = day_status
 
         if entry_payload:
             normalized[date_key] = entry_payload
@@ -582,6 +673,170 @@ def _resolve_pay_category(member: TeamMember | None) -> PayCategory | None:
         except ValueError:
             return None
     return None
+
+
+def _resolve_leave_entitlements(member: TeamMember | None) -> tuple[int, int]:
+    pay_category = _resolve_pay_category(member)
+    if pay_category not in _LEAVE_ELIGIBLE_PAY_CATEGORIES:
+        return 0, 0
+    return _ANNUAL_LEAVE_ENTITLEMENT, _MEDICAL_LEAVE_ENTITLEMENT
+
+
+def _previous_month(month: str) -> str | None:
+    if not month or len(month) != 7 or month[4] != "-":
+        return None
+    try:
+        year = int(month[:4])
+        month_number = int(month[5:])
+    except ValueError:
+        return None
+
+    if month_number < 1 or month_number > 12:
+        return None
+
+    if month_number == 1:
+        if year <= 1:
+            return None
+        return f"{year - 1}-12"
+
+    return f"{year}-{month_number - 1:02d}"
+
+
+def _calculate_leave_counts(entries: dict | None, month: str) -> dict[str, int]:
+    counts = {
+        "work_days": 0,
+        "no_pay_days": 0,
+        "annual_leave": 0,
+        "medical_leave": 0,
+    }
+
+    if not isinstance(entries, dict) or not month:
+        return counts
+
+    for iso, entry in entries.items():
+        if not isinstance(iso, str) or not iso.startswith(month):
+            continue
+
+        if not isinstance(entry, dict):
+            continue
+
+        on_value = entry.get("onTime")
+        off_value = entry.get("offTime")
+        pay_minutes = _compute_pay_minutes(on_value, off_value)
+        if isinstance(pay_minutes, int) and pay_minutes > 0:
+            counts["work_days"] += 1
+
+        day_status = _normalize_day_status(entry.get("dayStatus"))
+        if not day_status:
+            continue
+
+        if day_status == "No Pay Leave":
+            counts["no_pay_days"] += 1
+        elif day_status == "Annual Leave":
+            counts["annual_leave"] += 1
+        elif day_status == "Medical Leave":
+            counts["medical_leave"] += 1
+
+    return counts
+
+
+def _build_leave_summary(
+    member: TeamMember | None, month: str, entries: dict | None
+) -> dict[str, dict | int]:
+    counts = _calculate_leave_counts(entries, month)
+    annual_entitlement, medical_entitlement = _resolve_leave_entitlements(member)
+
+    annual_brought_forward = annual_entitlement
+    medical_brought_forward = medical_entitlement
+
+    if month and not month.endswith("-01"):
+        previous_month = _previous_month(month)
+        member_id = getattr(member, "id", None)
+        if member_id is not None and previous_month:
+            previous_record = TeamLeaveBalance.query.filter_by(
+                team_member_id=member_id, month=previous_month
+            ).one_or_none()
+            if previous_record is not None:
+                annual_brought_forward = int(previous_record.annual_balance or 0)
+                medical_brought_forward = int(previous_record.medical_balance or 0)
+
+    annual_balance = annual_brought_forward - counts["annual_leave"]
+    medical_balance = medical_brought_forward - counts["medical_leave"]
+
+    return {
+        "workDays": int(counts["work_days"]),
+        "noPayDays": int(counts["no_pay_days"]),
+        "annual": {
+            "broughtForward": int(annual_brought_forward),
+            "thisMonth": int(counts["annual_leave"]),
+            "balance": int(annual_balance),
+        },
+        "medical": {
+            "broughtForward": int(medical_brought_forward),
+            "thisMonth": int(counts["medical_leave"]),
+            "balance": int(medical_balance),
+        },
+    }
+
+
+def _summarize_leave_balance_record(record: TeamLeaveBalance | None) -> dict | None:
+    if record is None:
+        return None
+
+    return {
+        "workDays": int(record.work_days or 0),
+        "noPayDays": int(record.no_pay_days or 0),
+        "annual": {
+            "broughtForward": int(record.annual_brought_forward or 0),
+            "thisMonth": int(record.annual_taken or 0),
+            "balance": int(record.annual_balance or 0),
+        },
+        "medical": {
+            "broughtForward": int(record.medical_brought_forward or 0),
+            "thisMonth": int(record.medical_taken or 0),
+            "balance": int(record.medical_balance or 0),
+        },
+    }
+
+
+def _update_leave_balance(
+    member: TeamMember, month: str, entries: dict | None
+) -> tuple[dict[str, dict | int], TeamLeaveBalance | None, bool]:
+    summary = _build_leave_summary(member, month, entries)
+
+    member_id = getattr(member, "id", None)
+    if member_id is None or not month:
+        return summary, None, False
+
+    record = TeamLeaveBalance.query.filter_by(team_member_id=member_id, month=month).one_or_none()
+    created = False
+    if record is None:
+        record = TeamLeaveBalance(team_member=member, month=month)
+        created = True
+
+    changed = created
+
+    def _assign(attr: str, value: int) -> None:
+        nonlocal changed
+        current = getattr(record, attr)
+        if current != value:
+            setattr(record, attr, value)
+            changed = True
+
+    _assign("work_days", int(summary["workDays"]))
+    _assign("no_pay_days", int(summary["noPayDays"]))
+    _assign("annual_brought_forward", int(summary["annual"]["broughtForward"]))
+    _assign("annual_taken", int(summary["annual"]["thisMonth"]))
+    _assign("annual_balance", int(summary["annual"]["balance"]))
+    _assign("medical_brought_forward", int(summary["medical"]["broughtForward"]))
+    _assign("medical_taken", int(summary["medical"]["thisMonth"]))
+    _assign("medical_balance", int(summary["medical"]["balance"]))
+
+    if changed:
+        record.updated_at = datetime.utcnow()
+        db.session.add(record)
+
+    return summary, record, changed
 
 
 def _compute_overtime_amount_for_member(
@@ -1317,7 +1572,73 @@ def list_attendance_records():
         .all()
     )
 
+    member_ids = [
+        record.team_member_id for record in records if isinstance(record.team_member_id, int)
+    ]
+    leave_lookup: dict[int, TeamLeaveBalance] = {}
+    if member_ids:
+        leave_records = (
+            TeamLeaveBalance.query.filter(TeamLeaveBalance.month == month)
+            .filter(TeamLeaveBalance.team_member_id.in_(member_ids))
+            .all()
+        )
+        leave_lookup = {leave.team_member_id: leave for leave in leave_records}
+
+    for record in records:
+        summary = _summarize_leave_balance_record(
+            leave_lookup.get(record.team_member_id)
+        )
+        if summary is None:
+            entries = record.entries if isinstance(record.entries, dict) else {}
+            member = getattr(record, "team_member", None)
+            summary = _build_leave_summary(member, month, entries)
+        record.leave_summary = summary
+
     return jsonify({"month": month, "records": attendance_records_schema.dump(records)})
+
+
+@bp.get("/attendance/<int:member_id>/summary")
+@jwt_required()
+def get_attendance_summary(member_id: int):
+    month = _normalize_month(request.args.get("month"))
+    if not month:
+        return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
+
+    _ensure_schema()
+    _ensure_tracking_tables()
+
+    member = TeamMember.query.get_or_404(member_id)
+    attendance_record = TeamAttendanceRecord.query.filter_by(
+        team_member_id=member.id, month=month
+    ).one_or_none()
+    record_entries = getattr(attendance_record, "entries", None)
+    entries = record_entries if isinstance(record_entries, dict) else {}
+
+    summary, balance_record, changed = _update_leave_balance(member, month, entries)
+
+    if changed:
+        try:
+            db.session.commit()
+        except Exception as exc:  # pragma: no cover - defensive safety net
+            db.session.rollback()
+            current_app.logger.warning(
+                "Failed to refresh leave balance while loading summary: %s", exc
+            )
+            balance_record = TeamLeaveBalance.query.filter_by(
+                team_member_id=member.id, month=month
+            ).one_or_none()
+        else:
+            balance_record = balance_record or TeamLeaveBalance.query.filter_by(
+                team_member_id=member.id, month=month
+            ).one_or_none()
+
+    if balance_record is not None:
+        summary = _summarize_leave_balance_record(balance_record) or summary
+
+    if summary is None:
+        summary = _build_leave_summary(member, month, entries)
+
+    return jsonify({"memberId": member.id, "month": month, "leaveSummary": summary})
 
 
 @bp.put("/attendance/<int:member_id>")
@@ -1340,28 +1661,57 @@ def upsert_attendance_record(member_id: int):
 
     record = TeamAttendanceRecord.query.filter_by(team_member_id=member.id, month=month).one_or_none()
 
+    summary: dict | None = None
+    balance_record: TeamLeaveBalance | None = None
+    leave_changed = False
+    commit_required = False
+
     if normalized_entries:
         if record is None:
             record = TeamAttendanceRecord(team_member=member, month=month, entries=normalized_entries)
             db.session.add(record)
         else:
             record.entries = normalized_entries
+        commit_required = True
+        summary, balance_record, leave_changed = _update_leave_balance(
+            member, month, normalized_entries
+        )
+    else:
+        summary, balance_record, leave_changed = _update_leave_balance(member, month, {})
+        if record is not None:
+            db.session.delete(record)
+            commit_required = True
 
-        try:
+    if leave_changed:
+        commit_required = True
+
+    try:
+        if commit_required:
             db.session.commit()
-        except (DataError, IntegrityError, ProgrammingError, OperationalError) as exc:
-            db.session.rollback()
-            current_app.logger.warning("Failed to save attendance record: %s", exc)
-            return jsonify({"msg": "Unable to save attendance for the selected month."}), 400
+    except (DataError, IntegrityError, ProgrammingError, OperationalError) as exc:
+        db.session.rollback()
+        current_app.logger.warning("Failed to save attendance record: %s", exc)
+        return jsonify({"msg": "Unable to save attendance for the selected month."}), 400
 
-        return jsonify(attendance_record_schema.dump(record))
+    if balance_record is not None:
+        summary = _summarize_leave_balance_record(balance_record) or summary
+    if summary is None:
+        summary = _build_leave_summary(
+            member,
+            month,
+            normalized_entries if normalized_entries else {},
+        )
 
-    if record is None:
-        return jsonify({"status": "deleted", "memberId": member.id, "month": month})
+    if normalized_entries:
+        payload = attendance_record_schema.dump(record)
+        if summary:
+            payload["leaveSummary"] = summary
+        return jsonify(payload)
 
-    db.session.delete(record)
-    db.session.commit()
-    return jsonify({"status": "deleted", "memberId": member.id, "month": month})
+    response = {"status": "deleted", "memberId": member.id, "month": month}
+    if summary:
+        response["leaveSummary"] = summary
+    return jsonify(response)
 
 
 _SALARY_COMPONENT_LABELS = {

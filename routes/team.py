@@ -983,6 +983,86 @@ def _compute_monthly_overtime_amounts(
     return result
 
 
+def _compute_no_pay_amounts(
+    month: str,
+    component_sources: dict[int, dict | None],
+    member_lookup: dict[int, TeamMember] | None,
+) -> dict[int, str]:
+    if not month or not component_sources:
+        return {}
+
+    member_ids = [
+        member_id for member_id in component_sources.keys() if isinstance(member_id, int)
+    ]
+    if not member_ids:
+        return {}
+
+    leave_records = (
+        TeamLeaveBalance.query.filter(TeamLeaveBalance.month == month)
+        .filter(TeamLeaveBalance.team_member_id.in_(member_ids))
+        .all()
+    )
+    no_pay_days_lookup: dict[int, int] = {
+        record.team_member_id: int(record.no_pay_days or 0)
+        for record in leave_records
+    }
+
+    missing_ids = [
+        member_id for member_id in member_ids if member_id not in no_pay_days_lookup
+    ]
+    if missing_ids:
+        attendance_records = (
+            TeamAttendanceRecord.query.filter(TeamAttendanceRecord.month == month)
+            .filter(TeamAttendanceRecord.team_member_id.in_(missing_ids))
+            .all()
+        )
+        for attendance_record in attendance_records:
+            if isinstance(attendance_record.entries, dict):
+                entries = attendance_record.entries
+            else:
+                entries = {}
+            counts = _calculate_leave_counts(entries, month)
+            no_pay_days_lookup[attendance_record.team_member_id] = int(
+                counts["no_pay_days"]
+            )
+        for member_id in missing_ids:
+            no_pay_days_lookup.setdefault(member_id, 0)
+
+    resolved_member_lookup = dict(member_lookup or {})
+
+    results: dict[int, str] = {}
+    for member_id in member_ids:
+        member = resolved_member_lookup.get(member_id)
+        if member is None:
+            member = TeamMember.query.get(member_id)
+            if member is not None:
+                resolved_member_lookup[member_id] = member
+
+        pay_category = _resolve_pay_category(member)
+        if pay_category != PayCategory.FACTORY:
+            results[member_id] = _format_decimal_amount(Decimal("0"))
+            continue
+
+        components = component_sources.get(member_id) or {}
+        if not isinstance(components, dict):
+            components = {}
+
+        basic_salary = _decimal_from_value(components.get("basicSalary"))
+        if basic_salary <= 0:
+            results[member_id] = _format_decimal_amount(Decimal("0"))
+            continue
+
+        no_pay_days = Decimal(no_pay_days_lookup.get(member_id, 0))
+        if no_pay_days <= 0:
+            results[member_id] = _format_decimal_amount(Decimal("0"))
+            continue
+
+        amount = (basic_salary / Decimal("240")) * Decimal("8") * no_pay_days
+        results[member_id] = _format_decimal_amount(amount)
+
+    return results
+
+
 def _apply_computed_overtime_component(
     member: TeamMember | None, month: str, components: dict | None
 ) -> tuple[dict[str, str], Decimal]:
@@ -2145,33 +2225,22 @@ def list_salary_records():
 
     serialized_records = salary_records_schema.dump(records)
 
-    overtime_amounts = _compute_monthly_overtime_amounts(month, component_sources)
+    def _apply_component_to_payloads(
+        payloads: list[dict[str, object]], component_key: str, values: dict[int, str]
+    ) -> None:
+        if not values:
+            return
 
-    if overtime_amounts:
-        for record_payload in serialized_records:
-            member_id = record_payload.get("memberId")
-            if not isinstance(member_id, int):
+        for payload in payloads:
+            if not isinstance(payload, dict):
                 continue
 
-            overtime_value = overtime_amounts.get(member_id)
-            if overtime_value is None:
-                continue
-
-            components = record_payload.get("components")
-            if isinstance(components, dict):
-                updated = dict(components)
-            else:
-                updated = {}
-            updated["overtime"] = overtime_value
-            record_payload["components"] = updated
-
-        for payload in prefilled_payloads:
             member_id = payload.get("memberId")
             if not isinstance(member_id, int):
                 continue
 
-            overtime_value = overtime_amounts.get(member_id)
-            if overtime_value is None:
+            value = values.get(member_id)
+            if value is None:
                 continue
 
             components = payload.get("components")
@@ -2179,8 +2248,21 @@ def list_salary_records():
                 updated = dict(components)
             else:
                 updated = {}
-            updated["overtime"] = overtime_value
+
+            updated[component_key] = value
             payload["components"] = updated
+
+    overtime_amounts = _compute_monthly_overtime_amounts(month, component_sources)
+    _apply_component_to_payloads(serialized_records, "overtime", overtime_amounts)
+    _apply_component_to_payloads(prefilled_payloads, "overtime", overtime_amounts)
+
+    no_pay_amounts = _compute_no_pay_amounts(
+        month,
+        component_sources,
+        response_member_lookup,
+    )
+    _apply_component_to_payloads(serialized_records, "noPay", no_pay_amounts)
+    _apply_component_to_payloads(prefilled_payloads, "noPay", no_pay_amounts)
 
     def _update_payload_gross(
         payloads: list[dict[str, object]], member_lookup: dict[int, TeamMember]

@@ -291,6 +291,93 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(stored_balance.medical_taken, 1)
         self.assertEqual(stored_balance.medical_balance, 6)
 
+    def test_salary_list_includes_computed_no_pay_for_factory_members(self):
+        factory_member = self._create_member(
+            {"payCategory": "Factory", "regNumber": "FACT-001"}
+        )
+        office_member = self._create_member(
+            {"payCategory": "Office", "regNumber": "OFF-001"}
+        )
+
+        month = "2025-10"
+
+        factory_attendance_payload = {
+            "month": month,
+            "entries": {
+                "2025-10-02": {"dayStatus": "No Pay Leave"},
+                "2025-10-15": {"dayStatus": "No Pay Leave"},
+            },
+        }
+
+        office_attendance_payload = {
+            "month": month,
+            "entries": {
+                "2025-10-07": {"dayStatus": "No Pay Leave"},
+            },
+        }
+
+        response = self.client.put(
+            f"/api/team/attendance/{factory_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json=factory_attendance_payload,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.put(
+            f"/api/team/attendance/{office_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json=office_attendance_payload,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        TeamLeaveBalance = self.app_module.TeamLeaveBalance
+        (
+            self.app_module.db.session.query(TeamLeaveBalance)
+            .filter_by(team_member_id=factory_member["id"], month=month)
+            .delete()
+        )
+        self.app_module.db.session.commit()
+
+        response = self.client.put(
+            f"/api/team/salary/{factory_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json={"month": month, "components": {"basicSalary": "48000"}},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.put(
+            f"/api/team/salary/{office_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json={"month": month, "components": {"basicSalary": "50000"}},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get(
+            "/api/team/salary",
+            headers=self._auth_headers(self.admin_token),
+            query_string={"month": month},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        records = data.get("records", [])
+
+        factory_record = next(
+            (record for record in records if record.get("memberId") == factory_member["id"]),
+            None,
+        )
+        self.assertIsNotNone(factory_record)
+        factory_components = factory_record.get("components") or {}
+        self.assertEqual(factory_components.get("noPay"), "3200.00")
+
+        office_record = next(
+            (record for record in records if record.get("memberId") == office_member["id"]),
+            None,
+        )
+        self.assertIsNotNone(office_record)
+        office_components = office_record.get("components") or {}
+        self.assertEqual(office_components.get("noPay"), "0.00")
+
     def test_non_privileged_roles_cannot_register_member(self):
         payload = {
             "regNumber": "TM-002",

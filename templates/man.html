@@ -522,6 +522,7 @@
                                     <th scope="col">Actual hours</th>
                                     <th scope="col">Pay hours</th>
                                     <th scope="col">OT hours</th>
+                                    <th scope="col">Day Status</th>
                                 </tr>
                             </thead>
                             <tbody id="attendance-table-body"></tbody>
@@ -1875,6 +1876,114 @@
             }
         };
 
+        const ATTENDANCE_DAY_STATUS_OPTIONS = [
+            "Work Day",
+            "Not Work Day",
+            "Annual Leave",
+            "Medical Leave",
+            "Special Company Holiday",
+            "No Pay Leave",
+        ];
+        const ATTENDANCE_DAY_STATUS_DEFAULT = ATTENDANCE_DAY_STATUS_OPTIONS[0];
+
+        const normalizeDayStatusValue = (value) => {
+            if (typeof value !== "string") {
+                return "";
+            }
+            const trimmed = value.trim();
+            return ATTENDANCE_DAY_STATUS_OPTIONS.includes(trimmed) ? trimmed : "";
+        };
+
+        const resolveDayStatusValue = (value) => {
+            const normalized = normalizeDayStatusValue(value);
+            if (normalized) {
+                return normalized;
+            }
+            return ATTENDANCE_DAY_STATUS_DEFAULT;
+        };
+
+        const isWorkCalendarDateWorkDay = (iso) => {
+            const parts = parseIsoDate(iso);
+            if (!parts) {
+                return true;
+            }
+            const store = getWorkCalendarMonthStore(parts.year, parts.month);
+            if (!store) {
+                return true;
+            }
+            const entry = store.get(iso);
+            return entry ? entry.isWorkDay !== false : true;
+        };
+
+        const setDayStatusValue = (select, hiddenInput, value) => {
+            const resolved = resolveDayStatusValue(value);
+            if (select) {
+                select.value = resolved;
+            }
+            if (hiddenInput) {
+                hiddenInput.value = resolved;
+            }
+            return resolved;
+        };
+
+        const applyDayStatusRules = (select, hiddenInput, iso, { payMinutes } = {}) => {
+            if (!select && !hiddenInput) {
+                return;
+            }
+
+            const calendarIsWorkDay = isWorkCalendarDateWorkDay(iso);
+            const validPayMinutes = Number.isFinite(payMinutes) && payMinutes >= 0 ? payMinutes : null;
+
+            if (!calendarIsWorkDay) {
+                const value = setDayStatusValue(select, hiddenInput, "Not Work Day");
+                if (select) {
+                    select.disabled = true;
+                    select.setAttribute("aria-disabled", "true");
+                }
+                if (hiddenInput) {
+                    hiddenInput.disabled = false;
+                    hiddenInput.value = value;
+                }
+                return;
+            }
+
+            if (validPayMinutes != null && validPayMinutes > 0) {
+                const value = setDayStatusValue(select, hiddenInput, "Work Day");
+                if (select) {
+                    select.disabled = true;
+                    select.setAttribute("aria-disabled", "true");
+                }
+                if (hiddenInput) {
+                    hiddenInput.disabled = false;
+                    hiddenInput.value = value;
+                }
+                return;
+            }
+
+            const candidateValues = [
+                select?.dataset?.userValue,
+                select?.dataset?.initialValue,
+            ];
+            let target = "";
+            for (const candidate of candidateValues) {
+                const normalized = normalizeDayStatusValue(candidate);
+                if (normalized) {
+                    target = normalized;
+                    break;
+                }
+            }
+
+            const value = setDayStatusValue(select, hiddenInput, target);
+            if (select) {
+                select.disabled = false;
+                select.removeAttribute("aria-disabled");
+            }
+            if (hiddenInput) {
+                hiddenInput.disabled = true;
+                hiddenInput.value = value;
+            }
+        };
+
         const refreshAttendanceTotals = () => {
             if (!attendanceTableBody) {
                 return;
@@ -1947,6 +2056,7 @@
             actualNode,
             payNode,
             overtimeNode,
+            options = {},
         ) => {
             if (!row || !iso || !onInput || !offInput || !actualNode || !payNode || !overtimeNode) {
                 return;
@@ -1982,7 +2092,23 @@
             setAttendanceRowMinutes(row, "regularMinutes", regularMinutes);
             setAttendanceRowMinutes(row, "overtimeMinutes", overtimeMinutes);
 
+            if (options?.dayStatus) {
+                applyDayStatusRules(
+                    options.dayStatus.select,
+                    options.dayStatus.hiddenInput,
+                    iso,
+                    { payMinutes },
+                );
+            }
+
             refreshAttendanceTotals();
+
+            return {
+                actualMinutes,
+                payMinutes,
+                regularMinutes,
+                overtimeMinutes,
+            };
         };
 
         const parseMemberId = (value) => {
@@ -3081,7 +3207,7 @@
             if (entries.length === 0) {
                 const row = document.createElement("tr");
                 const cell = document.createElement("td");
-                cell.colSpan = 6;
+                cell.colSpan = 7;
                 cell.textContent = "No calendar days available for the selected month.";
                 row.appendChild(cell);
                 attendanceTableBody.appendChild(row);
@@ -3160,6 +3286,47 @@
                 overtimeCell.classList.add("attendance-table__hours-cell");
                 row.appendChild(overtimeCell);
 
+                const dayStatusSelect = document.createElement("select");
+                dayStatusSelect.name = `status-${iso}`;
+                dayStatusSelect.className = "attendance-table__status-select edit-form__input";
+                dayStatusSelect.setAttribute("aria-label", `Day status for ${display}`);
+                ATTENDANCE_DAY_STATUS_OPTIONS.forEach((label) => {
+                    const option = document.createElement("option");
+                    option.value = label;
+                    option.textContent = label;
+                    dayStatusSelect.appendChild(option);
+                });
+
+                const dayStatusHidden = document.createElement("input");
+                dayStatusHidden.type = "hidden";
+                dayStatusHidden.name = `status-${iso}`;
+                dayStatusHidden.disabled = true;
+
+                const savedDayStatus = normalizeDayStatusValue(record?.[iso]?.dayStatus);
+                if (savedDayStatus) {
+                    dayStatusSelect.dataset.initialValue = savedDayStatus;
+                    dayStatusSelect.dataset.userValue = savedDayStatus;
+                } else {
+                    dayStatusSelect.dataset.initialValue = "";
+                }
+                setDayStatusValue(dayStatusSelect, dayStatusHidden, savedDayStatus);
+
+                dayStatusSelect.addEventListener("change", () => {
+                    const normalized = normalizeDayStatusValue(dayStatusSelect.value);
+                    if (normalized) {
+                        dayStatusSelect.dataset.userValue = normalized;
+                    } else {
+                        delete dayStatusSelect.dataset.userValue;
+                    }
+                    setDayStatusValue(dayStatusSelect, dayStatusHidden, normalized);
+                });
+
+                const statusContainer = document.createElement("div");
+                statusContainer.className = "attendance-table__status";
+                statusContainer.appendChild(dayStatusSelect);
+                statusContainer.appendChild(dayStatusHidden);
+                row.appendChild(createCell("Day Status", statusContainer));
+
                 const refreshHours = () => {
                     updateAttendanceHoursDisplay(
                         row,
@@ -3169,6 +3336,12 @@
                         actualValue,
                         payValue,
                         overtimeValue,
+                        {
+                            dayStatus: {
+                                select: dayStatusSelect,
+                                hiddenInput: dayStatusHidden,
+                            },
+                        },
                     );
                 };
 
@@ -4141,20 +4314,33 @@
                 entries.forEach(({ iso }) => {
                     const onValueRaw = formData.get(`on-${iso}`);
                     const offValueRaw = formData.get(`off-${iso}`);
+                    const statusValueRaw = formData.get(`status-${iso}`);
                     const onValue = normalizeTimeValue(
                         typeof onValueRaw === "string" ? onValueRaw : ""
                     );
                     const offValue = normalizeTimeValue(
                         typeof offValueRaw === "string" ? offValueRaw : ""
                     );
+                    const dayStatus = normalizeDayStatusValue(
+                        typeof statusValueRaw === "string" ? statusValueRaw : ""
+                    );
+                    const includeDayStatus =
+                        dayStatus &&
+                        (dayStatus !== "Work Day" ||
+                            onValue ||
+                            offValue ||
+                            !isWorkCalendarDateWorkDay(iso));
 
-                    if (onValue || offValue) {
+                    if (onValue || offValue || includeDayStatus) {
                         const entry = {};
                         if (onValue) {
                             entry.onTime = onValue;
                         }
                         if (offValue) {
                             entry.offTime = offValue;
+                        }
+                        if (includeDayStatus) {
+                            entry.dayStatus = dayStatus;
                         }
                         record[iso] = entry;
                     }

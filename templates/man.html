@@ -714,6 +714,17 @@
                             <input class="edit-form__input" type="number" step="0.01" id="salary-overtime" name="overtime" />
                         </div>
                         <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-casual-ot-rate">Casual OT Rate</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                id="salary-casual-ot-rate"
+                                name="casualOtRate"
+                                placeholder="Enter Casual OT Rate"
+                            />
+                        </div>
+                        <div class="edit-form__field">
                             <label class="edit-form__label" for="salary-gross-salary">Gross salary</label>
                             <input class="edit-form__input" type="number" step="0.01" id="salary-gross-salary" name="grossSalary" />
                         </div>
@@ -1070,6 +1081,7 @@
         ];
 
         const salaryDataStore = Object.create(null);
+        const casualOtRateStore = Object.create(null);
         const attendanceDataStore = Object.create(null);
         const computedAttendanceAllowanceStore = Object.create(null);
         const computedTargetAllowanceStore = Object.create(null);
@@ -3503,6 +3515,38 @@
             return salaryDataStore[month]?.[memberKey] || null;
         };
 
+        const getCasualOtRate = (month, memberKey) => {
+            if (!month || !memberKey) {
+                return "";
+            }
+            return casualOtRateStore[month]?.[memberKey] ?? "";
+        };
+
+        const setCasualOtRate = (month, memberKey, value) => {
+            if (!month || !memberKey) {
+                return;
+            }
+            const normalizedValue = typeof value === "string" ? value.trim() : "";
+            if (!normalizedValue) {
+                removeCasualOtRate(month, memberKey);
+                return;
+            }
+            if (!casualOtRateStore[month]) {
+                casualOtRateStore[month] = {};
+            }
+            casualOtRateStore[month][memberKey] = normalizedValue;
+        };
+
+        const removeCasualOtRate = (month, memberKey) => {
+            if (!month || !memberKey || !casualOtRateStore[month]) {
+                return;
+            }
+            delete casualOtRateStore[month][memberKey];
+            if (Object.keys(casualOtRateStore[month]).length === 0) {
+                delete casualOtRateStore[month];
+            }
+        };
+
         const setSalaryRecord = (month, memberKey, record) => {
             if (!month || !memberKey) {
                 return;
@@ -3521,6 +3565,7 @@
             if (Object.keys(salaryDataStore[month]).length === 0) {
                 delete salaryDataStore[month];
             }
+            removeCasualOtRate(month, memberKey);
         };
 
         const parseNumericValue = (value) => {
@@ -4167,6 +4212,12 @@
                 }
             });
 
+            const casualOtRateInput = salaryForm.elements?.casualOtRate;
+            if (casualOtRateInput) {
+                const storedCasualOtRate = getCasualOtRate(targetMonth, targetMemberKey);
+                casualOtRateInput.value = storedCasualOtRate;
+            }
+
             refreshSalaryFormOvertime();
             refreshSalaryFormProvidentFund({ basicSalary: record?.basicSalary });
         };
@@ -4249,6 +4300,33 @@
                     });
                 },
             );
+        }
+
+        if (salaryForm?.elements?.casualOtRate) {
+            const casualOtRateInput = salaryForm.elements.casualOtRate;
+            const persistCasualOtRate = () => {
+                if (!salaryModalContext?.memberKey) {
+                    return;
+                }
+
+                const normalizedMonth =
+                    normalizeMonthValue(salaryFormMonth?.value) ||
+                    normalizeMonthValue(currentSalaryMonth) ||
+                    currentSalaryMonth;
+                const value =
+                    typeof casualOtRateInput.value === "string"
+                        ? casualOtRateInput.value
+                        : "";
+
+                if (value.trim()) {
+                    setCasualOtRate(normalizedMonth, salaryModalContext.memberKey, value);
+                } else {
+                    removeCasualOtRate(normalizedMonth, salaryModalContext.memberKey);
+                }
+            };
+
+            casualOtRateInput.addEventListener("input", persistCasualOtRate);
+            casualOtRateInput.addEventListener("change", persistCasualOtRate);
         }
 
         const closeSalaryModal = () => {

@@ -13,6 +13,8 @@ class UserSchema(Schema):
 
 # schemas.py
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
+
 from marshmallow import Schema, fields, validates, ValidationError, pre_load
 
 # --- helpers ---------------------------------------------------------------
@@ -31,6 +33,34 @@ VALID_PAY_CATEGORIES = {value.lower(): value for value in (
     PayCategory.CASUAL.value,
     PayCategory.OTHER.value,
 )}
+
+
+COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
+UTC_ZONE = ZoneInfo("UTC")
+
+
+def ensure_colombo_datetime(value, *, assume_local: bool = False) -> datetime | None:
+    """Return ``value`` converted to the Asia/Colombo timezone."""
+
+    if not isinstance(value, datetime):
+        return None
+
+    dt_value = value
+    if dt_value.tzinfo is None:
+        tz = COLOMBO_ZONE if assume_local else UTC_ZONE
+        dt_value = dt_value.replace(tzinfo=tz)
+
+    try:
+        return dt_value.astimezone(COLOMBO_ZONE)
+    except Exception:  # pragma: no cover - defensive guard
+        return None
+
+
+def format_datetime_as_colombo_iso(value, *, assume_local: bool = False) -> str | None:
+    """Return an ISO 8601 string in the Asia/Colombo timezone."""
+
+    converted = ensure_colombo_datetime(value, assume_local=assume_local)
+    return converted.isoformat() if converted is not None else None
 
 def _parse_flexible_date(v):
     """Return a date object from either YYYY-MM-DD or MM/DD/YYYY; None if empty."""
@@ -404,13 +434,23 @@ class MachineAssetSchema(Schema):
 class MachineIdleEventSchema(Schema):
     id = fields.Int()
     asset_id = fields.Int()
-    started_at = fields.DateTime()
-    ended_at = fields.DateTime(allow_none=True)
+    started_at = fields.Method("get_started_at")
+    ended_at = fields.Method("get_ended_at", allow_none=True)
     reason = fields.Str(allow_none=True)
     secondary_reason = fields.Str(allow_none=True)
     notes = fields.Str(allow_none=True)
     duration_minutes = fields.Int(allow_none=True)
     asset = fields.Nested(MachineAssetSchema(only=("id", "name", "code")))
+
+    def get_started_at(self, obj):
+        return format_datetime_as_colombo_iso(
+            getattr(obj, "started_at", None), assume_local=True
+        )
+
+    def get_ended_at(self, obj):
+        return format_datetime_as_colombo_iso(
+            getattr(obj, "ended_at", None), assume_local=True
+        )
 
 
 class ServiceSupplierSchema(Schema):
@@ -433,7 +473,7 @@ class DailyProductionEntrySchema(Schema):
     asset_id = fields.Int()
     machine_code = fields.Method("get_machine_code")
     machine_name = fields.Method("get_machine_name")
-    updated_at = fields.DateTime(allow_none=True)
+    updated_at = fields.Method("get_updated_at", allow_none=True)
 
     def get_machine_code(self, obj):
         try:
@@ -446,6 +486,12 @@ class DailyProductionEntrySchema(Schema):
             return obj.asset.name
         except AttributeError:
             return None
+
+    def get_updated_at(self, obj):
+        value = getattr(obj, "updated_at", None)
+        if value is None:
+            value = getattr(obj, "created_at", None)
+        return format_datetime_as_colombo_iso(value)
 
 
 class ProductionForecastEntrySchema(Schema):
@@ -457,8 +503,8 @@ class ProductionForecastEntrySchema(Schema):
     asset_id = fields.Int()
     machine_code = fields.Method("get_machine_code")
     machine_name = fields.Method("get_machine_name")
-    created_at = fields.DateTime(allow_none=True)
-    updated_at = fields.DateTime(allow_none=True)
+    created_at = fields.Method("get_created_at", allow_none=True)
+    updated_at = fields.Method("get_updated_at", allow_none=True)
 
     def get_machine_code(self, obj):
         try:
@@ -471,3 +517,9 @@ class ProductionForecastEntrySchema(Schema):
             return obj.asset.name
         except AttributeError:
             return None
+
+    def get_created_at(self, obj):
+        return format_datetime_as_colombo_iso(getattr(obj, "created_at", None))
+
+    def get_updated_at(self, obj):
+        return format_datetime_as_colombo_iso(getattr(obj, "updated_at", None))

@@ -23,6 +23,7 @@ from schemas import (
     MachinePartSchema,
     MachineIdleEventSchema,
     ServiceSupplierSchema,
+    format_datetime_as_colombo_iso,
 )
 
 bp = Blueprint("machines", __name__, url_prefix="/api/machines")
@@ -536,14 +537,14 @@ def create_idle_event():
             "type": "production_hour",
             "machine": machine_payload,
             "idle_window": {
-                "start": started_at.isoformat(),
-                "end": ended_at.isoformat() if ended_at else None,
+                "start": format_datetime_as_colombo_iso(started_at, assume_local=True),
+                "end": format_datetime_as_colombo_iso(ended_at, assume_local=True),
             },
             "production_hour": {
                 "id": conflicting_entry.id,
                 "hour_no": conflicting_entry.hour_no,
-                "start": hour_start.isoformat(),
-                "end": hour_end.isoformat(),
+                "start": format_datetime_as_colombo_iso(hour_start, assume_local=True),
+                "end": format_datetime_as_colombo_iso(hour_end, assume_local=True),
                 "quantity_tons": conflicting_entry.quantity_tons,
             },
         }

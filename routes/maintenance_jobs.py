@@ -91,9 +91,9 @@ def _find_user_by_email(email: Optional[str]) -> Optional[User]:
     ).scalar_one_or_none()
 
 
-def _send_email(subject: str, recipient: Optional[str], body: str) -> None:
+def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool, Optional[str]]:
     if not recipient:
-        return
+        return False, "No recipient email address was provided."
     try:
         message = Message(subject, recipients=[recipient])
         default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
@@ -101,8 +101,10 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> None:
             message.sender = default_sender
         message.body = body
         mail.send(message)
+        return True, f"Notification email sent to {recipient}."
     except Exception as exc:  # pragma: no cover - logging only
         current_app.logger.warning("Failed to send maintenance job email: %s", exc)
+        return False, "Failed to send the notification email."
 
 
 @bp.get("/next-code")
@@ -224,9 +226,20 @@ def create_job():
         body_lines.extend(["", "Job description:", job.description])
     body_lines.extend(["", f"View job: {link}"])
     body = "\n".join(body_lines)
-    _send_email(f"New Maintenance Job Assigned: {job.job_code}", maint_email, body)
+    email_sent, email_message = _send_email(
+        f"New Maintenance Job Assigned: {job.job_code}", maint_email, body
+    )
 
-    return jsonify(job_schema.dump(job)), 201
+    response_payload = {
+        "job": job_schema.dump(job),
+        "email_notification": {
+            "sent": email_sent,
+            "recipient": maint_email,
+            "message": email_message,
+        },
+    }
+
+    return jsonify(response_payload), 201
 
 
 @bp.patch("/<int:job_id>")
@@ -345,9 +358,20 @@ def update_job(job_id: int):
         body_lines.extend(["", "Remarks:", job.maintenance_notes])
     body_lines.extend(["", "Thank you."])
     body = "\n".join(body_lines)
-    _send_email(f"Maintenance Job Completed: {job.job_code}", job.prod_email, body)
+    email_sent, email_message = _send_email(
+        f"Maintenance Job Completed: {job.job_code}", job.prod_email, body
+    )
 
-    return jsonify(job_schema.dump(job))
+    response_payload = {
+        "job": job_schema.dump(job),
+        "email_notification": {
+            "sent": email_sent,
+            "recipient": job.prod_email,
+            "message": email_message,
+        },
+    }
+
+    return jsonify(response_payload)
 
 
 @bp.post("/<int:job_id>/reopen")

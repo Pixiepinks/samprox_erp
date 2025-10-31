@@ -431,6 +431,7 @@ class ReportsApiTestCase(unittest.TestCase):
 
         MaterialItem = self.app_module.MaterialItem
         MRNHeader = self.app_module.MRNHeader
+        MRNLine = self.app_module.MRNLine
         db = self.app_module.db
 
         default_names = [
@@ -452,21 +453,33 @@ class ReportsApiTestCase(unittest.TestCase):
         db.session.commit()
 
         def add_mrn(day, item, qty):
+            qty_decimal = Decimal(str(qty))
+            amount_decimal = qty_decimal * Decimal("100.00")
+
             mrn = MRNHeader(
                 mrn_no=f"MRN-{item.name[:3].upper()}-{day}",
                 date=date(2024, 5, day),
-                item=item,
-                qty_ton=Decimal(str(qty)),
-                unit_price=Decimal("100.00"),
-                wet_factor=Decimal("1.000"),
-                approved_unit_price=Decimal("100.00"),
-                amount=Decimal("100.00"),
+                qty_ton=qty_decimal,
+                amount=amount_decimal,
                 weighing_slip_no=f"WS-{day:02d}",
                 weigh_in_time=datetime(2024, 5, day, 8, 0, tzinfo=timezone.utc),
                 weigh_out_time=datetime(2024, 5, day, 9, 0, tzinfo=timezone.utc),
                 security_officer_name="Guard",
                 authorized_person_name="Manager",
             )
+
+            MRNLine(
+                mrn=mrn,
+                item=item,
+                first_weight_kg=Decimal("20000.000"),
+                second_weight_kg=Decimal("10000.000"),
+                qty_ton=qty_decimal,
+                unit_price=Decimal("100.00"),
+                wet_factor=Decimal("1.000"),
+                approved_unit_price=Decimal("100.00"),
+                amount=amount_decimal,
+            )
+
             db.session.add(mrn)
 
         add_mrn(1, items["Wood Shaving"], 10)

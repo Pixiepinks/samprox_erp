@@ -16,7 +16,11 @@ from models import (
 )
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
-from schemas import DailyProductionEntrySchema, ProductionForecastEntrySchema
+from schemas import (
+    DailyProductionEntrySchema,
+    ProductionForecastEntrySchema,
+    format_datetime_as_colombo_iso,
+)
 
 
 bp = Blueprint("production", __name__, url_prefix="/api/production")
@@ -237,17 +241,13 @@ def upsert_daily_production():
             "machine": machine_payload,
             "hour": {
                 "hour_no": hour_no,
-                "start": hour_start.isoformat(),
-                "end": hour_end.isoformat(),
+                "start": format_datetime_as_colombo_iso(hour_start, assume_local=True),
+                "end": format_datetime_as_colombo_iso(hour_end, assume_local=True),
             },
             "idle_event": {
                 "id": conflicting_idle_event.id,
-                "start": conflicting_idle_event.started_at.isoformat(),
-                "end": (
-                    conflicting_idle_event.ended_at.isoformat()
-                    if conflicting_idle_event.ended_at
-                    else None
-                ),
+                "start": format_datetime_as_colombo_iso(conflicting_idle_event.started_at),
+                "end": format_datetime_as_colombo_iso(conflicting_idle_event.ended_at),
                 "reason": conflicting_idle_event.reason,
             },
         }
@@ -420,7 +420,7 @@ def get_daily_production_summary():
             "asset_id": asset.id,
             "machine_code": code,
             "quantity_tons": round(quantity, 3),
-            "updated_at": updated_at.isoformat() if updated_at else None,
+            "updated_at": format_datetime_as_colombo_iso(updated_at),
         }
 
         if code not in asset_by_code:
@@ -473,7 +473,7 @@ def get_daily_production_summary():
             "hour_no": hour,
             "machines": machines_payload,
             "hour_total_tons": round(hour_total, 3),
-            "last_updated": latest_update.isoformat() if latest_update else None,
+            "last_updated": format_datetime_as_colombo_iso(latest_update),
         }
         hours.append(hour_payload)
 
@@ -720,7 +720,7 @@ def get_production_forecast():
                 "forecast_hours": forecast_hours_value,
                 "average_hourly_production": average_hourly_value,
                 "entry_id": entry_id,
-                "updated_at": updated_at_value.isoformat() if updated_at_value else None,
+                "updated_at": format_datetime_as_colombo_iso(updated_at_value),
             }
         )
 
@@ -968,7 +968,7 @@ def get_monthly_hourly_pulse():
                 "index": len(hourly_totals) + 1,
                 "day": day,
                 "hour": hour_no,
-                "timestamp": hour_start.isoformat(),
+                "timestamp": format_datetime_as_colombo_iso(hour_start, assume_local=True),
                 "label": label,
             }
 

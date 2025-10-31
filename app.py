@@ -24,7 +24,6 @@ from models import (
     MachineAsset,
     MachineIdleEvent,
     MRNHeader,
-    MRNLine,
     RoleEnum,
     Supplier,
     SalesActualEntry,

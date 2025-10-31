@@ -373,6 +373,8 @@
                                     <th scope="col">Overtime</th>
                                     <th scope="col">Gross Salary</th>
                                     <th scope="col">Provident Fund</th>
+                                    <th scope="col">Loan Deduction</th>
+                                    <th scope="col">Meal Deduction</th>
                                     <th scope="col">Other Deduction</th>
                                     <th scope="col">Salary Advance</th>
                                     <th scope="col">No Pay</th>
@@ -739,6 +741,28 @@
                             />
                         </div>
                         <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-loan-deduction">Loan deduction</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                id="salary-loan-deduction"
+                                name="loanDeduction"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="salary-meal-deduction">Meal deduction</label>
+                            <input
+                                class="edit-form__input"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                id="salary-meal-deduction"
+                                name="mealDeduction"
+                            />
+                        </div>
+                        <div class="edit-form__field">
                             <label class="edit-form__label" for="salary-other-deduction">Other deduction</label>
                             <input
                                 class="edit-form__input"
@@ -1073,12 +1097,68 @@
             { name: "overtime", label: "Overtime" },
             { name: "grossSalary", label: "Gross Salary" },
             { name: "providentFund", label: "Provident Fund" },
+            { name: "loanDeduction", label: "Loan Deduction" },
+            { name: "mealDeduction", label: "Meal Deduction" },
             { name: "otherDeduction", label: "Other Deduction" },
             { name: "salaryAdvance", label: "Salary Advance" },
             { name: "noPay", label: "No Pay" },
             { name: "totalDeduction", label: "Total Deduction" },
             { name: "netPay", label: "Net Pay" },
         ];
+
+        const deductionFieldNames = [
+            "providentFund",
+            "loanDeduction",
+            "mealDeduction",
+            "otherDeduction",
+            "salaryAdvance",
+            "noPay",
+        ];
+
+        const refreshSalaryFormTotals = () => {
+            if (!salaryForm) {
+                return;
+            }
+
+            const totalDeductionInput = salaryForm.elements?.totalDeduction;
+            const netPayInput = salaryForm.elements?.netPay;
+            const grossSalaryInput = salaryForm.elements?.grossSalary;
+
+            let total = 0;
+
+            deductionFieldNames.forEach((name) => {
+                const field = salaryForm.elements?.[name];
+                if (!field) {
+                    return;
+                }
+
+                const parsed = parseNumericAmount(field.value);
+                if (Number.isFinite(parsed)) {
+                    total += parsed;
+                }
+            });
+
+            if (totalDeductionInput) {
+                totalDeductionInput.readOnly = true;
+                totalDeductionInput.setAttribute("aria-readonly", "true");
+                totalDeductionInput.value = formatNumberForInput(total);
+            }
+
+            if (!netPayInput) {
+                return;
+            }
+
+            netPayInput.readOnly = true;
+            netPayInput.setAttribute("aria-readonly", "true");
+
+            const grossValue = parseNumericAmount(grossSalaryInput?.value);
+            if (Number.isFinite(grossValue)) {
+                const netValue = grossValue - total;
+                netPayInput.value = formatNumberForInput(netValue);
+            } else {
+                netPayInput.value = "";
+            }
+        };
 
         const salaryDataStore = Object.create(null);
         const casualOtRateStore = Object.create(null);
@@ -4440,6 +4520,7 @@
 
             refreshSalaryFormOvertime();
             refreshSalaryFormProvidentFund({ basicSalary: record?.basicSalary });
+            refreshSalaryFormTotals();
         };
 
         const refreshSalaryFormOvertime = () => {
@@ -4506,10 +4587,12 @@
 
             if (amount == null) {
                 providentFundInput.value = "";
+                refreshSalaryFormTotals();
                 return;
             }
 
             providentFundInput.value = formatNumberForInput(amount);
+            refreshSalaryFormTotals();
         };
 
         const refreshSalaryFormCasualTotalDaySalary = (overrides = {}) => {
@@ -4622,6 +4705,24 @@
 
             casualOtRateInput.addEventListener("input", persistCasualOtRate);
             casualOtRateInput.addEventListener("change", persistCasualOtRate);
+        }
+
+        if (salaryForm) {
+            deductionFieldNames.forEach((name) => {
+                const field = salaryForm.elements?.[name];
+                if (!field) {
+                    return;
+                }
+
+                field.addEventListener("input", refreshSalaryFormTotals);
+                field.addEventListener("change", refreshSalaryFormTotals);
+            });
+
+            const grossSalaryInput = salaryForm.elements?.grossSalary;
+            if (grossSalaryInput) {
+                grossSalaryInput.addEventListener("input", refreshSalaryFormTotals);
+                grossSalaryInput.addEventListener("change", refreshSalaryFormTotals);
+            }
         }
 
         const closeSalaryModal = () => {

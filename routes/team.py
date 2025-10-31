@@ -417,6 +417,9 @@ def _normalize_salary_components(components: dict | None) -> dict[str, str]:
             except (InvalidOperation, ValueError):  # pragma: no cover - defensive
                 label = _SALARY_COMPONENT_LABELS.get(key, key)
                 raise ValueError(f"{label} must be a numeric value.")
+            if key in _NON_NEGATIVE_SALARY_COMPONENT_KEYS and numeric_value < 0:
+                label = _SALARY_COMPONENT_LABELS.get(key, key)
+                raise ValueError(f"{label} cannot be negative.")
             normalized[key] = _format_decimal_amount(numeric_value)
         else:
             normalized[key] = value
@@ -727,12 +730,30 @@ def _compute_gross_salary_amount(
     return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def _compute_total_deduction_amount(components: dict | None) -> Decimal:
+    values = components if isinstance(components, dict) else {}
+
+    total = Decimal("0.00")
+    for key in _DEDUCTION_COMPONENT_KEYS:
+        total += _decimal_from_value(values.get(key))
+
+    return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _apply_computed_gross_component(
     member: TeamMember | None, components: dict | None
 ) -> tuple[dict[str, object], Decimal]:
     normalized = _normalize_numeric_component_map(components)
+    normalized.setdefault("loanDeduction", _format_decimal_amount(Decimal("0")))
+    normalized.setdefault("mealDeduction", _format_decimal_amount(Decimal("0")))
     gross_amount = _compute_gross_salary_amount(member, normalized)
     normalized["grossSalary"] = _format_decimal_amount(gross_amount)
+    total_deduction = _compute_total_deduction_amount(normalized)
+    normalized["totalDeduction"] = _format_decimal_amount(total_deduction)
+    net_pay = (gross_amount - total_deduction).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    normalized["netPay"] = _format_decimal_amount(net_pay)
     return normalized, gross_amount
 
 
@@ -2045,6 +2066,8 @@ _SALARY_COMPONENT_LABELS = {
     "casualOtRate": "Casual OT Rate",
     "grossSalary": "Gross salary",
     "providentFund": "Provident fund",
+    "loanDeduction": "Loan deduction",
+    "mealDeduction": "Meal deduction",
     "otherDeduction": "Other deduction",
     "salaryAdvance": "Salary advance",
     "noPay": "No pay",
@@ -2053,6 +2076,20 @@ _SALARY_COMPONENT_LABELS = {
 }
 
 _NUMERIC_SALARY_COMPONENT_KEYS = frozenset(_SALARY_COMPONENT_LABELS.keys())
+
+_NON_NEGATIVE_SALARY_COMPONENT_KEYS = frozenset({
+    "loanDeduction",
+    "mealDeduction",
+})
+
+_DEDUCTION_COMPONENT_KEYS = (
+    "providentFund",
+    "loanDeduction",
+    "mealDeduction",
+    "otherDeduction",
+    "salaryAdvance",
+    "noPay",
+)
 
 _GROSS_COMPONENT_KEY_MAP = {
     PayCategory.OFFICE: (

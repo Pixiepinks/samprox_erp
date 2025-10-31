@@ -378,6 +378,49 @@ class TeamApiTestCase(unittest.TestCase):
         office_components = office_record.get("components") or {}
         self.assertEqual(office_components.get("noPay"), "0.00")
 
+    def test_salary_save_includes_new_deductions(self):
+        member = self._create_member({"payCategory": "Office"})
+
+        response = self.client.put(
+            f"/api/team/salary/{member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json={
+                "month": "2025-11",
+                "components": {
+                    "basicSalary": "50000",
+                    "loanDeduction": "1500",
+                    "mealDeduction": "250",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        components = payload.get("components") or {}
+        self.assertEqual(components.get("loanDeduction"), "1500.00")
+        self.assertEqual(components.get("mealDeduction"), "250.00")
+        self.assertEqual(components.get("totalDeduction"), "1750.00")
+        self.assertEqual(components.get("netPay"), "48250.00")
+
+    def test_salary_rejects_negative_loan_deduction(self):
+        member = self._create_member({"payCategory": "Office"})
+
+        response = self.client.put(
+            f"/api/team/salary/{member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json={
+                "month": "2025-11",
+                "components": {
+                    "basicSalary": "45000",
+                    "loanDeduction": "-10",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("Loan deduction", data.get("msg", ""))
+
     def test_casual_overtime_uses_custom_rate(self):
         casual_member = self._create_member(
             {"payCategory": "Casual", "regNumber": "CAS-001"}

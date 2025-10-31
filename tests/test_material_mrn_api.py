@@ -27,7 +27,6 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.Supplier = self.app_module.Supplier
         self.MaterialItem = self.app_module.MaterialItem
         self.MRNHeader = self.app_module.MRNHeader
-        self.MRNLine = self.app_module.MRNLine
         self.create_supplier_service = create_supplier_service
 
     def tearDown(self):
@@ -65,21 +64,20 @@ class MaterialMRNApiTestCase(unittest.TestCase):
             "mrn_no": "MRN-001",
             "date": "2024-08-10",
             "supplier_id": str(supplier.id),
-            "items": [
-                {
-                    "item_id": str(item.id),
-                    "first_weight_kg": 13345,
-                    "second_weight_kg": 1000,
-                    "unit_price": 95.5,
-                    "wet_factor": 1.1,
-                }
-            ],
+            "item_id": str(item.id),
+            "weigh_in_weight_kg": 13345,
+            "weigh_out_weight_kg": 1000,
+            "qty_ton": 0,
+            "unit_price": 95.5,
+            "wet_factor": 1.1,
             "weighing_slip_no": "WS-9001",
             "weigh_in_time": weigh_in.isoformat(),
             "weigh_out_time": weigh_out.isoformat(),
             "security_officer_name": "Officer Jane",
             "authorized_person_name": "Manager John",
             "vehicle_no": "TRK-001",
+            "approved_unit_price": 5,  # should be ignored by server
+            "amount": 1,
         }
 
     def _create_mrn(self, overrides=None):
@@ -102,40 +100,27 @@ class MaterialMRNApiTestCase(unittest.TestCase):
 
         self.assertIn("id", data)
         self.assertEqual(data["mrn_no"], payload["mrn_no"])
-        self.assertEqual(data["qty_ton"], "12.345")
+        self.assertEqual(data["approved_unit_price"], "105.05")
         self.assertEqual(data["amount"], "1296.84")
         self.assertEqual(data["supplier_id"], payload["supplier_id"])
         self.assertEqual(data["vehicle_no"], payload["vehicle_no"])
-
-        self.assertIn("items", data)
-        self.assertEqual(len(data["items"]), 1)
-        item_data = data["items"][0]
-        self.assertEqual(item_data["approved_unit_price"], "105.05")
-        self.assertEqual(item_data["amount"], "1296.84")
-        self.assertEqual(item_data["qty_ton"], "12.345")
-        self.assertEqual(item_data["first_weight_kg"], "13345.000")
-        self.assertEqual(item_data["second_weight_kg"], "1000.000")
-        self.assertEqual(item_data["unit_price"], "95.50")
-        self.assertEqual(item_data["wet_factor"], "1.100")
+        self.assertEqual(data["qty_ton"], "12.345")
+        self.assertEqual(data["weigh_in_weight_kg"], "13345.000")
+        self.assertEqual(data["weigh_out_weight_kg"], "1000.000")
 
         mrn = self.MRNHeader.query.filter_by(mrn_no=payload["mrn_no"]).first()
         self.assertIsNotNone(mrn)
+        self.assertAlmostEqual(float(mrn.approved_unit_price), 105.05)
         self.assertAlmostEqual(float(mrn.amount), 1296.84)
         self.assertAlmostEqual(float(mrn.qty_ton), 12.345)
+        self.assertAlmostEqual(float(mrn.weigh_in_weight_kg), 13345)
+        self.assertAlmostEqual(float(mrn.weigh_out_weight_kg), 1000)
         self.assertEqual(mrn.vehicle_no, payload["vehicle_no"])
-
-        self.assertEqual(len(mrn.items), 1)
-        line = mrn.items[0]
-        self.assertAlmostEqual(float(line.approved_unit_price), 105.05)
-        self.assertAlmostEqual(float(line.amount), 1296.84)
-        self.assertAlmostEqual(float(line.qty_ton), 12.345)
-        self.assertAlmostEqual(float(line.first_weight_kg), 13345)
-        self.assertAlmostEqual(float(line.second_weight_kg), 1000)
 
     def test_create_mrn_validation_errors(self):
         payload = self._default_payload()
         payload.pop("supplier_id", None)
-        payload["items"][0]["second_weight_kg"] = 14000
+        payload["weigh_out_weight_kg"] = 14000
         payload["weigh_out_time"] = datetime(2024, 8, 10, 8, 30, tzinfo=timezone.utc).isoformat()
 
         response = self.client.post("/api/material/mrn", json=payload)
@@ -143,7 +128,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertIn("errors", data)
         self.assertIn("supplier_id", data["errors"])
-        self.assertIn("items.0.second_weight_kg", data["errors"])
+        self.assertIn("weigh_out_weight_kg", data["errors"])
         self.assertNotIn("weigh_out_time", data["errors"])
 
         # weigh-out validation should trigger when other fields are valid
@@ -197,11 +182,11 @@ class MaterialMRNApiTestCase(unittest.TestCase):
 
     def test_qty_ton_rounding_to_zero_returns_validation_error(self):
         payload = self._default_payload()
-        payload["mrn_no"] = "MRN-SMALL-WEIGHT"
-        payload["items"][0].update(
+        payload.update(
             {
-                "first_weight_kg": 1000.4,
-                "second_weight_kg": 1000,
+                "mrn_no": "MRN-SMALL-WEIGHT",
+                "weigh_in_weight_kg": 1000.4,
+                "weigh_out_weight_kg": 1000,
             }
         )
 
@@ -209,7 +194,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertIn("errors", data)
-        self.assertEqual(data["errors"].get("items.0.qty_ton"), "Quantity must be greater than 0.")
+        self.assertEqual(data["errors"].get("qty_ton"), "Quantity must be greater than 0.")
 
     def test_list_mrn_returns_recent_entries(self):
         first = self._create_mrn()
@@ -228,8 +213,6 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertGreaterEqual(len(data), 2)
         self.assertEqual(data[0]["mrn_no"], second["mrn_no"])
         self.assertEqual(data[1]["mrn_no"], first["mrn_no"])
-        self.assertTrue(all("items" in entry for entry in data))
-        self.assertGreater(len(data[0]["items"]), 0)
 
         search_response = self.client.get("/api/material/mrn", query_string={"q": "MRN-002"})
         self.assertEqual(search_response.status_code, 200)

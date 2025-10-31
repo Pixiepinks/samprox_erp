@@ -3141,6 +3141,42 @@
             return null;
         };
 
+        const computeTotalDeductionAmountFromComponents = (components) => {
+            if (!components || typeof components !== "object") {
+                return 0;
+            }
+
+            let total = 0;
+
+            deductionFieldNames.forEach((name) => {
+                const parsed = parseNumericAmount(components[name]);
+                if (Number.isFinite(parsed)) {
+                    total += parsed;
+                }
+            });
+
+            return total;
+        };
+
+        const computeNetPayAmountFromComponents = (components, totalDeductionOverride) => {
+            if (!components || typeof components !== "object") {
+                return null;
+            }
+
+            const grossValue = parseNumericAmount(components.grossSalary);
+            if (!Number.isFinite(grossValue)) {
+                return null;
+            }
+
+            let deductionTotal = totalDeductionOverride;
+
+            if (!Number.isFinite(deductionTotal)) {
+                deductionTotal = computeTotalDeductionAmountFromComponents(components);
+            }
+
+            return grossValue - deductionTotal;
+        };
+
         const computeProvidentFundAmount = (member, basicSalaryValue) => {
             if (!memberHasEpfNumber(member)) {
                 return null;
@@ -4269,6 +4305,25 @@
                         displayRecord = { overtime: formattedOvertime };
                     }
                 }
+                const combinedRecord =
+                    record && typeof record === "object" ? { ...record } : {};
+
+                if (displayRecord && typeof displayRecord === "object") {
+                    Object.assign(combinedRecord, displayRecord);
+                }
+
+                const totalDeductionAmount =
+                    computeTotalDeductionAmountFromComponents(combinedRecord);
+                combinedRecord.totalDeduction = formatNumberForInput(totalDeductionAmount);
+
+                const netPayAmount = computeNetPayAmountFromComponents(
+                    combinedRecord,
+                    totalDeductionAmount,
+                );
+                if (Number.isFinite(netPayAmount)) {
+                    combinedRecord.netPay = formatNumberForInput(netPayAmount);
+                }
+
                 const row = document.createElement("tr");
 
                 row.appendChild(createCell("Reg No", sanitizeText(member?.regNumber)));
@@ -4348,7 +4403,7 @@
 
                 salaryFieldDefinitions.forEach(({ label, name }) => {
                     row.appendChild(
-                        createCell(label, formatSalaryValue(displayRecord?.[name])),
+                        createCell(label, formatSalaryValue(combinedRecord?.[name])),
                     );
                 });
 
@@ -5606,6 +5661,8 @@
                     return;
                 }
 
+                refreshSalaryFormTotals();
+
                 const formData = new FormData(salaryForm);
                 const monthRaw = formData.get("salaryMonth");
                 const normalizedMonth = normalizeMonthValue(monthRaw) || currentSalaryMonth;
@@ -5620,6 +5677,18 @@
                         }
                     }
                 });
+
+                const computedTotalDeduction =
+                    computeTotalDeductionAmountFromComponents(record);
+                record.totalDeduction = formatNumberForInput(computedTotalDeduction);
+
+                const computedNetPay = computeNetPayAmountFromComponents(
+                    record,
+                    computedTotalDeduction,
+                );
+                if (Number.isFinite(computedNetPay)) {
+                    record.netPay = formatNumberForInput(computedNetPay);
+                }
 
                 const casualOtRateField = salaryForm.elements?.casualOtRate;
                 if (casualOtRateField && typeof casualOtRateField.value === "string") {

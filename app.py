@@ -280,7 +280,7 @@ def _ensure_accessall_user(
     force_reset: bool = False,
 ):
     target_app = flask_app or globals().get("app")
-    normalized_email = _normalize_email(email or os.getenv("ACCESSALL_EMAIL", "accessall@samprox.lk"))
+    normalized_email = _normalize_email(email or os.getenv("ACCESSALL_EMAIL", "production@samprox.lk"))
     password = password or os.getenv("ACCESSALL_PASSWORD", "123")
     name = name or os.getenv("ACCESSALL_NAME", "Accessall")
 
@@ -578,7 +578,7 @@ def seed_admin(email, password, name):
 
 
 @app.cli.command("seed-accessall")
-@click.option("--email", default="accessall@samprox.lk", help="Accessall email")
+@click.option("--email", default="production@samprox.lk", help="Production manager email")
 @click.option("--password", default="123", help="Accessall password")
 @click.option("--name", default="Accessall", help="Accessall display name")
 def seed_accessall(email, password, name):

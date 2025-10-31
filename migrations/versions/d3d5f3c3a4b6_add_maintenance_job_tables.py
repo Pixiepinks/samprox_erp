@@ -16,16 +16,17 @@ down_revision = "3c4296c0f5c1"
 branch_labels = None
 depends_on = None
 
-maintenance_status = sa.Enum(
-    "NEW", "IN_PROGRESS", "COMPLETED", name="maintenancejobstatus", create_type=False
-)
-maintenance_status_type = postgresql.ENUM(
-    "NEW", "IN_PROGRESS", "COMPLETED", name="maintenancejobstatus"
+maintenance_status = postgresql.ENUM(
+    "NEW",
+    "IN_PROGRESS",
+    "COMPLETED",
+    name="maintenancejobstatus",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
-    maintenance_status_type.create(op.get_bind(), checkfirst=True)
+    maintenance_status.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "maintenance_job",
@@ -81,4 +82,4 @@ def downgrade() -> None:
     op.drop_table("maintenance_material")
     op.drop_index("ix_maintenance_job_status", table_name="maintenance_job")
     op.drop_table("maintenance_job")
-    maintenance_status_type.drop(op.get_bind(), checkfirst=True)
+    maintenance_status.drop(op.get_bind(), checkfirst=True)

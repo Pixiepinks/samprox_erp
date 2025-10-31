@@ -57,16 +57,11 @@ body {
 }
 
 .panel__logo {
-    display: grid;
-    place-items: center;
+    display: block;
     width: 52px;
     height: 52px;
     border-radius: 16px;
-    background: linear-gradient(135deg, #1d4ed8, #38bdf8);
-    color: #fff;
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    object-fit: cover;
     box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
 }
 

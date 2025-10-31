@@ -184,6 +184,88 @@
             padding: 12px 16px;
             font-size: 0.9rem;
         }
+        .item-section {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .item-section__header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .item-section__title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #111827;
+        }
+        .item-table-wrapper {
+            overflow-x: auto;
+        }
+        .item-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 720px;
+        }
+        .item-table th,
+        .item-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .item-table th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .item-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .item-actions-header {
+            width: 1%;
+            white-space: nowrap;
+        }
+        .table-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .table-field input,
+        .table-field select {
+            width: 100%;
+        }
+        .item-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: flex-end;
+        }
+        .item-summary__field {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .item-summary__value {
+            font-variant-numeric: tabular-nums;
+        }
+        .item-remove-button {
+            background: transparent;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        .item-remove-button:hover {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #b91c1c;
+        }
     </style>
 </head>
 <body>
@@ -247,53 +329,6 @@
                             <p class="error-text" data-error-for="vehicle_no"></p>
                         </div>
                         <div class="field">
-                            <label for="item-select">Item Name<span class="text-red"> *</span></label>
-                            <select id="item-select" name="item_id" required>
-                                <option value="__create__">➕ Create new item…</option>
-                                {% for item in items %}
-                                <option value="{{ item.id }}">{{ item.name }}</option>
-                                {% endfor %}
-                            </select>
-                            <p class="helper">Choose an existing item or create a new one.</p>
-                            <p class="error-text" data-error-for="item_id"></p>
-                        </div>
-                        <div class="field">
-                            <label for="weigh-in-weight">First Weight (Kg)<span class="text-red"> *</span></label>
-                            <input id="weigh-in-weight" name="weigh_in_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
-                            <p class="error-text" data-error-for="weigh_in_weight_kg"></p>
-                        </div>
-                        <div class="field">
-                            <label for="weigh-out-weight">Second Weight (Kg)<span class="text-red"> *</span></label>
-                            <input id="weigh-out-weight" name="weigh_out_weight_kg" type="number" min="0" step="0.001" placeholder="0.000" required />
-                            <p class="error-text" data-error-for="weigh_out_weight_kg"></p>
-                        </div>
-                        <div class="field">
-                            <label for="qty-ton">Qty (Ton)<span class="text-red"> *</span></label>
-                            <input id="qty-ton" name="qty_ton" type="number" min="0" step="0.001" placeholder="0.000" readonly required />
-                            <p class="helper">Automatically calculated from First Weight − Second Weight.</p>
-                            <p class="error-text" data-error-for="qty_ton"></p>
-                        </div>
-                        <div class="field">
-                            <label for="unit-price">Unit Price<span class="text-red"> *</span></label>
-                            <input id="unit-price" name="unit_price" type="number" min="0" step="0.01" placeholder="0.00" required />
-                            <p class="error-text" data-error-for="unit_price"></p>
-                        </div>
-                        <div class="field">
-                            <label for="wet-factor">Wet Factor</label>
-                            <input id="wet-factor" name="wet_factor" type="number" min="0" step="0.001" value="1.000" />
-                            <p class="error-text" data-error-for="wet_factor"></p>
-                        </div>
-                        <div class="field">
-                            <label for="approved-unit-price">Approved Unit Price</label>
-                            <input id="approved-unit-price" type="text" value="0.00" readonly />
-                            <p class="helper">Calculated as Unit Price × Wet Factor.</p>
-                        </div>
-                        <div class="field">
-                            <label for="amount">Amount</label>
-                            <input id="amount" type="text" value="0.00" readonly />
-                            <p class="helper">Calculated as Qty × Approved Unit Price.</p>
-                        </div>
-                        <div class="field">
                             <label for="weighing-slip">Weighing Slip No<span class="text-red"> *</span></label>
                             <input id="weighing-slip" name="weighing_slip_no" type="text" placeholder="Enter slip number" required />
                             <p class="error-text" data-error-for="weighing_slip_no"></p>
@@ -324,6 +359,42 @@
                             <input id="authorized-person" name="authorized_person_name" type="text" required />
                             <p class="error-text" data-error-for="authorized_person_name"></p>
                         </div>
+                    </div>
+                    <div class="item-section">
+                        <div class="item-section__header">
+                            <h2 class="item-section__title">Item details</h2>
+                            <button type="button" class="button-secondary" id="add-item-row">Add item</button>
+                        </div>
+                        <div class="item-table-wrapper">
+                            <table class="item-table" id="item-lines">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Item</th>
+                                        <th scope="col">First Weight (Kg)</th>
+                                        <th scope="col">Second Weight (Kg)</th>
+                                        <th scope="col">Qty (Ton)</th>
+                                        <th scope="col">Unit Price</th>
+                                        <th scope="col">Wet Factor</th>
+                                        <th scope="col">Approved Unit Price</th>
+                                        <th scope="col">Amount</th>
+                                        <th scope="col" class="item-actions-header">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="item-table-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="item-summary">
+                            <div class="item-summary__field">
+                                <span>Total Qty (Ton):</span>
+                                <span class="item-summary__value" id="total-qty-value">0.000</span>
+                            </div>
+                            <div class="item-summary__field">
+                                <span>Total Amount:</span>
+                                <span class="item-summary__value" id="total-amount-value">0.00</span>
+                            </div>
+                        </div>
+                        <p class="error-text" data-error-for="items"></p>
+                        <p class="error-text" data-error-for="qty_ton"></p>
                     </div>
                     <div class="actions">
                         <button type="button" class="button-secondary" id="reset-form">Reset</button>
@@ -488,15 +559,12 @@
         const submitBtn = document.getElementById("submit-btn");
         const formAlert = document.getElementById("form-alert");
         const resetBtn = document.getElementById("reset-form");
-        const unitPriceInput = document.getElementById("unit-price");
-        const wetFactorInput = document.getElementById("wet-factor");
-        const approvedUnitPriceInput = document.getElementById("approved-unit-price");
-        const weighInWeightInput = document.getElementById("weigh-in-weight");
-        const weighOutWeightInput = document.getElementById("weigh-out-weight");
-        const qtyInput = document.getElementById("qty-ton");
-        const amountInput = document.getElementById("amount");
-        const itemSelect = document.getElementById("item-select");
-        let lastValidItemValue = "";
+        const itemTableBody = document.getElementById("item-table-body");
+        const addItemButton = document.getElementById("add-item-row");
+        const totalAmountValueEl = document.getElementById("total-amount-value");
+        const totalQtyValueEl = document.getElementById("total-qty-value");
+        const availableItems = {{ items | tojson }};
+        let activeItemSelect = null;
 
         async function populateMrnNumber(force = false) {
             if (!mrnNoInput) {
@@ -565,9 +633,22 @@
             document.querySelectorAll("[data-error-for]").forEach((node) => {
                 node.textContent = "";
             });
+            clearAllItemRowErrors();
         }
 
         function setError(field, message) {
+            if (field && field.startsWith("items.")) {
+                const parts = field.split(".");
+                const rowIndex = Number.parseInt(parts[1], 10);
+                const rowField = parts.slice(2).join(".");
+                if (Number.isInteger(rowIndex) && rowField) {
+                    const row = itemTableBody?.querySelector(`.item-row[data-index="${rowIndex}"]`);
+                    if (row) {
+                        setItemRowError(row, rowField, message);
+                        return;
+                    }
+                }
+            }
             const target = document.querySelector(`[data-error-for="${field}"]`);
             if (target) {
                 target.textContent = message;
@@ -733,52 +814,336 @@
             return (Math.round(value * factor) / factor).toFixed(precision);
         }
 
-        function updateApprovedUnitPrice() {
-            const unit = parseFloat(unitPriceInput.value) || 0;
-            const wet = parseFloat(wetFactorInput.value) || 0;
-            const approved = toFixed(unit * wet, 2);
-            approvedUnitPriceInput.value = approved;
-            updateAmount();
-        }
-
-        function updateAmount() {
-            const qty = parseFloat(qtyInput.value) || 0;
-            const approved = parseFloat(approvedUnitPriceInput.value) || 0;
-            amountInput.value = toFixed(qty * approved, 2);
-        }
-
-        function updateQuantityFromWeights() {
-            if (!weighInWeightInput || !weighOutWeightInput || !qtyInput) {
+        function clearItemRowErrors(row) {
+            if (!row) {
                 return;
             }
-            const firstWeight = parseFloat(weighInWeightInput.value);
-            const secondWeight = parseFloat(weighOutWeightInput.value);
-            if (!Number.isFinite(firstWeight) || !Number.isFinite(secondWeight)) {
-                qtyInput.value = "";
-                updateAmount();
-                return;
-            }
-            const netKg = firstWeight - secondWeight;
-            if (netKg <= 0) {
-                qtyInput.value = "";
-                updateAmount();
-                return;
-            }
-            const netTon = netKg / 1000;
-            qtyInput.value = toFixed(netTon, 3);
-            updateAmount();
+            row.querySelectorAll("[data-row-error]").forEach((node) => {
+                node.textContent = "";
+            });
         }
 
-        unitPriceInput.addEventListener("input", updateApprovedUnitPrice);
-        wetFactorInput.addEventListener("input", updateApprovedUnitPrice);
-        qtyInput.addEventListener("input", updateAmount);
-        if (weighInWeightInput) {
-            weighInWeightInput.addEventListener("input", updateQuantityFromWeights);
+        function clearAllItemRowErrors() {
+            if (!itemTableBody) {
+                return;
+            }
+            itemTableBody.querySelectorAll(".item-row").forEach((row) => clearItemRowErrors(row));
         }
-        if (weighOutWeightInput) {
-            weighOutWeightInput.addEventListener("input", updateQuantityFromWeights);
+
+        function setItemRowError(row, field, message) {
+            if (!row) {
+                return;
+            }
+            const target = row.querySelector(`[data-row-error="${field}"]`);
+            if (target) {
+                target.textContent = message;
+            }
         }
-        updateQuantityFromWeights();
+
+        function syncRowIndexes() {
+            if (!itemTableBody) {
+                return;
+            }
+            Array.from(itemTableBody.querySelectorAll(".item-row")).forEach((row, index) => {
+                row.dataset.index = String(index);
+            });
+        }
+
+        function buildItemSelectOptions(selectedValue = "") {
+            const options = [
+                `<option value="" ${selectedValue ? "" : "selected"} disabled hidden>Select item</option>`,
+                '<option value="__create__">➕ Create new item…</option>',
+            ];
+            (availableItems || []).forEach((item) => {
+                if (!item) {
+                    return;
+                }
+                const selected = item.id === selectedValue ? " selected" : "";
+                options.push(`<option value="${item.id}"${selected}>${item.name}</option>`);
+            });
+            return options.join("");
+        }
+
+        function computeRowValues(row) {
+            if (!row) {
+                return;
+            }
+            const firstInput = row.querySelector(".first-weight-input");
+            const secondInput = row.querySelector(".second-weight-input");
+            const qtyInputEl = row.querySelector(".qty-input");
+            const unitInput = row.querySelector(".unit-price-input");
+            const wetInput = row.querySelector(".wet-factor-input");
+            const approvedInput = row.querySelector(".approved-price-input");
+            const amountInputEl = row.querySelector(".amount-input");
+
+            const first = parseFloat(firstInput?.value);
+            const second = parseFloat(secondInput?.value);
+            const unit = parseFloat(unitInput?.value);
+            const wet = parseFloat(wetInput?.value);
+
+            let qtyText = "";
+            if (Number.isFinite(first) && Number.isFinite(second) && first > second) {
+                qtyText = toFixed((first - second) / 1000, 3);
+            }
+            if (qtyInputEl) {
+                qtyInputEl.value = qtyText;
+            }
+
+            let approvedText = "0.00";
+            if (Number.isFinite(unit) && Number.isFinite(wet)) {
+                approvedText = toFixed(unit * wet, 2);
+            }
+            if (approvedInput) {
+                approvedInput.value = approvedText;
+            }
+
+            let amountText = "0.00";
+            if (qtyText) {
+                amountText = toFixed(parseFloat(qtyText) * parseFloat(approvedText), 2);
+            }
+            if (amountInputEl) {
+                amountInputEl.value = amountText;
+            }
+        }
+
+        function updateTotals() {
+            if (!itemTableBody) {
+                if (totalAmountValueEl) {
+                    totalAmountValueEl.textContent = "0.00";
+                }
+                if (totalQtyValueEl) {
+                    totalQtyValueEl.textContent = "0.000";
+                }
+                return;
+            }
+            let totalAmount = 0;
+            let totalQty = 0;
+            itemTableBody.querySelectorAll(".item-row").forEach((row) => {
+                const qty = parseFloat(row.querySelector(".qty-input")?.value);
+                const amount = parseFloat(row.querySelector(".amount-input")?.value);
+                if (Number.isFinite(qty)) {
+                    totalQty += qty;
+                }
+                if (Number.isFinite(amount)) {
+                    totalAmount += amount;
+                }
+            });
+            if (totalQtyValueEl) {
+                totalQtyValueEl.textContent = toFixed(totalQty, 3);
+            }
+            if (totalAmountValueEl) {
+                totalAmountValueEl.textContent = toFixed(totalAmount, 2);
+            }
+        }
+
+        function attachRowEvents(row) {
+            if (!row) {
+                return;
+            }
+            const select = row.querySelector(".item-select");
+            const firstInput = row.querySelector(".first-weight-input");
+            const secondInput = row.querySelector(".second-weight-input");
+            const unitInput = row.querySelector(".unit-price-input");
+            const wetInput = row.querySelector(".wet-factor-input");
+            const removeButton = row.querySelector(".item-remove-button");
+
+            if (select) {
+                select.addEventListener("change", (event) => {
+                    const value = event.target.value;
+                    if (value === "__create__") {
+                        activeItemSelect = event.target;
+                        event.target.value = event.target.dataset.previousValue || "";
+                        openItemModal();
+                        return;
+                    }
+                    event.target.dataset.previousValue = value;
+                    setItemRowError(row, "item_id", "");
+                });
+            }
+
+            [firstInput, secondInput, unitInput, wetInput].forEach((input) => {
+                if (!input) {
+                    return;
+                }
+                input.addEventListener("input", () => {
+                    computeRowValues(row);
+                    updateTotals();
+                });
+            });
+
+            if (removeButton) {
+                removeButton.addEventListener("click", () => removeItemRow(row));
+            }
+        }
+
+        function createItemRow(initial = {}) {
+            const row = document.createElement("tr");
+            row.className = "item-row";
+            row.innerHTML = `
+                <td>
+                    <div class="table-field">
+                        <select class="item-select"></select>
+                        <p class="error-text" data-row-error="item_id"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="number" class="first-weight-input" min="0" step="0.001" placeholder="0.000" />
+                        <p class="error-text" data-row-error="first_weight_kg"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="number" class="second-weight-input" min="0" step="0.001" placeholder="0.000" />
+                        <p class="error-text" data-row-error="second_weight_kg"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="text" class="qty-input" placeholder="0.000" readonly />
+                        <p class="error-text" data-row-error="qty_ton"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="number" class="unit-price-input" min="0" step="0.01" placeholder="0.00" />
+                        <p class="error-text" data-row-error="unit_price"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="number" class="wet-factor-input" min="0" step="0.001" />
+                        <p class="error-text" data-row-error="wet_factor"></p>
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="text" class="approved-price-input" value="0.00" readonly />
+                    </div>
+                </td>
+                <td>
+                    <div class="table-field">
+                        <input type="text" class="amount-input" value="0.00" readonly />
+                    </div>
+                </td>
+                <td>
+                    <button type="button" class="item-remove-button">Remove</button>
+                </td>
+            `;
+
+            const select = row.querySelector(".item-select");
+            if (select) {
+                select.innerHTML = buildItemSelectOptions(initial.item_id || "");
+                if (initial.item_id) {
+                    select.value = initial.item_id;
+                }
+                select.dataset.previousValue = initial.item_id || "";
+            }
+
+            const firstInput = row.querySelector(".first-weight-input");
+            const secondInput = row.querySelector(".second-weight-input");
+            const unitInput = row.querySelector(".unit-price-input");
+            const wetInput = row.querySelector(".wet-factor-input");
+            const approvedInput = row.querySelector(".approved-price-input");
+            const amountInput = row.querySelector(".amount-input");
+
+            if (firstInput && initial.first_weight_kg !== undefined) {
+                firstInput.value = initial.first_weight_kg;
+            }
+            if (secondInput && initial.second_weight_kg !== undefined) {
+                secondInput.value = initial.second_weight_kg;
+            }
+            if (unitInput && initial.unit_price !== undefined) {
+                unitInput.value = initial.unit_price;
+            }
+            if (wetInput) {
+                wetInput.value = initial.wet_factor !== undefined ? initial.wet_factor : "1.000";
+            }
+            if (approvedInput && initial.approved_unit_price !== undefined) {
+                approvedInput.value = initial.approved_unit_price;
+            }
+            if (amountInput && initial.amount !== undefined) {
+                amountInput.value = initial.amount;
+            }
+
+            attachRowEvents(row);
+            computeRowValues(row);
+            return row;
+        }
+
+        function removeItemRow(row) {
+            if (!row || !itemTableBody) {
+                return;
+            }
+            const rows = itemTableBody.querySelectorAll(".item-row");
+            if (rows.length <= 1) {
+                clearItemRowErrors(row);
+                const select = row.querySelector(".item-select");
+                if (select) {
+                    select.value = "";
+                    select.dataset.previousValue = "";
+                }
+                row.querySelectorAll("input").forEach((input) => {
+                    if (input.classList.contains("wet-factor-input")) {
+                        input.value = "1.000";
+                    } else if (input.classList.contains("approved-price-input") || input.classList.contains("amount-input")) {
+                        input.value = "0.00";
+                    } else if (input.classList.contains("qty-input")) {
+                        input.value = "";
+                    } else {
+                        input.value = "";
+                    }
+                });
+                computeRowValues(row);
+                updateTotals();
+                return;
+            }
+            row.remove();
+            syncRowIndexes();
+            updateTotals();
+        }
+
+        function addItemRow(initial = {}) {
+            if (!itemTableBody) {
+                return null;
+            }
+            const row = createItemRow(initial);
+            itemTableBody.appendChild(row);
+            syncRowIndexes();
+            updateTotals();
+            return row;
+        }
+
+        function collectItemRows() {
+            if (!itemTableBody) {
+                return [];
+            }
+            return Array.from(itemTableBody.querySelectorAll(".item-row")).map((row) => ({
+                element: row,
+                item_id: row.querySelector(".item-select")?.value || "",
+                first_weight_kg: row.querySelector(".first-weight-input")?.value || "",
+                second_weight_kg: row.querySelector(".second-weight-input")?.value || "",
+                unit_price: row.querySelector(".unit-price-input")?.value || "",
+                wet_factor: row.querySelector(".wet-factor-input")?.value || "",
+                qty_ton: row.querySelector(".qty-input")?.value || "",
+            }));
+        }
+
+        function resetItemRows() {
+            if (!itemTableBody) {
+                return;
+            }
+            itemTableBody.innerHTML = "";
+            addItemRow();
+            updateTotals();
+        }
+
+        if (addItemButton) {
+            addItemButton.addEventListener("click", () => addItemRow());
+        }
+
+        addItemRow();
+        updateTotals();
 
         function coerceNumericValue(rawValue, { defaultValue } = {}) {
             if (rawValue === undefined || rawValue === null) {
@@ -1094,6 +1459,7 @@
 
         function closeItemModal() {
             itemModal.classList.remove("active");
+            activeItemSelect = null;
         }
 
         itemModalClose.addEventListener("click", closeItemModal);
@@ -1133,12 +1499,24 @@
                     return;
                 }
 
-                const option = document.createElement("option");
-                option.value = data.id;
-                option.textContent = data.name;
-                itemSelect.appendChild(option);
-                itemSelect.value = data.id;
-                lastValidItemValue = data.id;
+                if (data && data.id && data.name) {
+                    availableItems.push({ id: data.id, name: data.name });
+                    const selects = itemTableBody?.querySelectorAll(".item-select") || [];
+                    selects.forEach((select) => {
+                        const currentValue = select === activeItemSelect ? data.id : select.value;
+                        select.innerHTML = buildItemSelectOptions(currentValue);
+                        select.value = currentValue || "";
+                        select.dataset.previousValue = select.value || "";
+                    });
+                    if (activeItemSelect) {
+                        activeItemSelect.value = data.id;
+                        activeItemSelect.dataset.previousValue = data.id;
+                        const row = activeItemSelect.closest(".item-row");
+                        setItemRowError(row, "item_id", "");
+                        computeRowValues(row);
+                        updateTotals();
+                    }
+                }
                 closeItemModal();
             } catch (error) {
                 setItemModalError("Network error. Please try again.");
@@ -1146,23 +1524,6 @@
                 saveButton.disabled = false;
             }
         });
-
-        if (itemSelect) {
-            itemSelect.selectedIndex = -1;
-            itemSelect.addEventListener("change", (event) => {
-                const value = event.target.value;
-                if (value === "__create__") {
-                    if (lastValidItemValue) {
-                        event.target.value = lastValidItemValue;
-                    } else {
-                        event.target.selectedIndex = -1;
-                    }
-                    openItemModal();
-                    return;
-                }
-                lastValidItemValue = value;
-            });
-        }
 
         resetBtn.addEventListener("click", () => {
             mrnForm.reset();
@@ -1174,78 +1535,95 @@
             if (vehicleNoInput) {
                 vehicleNoInput.value = "";
             }
-            approvedUnitPriceInput.value = "0.00";
-            amountInput.value = "0.00";
-            if (weighInWeightInput) {
-                weighInWeightInput.value = "";
-            }
-            if (weighOutWeightInput) {
-                weighOutWeightInput.value = "";
-            }
-            if (qtyInput) {
-                qtyInput.value = "";
-            }
-            if (itemSelect) {
-                itemSelect.selectedIndex = -1;
-            }
-            lastValidItemValue = "";
             clearErrors();
-            updateQuantityFromWeights();
+            resetItemRows();
             populateMrnNumber(true);
         });
 
         function validateForm() {
             const errors = {};
-            const formData = new FormData(mrnForm);
-            const qtyValue = parseFloat(formData.get("qty_ton"));
-            const unitValue = parseFloat(formData.get("unit_price"));
-            const wetValue = parseFloat(formData.get("wet_factor"));
-            const weighInWeightValue = parseFloat(formData.get("weigh_in_weight_kg"));
-            const weighOutWeightValue = parseFloat(formData.get("weigh_out_weight_kg"));
+            const sanitizedItems = [];
+            const rows = collectItemRows();
+            if (rows.length === 0) {
+                errors["items"] = "Add at least one item.";
+            }
 
-            ["date", "mrn_no", "weighing_slip_no", "weigh_in_time", "weigh_out_time", "security_officer_name", "authorized_person_name", "item_id"].forEach((field) => {
+            let totalQty = 0;
+
+            rows.forEach((rowData, index) => {
+                const prefix = `items.${index}.`;
+                const itemId = (rowData.item_id || "").trim();
+                let hasError = false;
+
+                if (!itemId) {
+                    errors[`${prefix}item_id`] = "Select an item.";
+                    hasError = true;
+                }
+
+                const first = Number.parseFloat(rowData.first_weight_kg);
+                const second = Number.parseFloat(rowData.second_weight_kg);
+                const unit = Number.parseFloat(rowData.unit_price);
+                const wet = Number.parseFloat(rowData.wet_factor);
+
+                if (!Number.isFinite(first) || first < 0) {
+                    errors[`${prefix}first_weight_kg`] = "Enter a valid non-negative weight.";
+                    hasError = true;
+                }
+                if (!Number.isFinite(second) || second < 0) {
+                    errors[`${prefix}second_weight_kg`] = "Enter a valid non-negative weight.";
+                    hasError = true;
+                }
+                if (!Number.isFinite(unit) || unit < 0) {
+                    errors[`${prefix}unit_price`] = "Unit price must be zero or greater.";
+                    hasError = true;
+                }
+                if (!Number.isFinite(wet) || wet < 0) {
+                    errors[`${prefix}wet_factor`] = "Wet factor must be zero or greater.";
+                    hasError = true;
+                }
+                if (Number.isFinite(first) && Number.isFinite(second) && first <= second) {
+                    errors[`${prefix}second_weight_kg`] = "Second weight must be less than first weight.";
+                    hasError = true;
+                }
+
+                let qty = NaN;
+                if (!hasError && Number.isFinite(first) && Number.isFinite(second)) {
+                    qty = (first - second) / 1000;
+                    if (!(qty > 0)) {
+                        errors[`${prefix}qty_ton`] = "Quantity must be greater than 0.";
+                        hasError = true;
+                    }
+                }
+
+                if (!hasError) {
+                    sanitizedItems.push({
+                        item_id: itemId,
+                        first_weight_kg: first,
+                        second_weight_kg: second,
+                        unit_price: unit,
+                        wet_factor: wet,
+                    });
+                    totalQty += qty;
+                }
+            });
+
+            const formData = new FormData(mrnForm);
+            [
+                "date",
+                "mrn_no",
+                "weighing_slip_no",
+                "weigh_in_time",
+                "weigh_out_time",
+                "security_officer_name",
+                "authorized_person_name",
+            ].forEach((field) => {
                 if (!(formData.get(field) || "").trim()) {
                     errors[field] = "This field is required.";
                 }
             });
 
-            ["weigh_in_weight_kg", "weigh_out_weight_kg"].forEach((field) => {
-                const raw = formData.get(field);
-                if ((raw || "").trim() === "") {
-                    errors[field] = "This field is required.";
-                }
-            });
-
-            if ((formData.get("item_id") || "") === "__create__") {
-                errors["item_id"] = "Select an item.";
-            }
-
             if (!supplierIdInput.value) {
                 errors["supplier_id"] = "Select a supplier.";
-            }
-
-            if (!Number.isFinite(weighInWeightValue) || weighInWeightValue < 0) {
-                errors["weigh_in_weight_kg"] = "Enter a valid non-negative weight.";
-            }
-            if (!Number.isFinite(weighOutWeightValue) || weighOutWeightValue < 0) {
-                errors["weigh_out_weight_kg"] = "Enter a valid non-negative weight.";
-            }
-            if (
-                Number.isFinite(weighInWeightValue) &&
-                Number.isFinite(weighOutWeightValue) &&
-                weighInWeightValue <= weighOutWeightValue
-            ) {
-                errors["weigh_out_weight_kg"] = "Second weight must be less than first weight.";
-            }
-
-            if (Number.isNaN(qtyValue) || qtyValue <= 0) {
-                errors["qty_ton"] = "Quantity must be greater than 0.";
-            }
-            if (Number.isNaN(unitValue) || unitValue < 0) {
-                errors["unit_price"] = "Unit price must be zero or greater.";
-            }
-            if (wetValue < 0 || Number.isNaN(wetValue)) {
-                errors["wet_factor"] = "Wet factor must be zero or greater.";
             }
 
             const weighIn = formData.get("weigh_in_time");
@@ -1258,7 +1636,15 @@
                 }
             }
 
-            return errors;
+            if (sanitizedItems.length === 0 && !errors.items) {
+                errors["items"] = "Add at least one valid item.";
+            }
+
+            if (sanitizedItems.length > 0 && !(totalQty > 0)) {
+                errors["qty_ton"] = "Quantity must be greater than 0.";
+            }
+
+            return { errors, sanitizedItems };
         }
 
         mrnForm.addEventListener("submit", async (event) => {
@@ -1266,7 +1652,7 @@
             clearErrors();
             submitBtn.disabled = true;
 
-            const errors = validateForm();
+            const { errors, sanitizedItems } = validateForm();
             if (Object.keys(errors).length > 0) {
                 Object.entries(errors).forEach(([field, message]) => setError(field, message));
                 submitBtn.disabled = false;
@@ -1275,20 +1661,17 @@
 
             const formData = new FormData(mrnForm);
             const payload = Object.fromEntries(formData.entries());
-            payload.weigh_in_weight_kg = coerceNumericValue(payload.weigh_in_weight_kg);
-            payload.weigh_out_weight_kg = coerceNumericValue(payload.weigh_out_weight_kg);
-            payload.unit_price = coerceNumericValue(payload.unit_price);
-            payload.wet_factor = coerceNumericValue(payload.wet_factor, { defaultValue: 1 });
-            payload.qty_ton = coerceNumericValue(payload.qty_ton);
             payload.weigh_in_time = normalizeDateValue(payload.weigh_in_time);
             payload.weigh_out_time = normalizeDateValue(payload.weigh_out_time);
             payload.supplier_id = supplierIdInput.value || undefined;
             payload.vehicle_no = (vehicleNoInput?.value || "").trim() || undefined;
-            if (payload.item_id === "__create__") {
-                payload.item_id = undefined;
-            }
-
-            delete payload.qty_ton;
+            payload.items = sanitizedItems.map((item) => ({
+                item_id: item.item_id,
+                first_weight_kg: coerceNumericValue(item.first_weight_kg),
+                second_weight_kg: coerceNumericValue(item.second_weight_kg),
+                unit_price: coerceNumericValue(item.unit_price),
+                wet_factor: coerceNumericValue(item.wet_factor, { defaultValue: 1 }),
+            }));
 
             Object.keys(payload).forEach((key) => {
                 if (payload[key] === undefined || payload[key] === "") {

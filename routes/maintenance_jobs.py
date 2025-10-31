@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import smtplib
+import socket
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -104,7 +106,18 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
         return True, f"Notification email sent to {recipient}."
     except Exception as exc:  # pragma: no cover - logging only
         current_app.logger.warning("Failed to send maintenance job email: %s", exc)
-        return False, "Failed to send the notification email."
+        message = "Failed to send the notification email."
+        if isinstance(exc, (socket.timeout, TimeoutError)):
+            message = "Failed to send the notification email: the mail server timed out."
+        elif isinstance(exc, smtplib.SMTPAuthenticationError):
+            message = "Failed to send the notification email: authentication failed."
+        elif isinstance(exc, smtplib.SMTPConnectError):
+            message = "Failed to send the notification email: could not connect to the mail server."
+        elif isinstance(exc, smtplib.SMTPRecipientsRefused):
+            message = "Failed to send the notification email: the recipient address was rejected."
+        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
+            message = "Failed to send the notification email: the mail server could not be reached."
+        return False, message
 
 
 @bp.get("/next-code")

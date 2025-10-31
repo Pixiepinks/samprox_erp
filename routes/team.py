@@ -2076,7 +2076,7 @@ _GROSS_COMPONENT_KEY_MAP = {
         "overtime",
     ),
     PayCategory.CASUAL: (
-        "daySalary",
+        "totaldaySalary",
         "production",
         "generalAllowance",
         "transportAllowance",

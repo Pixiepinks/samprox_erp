@@ -701,6 +701,14 @@ body {
     overflow-x: auto;
 }
 
+.salary-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: rgba(226, 232, 240, 0.6);
+    backdrop-filter: blur(2px);
+}
+
 .salary-section__empty {
     margin: 0.75rem 0 0;
     font-size: 0.95rem;
@@ -744,6 +752,11 @@ body {
 .salary-table th:nth-child(2) {
     z-index: 3;
     background: rgba(226, 232, 240, 0.4);
+}
+
+.salary-table thead th:first-child,
+.salary-table thead th:nth-child(2) {
+    z-index: 5;
 }
 
 .salary-table__name-button {

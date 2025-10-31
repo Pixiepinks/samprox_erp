@@ -1,6 +1,7 @@
 from flask import Blueprint, abort, redirect, render_template, url_for
 
 from material import MaterialValidationError, get_mrn_detail, list_material_items
+from schemas import MaterialItemSchema
 
 bp = Blueprint("ui", __name__)
 
@@ -51,7 +52,9 @@ def material_page():
 def material_mrn_new_page():
     """Render the Material Receipt Note capture form."""
     items = list_material_items()
-    return render_template("material/mrn_new.html", items=items)
+    item_schema = MaterialItemSchema(many=True)
+    item_options = item_schema.dump(items)
+    return render_template("material/mrn_new.html", items=item_options)
 
 
 @bp.get("/material/mrn/<mrn_id>")

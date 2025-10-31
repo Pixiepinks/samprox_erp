@@ -171,7 +171,11 @@ class MaterialItem(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    mrns = db.relationship("MRNHeader", back_populates="item")
+    mrn_lines = db.relationship(
+        "MRNLine",
+        back_populates="item",
+        passive_deletes=True,
+    )
 
 
 class MRNHeader(db.Model):
@@ -182,15 +186,9 @@ class MRNHeader(db.Model):
     date = db.Column(db.Date, nullable=False)
     supplier_id = db.Column(GUID(), db.ForeignKey("suppliers.id"))
     vehicle_no = db.Column("supplier_name_free", db.String(255))
-    item_id = db.Column(GUID(), db.ForeignKey("material_items.id"), nullable=False)
     qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
-    unit_price = db.Column(db.Numeric(12, 2), nullable=False)
-    wet_factor = db.Column(db.Numeric(6, 3), nullable=False, default=Decimal("1.000"))
-    approved_unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     amount = db.Column(db.Numeric(14, 2), nullable=False)
     weighing_slip_no = db.Column(db.String(80), nullable=False)
-    weigh_in_weight_kg = db.Column(db.Numeric(12, 3), nullable=True)
-    weigh_out_weight_kg = db.Column(db.Numeric(12, 3), nullable=True)
     weigh_in_time = db.Column(db.DateTime(timezone=True), nullable=False)
     weigh_out_time = db.Column(db.DateTime(timezone=True), nullable=False)
     security_officer_name = db.Column(db.String(120), nullable=False)
@@ -200,20 +198,52 @@ class MRNHeader(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     supplier = db.relationship("Supplier", back_populates="mrns")
-    item = db.relationship("MaterialItem", back_populates="mrns")
     creator = db.relationship("User")
+    items = db.relationship(
+        "MRNLine",
+        back_populates="mrn",
+        cascade="all, delete-orphan",
+        order_by="MRNLine.created_at",
+    )
 
     __table_args__ = (
         CheckConstraint("qty_ton > 0", name="ck_mrn_qty_positive"),
-        CheckConstraint("unit_price >= 0", name="ck_mrn_unit_price_non_negative"),
-        CheckConstraint("wet_factor >= 0", name="ck_mrn_wet_factor_non_negative"),
-        CheckConstraint("approved_unit_price >= 0", name="ck_mrn_approved_unit_price_non_negative"),
         CheckConstraint("amount >= 0", name="ck_mrn_amount_non_negative"),
-        CheckConstraint(
-            "weigh_in_weight_kg IS NULL OR weigh_out_weight_kg IS NULL OR weigh_in_weight_kg > weigh_out_weight_kg",
-            name="ck_mrn_first_weight_greater_than_second",
-        ),
         CheckConstraint("weigh_out_time >= weigh_in_time", name="ck_mrn_weigh_out_after_in"),
+    )
+
+
+class MRNLine(db.Model):
+    __tablename__ = "mrn_lines"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    mrn_id = db.Column(GUID(), db.ForeignKey("mrn_headers.id", ondelete="CASCADE"), nullable=False)
+    item_id = db.Column(GUID(), db.ForeignKey("material_items.id"), nullable=False)
+    first_weight_kg = db.Column(db.Numeric(12, 3), nullable=False)
+    second_weight_kg = db.Column(db.Numeric(12, 3), nullable=False)
+    qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
+    unit_price = db.Column(db.Numeric(12, 2), nullable=False)
+    wet_factor = db.Column(db.Numeric(6, 3), nullable=False, default=Decimal("1.000"))
+    approved_unit_price = db.Column(db.Numeric(12, 2), nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    mrn = db.relationship("MRNHeader", back_populates="items")
+    item = db.relationship("MaterialItem", back_populates="mrn_lines")
+
+    __table_args__ = (
+        CheckConstraint("first_weight_kg >= 0", name="ck_mrn_line_first_weight_non_negative"),
+        CheckConstraint("second_weight_kg >= 0", name="ck_mrn_line_second_weight_non_negative"),
+        CheckConstraint("first_weight_kg > second_weight_kg", name="ck_mrn_line_weight_order"),
+        CheckConstraint("qty_ton > 0", name="ck_mrn_line_qty_positive"),
+        CheckConstraint("unit_price >= 0", name="ck_mrn_line_unit_price_non_negative"),
+        CheckConstraint("wet_factor >= 0", name="ck_mrn_line_wet_factor_non_negative"),
+        CheckConstraint(
+            "approved_unit_price >= 0",
+            name="ck_mrn_line_approved_unit_price_non_negative",
+        ),
+        CheckConstraint("amount >= 0", name="ck_mrn_line_amount_non_negative"),
     )
 
 class MachineAsset(db.Model):

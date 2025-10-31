@@ -2038,7 +2038,8 @@ _SALARY_COMPONENT_LABELS = {
     "attendanceAllowance": "Attendance allowance",
     "specialAllowance": "Special allowance",
     "performanceBonus": "Performance bonus",
-    "totaldaysalary": "totaldaysalary",
+    "production": "Total day salary",
+    "totaldaysalary": "Total day salary",
     "targetAllowance": "Target allowance",
     "overtime": "Overtime",
     "casualOtRate": "Casual OT Rate",
@@ -2075,6 +2076,7 @@ _GROSS_COMPONENT_KEY_MAP = {
         "overtime",
     ),
     PayCategory.CASUAL: (
+        "production",
         "totaldaysalary",
         "generalAllowance",
         "transportAllowance",

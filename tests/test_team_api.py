@@ -378,6 +378,56 @@ class TeamApiTestCase(unittest.TestCase):
         office_components = office_record.get("components") or {}
         self.assertEqual(office_components.get("noPay"), "0.00")
 
+    def test_casual_overtime_uses_custom_rate(self):
+        casual_member = self._create_member(
+            {"payCategory": "Casual", "regNumber": "CAS-001"}
+        )
+
+        month = "2025-10"
+        attendance_payload = {
+            "month": month,
+            "entries": {
+                "2025-10-01": {"onTime": "07:00", "offTime": "19:00"},
+            },
+        }
+
+        response = self.client.put(
+            f"/api/team/attendance/{casual_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json=attendance_payload,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.put(
+            f"/api/team/salary/{casual_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json={"month": month, "components": {"casualOtRate": "150"}},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        components = body.get("components") or {}
+        self.assertEqual(components.get("casualOtRate"), "150.00")
+        self.assertEqual(components.get("overtime"), "450.00")
+
+        response = self.client.get(
+            "/api/team/salary",
+            headers=self._auth_headers(self.admin_token),
+            query_string={"month": month},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        records = data.get("records", [])
+        casual_record = next(
+            (record for record in records if record.get("memberId") == casual_member["id"]),
+            None,
+        )
+        self.assertIsNotNone(casual_record)
+        casual_components = casual_record.get("components") or {}
+        self.assertEqual(casual_components.get("casualOtRate"), "150.00")
+        self.assertEqual(casual_components.get("overtime"), "450.00")
+
     def test_non_privileged_roles_cannot_register_member(self):
         payload = {
             "regNumber": "TM-002",

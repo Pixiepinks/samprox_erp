@@ -197,42 +197,109 @@
                             </header>
                             <div class="panel__body">
                                 <div class="alert alert--info" id="creation-notice" hidden></div>
-                                <div class="alert alert--success" id="creation-success" hidden>Job created successfully.</div>
+                                <div class="alert alert--success" id="creation-success" hidden></div>
+                                <div class="alert alert--success" id="maintenance-success" hidden></div>
                                 <div class="alert alert--error" id="creation-error" hidden></div>
                                 <form class="form" id="job-form" novalidate>
-                                    <div class="form-grid">
-                                        <div class="input-group">
-                                            <label for="code">Job code <span class="required">*</span></label>
-                                            <input id="code" name="code" type="text" placeholder="JOB-001" required />
+                                    <input type="hidden" id="job-id" name="job_id" />
+                                    <fieldset class="form-section" data-production-section>
+                                        <legend>Production Manager</legend>
+                                        <div class="form-grid">
+                                            <div class="input-group">
+                                                <label for="job-code">Job code</label>
+                                                <input id="job-code" name="job_code" type="text" placeholder="JOB-001" readonly />
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-date">Date</label>
+                                                <input id="job-date" name="job_date" type="date" />
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-title">Title <span class="required">*</span></label>
+                                                <input id="job-title" name="title" type="text" placeholder="Routine maintenance" required />
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-priority">Priority</label>
+                                                <select id="job-priority" name="priority">
+                                                    <option value="Normal">Normal</option>
+                                                    <option value="Urgent">Urgent</option>
+                                                    <option value="Critical">Critical</option>
+                                                </select>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-location">Location</label>
+                                                <select id="job-location" name="location">
+                                                    <option value="">Select a location</option>
+                                                    <option value="Plant 1">Plant 1</option>
+                                                    <option value="Plant 2">Plant 2</option>
+                                                    <option value="Plant 3">Plant 3</option>
+                                                    <option value="Warehouse">Warehouse</option>
+                                                </select>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-expected">Expected completion</label>
+                                                <input id="job-expected" name="expected_completion" type="date" />
+                                            </div>
                                         </div>
                                         <div class="input-group">
-                                            <label for="title">Title <span class="required">*</span></label>
-                                            <input id="title" name="title" type="text" placeholder="Routine maintenance" required />
+                                            <label for="job-description">Description of the job</label>
+                                            <textarea id="job-description" name="description" rows="4" placeholder="Provide any additional details"></textarea>
                                         </div>
                                         <div class="input-group">
-                                            <label for="priority">Priority</label>
-                                            <select id="priority" name="priority">
-                                                <option value="Normal" selected>Normal</option>
-                                                <option value="High">High</option>
-                                                <option value="Low">Low</option>
-                                            </select>
+                                            <label for="maintenance-email">Email of Maintenance Manager</label>
+                                            <input id="maintenance-email" name="maint_email" type="email" placeholder="manager@example.com" />
+                                        </div>
+                                        <div class="form__footer">
+                                            <div class="button-group">
+                                                <button type="button" class="button" id="submit-to-maintenance">Submit to Maintenance Manager</button>
+                                                <button type="button" class="button button--ghost" id="reset-job-form">Start new job</button>
+                                            </div>
+                                        </div>
+                                    </fieldset>
+
+                                    <fieldset class="form-section" data-maintenance-section>
+                                        <legend>Maintenance Manager</legend>
+                                        <div class="form-grid">
+                                            <div class="input-group">
+                                                <label for="job-start">Job started date</label>
+                                                <input id="job-start" name="job_started_date" type="date" />
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-finish">Job finished date</label>
+                                                <input id="job-finish" name="job_finished_date" type="date" />
+                                            </div>
                                         </div>
                                         <div class="input-group">
-                                            <label for="location">Location</label>
-                                            <input id="location" name="location" type="text" placeholder="Plant 1" />
+                                            <label>Materials used</label>
+                                            <div class="table-wrapper" data-materials-table>
+                                                <table class="jobs-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th scope="col">Material name</th>
+                                                            <th scope="col">Units</th>
+                                                            <th scope="col">Cost</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="materials-table-body"></tbody>
+                                                </table>
+                                            </div>
+                                            <div class="button-group button-group--inline">
+                                                <button type="button" class="button button--ghost" id="add-material-row">Add row</button>
+                                                <button type="button" class="button button--ghost" id="remove-material-row">Remove row</button>
+                                            </div>
+                                            <p class="form__hint">Total cost: <span id="materials-total">0.00</span></p>
                                         </div>
                                         <div class="input-group">
-                                            <label for="expected_completion_date">Expected completion</label>
-                                            <input id="expected_completion_date" name="expected_completion_date" type="date" />
+                                            <label for="maintenance-notes">Signature / Remarks</label>
+                                            <textarea id="maintenance-notes" name="maintenance_notes" rows="3"></textarea>
                                         </div>
-                                    </div>
-                                    <div class="input-group">
-                                        <label for="description">Description</label>
-                                        <textarea id="description" name="description" rows="4" placeholder="Provide any additional details"></textarea>
-                                    </div>
-                                    <div class="form__footer">
-                                        <button type="submit" class="button">Create job</button>
-                                    </div>
+                                        <div class="input-group">
+                                            <label for="production-email">Email of Production Manager</label>
+                                            <input id="production-email" name="prod_email" type="email" placeholder="production@example.com" />
+                                        </div>
+                                        <div class="form__footer">
+                                            <button type="button" class="button" id="submit-to-production">Submit to Production Manager</button>
+                                        </div>
+                                    </fieldset>
                                 </form>
                             </div>
                         </section>
@@ -975,7 +1042,8 @@
 
         const canManageAssets = ["production_manager", "admin"].includes(user?.role);
         const canManageParts = canManageAssets || ["maintenance_manager"].includes(user?.role);
-        const canCreateJobs = ["production_manager", "admin"].includes(user?.role);
+        const canManageProductionJobs = ["production_manager", "admin"].includes(user?.role);
+        const canManageMaintenanceJobs = ["maintenance_manager", "admin"].includes(user?.role);
         const canLogIdle = ["production_manager", "maintenance_manager", "admin"].includes(user?.role);
         const canAddSuppliers = ["production_manager", "admin"].includes(user?.role);
 
@@ -987,7 +1055,7 @@
         }
 
         const maintenanceTrigger = document.querySelector('[data-modal-open="maintenance-modal"]');
-        if (maintenanceTrigger && !canCreateJobs) {
+        if (maintenanceTrigger && !canManageProductionJobs) {
             maintenanceTrigger.disabled = true;
             maintenanceTrigger.setAttribute("aria-disabled", "true");
             maintenanceTrigger.title = "Only Production Managers or Admins can request maintenance jobs.";
@@ -1021,6 +1089,29 @@
         const creationNotice = document.getElementById("creation-notice");
         const creationSuccess = document.getElementById("creation-success");
         const creationError = document.getElementById("creation-error");
+        const maintenanceSuccess = document.getElementById("maintenance-success");
+        const jobIdInput = document.getElementById("job-id");
+        const jobCodeInput = document.getElementById("job-code");
+        const jobDateInput = document.getElementById("job-date");
+        const jobTitleInput = document.getElementById("job-title");
+        const jobPrioritySelect = document.getElementById("job-priority");
+        const jobLocationSelect = document.getElementById("job-location");
+        const jobExpectedInput = document.getElementById("job-expected");
+        const jobDescriptionInput = document.getElementById("job-description");
+        const maintenanceEmailInput = document.getElementById("maintenance-email");
+        const productionEmailInput = document.getElementById("production-email");
+        const jobStartInput = document.getElementById("job-start");
+        const jobFinishInput = document.getElementById("job-finish");
+        const maintenanceNotesInput = document.getElementById("maintenance-notes");
+        const submitToMaintenanceButton = document.getElementById("submit-to-maintenance");
+        const submitToProductionButton = document.getElementById("submit-to-production");
+        const addMaterialRowButton = document.getElementById("add-material-row");
+        const removeMaterialRowButton = document.getElementById("remove-material-row");
+        const materialsTableBody = document.getElementById("materials-table-body");
+        const materialsTotalEl = document.getElementById("materials-total");
+        const productionSection = document.querySelector("[data-production-section]");
+        const maintenanceSection = document.querySelector("[data-maintenance-section]");
+        const resetJobFormButton = document.getElementById("reset-job-form");
         const jobsError = document.getElementById("jobs-error");
         const jobsEmpty = document.getElementById("jobs-empty");
         const jobsTableBody = document.getElementById("jobs-table-body");
@@ -1049,6 +1140,9 @@
         let machineCards = Array.from(
             machineCardsContainer?.querySelectorAll("[data-machine-card]") || []
         );
+
+        let currentMaintenanceJob = null;
+        let selectedJobId = null;
 
         const supplierForm = document.getElementById("supplier-form");
         const supplierFormNotice = document.getElementById("supplier-form-notice");
@@ -1197,18 +1291,279 @@
             });
         }
 
-        if (!canCreateJobs) {
-            if (creationNotice) {
-                creationNotice.textContent = "Only Production Managers can create jobs. You can still view existing jobs.";
-                creationNotice.hidden = false;
+        function setProductionFieldsDisabled(disabled) {
+            if (!productionSection) return;
+            productionSection.querySelectorAll("input, textarea, select").forEach((element) => {
+                if (element) element.disabled = disabled;
+            });
+            if (submitToMaintenanceButton) {
+                submitToMaintenanceButton.disabled = disabled || !canManageProductionJobs;
             }
-            if (jobForm) {
-                jobForm.querySelectorAll("input, textarea, select, button").forEach((element) => {
-                    element.disabled = true;
-                });
+            if (resetJobFormButton) {
+                resetJobFormButton.disabled = !canManageProductionJobs;
             }
         }
 
+        function setMaintenanceFieldsDisabled(disabled) {
+            if (!maintenanceSection) return;
+            maintenanceSection.querySelectorAll("input, textarea, select").forEach((element) => {
+                if (element) element.disabled = disabled;
+            });
+            if (addMaterialRowButton) addMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (removeMaterialRowButton) removeMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (submitToProductionButton) {
+                submitToProductionButton.disabled = disabled || !canManageMaintenanceJobs;
+            }
+        }
+
+        if (!canManageProductionJobs && creationNotice) {
+            creationNotice.textContent = "Only Production Managers can submit new maintenance jobs.";
+            creationNotice.hidden = false;
+        }
+
+        if (!canManageProductionJobs) {
+            setProductionFieldsDisabled(true);
+        }
+
+        if (!canManageMaintenanceJobs) {
+            setMaintenanceFieldsDisabled(true);
+        }
+
+        function hideJobAlerts() {
+            if (creationSuccess) creationSuccess.hidden = true;
+            if (maintenanceSuccess) maintenanceSuccess.hidden = true;
+            if (creationError) creationError.hidden = true;
+        }
+
+        function showSuccess(alertEl, message) {
+            if (!alertEl) return;
+            alertEl.textContent = message;
+            alertEl.hidden = false;
+        }
+
+        function showError(message) {
+            if (!creationError) return;
+            creationError.textContent = message;
+            creationError.hidden = false;
+        }
+
+        function clearTableBody(body) {
+            if (!body) return;
+            while (body.firstChild) {
+                body.removeChild(body.firstChild);
+            }
+        }
+
+        function addMaterialRow(material = {}) {
+            if (!materialsTableBody) return;
+            const row = document.createElement("tr");
+
+            const nameCell = document.createElement("td");
+            const nameInput = document.createElement("input");
+            nameInput.type = "text";
+            nameInput.placeholder = "Bearing";
+            nameInput.value = material.material_name || "";
+            nameCell.appendChild(nameInput);
+
+            const unitCell = document.createElement("td");
+            const unitInput = document.createElement("input");
+            unitInput.type = "text";
+            unitInput.placeholder = "2 pcs";
+            unitInput.value = material.units || "";
+            unitCell.appendChild(unitInput);
+
+            const costCell = document.createElement("td");
+            const costInput = document.createElement("input");
+            costInput.type = "number";
+            costInput.step = "0.01";
+            costInput.min = "0";
+            costInput.placeholder = "0.00";
+            costInput.value = material.cost != null ? material.cost : "";
+            costCell.appendChild(costInput);
+
+            [nameInput, unitInput, costInput].forEach((input) => {
+                input.addEventListener("input", () => {
+                    hideJobAlerts();
+                    updateMaterialsTotal();
+                });
+            });
+
+            row.appendChild(nameCell);
+            row.appendChild(unitCell);
+            row.appendChild(costCell);
+            materialsTableBody.appendChild(row);
+        }
+
+        function updateMaterialsTotal() {
+            if (!materialsTableBody || !materialsTotalEl) return;
+            let total = 0;
+            materialsTableBody.querySelectorAll("input[type='number']").forEach((input) => {
+                const value = parseFloat(input.value);
+                if (!Number.isNaN(value)) {
+                    total += value;
+                }
+            });
+            materialsTotalEl.textContent = total.toFixed(2);
+        }
+
+        function setMaterials(materials = []) {
+            clearTableBody(materialsTableBody);
+            if (!materials || materials.length === 0) {
+                addMaterialRow();
+            } else {
+                materials.forEach((material) => addMaterialRow(material));
+            }
+            updateMaterialsTotal();
+        }
+
+        function gatherMaterials() {
+            if (!materialsTableBody) return [];
+            const materials = [];
+            materialsTableBody.querySelectorAll("tr").forEach((row) => {
+                const inputs = row.querySelectorAll("input");
+                if (!inputs.length) return;
+                const [nameInput, unitsInput, costInput] = inputs;
+                const name = nameInput.value.trim();
+                const units = unitsInput.value.trim();
+                const costRaw = costInput.value;
+                const cost = costRaw === "" ? null : Number(costRaw);
+                if (costRaw !== "" && Number.isNaN(cost)) {
+                    throw new Error(`Invalid cost value in materials table${name ? ` for "${name}"` : ""}.`);
+                }
+                if (!name && cost === null && !units) return;
+                materials.push({
+                    material_name: name,
+                    units: units || null,
+                    cost,
+                });
+            });
+            return materials;
+        }
+
+        function populateSelect(select, value) {
+            if (!select) return;
+            if (value && !Array.from(select.options).some((option) => option.value === value)) {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = value;
+                select.appendChild(option);
+            }
+            select.value = value || "";
+        }
+
+        function setSelectedRowHighlight() {
+            if (!jobsTableBody) return;
+            jobsTableBody.querySelectorAll("tr").forEach((row) => {
+                if (Number(row.dataset.jobId) === Number(selectedJobId)) {
+                    row.classList.add("is-selected");
+                } else {
+                    row.classList.remove("is-selected");
+                }
+            });
+        }
+
+        function populateJobForm(job) {
+            currentMaintenanceJob = job || null;
+            if (!job) {
+                if (jobIdInput) jobIdInput.value = "";
+                if (jobCodeInput) jobCodeInput.value = "";
+                if (jobTitleInput) jobTitleInput.value = "";
+                if (jobDateInput) jobDateInput.value = "";
+                if (jobExpectedInput) jobExpectedInput.value = "";
+                if (jobDescriptionInput) jobDescriptionInput.value = "";
+                if (maintenanceEmailInput) maintenanceEmailInput.value = "";
+                if (productionEmailInput) productionEmailInput.value = user?.email || "";
+                if (jobStartInput) jobStartInput.value = "";
+                if (jobFinishInput) jobFinishInput.value = "";
+                if (maintenanceNotesInput) maintenanceNotesInput.value = "";
+                setMaterials([]);
+                updateMaterialsTotal();
+                if (canManageMaintenanceJobs) {
+                    setMaintenanceFieldsDisabled(true);
+                }
+                return;
+            }
+
+            if (jobIdInput) jobIdInput.value = job.id || "";
+            if (jobCodeInput) jobCodeInput.value = job.job_code || "";
+            if (jobDateInput && job.job_date) jobDateInput.value = job.job_date;
+            if (jobTitleInput) jobTitleInput.value = job.title || "";
+            populateSelect(jobPrioritySelect, job.priority || "Normal");
+            populateSelect(jobLocationSelect, job.location || "");
+            if (jobExpectedInput) jobExpectedInput.value = job.expected_completion || "";
+            if (jobDescriptionInput) jobDescriptionInput.value = job.description || "";
+            if (maintenanceEmailInput) maintenanceEmailInput.value = job.maint_email || "";
+            if (productionEmailInput) {
+                productionEmailInput.value = job.prod_email || user?.email || "";
+            }
+            if (jobStartInput) jobStartInput.value = job.job_started_date || "";
+            if (jobFinishInput) jobFinishInput.value = job.job_finished_date || "";
+            if (maintenanceNotesInput) maintenanceNotesInput.value = job.maintenance_notes || "";
+            setMaterials(job.materials || []);
+            updateMaterialsTotal();
+        }
+
+        function syncSectionState(job) {
+            const productionLocked = !canManageProductionJobs || (job && job.prod_submitted_at);
+            const maintenanceLocked = !canManageMaintenanceJobs || !job || job.status === "COMPLETED";
+
+            setProductionFieldsDisabled(productionLocked);
+            setMaintenanceFieldsDisabled(maintenanceLocked);
+
+            if (!job && canManageProductionJobs) {
+                setProductionFieldsDisabled(false);
+            }
+        }
+
+        async function loadJob(jobId) {
+            if (!jobId) return;
+            hideJobAlerts();
+            try {
+                const job = await fetchJson(`/api/maintenance-jobs/${jobId}`);
+                populateJobForm(job);
+                syncSectionState(job);
+            } catch (error) {
+                showError(error.message || "Unable to load job details.");
+            }
+        }
+
+        async function selectJob(jobId) {
+            selectedJobId = jobId;
+            setSelectedRowHighlight();
+            await loadJob(jobId);
+        }
+
+        function prepareNewJobForm() {
+            selectedJobId = null;
+            setSelectedRowHighlight();
+            populateJobForm(null);
+            hideJobAlerts();
+            if (!canManageProductionJobs) return;
+            const today = new Date();
+            const iso = today.toISOString().slice(0, 10);
+            if (jobDateInput) jobDateInput.value = iso;
+            if (jobPrioritySelect) jobPrioritySelect.value = "Normal";
+            if (jobLocationSelect) jobLocationSelect.value = "";
+            setMaterials([]);
+            setProductionFieldsDisabled(false);
+            setMaintenanceFieldsDisabled(true);
+            if (productionEmailInput) productionEmailInput.value = user?.email || "";
+            fetchNextJobCode();
+        }
+
+        async function fetchNextJobCode() {
+            if (!canManageProductionJobs || !jobCodeInput) return;
+            try {
+                jobCodeInput.value = "";
+                jobCodeInput.placeholder = "Generating…";
+                const data = await fetchJson("/api/maintenance-jobs/next-code");
+                jobCodeInput.value = data.code || "";
+                jobCodeInput.placeholder = data.code ? data.code : "JOB-001";
+            } catch (error) {
+                jobCodeInput.placeholder = "Unable to fetch";
+                showError(error.message || "Unable to generate job code.");
+            }
+        }
         if (!canLogIdle && idleEntryForm) {
             if (idleEntryNotice) {
                 idleEntryNotice.textContent = "Only Production, Maintenance Managers or Admins can log hour meter readings.";
@@ -1865,7 +2220,7 @@
             }
 
             try {
-                const jobs = await fetchJson("/api/jobs");
+                const jobs = await fetchJson("/api/maintenance-jobs");
                 renderJobs(jobs);
             } catch (error) {
                 if (jobsError) {
@@ -1890,63 +2245,164 @@
 
             jobs.forEach((job) => {
                 const row = document.createElement("tr");
+                row.dataset.jobId = job.id;
+                const statusText = job.status_label || job.status || "—";
                 row.innerHTML = `
-                    <td data-label="Code">${job.code}</td>
+                    <td data-label="Code">${job.job_code}</td>
                     <td data-label="Title">${job.title}</td>
-                    <td data-label="Status">${job.status}</td>
+                    <td data-label="Status">${statusText}</td>
                     <td data-label="Priority">${job.priority}</td>
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
-                    <td data-label="Expected">${formatDate(job.expected_completion_date)}</td>
-                    <td data-label="Created">${formatDate(job.created_at, true)}</td>
+                    <td data-label="Expected">${formatDate(job.expected_completion)}</td>
+                    <td data-label="Updated">${formatDate(job.updated_at, true)}</td>
                 `;
+                row.addEventListener("click", () => {
+                    selectJob(job.id);
+                });
+                if (selectedJobId && Number(selectedJobId) === Number(job.id)) {
+                    row.classList.add("is-selected");
+                }
                 jobsTableBody.appendChild(row);
             });
+            setSelectedRowHighlight();
         }
 
         refreshJobsButton?.addEventListener("click", loadJobs);
 
-        if (canCreateJobs && jobForm) {
-            jobForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                if (creationSuccess) creationSuccess.hidden = true;
-                if (creationError) creationError.hidden = true;
-                const formData = new FormData(jobForm);
-                const payload = {
-                    code: formData.get("code")?.trim(),
-                    title: formData.get("title")?.trim(),
-                    priority: formData.get("priority") || "Normal",
-                    location: formData.get("location")?.trim() || null,
-                    description: formData.get("description")?.trim() || null,
-                    expected_completion_date: formData.get("expected_completion_date") || null,
-                };
+        if (addMaterialRowButton) {
+            addMaterialRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                addMaterialRow();
+                updateMaterialsTotal();
+            });
+        }
 
-                if ((!payload.code || !payload.title) && creationError) {
-                    creationError.textContent = "Code and Title are required.";
-                    creationError.hidden = false;
-                    return;
-                }
-
-                const submitButton = jobForm.querySelector('button[type="submit"]');
-                submitButton.disabled = true;
-
-                try {
-                    await fetchJson("/api/jobs", {
-                        method: "POST",
-                        body: JSON.stringify(payload),
+        if (removeMaterialRowButton) {
+            removeMaterialRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                if (!materialsTableBody) return;
+                const rows = materialsTableBody.querySelectorAll("tr");
+                if (rows.length > 1) {
+                    materialsTableBody.removeChild(rows[rows.length - 1]);
+                    updateMaterialsTotal();
+                } else {
+                    rows[0].querySelectorAll("input").forEach((input) => {
+                        input.value = "";
                     });
-                    jobForm.reset();
-                    if (creationSuccess) creationSuccess.hidden = false;
-                    await loadJobs();
-                } catch (error) {
-                    if (creationError) {
-                        creationError.textContent = error.message || "Unable to create job";
-                        creationError.hidden = false;
-                    }
-                } finally {
-                    submitButton.disabled = false;
+                    updateMaterialsTotal();
                 }
             });
         }
+
+        if (resetJobFormButton) {
+            resetJobFormButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                prepareNewJobForm();
+            });
+        }
+
+        if (submitToMaintenanceButton) {
+            submitToMaintenanceButton.addEventListener("click", async () => {
+                if (!canManageProductionJobs) return;
+                hideJobAlerts();
+                if (currentMaintenanceJob) {
+                    showError("This job has already been submitted to Maintenance.");
+                    return;
+                }
+
+                const title = jobTitleInput?.value?.trim();
+                if (!title) {
+                    showError("Title is required.");
+                    return;
+                }
+
+                if (jobCodeInput && !jobCodeInput.value) {
+                    await fetchNextJobCode();
+                }
+
+                const payload = {
+                    job_code: jobCodeInput?.value?.trim() || null,
+                    job_date: jobDateInput?.value || null,
+                    title,
+                    priority: jobPrioritySelect?.value || "Normal",
+                    location: jobLocationSelect?.value || null,
+                    expected_completion: jobExpectedInput?.value || null,
+                    description: jobDescriptionInput?.value?.trim() || null,
+                    maint_email: maintenanceEmailInput?.value?.trim() || null,
+                    prod_email: productionEmailInput?.value?.trim() || user?.email || null,
+                };
+
+                submitToMaintenanceButton.disabled = true;
+                try {
+                    const job = await fetchJson("/api/maintenance-jobs", {
+                        method: "POST",
+                        body: JSON.stringify(payload),
+                    });
+                    populateJobForm(job);
+                    syncSectionState(job);
+                    selectedJobId = job.id;
+                    showSuccess(creationSuccess, "Job submitted to Maintenance Manager.");
+                    await loadJobs();
+                } catch (error) {
+                    showError(error.message || "Unable to submit job to Maintenance Manager.");
+                } finally {
+                    submitToMaintenanceButton.disabled = false;
+                }
+            });
+        }
+
+        if (submitToProductionButton) {
+            submitToProductionButton.addEventListener("click", async () => {
+                if (!canManageMaintenanceJobs) return;
+                hideJobAlerts();
+                const jobId = jobIdInput?.value;
+                if (!jobId) {
+                    showError("Select a maintenance job before submitting.");
+                    return;
+                }
+
+                let materials;
+                try {
+                    materials = gatherMaterials();
+                } catch (materialError) {
+                    showError(materialError.message || "Invalid material details.");
+                    return;
+                }
+
+                const payload = {
+                    job_started_date: jobStartInput?.value || null,
+                    job_finished_date: jobFinishInput?.value || null,
+                    maintenance_notes: maintenanceNotesInput?.value?.trim() || null,
+                    prod_email: productionEmailInput?.value?.trim() || null,
+                    materials,
+                };
+
+                submitToProductionButton.disabled = true;
+                try {
+                    const job = await fetchJson(`/api/maintenance-jobs/${jobId}`, {
+                        method: "PATCH",
+                        body: JSON.stringify(payload),
+                    });
+                    populateJobForm(job);
+                    syncSectionState(job);
+                    showSuccess(maintenanceSuccess, "Maintenance details submitted to Production Manager.");
+                    selectedJobId = job.id;
+                    await loadJobs();
+                } catch (error) {
+                    showError(error.message || "Unable to submit maintenance details.");
+                } finally {
+                    submitToProductionButton.disabled = false;
+                }
+            });
+        }
+
+        if (canManageProductionJobs) {
+            prepareNewJobForm();
+        } else {
+            populateJobForm(null);
+        }
+
+        loadJobs();
 
 
         function hideIdleMessages() {

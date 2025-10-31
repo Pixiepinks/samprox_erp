@@ -13,6 +13,8 @@ class MachineApiTestCase(unittest.TestCase):
             self.app_module = importlib.import_module("app")
 
         self.app = self.app_module.create_app()
+        self.app.testing = True
+        self.app.config["MAIL_SUPPRESS_SEND"] = True
         self.ctx = self.app.app_context()
         self.ctx.push()
         self.app_module.db.create_all()

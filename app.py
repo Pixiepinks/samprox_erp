@@ -13,7 +13,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from config import Config, current_database_url
-from extensions import db, migrate, jwt, mail
+from extensions import db, migrate, jwt
 from models import (
     Customer,
     CustomerCategory,
@@ -37,7 +37,6 @@ from models import (
 from routes import (
     auth,
     jobs,
-    maintenance_jobs,
     quotation,
     labor,
     materials,
@@ -170,7 +169,6 @@ def create_app():
     migrate.init_app(app, db)
     _run_database_migrations(app)
     jwt.init_app(app)
-    mail.init_app(app)
 
     @jwt.additional_claims_loader
     def add_claims(identity):
@@ -179,7 +177,6 @@ def create_app():
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(jobs.bp)
-    app.register_blueprint(maintenance_jobs.bp)
     app.register_blueprint(quotation.bp)
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)

@@ -1981,6 +1981,20 @@
             return ATTENDANCE_DAY_STATUS_OPTIONS.includes(trimmed) ? trimmed : "";
         };
 
+        const isWorkDayStatus = (value) => {
+            if (typeof value !== "string") {
+                return false;
+            }
+
+            const normalized = normalizeDayStatusValue(value);
+            if (normalized) {
+                return normalized.toLowerCase().startsWith("work");
+            }
+
+            const trimmed = value.trim().toLowerCase();
+            return trimmed === "work" || trimmed === "work day";
+        };
+
         const resolveDayStatusValue = (value) => {
             const normalized = normalizeDayStatusValue(value);
             if (normalized) {
@@ -2687,6 +2701,9 @@
 
         const isFactoryPayCategory = (member) =>
             getMemberPayCategory(member).toLowerCase() === "factory";
+
+        const isCasualPayCategory = (member) =>
+            getMemberPayCategory(member).toLowerCase() === "casual";
 
         const getWorkCalendarSummaryForMonth = async (month) => {
             const parts = getMonthParts(month);
@@ -3598,6 +3615,97 @@
             removeCasualOtRate(normalizedMonth, memberKey);
         };
 
+        const computeCasualTotalDaySalaryAmount = (
+            month,
+            memberKey,
+            member,
+            options = {},
+        ) => {
+            if (!isCasualPayCategory(member)) {
+                return null;
+            }
+
+            const normalizedMonth = normalizeMonthValue(month) || month;
+            if (!normalizedMonth || !memberKey) {
+                return null;
+            }
+
+            let daySalaryValue = null;
+            if (Object.prototype.hasOwnProperty.call(options, "daySalaryOverride")) {
+                daySalaryValue = parseNumericAmount(options.daySalaryOverride);
+            }
+
+            if (!Number.isFinite(daySalaryValue) || daySalaryValue < 0) {
+                const recordSources = [];
+                if (options.record && typeof options.record === "object") {
+                    recordSources.push(options.record);
+                }
+
+                const storedRecord = getSalaryRecord(normalizedMonth, memberKey);
+                if (storedRecord && typeof storedRecord === "object") {
+                    recordSources.push(storedRecord);
+                }
+
+                for (const source of recordSources) {
+                    if (!source || typeof source !== "object") {
+                        continue;
+                    }
+                    if (!Object.prototype.hasOwnProperty.call(source, "daySalary")) {
+                        continue;
+                    }
+                    const parsed = parseNumericAmount(source.daySalary);
+                    if (Number.isFinite(parsed) && parsed >= 0) {
+                        daySalaryValue = parsed;
+                        break;
+                    }
+                }
+            }
+
+            if (!Number.isFinite(daySalaryValue) || daySalaryValue < 0) {
+                return null;
+            }
+
+            let workDays = null;
+            const summary = getAttendanceLeaveSummaryRecord(normalizedMonth, memberKey);
+            if (summary && Number.isFinite(summary.workDays)) {
+                workDays = summary.workDays;
+            } else {
+                const attendanceRecord = getAttendanceRecord(normalizedMonth, memberKey);
+                if (attendanceRecord && typeof attendanceRecord === "object") {
+                    let count = 0;
+                    Object.entries(attendanceRecord).forEach(([iso, entry]) => {
+                        if (typeof iso !== "string" || !iso.startsWith(normalizedMonth)) {
+                            return;
+                        }
+                        if (!entry || typeof entry !== "object") {
+                            return;
+                        }
+
+                        if (isWorkDayStatus(entry.dayStatus)) {
+                            count += 1;
+                            return;
+                        }
+
+                        const onValue =
+                            typeof entry.onTime === "string" ? entry.onTime : "";
+                        const offValue =
+                            typeof entry.offTime === "string" ? entry.offTime : "";
+                        const payMinutes = computePayMinutes(onValue, offValue);
+                        if (Number.isFinite(payMinutes) && payMinutes > 0) {
+                            count += 1;
+                        }
+                    });
+                    workDays = count;
+                }
+            }
+
+            if (!Number.isFinite(workDays) || workDays < 0) {
+                return null;
+            }
+
+            return daySalaryValue * workDays;
+        };
+
         const parseNumericValue = (value) => {
             if (typeof value === "number" && Number.isFinite(value)) {
                 return value;
@@ -4124,6 +4232,40 @@
                     displayRecord = { ...displayRecord, providentFund: null };
                 }
 
+                const casualTotalDaySalaryAmount = computeCasualTotalDaySalaryAmount(
+                    currentSalaryMonth,
+                    memberKey,
+                    member,
+                    {
+                        record:
+                            displayRecord && typeof displayRecord === "object"
+                                ? displayRecord
+                                : record && typeof record === "object"
+                                ? record
+                                : null,
+                    },
+                );
+
+                if (Number.isFinite(casualTotalDaySalaryAmount)) {
+                    const formattedTotalDaySalary = formatNumberForInput(
+                        casualTotalDaySalaryAmount,
+                    );
+
+                    if (displayRecord && typeof displayRecord === "object") {
+                        displayRecord = {
+                            ...displayRecord,
+                            production: formattedTotalDaySalary,
+                        };
+                    } else if (record && typeof record === "object") {
+                        displayRecord = {
+                            ...record,
+                            production: formattedTotalDaySalary,
+                        };
+                    } else {
+                        displayRecord = { production: formattedTotalDaySalary };
+                    }
+                }
+
                 salaryFieldDefinitions.forEach(({ label, name }) => {
                     row.appendChild(
                         createCell(label, formatSalaryValue(displayRecord?.[name])),
@@ -4214,6 +4356,22 @@
 
                         if (computedAllowance != null) {
                             value = formatNumberForInput(computedAllowance);
+                        }
+                    } else if (name === "production") {
+                        if (isCasualPayCategory(contextMember)) {
+                            input.readOnly = true;
+                            input.setAttribute("aria-readonly", "true");
+
+                            const computedCasualTotal = computeCasualTotalDaySalaryAmount(
+                                targetMonth,
+                                targetMemberKey,
+                                contextMember,
+                                { record },
+                            );
+
+                            if (Number.isFinite(computedCasualTotal)) {
+                                value = formatNumberForInput(computedCasualTotal);
+                            }
                         }
                     } else if (name === "targetAllowance") {
                         input.disabled = !isFactoryMember;
@@ -4354,6 +4512,58 @@
             providentFundInput.value = formatNumberForInput(amount);
         };
 
+        const refreshSalaryFormCasualTotalDaySalary = (overrides = {}) => {
+            if (!salaryForm) {
+                return;
+            }
+
+            const productionInput = salaryForm.elements?.production;
+            if (!productionInput) {
+                return;
+            }
+
+            const member = salaryModalContext?.member ?? null;
+            if (!isCasualPayCategory(member)) {
+                return;
+            }
+
+            const memberKey = salaryModalContext?.memberKey ?? null;
+            if (!memberKey) {
+                return;
+            }
+
+            const normalizedMonth =
+                normalizeMonthValue(salaryFormMonth?.value) ||
+                normalizeMonthValue(currentSalaryMonth) ||
+                currentSalaryMonth;
+
+            if (!normalizedMonth) {
+                productionInput.value = "";
+                return;
+            }
+
+            const baseRecord =
+                overrides.record && typeof overrides.record === "object"
+                    ? overrides.record
+                    : getSalaryRecord(normalizedMonth, memberKey) || null;
+
+            const amount = computeCasualTotalDaySalaryAmount(
+                normalizedMonth,
+                memberKey,
+                member,
+                {
+                    ...overrides,
+                    record: baseRecord,
+                },
+            );
+
+            if (Number.isFinite(amount)) {
+                productionInput.value = formatNumberForInput(amount);
+            } else if (Object.prototype.hasOwnProperty.call(overrides, "daySalaryOverride")) {
+                productionInput.value = "";
+            }
+        };
+
         if (salaryForm?.elements?.basicSalary) {
             salaryForm.elements.basicSalary.addEventListener(
                 "input",
@@ -4365,8 +4575,24 @@
                                 ? event.target.value
                                 : undefined,
                     });
+                    refreshSalaryFormCasualTotalDaySalary();
                 },
             );
+        }
+
+        if (salaryForm?.elements?.daySalary) {
+            const daySalaryInput = salaryForm.elements.daySalary;
+            const updateCasualTotalDaySalary = () => {
+                refreshSalaryFormCasualTotalDaySalary({
+                    daySalaryOverride:
+                        typeof daySalaryInput.value === "string"
+                            ? daySalaryInput.value
+                            : "",
+                });
+            };
+
+            daySalaryInput.addEventListener("input", updateCasualTotalDaySalary);
+            daySalaryInput.addEventListener("change", updateCasualTotalDaySalary);
         }
 
         if (salaryForm?.elements?.casualOtRate) {

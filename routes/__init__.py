@@ -1,6 +1,7 @@
 from . import (
     auth,
     jobs,
+    maintenance_jobs,
     quotation,
     labor,
     materials,
@@ -16,6 +17,7 @@ from . import (
 __all__ = [
     "auth",
     "jobs",
+    "maintenance_jobs",
     "quotation",
     "labor",
     "materials",

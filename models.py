@@ -101,6 +101,74 @@ class Job(db.Model):
     def progress_pct(self):
         return self.progress_pct_manual if self.progress_pct_manual is not None else self.progress_pct_auto()
 
+
+class MaintenanceJobStatus(str, Enum):
+    NEW = "NEW"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+
+
+class MaintenanceJob(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_code = db.Column(db.String(40), unique=True, nullable=False)
+    job_date = db.Column(db.Date, nullable=False, default=date.today)
+    title = db.Column(db.String(255), nullable=False)
+    priority = db.Column(db.String(20), nullable=False, default="Normal")
+    location = db.Column(db.String(120))
+    description = db.Column(db.Text)
+    expected_completion = db.Column(db.Date)
+    status = db.Column(db.Enum(MaintenanceJobStatus), nullable=False, default=MaintenanceJobStatus.NEW)
+    prod_email = db.Column(db.String(255))
+    maint_email = db.Column(db.String(255))
+    prod_submitted_at = db.Column(db.DateTime)
+    maint_submitted_at = db.Column(db.DateTime)
+    job_started_date = db.Column(db.Date)
+    job_finished_date = db.Column(db.Date)
+    total_cost = db.Column(db.Numeric(12, 2), default=Decimal("0.00"))
+    maintenance_notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    assigned_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+
+    materials = db.relationship(
+        "MaintenanceMaterial",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    def recalculate_total_cost(self) -> None:
+        total = Decimal("0")
+        for material in self.materials:
+            cost = material.cost or Decimal("0")
+            if not isinstance(cost, Decimal):
+                try:
+                    cost = Decimal(str(cost))
+                except Exception:
+                    cost = Decimal("0")
+            total += cost
+        self.total_cost = total
+
+
+class MaintenanceMaterial(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    maintenance_job_id = db.Column(
+        db.Integer,
+        db.ForeignKey("maintenance_job.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    material_name = db.Column(db.String(255), nullable=False)
+    units = db.Column(db.String(120))
+    cost = db.Column(db.Numeric(12, 2))
+
+    job = db.relationship("MaintenanceJob", back_populates="materials")
+
 class Quotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     job_id = db.Column(db.Integer, db.ForeignKey("job.id"), unique=True, nullable=False)

@@ -2,11 +2,7 @@ import re
 
 from marshmallow import Schema, fields
 
-from models import (
-    PayCategory,
-    TeamMemberStatus,
-    MaintenanceJobStatus,
-)
+from models import PayCategory, TeamMemberStatus
 
 class UserSchema(Schema):
     id = fields.Int()
@@ -335,51 +331,6 @@ class JobSchema(Schema):
 
     def get_progress(self, obj):
         return obj.progress_pct
-
-
-class MaintenanceMaterialSchema(Schema):
-    id = fields.Int()
-    material_name = fields.Str()
-    units = fields.Str(allow_none=True)
-    cost = fields.Float(allow_none=True)
-
-
-class MaintenanceJobSchema(Schema):
-    id = fields.Int()
-    job_code = fields.Str()
-    job_date = fields.Date()
-    title = fields.Str()
-    priority = fields.Str()
-    location = fields.Str(allow_none=True)
-    description = fields.Str(allow_none=True)
-    expected_completion = fields.Date(allow_none=True)
-    status = fields.Str()
-    prod_email = fields.Str(allow_none=True)
-    maint_email = fields.Str(allow_none=True)
-    prod_submitted_at = fields.DateTime(allow_none=True)
-    maint_submitted_at = fields.DateTime(allow_none=True)
-    job_started_date = fields.Date(allow_none=True)
-    job_finished_date = fields.Date(allow_none=True)
-    total_cost = fields.Float()
-    maintenance_notes = fields.Str(allow_none=True)
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
-    created_by = fields.Nested(UserSchema)
-    assigned_to = fields.Nested(UserSchema, allow_none=True)
-    materials = fields.Nested(MaintenanceMaterialSchema, many=True)
-
-    status_label = fields.Method("get_status_label")
-
-    def get_status_label(self, obj):
-        status = getattr(obj, "status", None)
-        if isinstance(status, MaintenanceJobStatus):
-            return status.value
-        if isinstance(status, str):
-            try:
-                return MaintenanceJobStatus(status).value
-            except ValueError:
-                return status
-        return status
 
 
 class MachinePartReplacementSchema(Schema):

@@ -200,6 +200,71 @@ class ProductionApiTestCase(unittest.TestCase):
             0.0,
         )
 
+    def test_daily_summary_excludes_mch_0003_from_totals(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+        third_asset = self._create_machine()
+
+        def save_output(machine_code, hour_no, quantity, date="2024-05-15"):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        save_output(first_asset["code"], 3, 4.0)
+        save_output(second_asset["code"], 3, 2.5)
+        save_output(third_asset["code"], 3, 6.0)
+
+        response = self.client.get(
+            "/api/production/daily/summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={
+                "date": "2024-05-15",
+                "machine_codes": ",".join(
+                    [first_asset["code"], second_asset["code"], third_asset["code"]]
+                ),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        hour_three = next(hour for hour in data["hours"] if hour["hour_no"] == 3)
+
+        self.assertAlmostEqual(
+            hour_three["machines"][first_asset["code"]]["quantity_tons"],
+            4.0,
+        )
+        self.assertAlmostEqual(
+            hour_three["machines"][second_asset["code"]]["quantity_tons"],
+            2.5,
+        )
+        self.assertAlmostEqual(
+            hour_three["machines"][third_asset["code"]]["quantity_tons"],
+            6.0,
+        )
+
+        # Hour totals should only include MCH-0001 and MCH-0002 quantities.
+        self.assertAlmostEqual(hour_three["hour_total_tons"], 6.5)
+
+        today_totals = data["totals"]["today"]
+        self.assertAlmostEqual(today_totals["machines"][first_asset["code"]], 4.0)
+        self.assertAlmostEqual(today_totals["machines"][second_asset["code"]], 2.5)
+        self.assertAlmostEqual(today_totals["machines"][third_asset["code"]], 6.0)
+
+        # Daily total should exclude the MCH-0003 contribution.
+        self.assertAlmostEqual(today_totals["total"], 6.5)
+
+        mtd_totals = data["totals"]["mtd"]
+        self.assertAlmostEqual(mtd_totals["machines"][third_asset["code"]], 6.0)
+        self.assertAlmostEqual(mtd_totals["total"], 6.5)
+
     def test_create_update_and_fetch_forecast(self):
         asset = self._create_machine()
 

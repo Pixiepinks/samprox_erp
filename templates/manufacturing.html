@@ -191,12 +191,13 @@
                                     <th scope="col">MCH-0001 (tons)</th>
                                     <th scope="col">MCH-0002 (tons)</th>
                                     <th scope="col">Hour total (tons)</th>
+                                    <th scope="col">MCH-0003 (tons)</th>
                                     <th scope="col">Last updated</th>
                                 </tr>
                             </thead>
                             <tbody id="production-table-body">
                                 <tr id="production-empty-row">
-                                    <td colspan="5" class="production-table__empty">
+                                    <td colspan="6" class="production-table__empty">
                                         No production records are available for this date.
                                     </td>
                                 </tr>
@@ -858,7 +859,12 @@
         }
 
         const SUMMARY_MACHINE_CODES = ["MCH-0001", "MCH-0002"];
-        const SUMMARY_MACHINE_NORMALIZED_CODES = SUMMARY_MACHINE_CODES.map((code) =>
+        const SUMMARY_EXTRA_MACHINE_CODES = ["MCH-0003"];
+        const SUMMARY_ALL_MACHINE_CODES = [
+            ...SUMMARY_MACHINE_CODES,
+            ...SUMMARY_EXTRA_MACHINE_CODES,
+        ];
+        const SUMMARY_MACHINE_NORMALIZED_CODES = SUMMARY_ALL_MACHINE_CODES.map((code) =>
             normalizeMachineCodeKey(code),
         ).filter((value) => value.length > 0);
         const MACHINE_HOUR_CODES = ["MCH-0001", "MCH-0002", "MCH-0003"];
@@ -2171,6 +2177,16 @@
                 totalCell.textContent = formatQuantity(hourTotal);
                 tr.appendChild(totalCell);
 
+                SUMMARY_EXTRA_MACHINE_CODES.forEach((code) => {
+                    const machineCell = document.createElement("td");
+                    machineCell.dataset.machineCode = code;
+                    const machineData = machinesMap[code];
+                    const quantity = Number(machineData?.quantity_tons ?? 0);
+                    machineCell.textContent = formatQuantity(quantity);
+                    machineCell.dataset.quantity = Number.isFinite(quantity) ? quantity : 0;
+                    tr.appendChild(machineCell);
+                });
+
                 const updatedCell = document.createElement("td");
                 const updatedValue = hourData.last_updated;
                 if (updatedValue) {
@@ -2310,8 +2326,8 @@
             if (dateInput.value) {
                 params.set("date", dateInput.value);
             }
-            if (SUMMARY_MACHINE_CODES.length > 0) {
-                params.set("machine_codes", SUMMARY_MACHINE_CODES.join(","));
+            if (SUMMARY_ALL_MACHINE_CODES.length > 0) {
+                params.set("machine_codes", SUMMARY_ALL_MACHINE_CODES.join(","));
             }
 
             try {

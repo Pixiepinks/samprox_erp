@@ -28,7 +28,8 @@ bp = Blueprint("production", __name__, url_prefix="/api/production")
 entry_schema = DailyProductionEntrySchema()
 forecast_entry_schema = ProductionForecastEntrySchema()
 
-SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002")
+SUMMARY_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
+SUMMARY_TOTALS_EXCLUDED_CODES = {"MCH-0003"}
 PULSE_MACHINE_CODES = ("MCH-0001", "MCH-0002", "MCH-0003")
 
 EFFECTIVE_TON_THRESHOLD = 0.4
@@ -452,7 +453,8 @@ def get_daily_production_summary():
 
             try:
                 machine_quantity = float(machine_entry.get("quantity_tons") or 0.0)
-                hour_total += machine_quantity
+                if code.upper() not in SUMMARY_TOTALS_EXCLUDED_CODES:
+                    hour_total += machine_quantity
                 daily_totals_by_machine[code] = daily_totals_by_machine.get(code, 0.0) + machine_quantity
             except (TypeError, ValueError):
                 pass
@@ -488,13 +490,16 @@ def get_daily_production_summary():
             }
         )
 
-    today_totals = {
-        "machines": {
-            code: round(daily_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
-        },
+    today_machines = {
+        code: round(daily_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
     }
+    today_totals = {"machines": today_machines}
     today_totals["total"] = round(
-        sum(today_totals["machines"].values()),
+        sum(
+            value
+            for code, value in today_machines.items()
+            if code.upper() not in SUMMARY_TOTALS_EXCLUDED_CODES
+        ),
         3,
     )
 
@@ -524,12 +529,18 @@ def get_daily_production_summary():
             except (TypeError, ValueError):
                 mtd_totals_by_machine[canonical_code] = 0.0
 
-    mtd_totals = {
-        "machines": {
-            code: round(mtd_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
-        },
+    mtd_machines = {
+        code: round(mtd_totals_by_machine.get(code, 0.0), 3) for code in machine_codes
     }
-    mtd_totals["total"] = round(sum(mtd_totals["machines"].values()), 3)
+    mtd_totals = {"machines": mtd_machines}
+    mtd_totals["total"] = round(
+        sum(
+            value
+            for code, value in mtd_machines.items()
+            if code.upper() not in SUMMARY_TOTALS_EXCLUDED_CODES
+        ),
+        3,
+    )
 
     response = {
         "date": query_date.isoformat(),

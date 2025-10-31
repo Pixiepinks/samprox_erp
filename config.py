@@ -5,6 +5,19 @@ from urllib.parse import urlparse, urlunparse
 DEFAULT_DATABASE_URL = "sqlite:///samprox.db"
 
 
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip()
+    if not text:
+        return default
+    try:
+        return float(text)
+    except ValueError:
+        return default
+
+
 def _normalize_db_url(url: str) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
@@ -64,3 +77,4 @@ class Config:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "1890071481Vip*(DTY)")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreply@samprox.lk")
     MAIL_SUPPRESS_SEND = os.getenv("MAIL_SUPPRESS_SEND", "false").lower() == "true"
+    MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)

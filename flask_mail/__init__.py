@@ -138,10 +138,17 @@ class Mail:
         password = config.get("MAIL_PASSWORD")
         use_tls = bool(config.get("MAIL_USE_TLS", False))
         use_ssl = bool(config.get("MAIL_USE_SSL", False))
-        timeout = config.get("MAIL_TIMEOUT")
+        timeout = config.get("MAIL_TIMEOUT", 10.0)
+        try:
+            timeout_value = float(timeout)
+        except (TypeError, ValueError):
+            timeout_value = 10.0
+        else:
+            if timeout_value <= 0:
+                timeout_value = 10.0
 
         smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
-        with smtp_class(host, port, timeout=timeout) as server:
+        with smtp_class(host, port, timeout=timeout_value) as server:
             server.ehlo()
             if use_tls and not use_ssl:
                 server.starttls()

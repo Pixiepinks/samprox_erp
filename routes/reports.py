@@ -14,7 +14,6 @@ from models import (
     MaterialEntry,
     MaterialItem,
     MRNHeader,
-    MRNLine,
     SalesActualEntry,
     SalesForecastEntry,
 )
@@ -509,10 +508,9 @@ def monthly_material_summary():
         db.session.query(
             MRNHeader.date,
             MaterialItem.name,
-            func.coalesce(func.sum(MRNLine.qty_ton), 0.0),
+            func.coalesce(func.sum(MRNHeader.qty_ton), 0.0),
         )
-        .join(MRNLine, MRNLine.mrn_id == MRNHeader.id)
-        .join(MaterialItem, MRNLine.item_id == MaterialItem.id)
+        .join(MaterialItem, MRNHeader.item)
         .filter(MRNHeader.date >= month_start, MRNHeader.date <= month_end)
         .group_by(MRNHeader.date, MaterialItem.name)
         .order_by(MRNHeader.date.asc())

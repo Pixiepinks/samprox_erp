@@ -39,43 +39,6 @@
             font-weight: 600;
             color: #111827;
         }
-        .item-section {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .item-section__title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #111827;
-        }
-        .item-table-wrapper {
-            overflow-x: auto;
-        }
-        .item-table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 720px;
-        }
-        .item-table th,
-        .item-table td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        .item-table th {
-            background: #f9fafb;
-            font-weight: 600;
-            color: #1f2937;
-        }
-        .item-table tfoot th,
-        .item-table tfoot td {
-            font-weight: 600;
-        }
-        .empty-state {
-            color: #6b7280;
-            font-style: italic;
-        }
         .actions {
             display: flex;
             justify-content: flex-end;
@@ -183,16 +146,52 @@
                         <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label">Total Qty (Ton)</span>
+                        <span class="summary-label">Item Name</span>
+                        <span class="summary-value">{{ mrn.item.name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Qty (Ton)</span>
                         <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
                     </div>
                     <div class="summary-item">
-                        <span class="summary-label">Total Amount</span>
+                        <span class="summary-label">Unit Price</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.unit_price) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Wet Factor</span>
+                        <span class="summary-value">{{ '%.3f'|format(mrn.wet_factor) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Approved Unit Price</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.approved_unit_price) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Amount</span>
                         <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Weighing Slip No</span>
                         <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">First Weight (Kg)</span>
+                        <span class="summary-value">
+                            {% if mrn.weigh_in_weight_kg is not none %}
+                                {{ '%.3f'|format(mrn.weigh_in_weight_kg) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Second Weight (Kg)</span>
+                        <span class="summary-value">
+                            {% if mrn.weigh_out_weight_kg is not none %}
+                                {{ '%.3f'|format(mrn.weigh_out_weight_kg) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
                     </div>
                     <div class="summary-item">
                         <span class="summary-label">Weigh Bridge In-time</span>
@@ -214,65 +213,6 @@
                         <span class="summary-label">Recorded At</span>
                         <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                     </div>
-                </div>
-                <div class="item-section">
-                    <h2 class="item-section__title">Item details</h2>
-                    {% if mrn.items %}
-                    <div class="item-table-wrapper">
-                        <table class="item-table">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Item</th>
-                                    <th scope="col">First Weight (Kg)</th>
-                                    <th scope="col">Second Weight (Kg)</th>
-                                    <th scope="col">Qty (Ton)</th>
-                                    <th scope="col">Unit Price</th>
-                                    <th scope="col">Wet Factor</th>
-                                    <th scope="col">Approved Unit Price</th>
-                                    <th scope="col">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for line in mrn.items %}
-                                <tr>
-                                    <td>{{ line.item.name if line.item else "—" }}</td>
-                                    <td>
-                                        {% if line.first_weight_kg is not none %}
-                                            {{ '%.3f'|format(line.first_weight_kg) }}
-                                        {% else %}
-                                            —
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if line.second_weight_kg is not none %}
-                                            {{ '%.3f'|format(line.second_weight_kg) }}
-                                        {% else %}
-                                            —
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ '%.3f'|format(line.qty_ton) }}</td>
-                                    <td>{{ '%.2f'|format(line.unit_price) }}</td>
-                                    <td>{{ '%.3f'|format(line.wet_factor) }}</td>
-                                    <td>{{ '%.2f'|format(line.approved_unit_price) }}</td>
-                                    <td>{{ '%.2f'|format(line.amount) }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <th scope="row" colspan="3">Totals</th>
-                                    <th>{{ '%.3f'|format(mrn.qty_ton) }}</th>
-                                    <th></th>
-                                    <th></th>
-                                    <th></th>
-                                    <th>{{ '%.2f'|format(mrn.amount) }}</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    {% else %}
-                    <p class="empty-state">No item details recorded.</p>
-                    {% endif %}
                 </div>
             </div>
         </section>

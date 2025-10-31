@@ -2514,6 +2514,10 @@
                 const records = Array.isArray(body?.records) ? body.records : [];
                 const monthStore = Object.create(null);
 
+                if (casualOtRateStore[normalized]) {
+                    delete casualOtRateStore[normalized];
+                }
+
                 records.forEach((record) => {
                     const memberId = parseMemberId(record?.memberId);
                     if (memberId == null) {
@@ -2587,6 +2591,13 @@
                         Object.keys(components).length > 0
                     ) {
                         monthStore[storeKey] = components;
+
+                        const rateValue = components.casualOtRate;
+                        if (rateValue != null && rateValue !== "") {
+                            setCasualOtRate(normalized, storeKey, rateValue);
+                        } else {
+                            removeCasualOtRate(normalized, storeKey);
+                        }
                     }
                 });
 
@@ -3526,14 +3537,23 @@
             if (!month || !memberKey) {
                 return;
             }
-            const normalizedValue = typeof value === "string" ? value.trim() : "";
+
+            let normalizedValue = "";
+            if (typeof value === "string") {
+                normalizedValue = value.trim();
+            } else if (typeof value === "number" && Number.isFinite(value)) {
+                normalizedValue = String(value);
+            }
+
             if (!normalizedValue) {
                 removeCasualOtRate(month, memberKey);
                 return;
             }
+
             if (!casualOtRateStore[month]) {
                 casualOtRateStore[month] = {};
             }
+
             casualOtRateStore[month][memberKey] = normalizedValue;
         };
 
@@ -3548,24 +3568,34 @@
         };
 
         const setSalaryRecord = (month, memberKey, record) => {
-            if (!month || !memberKey) {
+            const normalizedMonth = normalizeMonthValue(month) || month;
+            if (!normalizedMonth || !memberKey) {
                 return;
             }
-            if (!salaryDataStore[month]) {
-                salaryDataStore[month] = {};
+
+            if (!salaryDataStore[normalizedMonth]) {
+                salaryDataStore[normalizedMonth] = {};
             }
-            salaryDataStore[month][memberKey] = record;
+
+            salaryDataStore[normalizedMonth][memberKey] = record;
+
+            if (record && typeof record === "object" && record.casualOtRate != null) {
+                setCasualOtRate(normalizedMonth, memberKey, record.casualOtRate);
+            } else {
+                removeCasualOtRate(normalizedMonth, memberKey);
+            }
         };
 
         const removeSalaryRecord = (month, memberKey) => {
-            if (!month || !memberKey || !salaryDataStore[month]) {
+            const normalizedMonth = normalizeMonthValue(month) || month;
+            if (!normalizedMonth || !memberKey || !salaryDataStore[normalizedMonth]) {
                 return;
             }
-            delete salaryDataStore[month][memberKey];
-            if (Object.keys(salaryDataStore[month]).length === 0) {
-                delete salaryDataStore[month];
+            delete salaryDataStore[normalizedMonth][memberKey];
+            if (Object.keys(salaryDataStore[normalizedMonth]).length === 0) {
+                delete salaryDataStore[normalizedMonth];
             }
-            removeCasualOtRate(month, memberKey);
+            removeCasualOtRate(normalizedMonth, memberKey);
         };
 
         const parseNumericValue = (value) => {
@@ -3661,9 +3691,9 @@
                 return 0;
             }
 
+            const salaryRecord = getSalaryRecord(normalized, memberKey) || {};
             const payCategory = getMemberPayCategory(member).toLowerCase();
             if (payCategory === "factory") {
-                const salaryRecord = getSalaryRecord(normalized, memberKey) || {};
                 const overrideBasicSalary =
                     overrides && Object.prototype.hasOwnProperty.call(overrides, "basicSalary")
                         ? overrides.basicSalary
@@ -3676,7 +3706,30 @@
             }
 
             if (payCategory === "casual") {
-                return roundCurrencyValue(120 * totalHours);
+                if (
+                    overrides &&
+                    Object.prototype.hasOwnProperty.call(overrides, "casualOtRate")
+                ) {
+                    const overrideRate = parseNumericValue(overrides.casualOtRate);
+                    if (!Number.isFinite(overrideRate) || overrideRate <= 0) {
+                        return 0;
+                    }
+                    return roundCurrencyValue(overrideRate * totalHours);
+                }
+
+                let casualRate = parseNumericValue(
+                    getCasualOtRate(normalized, memberKey),
+                );
+
+                if (!Number.isFinite(casualRate) || casualRate <= 0) {
+                    casualRate = parseNumericValue(salaryRecord?.casualOtRate);
+                }
+
+                if (!Number.isFinite(casualRate) || casualRate <= 0) {
+                    return 0;
+                }
+
+                return roundCurrencyValue(casualRate * totalHours);
             }
 
             return 0;
@@ -4214,7 +4267,16 @@
 
             const casualOtRateInput = salaryForm.elements?.casualOtRate;
             if (casualOtRateInput) {
-                const storedCasualOtRate = getCasualOtRate(targetMonth, targetMemberKey);
+                let storedCasualOtRate = getCasualOtRate(targetMonth, targetMemberKey);
+                if (!storedCasualOtRate && record?.casualOtRate != null) {
+                    setCasualOtRate(targetMonth, targetMemberKey, record.casualOtRate);
+                    storedCasualOtRate = getCasualOtRate(targetMonth, targetMemberKey);
+                }
+
+                if (!storedCasualOtRate) {
+                    removeCasualOtRate(targetMonth, targetMemberKey);
+                }
+
                 casualOtRateInput.value = storedCasualOtRate;
             }
 
@@ -4243,6 +4305,11 @@
             const basicSalaryInput = salaryForm.elements?.basicSalary;
             if (basicSalaryInput && typeof basicSalaryInput.value === "string") {
                 overrides.basicSalary = basicSalaryInput.value;
+            }
+
+            const casualOtRateInput = salaryForm.elements?.casualOtRate;
+            if (casualOtRateInput && typeof casualOtRateInput.value === "string") {
+                overrides.casualOtRate = casualOtRateInput.value;
             }
 
             const amount = getComputedOvertimeAmount(
@@ -4323,6 +4390,8 @@
                 } else {
                     removeCasualOtRate(normalizedMonth, salaryModalContext.memberKey);
                 }
+
+                refreshSalaryFormOvertime();
             };
 
             casualOtRateInput.addEventListener("input", persistCasualOtRate);
@@ -5224,6 +5293,18 @@
                         }
                     }
                 });
+
+                const casualOtRateField = salaryForm.elements?.casualOtRate;
+                if (casualOtRateField && typeof casualOtRateField.value === "string") {
+                    const trimmedRate = casualOtRateField.value.trim();
+                    if (trimmedRate) {
+                        record.casualOtRate = trimmedRate;
+                        setCasualOtRate(normalizedMonth, salaryModalContext.memberKey, trimmedRate);
+                    } else {
+                        delete record.casualOtRate;
+                        removeCasualOtRate(normalizedMonth, salaryModalContext.memberKey);
+                    }
+                }
 
                 if (!isFactoryPayCategory(salaryModalContext?.member)) {
                     delete record.attendanceAllowance;

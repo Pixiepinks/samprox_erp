@@ -933,7 +933,11 @@ def _compute_overtime_amount_for_member(
     total_hours = Decimal(total_minutes) / Decimal(60)
 
     if pay_category == PayCategory.CASUAL:
-        amount = Decimal("120") * total_hours
+        casual_rate = _decimal_from_value((components or {}).get("casualOtRate"))
+        if casual_rate <= 0:
+            return Decimal("0")
+
+        amount = casual_rate * total_hours
         return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     basic_salary = _decimal_from_value((components or {}).get("basicSalary"))
@@ -2037,6 +2041,7 @@ _SALARY_COMPONENT_LABELS = {
     "production": "Production",
     "targetAllowance": "Target allowance",
     "overtime": "Overtime",
+    "casualOtRate": "Casual OT Rate",
     "grossSalary": "Gross salary",
     "providentFund": "Provident fund",
     "otherDeduction": "Other deduction",

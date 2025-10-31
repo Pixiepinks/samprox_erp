@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import MaterialItem, MRNHeader, MRNLine, Supplier
+from models import MaterialItem, MRNHeader, Supplier
 
 SUPPLIER_CATEGORIES = {
     "Raw Material",
@@ -280,7 +280,7 @@ def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[M
     stmt = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
-            joinedload(MRNHeader.items).joinedload(MRNLine.item),
+            joinedload(MRNHeader.item),
         )
         .order_by(MRNHeader.date.desc(), MRNHeader.created_at.desc())
     )
@@ -291,8 +291,7 @@ def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[M
             like = f"%{term}%"
             stmt = (
                 stmt.outerjoin(MRNHeader.supplier)
-                .outerjoin(MRNLine, MRNLine.mrn_id == MRNHeader.id)
-                .outerjoin(MaterialItem, MRNLine.item_id == MaterialItem.id)
+                .outerjoin(MRNHeader.item)
                 .filter(
                     or_(
                         MRNHeader.mrn_no.ilike(like),
@@ -440,138 +439,95 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
 
     vehicle_no = (payload.get("vehicle_no") or "").strip() or None
 
+    item_uuid = _parse_uuid(payload.get("item_id"), "item_id", errors)
+    item: Optional[MaterialItem] = None
+    if item_uuid:
+        item = get_material_item(item_uuid)
+        if not item:
+            errors["item_id"] = "Item not found."
+        elif item.is_active is False:
+            errors["item_id"] = "Selected item is inactive."
+
     mrn_date = _parse_date(payload.get("date"), "date", errors)
     weigh_in_time = _parse_datetime(payload.get("weigh_in_time"), "weigh_in_time", errors)
     weigh_out_time = _parse_datetime(payload.get("weigh_out_time"), "weigh_out_time", errors)
 
-    items_payload = payload.get("items")
-    if not isinstance(items_payload, list) or len(items_payload) == 0:
-        errors["items"] = "Add at least one item."
-        items_payload = []
+    weigh_in_weight_kg = _decimal_field(
+        payload.get("weigh_in_weight_kg"),
+        "weigh_in_weight_kg",
+        errors,
+        minimum=Decimal("0"),
+        quantize="0.001",
+    )
+    weigh_out_weight_kg = _decimal_field(
+        payload.get("weigh_out_weight_kg"),
+        "weigh_out_weight_kg",
+        errors,
+        minimum=Decimal("0"),
+        quantize="0.001",
+    )
+    unit_price = _decimal_field(
+        payload.get("unit_price"),
+        "unit_price",
+        errors,
+        minimum=Decimal("0"),
+        quantize="0.01",
+    )
+    wet_factor = _decimal_field(
+        payload.get("wet_factor", Decimal("1.000")),
+        "wet_factor",
+        errors,
+        minimum=Decimal("0"),
+        quantize="0.001",
+        default=Decimal("1.000"),
+    )
 
-    validated_lines: list[Dict[str, Any]] = []
-    total_qty = Decimal("0")
-    total_amount = Decimal("0")
-
-    for index, item_payload in enumerate(items_payload):
-        prefix = f"items.{index}."
-        item_uuid = _parse_uuid(item_payload.get("item_id"), prefix + "item_id", errors)
-        material_item: Optional[MaterialItem] = None
-        if item_uuid:
-            material_item = MaterialItem.query.get(item_uuid)
-            if not material_item:
-                errors[prefix + "item_id"] = "Item not found."
-                material_item = None
-            elif material_item.is_active is False:
-                errors[prefix + "item_id"] = "Selected item is inactive."
-
-        first_weight = _decimal_field(
-            item_payload.get("first_weight_kg"),
-            prefix + "first_weight_kg",
-            errors,
-            minimum=Decimal("0"),
-            quantize="0.001",
-        )
-        second_weight = _decimal_field(
-            item_payload.get("second_weight_kg"),
-            prefix + "second_weight_kg",
-            errors,
-            minimum=Decimal("0"),
-            quantize="0.001",
-        )
-        unit_price = _decimal_field(
-            item_payload.get("unit_price"),
-            prefix + "unit_price",
-            errors,
-            minimum=Decimal("0"),
-            quantize="0.01",
-        )
-        wet_factor = _decimal_field(
-            item_payload.get("wet_factor", Decimal("1.000")),
-            prefix + "wet_factor",
-            errors,
-            minimum=Decimal("0"),
-            quantize="0.001",
-            default=Decimal("1.000"),
-        )
-
-        if (
-            first_weight is not None
-            and second_weight is not None
-            and first_weight <= second_weight
-        ):
-            errors[prefix + "second_weight_kg"] = "Second weight must be less than first weight."
-            continue
-
-        if (
-            first_weight is None
-            or second_weight is None
-            or unit_price is None
-            or wet_factor is None
-            or material_item is None
-        ):
-            continue
-
-        net_weight = (first_weight - second_weight).quantize(
-            Decimal("0.001"), rounding=ROUND_HALF_UP
-        )
-        if net_weight <= Decimal("0"):
-            errors[prefix + "qty_ton"] = "Quantity must be greater than 0."
-            continue
-
-        qty_ton = (net_weight / Decimal("1000")).quantize(
-            Decimal("0.001"), rounding=ROUND_HALF_UP
-        )
-        if qty_ton <= Decimal("0"):
-            errors[prefix + "qty_ton"] = "Quantity must be greater than 0."
-            continue
-
-        approved_unit_price = (unit_price * wet_factor).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
-        amount = (qty_ton * approved_unit_price).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
-
-        validated_lines.append(
-            dict(
-                item=material_item,
-                item_id=item_uuid,
-                first_weight_kg=first_weight,
-                second_weight_kg=second_weight,
-                qty_ton=qty_ton,
-                unit_price=unit_price,
-                wet_factor=wet_factor,
-                approved_unit_price=approved_unit_price,
-                amount=amount,
-            )
-        )
-        total_qty += qty_ton
-        total_amount += amount
-
-    if not errors and weigh_in_time and weigh_out_time and weigh_out_time < weigh_in_time:
-        errors["weigh_out_time"] = "Weigh-out time must be after weigh-in time."
-
-    if not validated_lines and "items" not in errors:
-        errors["items"] = "Add at least one valid item."
-
-    total_qty = total_qty.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
-    total_amount = total_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    if total_qty <= Decimal("0"):
-        errors["qty_ton"] = "Quantity must be greater than 0."
+    if (
+        weigh_in_weight_kg is not None
+        and weigh_out_weight_kg is not None
+        and weigh_in_weight_kg <= weigh_out_weight_kg
+    ):
+        errors["weigh_out_weight_kg"] = "Second weight must be less than first weight."
 
     if errors:
         raise MaterialValidationError(errors)
+
+    net_weight_kg = (weigh_in_weight_kg - weigh_out_weight_kg).quantize(
+        Decimal("0.001"), rounding=ROUND_HALF_UP
+    )
+    if net_weight_kg <= Decimal("0"):
+        errors["qty_ton"] = "Quantity must be greater than 0."
+        raise MaterialValidationError(errors)
+
+    qty_ton = (net_weight_kg / Decimal("1000")).quantize(
+        Decimal("0.001"), rounding=ROUND_HALF_UP
+    )
+
+    if qty_ton <= Decimal("0"):
+        errors["qty_ton"] = "Quantity must be greater than 0."
+        raise MaterialValidationError(errors)
+
+    if weigh_in_time and weigh_out_time and weigh_out_time < weigh_in_time:
+        errors["weigh_out_time"] = "Weigh-out time must be after weigh-in time."
+        raise MaterialValidationError(errors)
+
+    approved_unit_price = (unit_price * wet_factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    amount = (qty_ton * approved_unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     mrn_kwargs: Dict[str, Any] = dict(
         mrn_no=mrn_no,
         date=mrn_date,
         supplier=supplier,
         vehicle_no=vehicle_no,
-        qty_ton=total_qty,
-        amount=total_amount,
+        item_id=item_uuid,
+        qty_ton=qty_ton,
+        unit_price=unit_price,
+        wet_factor=wet_factor,
+        approved_unit_price=approved_unit_price,
+        amount=amount,
         weighing_slip_no=weighing_slip_no,
+        weigh_in_weight_kg=weigh_in_weight_kg,
+        weigh_out_weight_kg=weigh_out_weight_kg,
         weigh_in_time=weigh_in_time,
         weigh_out_time=weigh_out_time,
         security_officer_name=security_officer_name,
@@ -579,10 +535,10 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         created_by=created_by,
     )
 
-    mrn = MRNHeader(**mrn_kwargs)
+    if isinstance(item, MaterialItem):
+        mrn_kwargs["item"] = item
 
-    for line_kwargs in validated_lines:
-        mrn.items.append(MRNLine(**line_kwargs))
+    mrn = MRNHeader(**mrn_kwargs)
 
     db.session.add(mrn)
 
@@ -619,7 +575,7 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
     mrn = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
-            joinedload(MRNHeader.items).joinedload(MRNLine.item),
+            joinedload(MRNHeader.item),
         )
         .filter(MRNHeader.id == mrn_uuid)
         .first()

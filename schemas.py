@@ -372,32 +372,21 @@ class MaterialItemSchema(Schema):
     is_active = fields.Bool()
 
 
-class MRNLineSchema(Schema):
-    id = fields.UUID()
-    mrn_id = fields.UUID()
-    item_id = fields.UUID(required=True)
-    first_weight_kg = fields.Decimal(as_string=True)
-    second_weight_kg = fields.Decimal(as_string=True)
-    qty_ton = fields.Decimal(as_string=True)
-    unit_price = fields.Decimal(as_string=True)
-    wet_factor = fields.Decimal(as_string=True)
-    approved_unit_price = fields.Decimal(as_string=True)
-    amount = fields.Decimal(as_string=True)
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
-
-    item = fields.Nested(MaterialItemSchema, allow_none=True)
-
-
 class MRNSchema(Schema):
     id = fields.UUID()
     mrn_no = fields.Str(required=True)
     date = fields.Date(required=True)
     supplier_id = fields.UUID(allow_none=True)
     vehicle_no = fields.Str(allow_none=True)
+    item_id = fields.UUID(required=True)
     qty_ton = fields.Decimal(as_string=True)
+    unit_price = fields.Decimal(as_string=True)
+    wet_factor = fields.Decimal(as_string=True)
+    approved_unit_price = fields.Decimal(as_string=True)
     amount = fields.Decimal(as_string=True)
     weighing_slip_no = fields.Str()
+    weigh_in_weight_kg = fields.Decimal(as_string=True)
+    weigh_out_weight_kg = fields.Decimal(as_string=True)
     weigh_in_time = fields.DateTime()
     weigh_out_time = fields.DateTime()
     security_officer_name = fields.Str()
@@ -407,7 +396,7 @@ class MRNSchema(Schema):
     updated_at = fields.DateTime()
 
     supplier = fields.Nested(SupplierSchema, allow_none=True)
-    items = fields.Nested(MRNLineSchema, many=True)
+    item = fields.Nested(MaterialItemSchema)
 
 
 class MachinePartSchema(Schema):

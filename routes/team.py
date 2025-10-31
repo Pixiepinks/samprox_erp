@@ -421,6 +421,15 @@ def _normalize_salary_components(components: dict | None) -> dict[str, str]:
         else:
             normalized[key] = value
 
+    total_day_value = normalized.get("totalDaySalary")
+    production_value = normalized.get("production")
+
+    if total_day_value is not None:
+        normalized["production"] = total_day_value
+        normalized["totalDaySalary"] = total_day_value
+    elif production_value is not None:
+        normalized["totalDaySalary"] = production_value
+
     return normalized
 
 
@@ -722,6 +731,16 @@ def _compute_gross_salary_amount(
 
     total = Decimal("0.00")
     for key in component_keys:
+        lookup_keys = _GROSS_COMPONENT_ALIAS_MAP.get(key)
+        if lookup_keys:
+            for alias in lookup_keys:
+                if alias in values:
+                    total += _decimal_from_value(values.get(alias))
+                    break
+            else:
+                total += _decimal_from_value(values.get(key))
+            continue
+
         total += _decimal_from_value(values.get(key))
 
     return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -2038,7 +2057,8 @@ _SALARY_COMPONENT_LABELS = {
     "attendanceAllowance": "Attendance allowance",
     "specialAllowance": "Special allowance",
     "performanceBonus": "Performance bonus",
-    "production": "Production",
+    "production": "Total Day Salary",
+    "totalDaySalary": "Total Day Salary",
     "targetAllowance": "Target allowance",
     "overtime": "Overtime",
     "casualOtRate": "Casual OT Rate",
@@ -2085,6 +2105,10 @@ _GROSS_COMPONENT_KEY_MAP = {
         "targetAllowance",
         "overtime",
     ),
+}
+
+_GROSS_COMPONENT_ALIAS_MAP: dict[str, tuple[str, ...]] = {
+    "production": ("totalDaySalary", "production"),
 }
 
 _TARGET_ALLOWANCE_SPECIAL_REG_NO = "E005"

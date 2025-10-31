@@ -1019,6 +1019,12 @@ body {
     color: #1d4ed8;
 }
 
+.alert--warning {
+    background: rgba(254, 243, 199, 0.9);
+    border-color: rgba(251, 191, 36, 0.45);
+    color: #92400e;
+}
+
 .table-wrapper {
     width: 100%;
     overflow-x: auto;

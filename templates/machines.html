@@ -198,7 +198,9 @@
                             <div class="panel__body">
                                 <div class="alert alert--info" id="creation-notice" hidden></div>
                                 <div class="alert alert--success" id="creation-success" hidden></div>
+                                <div class="alert alert--warning" id="creation-warning" hidden></div>
                                 <div class="alert alert--success" id="maintenance-success" hidden></div>
+                                <div class="alert alert--warning" id="maintenance-warning" hidden></div>
                                 <div class="alert alert--error" id="creation-error" hidden></div>
                                 <form class="form" id="job-form" novalidate>
                                     <input type="hidden" id="job-id" name="job_id" />
@@ -1088,8 +1090,10 @@
         const jobForm = document.getElementById("job-form");
         const creationNotice = document.getElementById("creation-notice");
         const creationSuccess = document.getElementById("creation-success");
+        const creationWarning = document.getElementById("creation-warning");
         const creationError = document.getElementById("creation-error");
         const maintenanceSuccess = document.getElementById("maintenance-success");
+        const maintenanceWarning = document.getElementById("maintenance-warning");
         const jobIdInput = document.getElementById("job-id");
         const jobCodeInput = document.getElementById("job-code");
         const jobDateInput = document.getElementById("job-date");
@@ -1331,11 +1335,19 @@
 
         function hideJobAlerts() {
             if (creationSuccess) creationSuccess.hidden = true;
+            if (creationWarning) creationWarning.hidden = true;
             if (maintenanceSuccess) maintenanceSuccess.hidden = true;
+            if (maintenanceWarning) maintenanceWarning.hidden = true;
             if (creationError) creationError.hidden = true;
         }
 
         function showSuccess(alertEl, message) {
+            if (!alertEl) return;
+            alertEl.textContent = message;
+            alertEl.hidden = false;
+        }
+
+        function showWarning(alertEl, message) {
             if (!alertEl) return;
             alertEl.textContent = message;
             alertEl.hidden = false;
@@ -2334,14 +2346,25 @@
 
                 submitToMaintenanceButton.disabled = true;
                 try {
-                    const job = await fetchJson("/api/maintenance-jobs", {
+                    const result = await fetchJson("/api/maintenance-jobs", {
                         method: "POST",
                         body: JSON.stringify(payload),
                     });
+                    const job = result?.job || result;
+                    const notification = result?.email_notification || null;
                     populateJobForm(job);
                     syncSectionState(job);
-                    selectedJobId = job.id;
-                    showSuccess(creationSuccess, "Job submitted to Maintenance Manager.");
+                    selectedJobId = job?.id;
+                    const baseSuccessMessage = "Job submitted to Maintenance Manager.";
+                    if (notification && notification.sent === false) {
+                        const detail = notification.message
+                            ? `${notification.message} Please notify them manually.`
+                            : "The email notification could not be sent. Please notify them manually.";
+                        showWarning(creationWarning, `${baseSuccessMessage} ${detail}`);
+                    } else {
+                        const detail = notification?.message ? ` ${notification.message}` : "";
+                        showSuccess(creationSuccess, `${baseSuccessMessage}${detail}`);
+                    }
                     await loadJobs();
                 } catch (error) {
                     showError(error.message || "Unable to submit job to Maintenance Manager.");
@@ -2379,14 +2402,25 @@
 
                 submitToProductionButton.disabled = true;
                 try {
-                    const job = await fetchJson(`/api/maintenance-jobs/${jobId}`, {
+                    const result = await fetchJson(`/api/maintenance-jobs/${jobId}`, {
                         method: "PATCH",
                         body: JSON.stringify(payload),
                     });
+                    const job = result?.job || result;
+                    const notification = result?.email_notification || null;
                     populateJobForm(job);
                     syncSectionState(job);
-                    showSuccess(maintenanceSuccess, "Maintenance details submitted to Production Manager.");
-                    selectedJobId = job.id;
+                    selectedJobId = job?.id;
+                    const baseSuccessMessage = "Maintenance details submitted to Production Manager.";
+                    if (notification && notification.sent === false) {
+                        const detail = notification.message
+                            ? `${notification.message} Please notify them manually.`
+                            : "The email notification could not be sent. Please notify them manually.";
+                        showWarning(maintenanceWarning, `${baseSuccessMessage} ${detail}`);
+                    } else {
+                        const detail = notification?.message ? ` ${notification.message}` : "";
+                        showSuccess(maintenanceSuccess, `${baseSuccessMessage}${detail}`);
+                    }
                     await loadJobs();
                 } catch (error) {
                     showError(error.message || "Unable to submit maintenance details.");

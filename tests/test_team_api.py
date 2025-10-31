@@ -428,6 +428,52 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(casual_components.get("casualOtRate"), "150.00")
         self.assertEqual(casual_components.get("overtime"), "450.00")
 
+    def test_casual_total_day_salary_counts_towards_gross(self):
+        casual_member = self._create_member(
+            {"payCategory": "Casual", "regNumber": "CAS-200"}
+        )
+
+        month = "2025-11"
+        payload = {
+            "month": month,
+            "components": {
+                "daySalary": "100",
+                "totalDaySalary": "300",
+                "generalAllowance": "200",
+            },
+        }
+
+        response = self.client.put(
+            f"/api/team/salary/{casual_member['id']}",
+            headers=self._auth_headers(self.admin_token),
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        body = response.get_json()
+        components = body.get("components") or {}
+        self.assertEqual(components.get("production"), "300.00")
+        self.assertEqual(components.get("totalDaySalary"), "300.00")
+        self.assertEqual(components.get("grossSalary"), "500.00")
+
+        response = self.client.get(
+            "/api/team/salary",
+            headers=self._auth_headers(self.admin_token),
+            query_string={"month": month},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        records = data.get("records", [])
+        record = next(
+            (item for item in records if item.get("memberId") == casual_member["id"]),
+            None,
+        )
+        self.assertIsNotNone(record)
+        record_components = record.get("components") or {}
+        self.assertEqual(record_components.get("production"), "300.00")
+        self.assertEqual(record_components.get("grossSalary"), "500.00")
+
     def test_non_privileged_roles_cannot_register_member(self):
         payload = {
             "regNumber": "TM-002",

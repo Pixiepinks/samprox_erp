@@ -194,14 +194,28 @@ button[type="submit"][disabled] {
     align-self: center;
     color: #0f172a;
     display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
+    justify-content: center;
 }
 
-.promo h1 {
-    font-size: clamp(2.2rem, 3vw + 1rem, 3.4rem);
-    line-height: 1.1;
+.promo__figure {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+}
+
+.promo__figure img {
+    width: min(420px, 100%);
+    border-radius: 24px;
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
+}
+
+.promo__figure figcaption {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
 }
 
 .alert {
@@ -211,13 +225,6 @@ button[type="submit"][disabled] {
     background: rgba(254, 226, 226, 0.8);
     color: #991b1b;
     font-size: 0.95rem;
-}
-
-.promo p {
-    margin: 0;
-    color: #475569;
-    font-size: 1.05rem;
-    max-width: 28ch;
 }
 
 @media (max-width: 900px) {

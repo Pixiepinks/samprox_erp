@@ -68,6 +68,24 @@ class Mail:
             return formataddr((value[0], value[1]))
         return str(value)
 
+    @staticmethod
+    def _config_bool(value, default: bool = False) -> bool:
+        """Interpret truthy configuration values from strings and other types."""
+
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if not text:
+                return default
+            if text in {"1", "true", "yes", "on"}:
+                return True
+            if text in {"0", "false", "no", "off"}:
+                return False
+        return bool(value)
+
     def _resolve_sender(self, message: Message) -> str:
         sender = message.sender or self.app.config.get("MAIL_DEFAULT_SENDER")
         if not sender:
@@ -137,10 +155,10 @@ class Mail:
         port = int(config.get("MAIL_PORT", 25) or 25)
         username = config.get("MAIL_USERNAME")
         password = config.get("MAIL_PASSWORD")
-        use_tls = bool(config.get("MAIL_USE_TLS", False))
-        use_ssl = bool(config.get("MAIL_USE_SSL", False))
+        use_tls = self._config_bool(config.get("MAIL_USE_TLS"), False)
+        use_ssl = self._config_bool(config.get("MAIL_USE_SSL"), False)
         timeout = config.get("MAIL_TIMEOUT", 10.0)
-        fallback_to_tls = bool(config.get("MAIL_FALLBACK_TO_TLS", False))
+        fallback_to_tls = self._config_bool(config.get("MAIL_FALLBACK_TO_TLS"), False)
         fallback_port_value = config.get("MAIL_FALLBACK_PORT", 587)
         try:
             timeout_value = float(timeout)

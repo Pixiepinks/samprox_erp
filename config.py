@@ -78,3 +78,5 @@ class Config:
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreply@samprox.lk")
     MAIL_SUPPRESS_SEND = os.getenv("MAIL_SUPPRESS_SEND", "false").lower() == "true"
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)
+    MAIL_FALLBACK_TO_TLS = os.getenv("MAIL_FALLBACK_TO_TLS", "true").lower() == "true"
+    MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))

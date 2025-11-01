@@ -10,6 +10,7 @@ mode and delivery has not been explicitly suppressed.
 from __future__ import annotations
 
 import smtplib
+import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr, parseaddr
@@ -139,6 +140,8 @@ class Mail:
         use_tls = bool(config.get("MAIL_USE_TLS", False))
         use_ssl = bool(config.get("MAIL_USE_SSL", False))
         timeout = config.get("MAIL_TIMEOUT", 10.0)
+        fallback_to_tls = bool(config.get("MAIL_FALLBACK_TO_TLS", False))
+        fallback_port_value = config.get("MAIL_FALLBACK_PORT", 587)
         try:
             timeout_value = float(timeout)
         except (TypeError, ValueError):
@@ -147,15 +150,35 @@ class Mail:
             if timeout_value <= 0:
                 timeout_value = 10.0
 
-        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
-        with smtp_class(host, port, timeout=timeout_value) as server:
-            server.ehlo()
-            if use_tls and not use_ssl:
-                server.starttls()
+        try:
+            fallback_port = int(fallback_port_value)
+        except (TypeError, ValueError):
+            fallback_port = 587
+
+        def _send_once(target_port: int, ssl_enabled: bool, tls_enabled: bool) -> None:
+            smtp_class = smtplib.SMTP_SSL if ssl_enabled else smtplib.SMTP
+            with smtp_class(host, target_port, timeout=timeout_value) as server:
                 server.ehlo()
-            if username:
-                server.login(username, password or "")
-            server.send_message(email_message, from_addr=sender, to_addrs=recipients)
+                if tls_enabled and not ssl_enabled:
+                    server.starttls()
+                    server.ehlo()
+                if username:
+                    server.login(username, password or "")
+                server.send_message(email_message, from_addr=sender, to_addrs=recipients)
+
+        try:
+            _send_once(port, use_ssl, use_tls)
+            return
+        except (OSError, smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, ssl.SSLError) as exc:
+            if not fallback_to_tls:
+                raise
+            if not use_ssl and use_tls and port == fallback_port:
+                raise
+            try:
+                _send_once(fallback_port, False, True)
+                return
+            except Exception as fallback_exc:  # pragma: no cover - re-raised for callers
+                raise fallback_exc from exc
 
     # -- public API -----------------------------------------------------
     def send(self, message: Message) -> None:

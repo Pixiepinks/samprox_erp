@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import smtplib
+import ssl
 import socket
 from datetime import date, datetime
 from decimal import Decimal
@@ -115,6 +116,10 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
             message = "Failed to send the notification email: could not connect to the mail server."
         elif isinstance(exc, smtplib.SMTPRecipientsRefused):
             message = "Failed to send the notification email: the recipient address was rejected."
+        elif isinstance(exc, ssl.SSLCertVerificationError):
+            message = "Failed to send the notification email: the mail server's SSL certificate could not be verified."
+        elif isinstance(exc, ssl.SSLError):
+            message = "Failed to send the notification email: a secure connection to the mail server could not be established."
         elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
             message = "Failed to send the notification email: the mail server could not be reached."
         return False, message

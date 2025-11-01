@@ -2,6 +2,7 @@ import importlib
 import os
 import smtplib
 import socket
+import ssl
 import sys
 import unittest
 from unittest.mock import patch
@@ -76,6 +77,21 @@ class MaintenanceEmailTestCase(unittest.TestCase):
         notification = payload["email_notification"]
         self.assertFalse(notification["sent"])
         self.assertIn("authentication failed", notification["message"].lower())
+
+    def test_ssl_error_returns_descriptive_message(self):
+        ssl_error = ssl.SSLError("handshake failed")
+        with patch.object(self.app_module.mail, "send", side_effect=ssl_error):
+            response = self.client.post(
+                "/api/maintenance-jobs",
+                headers=self._auth_headers(),
+                json={"title": "SSL test", "maint_email": "maint@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.get_json()
+        notification = payload["email_notification"]
+        self.assertFalse(notification["sent"])
+        self.assertIn("secure connection", notification["message"].lower())
 
 
 if __name__ == "__main__":

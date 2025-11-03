@@ -146,6 +146,25 @@
                     </div>
                 </div>
             </section>
+            <section class="production-chart" aria-labelledby="labor-chart-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="labor-chart-title">Daily production labor cost</h2>
+                        <p>Stacked day-by-day payroll impact for factory and casual teams.</p>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="labor-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas
+                            id="labor-chart"
+                            height="320"
+                            aria-label="Daily production labor stacked bar chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
         </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -198,6 +217,8 @@
         const salesChartCanvas = document.getElementById("sales-chart");
         const materialSummaryContainer = document.getElementById("material-summary");
         const materialChartCanvas = document.getElementById("material-chart");
+        const laborSummaryContainer = document.getElementById("labor-summary");
+        const laborChartCanvas = document.getElementById("labor-chart");
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
@@ -297,6 +318,19 @@
             { background: "rgba(129, 140, 248, 0.75)", border: "rgb(129, 140, 248)" },
         ];
 
+        const LABOR_COLOR_PALETTE = [
+            { background: "rgba(59, 130, 246, 0.75)", border: "rgb(59, 130, 246)" },
+            { background: "rgba(16, 185, 129, 0.75)", border: "rgb(16, 185, 129)" },
+            { background: "rgba(249, 115, 22, 0.75)", border: "rgb(249, 115, 22)" },
+            { background: "rgba(236, 72, 153, 0.75)", border: "rgb(236, 72, 153)" },
+            { background: "rgba(139, 92, 246, 0.75)", border: "rgb(139, 92, 246)" },
+            { background: "rgba(34, 211, 238, 0.75)", border: "rgb(34, 211, 238)" },
+            { background: "rgba(244, 114, 182, 0.75)", border: "rgb(244, 114, 182)" },
+            { background: "rgba(74, 222, 128, 0.75)", border: "rgb(74, 222, 128)" },
+            { background: "rgba(250, 204, 21, 0.75)", border: "rgb(250, 204, 21)" },
+            { background: "rgba(148, 163, 184, 0.7)", border: "rgb(148, 163, 184)" },
+        ];
+
         const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
             const value = String(index + 1).padStart(2, "0");
             const label = new Date(2000, index, 1).toLocaleString(undefined, {
@@ -369,6 +403,7 @@
             if (yearSelect.disabled) {
                 showProductionSummaryError("No production periods available.");
                 showSalesSummaryError("No sales periods available.");
+                showLaborSummaryError("No labor data available.");
                 return false;
             }
 
@@ -387,6 +422,7 @@
         const idleParetoPeriodCache = new Map();
         const salesPeriodCache = new Map();
         const materialPeriodCache = new Map();
+        const laborPeriodCache = new Map();
 
         const formatTons = (value) => {
             const number = Number(value);
@@ -2025,6 +2061,264 @@
             }
         };
 
+        const renderLaborSummary = (periodData) => {
+            if (!laborSummaryContainer) {
+                return;
+            }
+
+            const totalCost = Number(periodData?.monthly_total ?? 0);
+            const averageCost = Number(periodData?.average_work_day_cost ?? 0);
+            const peakDay = periodData?.peak_day?.day ?? null;
+            const peakValue = Number(periodData?.peak_day?.total_cost ?? 0);
+            const topMemberName = periodData?.top_member?.name ?? null;
+            const topMemberCost = Number(periodData?.top_member?.total_cost ?? 0);
+
+            const summaryMetrics = [
+                {
+                    label: "Monthly labor cost",
+                    value: formatCurrency(totalCost),
+                },
+                {
+                    label: "Average per work day",
+                    value: formatCurrency(averageCost),
+                },
+                {
+                    label: "Highest cost day",
+                    value:
+                        peakDay !== null
+                            ? `Day ${peakDay} – ${formatCurrency(peakValue)}`
+                            : "—",
+                },
+                {
+                    label: "Top contributor",
+                    value:
+                        topMemberName
+                            ? `${topMemberName} (${formatCurrency(topMemberCost)})`
+                            : "—",
+                },
+            ];
+
+            laborSummaryContainer.innerHTML = summaryMetrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.value}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const showLaborSummaryError = (message) => {
+            if (!laborSummaryContainer) {
+                return;
+            }
+            laborSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Labor data</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const fetchLaborDailyCost = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (laborPeriodCache.has(periodKey)) {
+                return laborPeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey });
+            const response = await fetch(
+                `/api/reports/labor/daily-production-cost?${params.toString()}`,
+                { headers: authHeaders },
+            );
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load labor data.");
+            }
+
+            const data = await response.json();
+            laborPeriodCache.set(periodKey, data);
+            return data;
+        };
+
+        const buildLaborDataset = async (periodKey) => {
+            const periodData = await fetchLaborDailyCost(periodKey);
+            if (!periodData) {
+                return null;
+            }
+
+            const labels = Array.isArray(periodData.daily_totals)
+                ? periodData.daily_totals.map((item) => item.day)
+                : [];
+            const members = Array.isArray(periodData.members) ? periodData.members : [];
+
+            if (members.length === 0 || labels.length === 0) {
+                showLaborSummaryError("No labor data available.");
+                return null;
+            }
+
+            const datasets = members.map((member, index, array) => {
+                const values = (periodData.daily_totals || []).map((entry) => {
+                    const value = Number(entry?.member_costs?.[String(member.id)] ?? 0);
+                    return Number.isFinite(value) ? value : 0;
+                });
+
+                const style = LABOR_COLOR_PALETTE[index % LABOR_COLOR_PALETTE.length];
+                const isFirst = index === 0;
+                const isLast = index === array.length - 1;
+                const labelParts = [];
+                if (member?.name) {
+                    labelParts.push(member.name);
+                }
+                if (member?.regNumber) {
+                    labelParts.push(member.regNumber);
+                }
+                const datasetLabel =
+                    labelParts.length > 0 ? labelParts.join(" · ") : `Member ${index + 1}`;
+
+                return {
+                    label: datasetLabel,
+                    data: values,
+                    backgroundColor: style.background,
+                    borderColor: style.border,
+                    borderWidth: 1,
+                    stack: "labor",
+                    maxBarThickness: 18,
+                    borderSkipped: false,
+                    borderRadius: {
+                        topLeft: isLast ? 6 : 0,
+                        topRight: isLast ? 6 : 0,
+                        bottomLeft: isFirst ? 6 : 0,
+                        bottomRight: isFirst ? 6 : 0,
+                    },
+                    order: 1,
+                };
+            });
+
+            renderLaborSummary(periodData);
+            return { labels, datasets };
+        };
+
+        const buildLaborChart = async () => {
+            if (!laborSummaryContainer || !laborChartCanvas) {
+                return;
+            }
+
+            laborSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Loading</span>
+                    <span class="production-chart__metric-value">…</span>
+                </div>
+            `;
+
+            try {
+                const periodKey = getSelectedPeriodKey();
+                const dataset = await buildLaborDataset(periodKey);
+                if (!dataset || !Array.isArray(dataset.datasets) || dataset.datasets.length === 0) {
+                    showLaborSummaryError("No labor data available.");
+                    if (window.laborChartInstance) {
+                        window.laborChartInstance.destroy();
+                        window.laborChartInstance = null;
+                    }
+                    return;
+                }
+
+                if (window.laborChartInstance) {
+                    window.laborChartInstance.data.labels = dataset.labels;
+                    window.laborChartInstance.data.datasets = dataset.datasets;
+                    window.laborChartInstance.update();
+                    return;
+                }
+
+                window.laborChartInstance = new Chart(laborChartCanvas, {
+                    type: "bar",
+                    data: dataset,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: "Day of month",
+                                },
+                                grid: {
+                                    display: false,
+                                },
+                                ticks: {
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 15,
+                                },
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: "Labor cost (Rs)",
+                                },
+                                ticks: {
+                                    callback: (value) => formatCurrency(value),
+                                },
+                            },
+                        },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    usePointStyle: true,
+                                },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => {
+                                        const label = context.dataset.label || "";
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${label}: ${formatCurrency(value)}`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const stackContexts = contexts.filter(
+                                            (item) => item.dataset?.stack === "labor",
+                                        );
+                                        if (stackContexts.length === 0) {
+                                            return "";
+                                        }
+                                        const total = stackContexts.reduce(
+                                            (sum, item) => sum + Number(item.parsed.y ?? 0),
+                                            0,
+                                        );
+                                        return `Total: ${formatCurrency(total)}`;
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            } catch (error) {
+                console.error(error);
+                showLaborSummaryError("Unable to load labor data.");
+            }
+        };
+
         const refreshProductionChart = () => {
             buildProductionChart().catch((error) => {
                 console.error(error);
@@ -2060,12 +2354,20 @@
             });
         };
 
+        const refreshLaborChart = () => {
+            buildLaborChart().catch((error) => {
+                console.error(error);
+                showLaborSummaryError("Unable to load labor data.");
+            });
+        };
+
         const refreshCharts = () => {
             refreshProductionChart();
             refreshProductionPulseChart();
             refreshIdleParetoChart();
             refreshSalesChart();
             refreshMaterialChart();
+            refreshLaborChart();
         };
 
         const selectorsInitialized = initializePeriodSelectors();

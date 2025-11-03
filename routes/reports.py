@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
@@ -17,9 +18,21 @@ from models import (
     MRNLine,
     SalesActualEntry,
     SalesForecastEntry,
+    PayCategory,
+    TeamAttendanceRecord,
+    TeamMember,
+    TeamMemberStatus,
+    TeamSalaryRecord,
 )
 
 from material.services import DEFAULT_MATERIAL_ITEM_NAMES
+from routes.team import (
+    _build_work_calendar_lookup,
+    _calculate_entry_overtime_minutes,
+    _decimal_from_value,
+    _get_month_bounds,
+    _resolve_pay_category,
+)
 
 
 bp = Blueprint("reports", __name__, url_prefix="/api/reports")
@@ -34,6 +47,41 @@ DEFAULT_MATERIAL_LOOKUP = {
 }
 OTHER_MATERIAL_LABEL = "Other materials"
 OTHER_MATERIAL_FIELD = "material_other"
+
+
+def _quantize_currency(value: Decimal | None) -> Decimal:
+    if not isinstance(value, Decimal):
+        value = Decimal("0")
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _normalize_period_param(period: str | None) -> str | None:
+    if not period:
+        return None
+    try:
+        anchor = datetime.strptime(f"{period}-01", "%Y-%m-%d")
+    except ValueError:
+        return None
+    return anchor.strftime("%Y-%m")
+
+
+def _did_casual_work(entry: dict | None) -> bool:
+    if not isinstance(entry, dict):
+        return False
+
+    status_value = entry.get("dayStatus")
+    if isinstance(status_value, str) and status_value.strip().lower().startswith("work"):
+        return True
+
+    on_value = entry.get("onTime")
+    if isinstance(on_value, str) and on_value.strip():
+        return True
+
+    off_value = entry.get("offTime")
+    if isinstance(off_value, str) and off_value.strip():
+        return True
+
+    return False
 
 
 @bp.get("/costs")
@@ -487,6 +535,244 @@ def monthly_sales_summary():
     }
 
     return jsonify(response)
+
+
+@bp.get("/labor/daily-production-cost")
+@jwt_required()
+def labor_daily_production_cost():
+    period_param = _normalize_period_param(request.args.get("period"))
+    if not period_param:
+        today = date.today()
+        period_param = today.strftime("%Y-%m")
+
+    bounds = _get_month_bounds(period_param)
+    if not bounds:
+        return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+
+    month_start, month_end, days_in_month = bounds
+
+    members_query = TeamMember.query.filter(
+        TeamMember.pay_category.in_(
+            (PayCategory.FACTORY.value, PayCategory.CASUAL.value)
+        )
+    ).filter(TeamMember.status == TeamMemberStatus.ACTIVE.value)
+
+    members = (
+        members_query.order_by(TeamMember.pay_category.asc(), TeamMember.name.asc())
+        .all()
+    )
+
+    member_ids = [member.id for member in members if member.id is not None]
+
+    salary_records = []
+    attendance_records = []
+    if member_ids:
+        salary_records = (
+            TeamSalaryRecord.query.filter_by(month=period_param)
+            .filter(TeamSalaryRecord.team_member_id.in_(member_ids))
+            .all()
+        )
+        attendance_records = (
+            TeamAttendanceRecord.query.filter_by(month=period_param)
+            .filter(TeamAttendanceRecord.team_member_id.in_(member_ids))
+            .all()
+        )
+
+    salary_lookup = {
+        record.team_member_id: record.components
+        if isinstance(record.components, dict)
+        else {}
+        for record in salary_records
+    }
+
+    attendance_lookup = {
+        record.team_member_id: record.entries
+        if isinstance(record.entries, dict)
+        else {}
+        for record in attendance_records
+    }
+
+    work_calendar_lookup = _build_work_calendar_lookup(period_param)
+
+    work_day_flags = []
+    for day in range(1, days_in_month + 1):
+        current = date(month_start.year, month_start.month, day)
+        iso = current.isoformat()
+        is_work_day = work_calendar_lookup.get(iso)
+        work_day_flags.append((current, is_work_day is not False))
+
+    work_day_count = sum(1 for _, flag in work_day_flags if flag)
+
+    member_profiles = {}
+    for member in members:
+        if member.id is None:
+            continue
+        pay_category = _resolve_pay_category(member)
+        components = salary_lookup.get(member.id, {})
+
+        profile: dict[str, Decimal | PayCategory | None] = {
+            "pay_category": pay_category,
+        }
+
+        if pay_category == PayCategory.FACTORY:
+            basic = _decimal_from_value(components.get("basicSalary"))
+            attendance_allowance = _decimal_from_value(
+                components.get("attendanceAllowance")
+            )
+            target_allowance = _decimal_from_value(components.get("targetAllowance"))
+            base_total = basic + attendance_allowance + target_allowance
+            if work_day_count > 0:
+                profile["base_daily"] = base_total / Decimal(work_day_count)
+            else:
+                profile["base_daily"] = Decimal("0")
+
+            if basic > 0:
+                profile["ot_rate"] = (basic / Decimal("200")) * Decimal("1.5")
+            else:
+                profile["ot_rate"] = Decimal("0")
+        elif pay_category == PayCategory.CASUAL:
+            day_salary = _decimal_from_value(components.get("daySalary"))
+            profile["day_salary"] = day_salary
+            profile["ot_rate"] = _decimal_from_value(components.get("casualOtRate"))
+        else:
+            profile["base_daily"] = Decimal("0")
+            profile["day_salary"] = Decimal("0")
+            profile["ot_rate"] = Decimal("0")
+
+        member_profiles[member.id] = profile
+
+    daily_results = []
+    member_totals = {
+        member.id: Decimal("0") for member in members if member.id is not None
+    }
+
+    for current_date, is_work_day in work_day_flags:
+        iso = current_date.isoformat()
+        day_number = current_date.day
+        member_costs_payload: dict[str, float] = {}
+        day_total = Decimal("0")
+
+        for member in members:
+            if member.id is None:
+                continue
+
+            profile = member_profiles.get(member.id)
+            if not profile:
+                continue
+
+            pay_category = profile.get("pay_category")
+            amount = Decimal("0")
+
+            if pay_category == PayCategory.FACTORY:
+                base_daily = profile.get("base_daily") or Decimal("0")
+                if is_work_day:
+                    amount += base_daily
+
+            elif pay_category == PayCategory.CASUAL:
+                entries = attendance_lookup.get(member.id, {})
+                entry = entries.get(iso, {})
+                if _did_casual_work(entry):
+                    day_salary = profile.get("day_salary") or Decimal("0")
+                    amount += day_salary
+
+            entries = attendance_lookup.get(member.id, {})
+            entry = entries.get(iso, {})
+            overtime_minutes = _calculate_entry_overtime_minutes(
+                iso, entry, work_calendar_lookup
+            )
+            ot_rate = profile.get("ot_rate") or Decimal("0")
+            if overtime_minutes and ot_rate > 0:
+                ot_hours = Decimal(overtime_minutes) / Decimal(60)
+                amount += ot_hours * ot_rate
+
+            if amount <= 0:
+                continue
+
+            quantized_amount = _quantize_currency(amount)
+            member_costs_payload[str(member.id)] = float(quantized_amount)
+            day_total += quantized_amount
+            member_totals[member.id] = member_totals.get(member.id, Decimal("0")) + quantized_amount
+
+        day_total = _quantize_currency(day_total)
+        daily_results.append(
+            {
+                "day": day_number,
+                "date": iso,
+                "is_work_day": is_work_day,
+                "member_costs": member_costs_payload,
+                "total_cost": float(day_total),
+                "_total_decimal": day_total,
+            }
+        )
+
+    monthly_total = sum((entry["_total_decimal"] for entry in daily_results), Decimal("0"))
+    monthly_total = _quantize_currency(monthly_total)
+
+    if work_day_count > 0:
+        average_work_day_cost = _quantize_currency(monthly_total / Decimal(work_day_count))
+    else:
+        average_work_day_cost = Decimal("0.00")
+
+    peak_entry = max(daily_results, key=lambda entry: entry["_total_decimal"], default=None)
+    peak_payload = {
+        "day": peak_entry["day"] if peak_entry else None,
+        "date": peak_entry["date"] if peak_entry else None,
+        "total_cost": float(_quantize_currency(peak_entry["_total_decimal"]))
+        if peak_entry
+        else 0.0,
+    }
+
+    top_member_id = None
+    top_member_total = Decimal("0")
+    for member_id, total in member_totals.items():
+        if total > top_member_total:
+            top_member_total = total
+            top_member_id = member_id
+
+    top_member_payload = None
+    if top_member_id is not None:
+        top_member = next((m for m in members if m.id == top_member_id), None)
+        if top_member:
+            pay_category = _resolve_pay_category(top_member)
+            top_member_payload = {
+                "id": top_member.id,
+                "name": top_member.name,
+                "regNumber": top_member.reg_number,
+                "payCategory": pay_category.value if isinstance(pay_category, PayCategory) else None,
+                "total_cost": float(_quantize_currency(top_member_total)),
+            }
+
+    members_payload = []
+    for member in members:
+        pay_category = _resolve_pay_category(member)
+        members_payload.append(
+            {
+                "id": member.id,
+                "name": member.name,
+                "regNumber": member.reg_number,
+                "payCategory": pay_category.value if isinstance(pay_category, PayCategory) else None,
+            }
+        )
+
+    for entry in daily_results:
+        entry.pop("_total_decimal", None)
+
+    return jsonify(
+        {
+            "period": period_param,
+            "label": month_start.strftime("%B %Y"),
+            "start_date": month_start.isoformat(),
+            "end_date": month_end.isoformat(),
+            "days": days_in_month,
+            "work_day_count": work_day_count,
+            "monthly_total": float(monthly_total),
+            "average_work_day_cost": float(average_work_day_cost),
+            "peak_day": peak_payload,
+            "top_member": top_member_payload,
+            "members": members_payload,
+            "daily_totals": daily_results,
+        }
+    )
 
 
 @bp.get("/materials/monthly-summary")

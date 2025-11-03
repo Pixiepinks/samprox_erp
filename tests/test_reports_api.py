@@ -545,3 +545,119 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertIsNotNone(top_material)
         self.assertEqual(top_material["name"], "Wood Shaving")
         self.assertAlmostEqual(top_material["quantity_tons"], 14.0)
+
+    def test_labor_daily_production_cost_stacks_members(self):
+        models_module = importlib.import_module("models")
+        TeamMember = models_module.TeamMember
+        TeamMemberStatus = models_module.TeamMemberStatus
+        PayCategory = models_module.PayCategory
+        TeamSalaryRecord = models_module.TeamSalaryRecord
+        TeamAttendanceRecord = models_module.TeamAttendanceRecord
+        db = self.app_module.db
+
+        factory_member = TeamMember(
+            reg_number="E100",
+            name="Factory One",
+            pay_category=PayCategory.FACTORY.value,
+            status=TeamMemberStatus.ACTIVE.value,
+            join_date=date(2023, 1, 1),
+        )
+        casual_member = TeamMember(
+            reg_number="C200",
+            name="Casual One",
+            pay_category=PayCategory.CASUAL.value,
+            status=TeamMemberStatus.ACTIVE.value,
+            join_date=date(2023, 2, 1),
+        )
+
+        db.session.add_all([factory_member, casual_member])
+        db.session.commit()
+
+        factory_salary = TeamSalaryRecord(
+            team_member_id=factory_member.id,
+            month="2024-05",
+            components={
+                "basicSalary": "52000",
+                "attendanceAllowance": "11000",
+                "targetAllowance": "6000",
+            },
+        )
+        casual_salary = TeamSalaryRecord(
+            team_member_id=casual_member.id,
+            month="2024-05",
+            components={
+                "daySalary": "3000",
+                "casualOtRate": "200",
+            },
+        )
+
+        db.session.add_all([factory_salary, casual_salary])
+        db.session.commit()
+
+        factory_attendance = TeamAttendanceRecord(
+            team_member_id=factory_member.id,
+            month="2024-05",
+            entries={
+                "2024-05-01": {"onTime": "07:00", "offTime": "19:00"},
+                "2024-05-02": {"dayStatus": "Work Day"},
+            },
+        )
+        casual_attendance = TeamAttendanceRecord(
+            team_member_id=casual_member.id,
+            month="2024-05",
+            entries={
+                "2024-05-01": {"onTime": "08:00", "offTime": "18:00"},
+                "2024-05-02": {"dayStatus": "Work Day"},
+                "2024-05-03": {"dayStatus": "No Pay Leave"},
+            },
+        )
+
+        db.session.add_all([factory_attendance, casual_attendance])
+        db.session.commit()
+
+        response = self.client.get(
+            "/api/reports/labor/daily-production-cost",
+            headers=self._auth_headers(),
+            query_string={"period": "2024-05"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["days"], 31)
+        self.assertEqual(data["work_day_count"], 31)
+        self.assertEqual(len(data["daily_totals"]), 31)
+
+        members_by_reg = {member["regNumber"]: member for member in data["members"]}
+        self.assertIn("E100", members_by_reg)
+        self.assertIn("C200", members_by_reg)
+
+        day1 = next(entry for entry in data["daily_totals"] if entry["day"] == 1)
+        day2 = next(entry for entry in data["daily_totals"] if entry["day"] == 2)
+        day3 = next(entry for entry in data["daily_totals"] if entry["day"] == 3)
+
+        factory_id = members_by_reg["E100"]["id"]
+        casual_id = members_by_reg["C200"]["id"]
+
+        self.assertAlmostEqual(day1["member_costs"][str(factory_id)], 3395.81, places=2)
+        self.assertAlmostEqual(day1["member_costs"][str(casual_id)], 3200.0, places=2)
+        self.assertAlmostEqual(day1["total_cost"], 6595.81, places=2)
+
+        self.assertAlmostEqual(day2["member_costs"][str(factory_id)], 2225.81, places=2)
+        self.assertAlmostEqual(day2["member_costs"][str(casual_id)], 3000.0, places=2)
+        self.assertAlmostEqual(day2["total_cost"], 5225.81, places=2)
+
+        self.assertAlmostEqual(day3["member_costs"].get(str(factory_id), 0.0), 2225.81, places=2)
+        self.assertNotIn(str(casual_id), day3["member_costs"])
+        self.assertAlmostEqual(day3["total_cost"], 2225.81, places=2)
+
+        self.assertAlmostEqual(data["monthly_total"], 76370.11, places=2)
+        self.assertAlmostEqual(data["average_work_day_cost"], 2463.55, places=2)
+        self.assertEqual(data["peak_day"]["day"], 1)
+        self.assertAlmostEqual(data["peak_day"]["total_cost"], 6595.81, places=2)
+
+        top_member = data["top_member"]
+        self.assertIsNotNone(top_member)
+        self.assertEqual(top_member["regNumber"], "E100")
+        self.assertAlmostEqual(top_member["total_cost"], 70170.11, places=2)

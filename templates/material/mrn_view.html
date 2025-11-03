@@ -358,10 +358,6 @@
                         <span class="summary-label">Total Qty (Ton)</span>
                         <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
                     </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Total Amount</span>
-                        <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
-                    </div>
                 </div>
                 <div class="summary-column">
                     <h2 class="summary-column__title">Entry details</h2>
@@ -372,14 +368,6 @@
                     <div class="summary-item">
                         <span class="summary-label">Authorized Person</span>
                         <span class="summary-value">{{ mrn.authorized_person_name }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Recorded By</span>
-                        <span class="summary-value">{{ mrn.creator.name if mrn.creator else "—" }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Recorded At</span>
-                        <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                     </div>
                 </div>
             </section>
@@ -426,16 +414,6 @@
                             </tr>
                             {% endfor %}
                         </tbody>
-                        <tfoot>
-                            <tr>
-                                <th scope="row" colspan="3">Totals</th>
-                                <th>{{ '%.3f'|format(mrn.qty_ton) }}</th>
-                                <th></th>
-                                <th></th>
-                                <th></th>
-                                <th>{{ '%.2f'|format(mrn.amount) }}</th>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
                 {% else %}
@@ -445,18 +423,11 @@
             <footer class="print-footer">
                 <div class="signature-block">
                     <span class="signature-line"></span>
-                    <span class="signature-label">Security Officer</span>
-                    <span class="signature-name">{{ mrn.security_officer_name }}</span>
+                    <span class="signature-label">Checked By</span>
                 </div>
                 <div class="signature-block">
                     <span class="signature-line"></span>
-                    <span class="signature-label">Verified Officer</span>
-                    <span class="signature-name">{{ mrn.creator.name if mrn.creator else '________________' }}</span>
-                </div>
-                <div class="signature-block">
-                    <span class="signature-line"></span>
-                    <span class="signature-label">Approved Officer</span>
-                    <span class="signature-name">{{ mrn.authorized_person_name }}</span>
+                    <span class="signature-label">Approved By</span>
                 </div>
             </footer>
         </article>

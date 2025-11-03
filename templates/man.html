@@ -4487,12 +4487,11 @@
                 if (!shouldShowSummary) {
                     salarySummaryContainer.hidden = true;
                 } else {
-                    const combinedTotal = productionGrossTotal + casualGrossTotal;
                     salarySummaryContainer.hidden = false;
 
                     if (salarySummaryTotal) {
                         salarySummaryTotal.textContent = numberFormatter.format(
-                            combinedTotal,
+                            productionGrossTotal,
                         );
                     }
                     if (salarySummaryProduction) {

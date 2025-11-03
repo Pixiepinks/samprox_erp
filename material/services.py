@@ -43,7 +43,7 @@ class MaterialValidationError(Exception):
 
 SUPPLIER_REGISTRATION_PREFIX = "SR"
 
-MRN_NUMBER_START = 25197
+MRN_NUMBER_START = 25392
 
 
 def _strip_or_none(value: Any) -> Optional[str]:

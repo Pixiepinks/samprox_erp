@@ -155,12 +155,20 @@ class Mail:
         except (TypeError, ValueError):
             fallback_port = 587
 
+        tls_context = ssl.create_default_context()
+
         def _send_once(target_port: int, ssl_enabled: bool, tls_enabled: bool) -> None:
-            smtp_class = smtplib.SMTP_SSL if ssl_enabled else smtplib.SMTP
-            with smtp_class(host, target_port, timeout=timeout_value) as server:
+            if ssl_enabled:
+                smtp_class = smtplib.SMTP_SSL
+                smtp = smtp_class(host, target_port, timeout=timeout_value, context=tls_context)
+            else:
+                smtp_class = smtplib.SMTP
+                smtp = smtp_class(host, target_port, timeout=timeout_value)
+
+            with smtp as server:
                 server.ehlo()
                 if tls_enabled and not ssl_enabled:
-                    server.starttls()
+                    server.starttls(context=tls_context)
                     server.ehlo()
                 if username:
                     server.login(username, password or "")
@@ -175,7 +183,10 @@ class Mail:
             if not use_ssl and use_tls and port == fallback_port:
                 raise
             try:
-                _send_once(fallback_port, False, True)
+                fallback_use_ssl = bool(
+                    config.get("MAIL_FALLBACK_USE_SSL", False) or fallback_port == 465
+                )
+                _send_once(fallback_port, fallback_use_ssl, not fallback_use_ssl)
                 return
             except Exception as fallback_exc:  # pragma: no cover - re-raised for callers
                 raise fallback_exc from exc

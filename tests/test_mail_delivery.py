@@ -40,9 +40,20 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
         self.mail.send(message)
 
-        smtp_ssl_mock.assert_called_once_with("smtp.example.com", 465, timeout=10.0)
-        smtp_mock.assert_called_once_with("smtp.example.com", 587, timeout=10.0)
+        smtp_ssl_mock.assert_called_once()
+        ssl_args, ssl_kwargs = smtp_ssl_mock.call_args
+        self.assertEqual(ssl_args, ("smtp.example.com", 465))
+        self.assertEqual(ssl_kwargs.get("timeout"), 10.0)
+        self.assertIn("context", ssl_kwargs)
+
+        smtp_mock.assert_called_once()
+        smtp_args, smtp_kwargs = smtp_mock.call_args
+        self.assertEqual(smtp_args, ("smtp.example.com", 587))
+        self.assertEqual(smtp_kwargs.get("timeout"), 10.0)
+
         tls_server.starttls.assert_called_once()
+        starttls_kwargs = tls_server.starttls.call_args.kwargs
+        self.assertIn("context", starttls_kwargs)
         tls_server.send_message.assert_called_once()
 
     @patch("flask_mail.smtplib.SMTP")
@@ -54,7 +65,10 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
         self.mail.send(message)
 
-        smtp_mock.assert_called_once_with("smtp.example.com", 2525, timeout=10.0)
+        smtp_mock.assert_called_once()
+        args, kwargs = smtp_mock.call_args
+        self.assertEqual(args, ("smtp.example.com", 2525))
+        self.assertEqual(kwargs.get("timeout"), 10.0)
 
 
 if __name__ == "__main__":

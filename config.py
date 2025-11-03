@@ -80,3 +80,4 @@ class Config:
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)
     MAIL_FALLBACK_TO_TLS = os.getenv("MAIL_FALLBACK_TO_TLS", "true").lower() == "true"
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
+    MAIL_FALLBACK_USE_SSL = os.getenv("MAIL_FALLBACK_USE_SSL", "false").lower() == "true"

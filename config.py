@@ -69,13 +69,13 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=10)
     ENV = os.getenv("FLASK_ENV", "production")
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "mail.samprox.lk")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", "465"))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "false").lower() == "true"
-    MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "true").lower() == "true"
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreply@samprox.lk")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "1890071481Vip*(DTY)")
-    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreply@samprox.lk")
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
+    MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "false").lower() == "true"
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreplysamprox@gmail.com")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "zzohpxmeoiahipp")
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreplysamprox@gmail.com")
     MAIL_SUPPRESS_SEND = os.getenv("MAIL_SUPPRESS_SEND", "false").lower() == "true"
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)
     MAIL_FALLBACK_TO_TLS = os.getenv("MAIL_FALLBACK_TO_TLS", "true").lower() == "true"

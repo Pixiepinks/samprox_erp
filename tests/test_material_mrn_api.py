@@ -165,7 +165,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertIn("mrn_no", data)
         self.assertTrue(data["mrn_no"].isdigit())
-        self.assertGreaterEqual(int(data["mrn_no"]), 25197)
+        self.assertGreaterEqual(int(data["mrn_no"]), 25392)
 
         second_payload = self._default_payload()
         second_payload.pop("mrn_no", None)
@@ -178,14 +178,14 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         response = self.client.get("/api/material/mrn/next-number")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        self.assertEqual(data["mrn_no"], "25197")
+        self.assertEqual(data["mrn_no"], "25392")
 
-        self._create_mrn({"mrn_no": "25197"})
+        self._create_mrn({"mrn_no": "25392"})
 
         response = self.client.get("/api/material/mrn/next-number")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
-        self.assertEqual(data["mrn_no"], "25198")
+        self.assertEqual(data["mrn_no"], "25393")
 
     def test_mrn_number_must_be_unique(self):
         payload = self._default_payload()

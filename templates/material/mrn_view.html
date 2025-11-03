@@ -124,10 +124,25 @@
             margin: 0;
         }
 
-        .summary-grid {
+        .summary-columns {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 4mm 6mm;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6mm;
+        }
+
+        .summary-column {
+            display: flex;
+            flex-direction: column;
+            gap: 3mm;
+        }
+
+        .summary-column__title {
+            font-size: 10pt;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #4b5563;
+            margin: 0;
         }
 
         .summary-item {
@@ -209,7 +224,7 @@
         .print-footer {
             display: flex;
             justify-content: space-between;
-            gap: 8mm;
+            gap: 6mm;
             margin-top: auto;
         }
 
@@ -217,14 +232,14 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 3mm;
+            gap: 2mm;
             align-items: center;
         }
 
         .signature-line {
             width: 100%;
             border-bottom: 0.3mm solid #9ca3af;
-            height: 10mm;
+            height: 12mm;
         }
 
         .signature-label {
@@ -235,6 +250,12 @@
             letter-spacing: 0.05em;
         }
 
+        .signature-name {
+            font-size: 8pt;
+            color: #4b5563;
+            text-transform: capitalize;
+        }
+
         @media (max-width: 900px) {
             body {
                 padding: 24px 16px;
@@ -243,6 +264,18 @@
             .print-sheet {
                 width: min(210mm, 100%);
                 box-shadow: none;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .summary-columns {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 540px) {
+            .summary-columns {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
 
@@ -287,54 +320,67 @@
                 </div>
             </header>
             <h1 class="print-title">Material Receipt Note</h1>
-            <section class="summary-grid" aria-label="Material summary">
-                <div class="summary-item">
-                    <span class="summary-label">Date</span>
-                    <span class="summary-value">{{ mrn.date.strftime('%Y-%m-%d') }}</span>
+            <section class="summary-columns" aria-label="Material summary">
+                <div class="summary-column">
+                    <h2 class="summary-column__title">Shipment</h2>
+                    <div class="summary-item">
+                        <span class="summary-label">Date</span>
+                        <span class="summary-value">{{ mrn.date.strftime('%Y-%m-%d') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">MRN Number</span>
+                        <span class="summary-value">{{ mrn.mrn_no }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Supplier</span>
+                        <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Vehicle No</span>
+                        <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
+                    </div>
                 </div>
-                <div class="summary-item">
-                    <span class="summary-label">MRN Number</span>
-                    <span class="summary-value">{{ mrn.mrn_no }}</span>
+                <div class="summary-column">
+                    <h2 class="summary-column__title">Weighbridge</h2>
+                    <div class="summary-item">
+                        <span class="summary-label">Weighing Slip No</span>
+                        <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Weigh Bridge In-time</span>
+                        <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Weigh Bridge Out-time</span>
+                        <span class="summary-value">{{ mrn.weigh_out_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Qty (Ton)</span>
+                        <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Amount</span>
+                        <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
+                    </div>
                 </div>
-                <div class="summary-item">
-                    <span class="summary-label">Supplier</span>
-                    <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Vehicle No</span>
-                    <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Total Qty (Ton)</span>
-                    <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Total Amount</span>
-                    <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Weighing Slip No</span>
-                    <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Weigh Bridge In-time</span>
-                    <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Weigh Bridge Out-time</span>
-                    <span class="summary-value">{{ mrn.weigh_out_time.strftime('%Y-%m-%d %H:%M') }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Security Officer</span>
-                    <span class="summary-value">{{ mrn.security_officer_name }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Authorized Person</span>
-                    <span class="summary-value">{{ mrn.authorized_person_name }}</span>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-label">Recorded At</span>
-                    <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                <div class="summary-column">
+                    <h2 class="summary-column__title">Entry details</h2>
+                    <div class="summary-item">
+                        <span class="summary-label">Security Officer</span>
+                        <span class="summary-value">{{ mrn.security_officer_name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Authorized Person</span>
+                        <span class="summary-value">{{ mrn.authorized_person_name }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Recorded By</span>
+                        <span class="summary-value">{{ mrn.creator.name if mrn.creator else "—" }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Recorded At</span>
+                        <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    </div>
                 </div>
             </section>
             <section class="item-section" aria-label="Item details">
@@ -399,11 +445,18 @@
             <footer class="print-footer">
                 <div class="signature-block">
                     <span class="signature-line"></span>
+                    <span class="signature-label">Security Officer</span>
+                    <span class="signature-name">{{ mrn.security_officer_name }}</span>
+                </div>
+                <div class="signature-block">
+                    <span class="signature-line"></span>
                     <span class="signature-label">Verified Officer</span>
+                    <span class="signature-name">{{ mrn.creator.name if mrn.creator else '________________' }}</span>
                 </div>
                 <div class="signature-block">
                     <span class="signature-line"></span>
                     <span class="signature-label">Approved Officer</span>
+                    <span class="signature-name">{{ mrn.authorized_person_name }}</span>
                 </div>
             </footer>
         </article>

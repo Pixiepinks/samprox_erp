@@ -18,6 +18,35 @@
             flex-direction: column;
             gap: 24px;
         }
+        .print-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+        }
+        .print-header__address {
+            font-size: 0.95rem;
+            line-height: 1.4;
+            color: #1f2937;
+            max-width: 340px;
+        }
+        .print-header__logo img {
+            width: 120px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        .print-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-align: center;
+            color: #111827;
+            margin: 0;
+        }
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -108,7 +137,36 @@
             transform: translateY(-1px);
             box-shadow: 0 12px 24px rgba(5, 150, 105, 0.18);
         }
+        .print-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 32px;
+            margin-top: 32px;
+        }
+        .signature-block {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+        .signature-line {
+            width: 100%;
+            border-bottom: 1px solid #9ca3af;
+            height: 24px;
+        }
+        .signature-label {
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #374151;
+            letter-spacing: 0.05em;
+        }
         @media print {
+            @page {
+                size: A5 landscape;
+                margin: 12mm;
+            }
             body {
                 background: #fff;
             }
@@ -119,10 +177,36 @@
                 display: none !important;
             }
             .page {
-                padding: 24px;
+                padding: 0;
             }
             .content-card {
                 box-shadow: none;
+                padding: 0;
+            }
+            .print-header__logo img {
+                width: 100px;
+            }
+            .summary-grid {
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 12px 16px;
+            }
+            .summary-label {
+                font-size: 0.75rem;
+            }
+            .summary-value {
+                font-size: 0.95rem;
+            }
+            .item-table {
+                min-width: 100%;
+                font-size: 0.85rem;
+            }
+            .item-table th,
+            .item-table td {
+                padding: 6px 8px;
+            }
+            .print-footer {
+                gap: 24px;
+                margin-top: 24px;
             }
         }
     </style>
@@ -165,6 +249,19 @@
                 <button type="button" class="print-button" onclick="window.print()">Print</button>
             </div>
             <div class="content-card">
+                <div class="print-layout">
+                    <div class="print-header">
+                        <div class="print-header__address">
+                            <strong>16/2, Sasanawardenarama Mawatha,</strong><br />
+                            Galawaillawaththa<br />
+                            Homgama
+                        </div>
+                        <div class="print-header__logo">
+                            <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Company logo" />
+                        </div>
+                    </div>
+                    <h1 class="print-title">Material Receipt Note</h1>
+                </div>
                 <div class="summary-grid">
                     <div class="summary-item">
                         <span class="summary-label">Date</span>
@@ -274,6 +371,16 @@
                     <p class="empty-state">No item details recorded.</p>
                     {% endif %}
                 </div>
+                <footer class="print-footer">
+                    <div class="signature-block">
+                        <span class="signature-line"></span>
+                        <span class="signature-label">Verified Officer</span>
+                    </div>
+                    <div class="signature-block">
+                        <span class="signature-line"></span>
+                        <span class="signature-label">Approved Officer</span>
+                    </div>
+                </footer>
             </div>
         </section>
     </div>

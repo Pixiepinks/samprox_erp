@@ -38,6 +38,10 @@
             max-width: 100%;
         }
 
+        html {
+            font-size: 12px;
+        }
+
         main {
             width: 100%;
             max-width: 220mm;
@@ -47,10 +51,10 @@
             background: #ffffff;
             border-radius: 12px;
             box-shadow: 0 20px 45px rgba(15, 23, 42, 0.18);
-            padding: 26px 32px;
+            padding: 24px 28px;
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 16px;
         }
 
         .sheet-header {
@@ -63,12 +67,12 @@
         .company-block {
             display: grid;
             gap: 2px;
-            font-size: 1.4rem;
-            line-height: 1.4;
+            font-size: 1.2rem;
+            line-height: 1.35;
         }
 
         .company-name {
-            font-size: 1.65rem;
+            font-size: 1.4rem;
             font-weight: 700;
         }
 
@@ -79,30 +83,31 @@
 
         .document-title {
             text-align: center;
-            font-size: 2.6rem;
+            font-size: 2.2rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            margin: 4px 0 8px;
+            margin: 2px 0 6px;
         }
 
         .meta-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 18px;
+            gap: 14px;
         }
 
         .meta-block {
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
 
         .meta-row {
             display: flex;
             justify-content: space-between;
-            align-items: baseline;
-            gap: 16px;
-            font-size: 1.35rem;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 1.05rem;
+            line-height: 1.3;
         }
 
         .meta-label {
@@ -110,6 +115,7 @@
             color: #1f2937;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+            font-size: 0.9rem;
         }
 
         .meta-value {
@@ -117,6 +123,7 @@
             color: #111827;
             text-align: right;
             white-space: nowrap;
+            font-size: 0.95rem;
         }
 
         table {
@@ -129,14 +136,14 @@
             color: #ffffff;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
         }
 
         th,
         td {
             border: 1px solid #d1d5db;
-            padding: 11px 10px;
-            font-size: 1.3rem;
+            padding: 10px 9px;
+            font-size: 1.1rem;
         }
 
         td:nth-child(4),
@@ -167,8 +174,8 @@
         .signature-section {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 48px;
-            margin-top: 12px;
+            gap: 36px;
+            margin-top: 10px;
         }
 
         .signature-slot {
@@ -177,13 +184,13 @@
         }
 
         .signature-bar {
-            height: 46px;
+            height: 40px;
             border-bottom: 2px solid #111827;
         }
 
         .signature-label {
             text-align: center;
-            font-size: 1.25rem;
+            font-size: 1.05rem;
             font-weight: 700;
             letter-spacing: 0.2em;
             text-transform: uppercase;
@@ -195,12 +202,16 @@
             padding: 18px;
             border: 1px dashed #d1d5db;
             background: #f9fafb;
-            font-size: 1.3rem;
+            font-size: 1.05rem;
             color: #6b7280;
             text-align: center;
         }
 
         @media print {
+            html {
+                font-size: 11px;
+            }
+
             body {
                 background: #ffffff;
                 padding: 0;
@@ -209,7 +220,7 @@
             .print-sheet {
                 border-radius: 0;
                 box-shadow: none;
-                padding: 18mm;
+                padding: 16mm;
             }
         }
     </style>

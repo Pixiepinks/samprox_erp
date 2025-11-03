@@ -7,418 +7,422 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
     <style>
-        .content-card {
+        :root {
+            color-scheme: only light;
+        }
+
+        @page {
+            size: 210mm 148mm;
+            margin: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Inter", sans-serif;
+            background: #e5e7eb;
+            color: #0f172a;
+            display: flex;
+            justify-content: center;
+            padding: 32px 24px;
+        }
+
+        .print-stage {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            width: 100%;
+        }
+
+        .screen-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .screen-actions__link,
+        .screen-actions__button {
+            border-radius: 999px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease,
+                background-color 0.15s ease;
+        }
+
+        .screen-actions__link {
             background: #ffffff;
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+            color: #0f172a;
+            border-color: #d1d5db;
+        }
+
+        .screen-actions__link:hover {
+            border-color: #9ca3af;
+            transform: translateY(-1px);
+        }
+
+        .screen-actions__button {
+            background: linear-gradient(135deg, #0f766e, #047857);
+            color: #ffffff;
+        }
+
+        .screen-actions__button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(4, 120, 87, 0.2);
+        }
+
+        .print-sheet {
+            background: #ffffff;
+            width: 210mm;
+            height: 148mm;
+            max-width: 100%;
+            border-radius: 12px;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
+            padding: 10mm;
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 10mm;
+            overflow: hidden;
         }
-        .print-layout {
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-        }
+
         .print-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 24px;
+            gap: 6mm;
         }
+
         .print-header__address {
-            font-size: 0.95rem;
-            line-height: 1.4;
+            font-size: 10pt;
+            line-height: 1.35;
             color: #1f2937;
-            max-width: 340px;
+            max-width: 70mm;
         }
+
         .print-header__logo img {
-            width: 120px;
+            width: 32mm;
             max-width: 100%;
             object-fit: contain;
         }
+
         .print-title {
-            font-size: 1.5rem;
+            font-size: 15pt;
             font-weight: 700;
             text-align: center;
             color: #111827;
             margin: 0;
         }
+
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px 20px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 4mm 6mm;
         }
+
         .summary-item {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 1.5mm;
         }
+
         .summary-label {
-            font-size: 0.8rem;
+            font-size: 7.8pt;
             text-transform: uppercase;
             letter-spacing: 0.05em;
             color: #6b7280;
         }
+
         .summary-value {
-            font-size: 1.05rem;
+            font-size: 10pt;
             font-weight: 600;
             color: #111827;
         }
+
         .item-section {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 3mm;
+            min-height: 0;
         }
+
         .item-section__title {
-            font-size: 1.1rem;
+            font-size: 11pt;
             font-weight: 600;
             color: #111827;
+            margin: 0;
         }
+
         .item-table-wrapper {
-            overflow-x: auto;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
+
         .item-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 720px;
+            font-size: 8.4pt;
+            table-layout: fixed;
         }
-        .item-table th,
-        .item-table td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        .item-table th {
-            background: #f9fafb;
+
+        .item-table thead th {
             font-weight: 600;
-            color: #1f2937;
+            text-align: left;
+            padding: 3mm 2mm;
+            border-bottom: 0.3mm solid #d1d5db;
+            background: #f3f4f6;
         }
+
+        .item-table tbody td,
         .item-table tfoot th,
         .item-table tfoot td {
-            font-weight: 600;
+            padding: 2.5mm 2mm;
+            border-bottom: 0.25mm solid #e5e7eb;
         }
+
+        .item-table tfoot th {
+            text-align: left;
+        }
+
+        .item-table td,
+        .item-table th {
+            word-break: break-word;
+        }
+
         .empty-state {
             color: #6b7280;
             font-style: italic;
+            font-size: 9pt;
         }
-        .actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-        .button-secondary {
-            background: transparent;
-            border: 1px solid #d1d5db;
-            border-radius: 12px;
-            padding: 12px 24px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .button-secondary:hover {
-            background: #f3f4f6;
-            border-color: #9ca3af;
-        }
-        .print-button {
-            background: linear-gradient(135deg, #059669, #047857);
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            padding: 12px 24px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .print-button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 24px rgba(5, 150, 105, 0.18);
-        }
+
         .print-footer {
             display: flex;
             justify-content: space-between;
-            gap: 32px;
-            margin-top: 32px;
+            gap: 8mm;
+            margin-top: auto;
         }
+
         .signature-block {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 3mm;
             align-items: center;
         }
+
         .signature-line {
             width: 100%;
-            border-bottom: 1px solid #9ca3af;
-            height: 24px;
+            border-bottom: 0.3mm solid #9ca3af;
+            height: 10mm;
         }
+
         .signature-label {
-            font-size: 0.95rem;
+            font-size: 9pt;
             font-weight: 600;
             text-transform: uppercase;
             color: #374151;
             letter-spacing: 0.05em;
         }
-        @media print {
-            @page {
-                size: A5 landscape;
-                margin: 12mm;
-            }
+
+        @media (max-width: 900px) {
             body {
-                background: #fff;
+                padding: 24px 16px;
             }
-            .topbar,
-            .subnav,
-            .actions,
-            #logout {
+
+            .print-sheet {
+                width: min(210mm, 100%);
+                box-shadow: none;
+            }
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+                padding: 0;
+                display: block;
+            }
+
+            .print-stage {
+                gap: 0;
+            }
+
+            .screen-actions {
                 display: none !important;
             }
-            .page {
-                padding: 0;
-            }
-            .content-card {
+
+            .print-sheet {
+                border-radius: 0;
                 box-shadow: none;
-                padding: 0;
-            }
-            .print-header__logo img {
-                width: 100px;
-            }
-            .summary-grid {
-                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-                gap: 12px 16px;
-            }
-            .summary-label {
-                font-size: 0.75rem;
-            }
-            .summary-value {
-                font-size: 0.95rem;
-            }
-            .item-table {
-                min-width: 100%;
-                font-size: 0.85rem;
-            }
-            .item-table th,
-            .item-table td {
-                padding: 6px 8px;
-            }
-            .print-footer {
-                gap: 24px;
-                margin-top: 24px;
+                margin: 0;
             }
         }
     </style>
 </head>
 <body>
-    <div class="page">
-        <header class="topbar">
-            <div class="brand">
-                <div class="brand__logo">S</div>
-                <div class="brand__details">
-                    <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">Material Control</p>
+    <main class="print-stage">
+        <div class="screen-actions">
+            <a class="screen-actions__link" href="{{ url_for('ui.material_page') }}">Back to Material</a>
+            <button type="button" class="screen-actions__button" onclick="window.print()">Print</button>
+        </div>
+        <article class="print-sheet">
+            <header class="print-header">
+                <div class="print-header__address">
+                    <strong>16/2, Sasanawardenarama Mawatha,</strong><br />
+                    Galawaillawaththa<br />
+                    Homgama
                 </div>
-            </div>
-            <div class="topbar__actions">
-                <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
-                <div class="user-summary">
-                    <span class="user-summary__name" id="user-name"></span>
-                    <span class="user-summary__role" id="user-role"></span>
+                <div class="print-header__logo">
+                    <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Company logo" />
                 </div>
-                <button type="button" class="button button--secondary" id="logout">Sign out</button>
-            </div>
-        </header>
-        <nav class="subnav" aria-label="7M navigation">
-            <a class="subnav__link" href="{{ url_for('ui.mind_page') }}">Mind</a>
-            <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
-            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
-            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.material_page') }}">Material</a>
-            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
-            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
-            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
-        </nav>
-        <section class="section">
-            <header class="section__header">
-                <h1>MRN {{ mrn.mrn_no }}</h1>
-                <p class="section__description">Review details of the recorded material receipt.</p>
             </header>
-            <div class="actions">
-                <a class="button-secondary" href="{{ url_for('ui.material_mrn_new_page') }}">Record another MRN</a>
-                <button type="button" class="print-button" onclick="window.print()">Print</button>
-            </div>
-            <div class="content-card">
-                <div class="print-layout">
-                    <div class="print-header">
-                        <div class="print-header__address">
-                            <strong>16/2, Sasanawardenarama Mawatha,</strong><br />
-                            Galawaillawaththa<br />
-                            Homgama
-                        </div>
-                        <div class="print-header__logo">
-                            <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Company logo" />
-                        </div>
-                    </div>
-                    <h1 class="print-title">Material Receipt Note</h1>
+            <h1 class="print-title">Material Receipt Note</h1>
+            <section class="summary-grid" aria-label="Material summary">
+                <div class="summary-item">
+                    <span class="summary-label">Date</span>
+                    <span class="summary-value">{{ mrn.date.strftime('%Y-%m-%d') }}</span>
                 </div>
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <span class="summary-label">Date</span>
-                        <span class="summary-value">{{ mrn.date.strftime('%Y-%m-%d') }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">MRN Number</span>
-                        <span class="summary-value">{{ mrn.mrn_no }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Supplier</span>
-                        <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Vehicle No</span>
-                        <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Total Qty (Ton)</span>
-                        <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Total Amount</span>
-                        <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Weighing Slip No</span>
-                        <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Weigh Bridge In-time</span>
-                        <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Weigh Bridge Out-time</span>
-                        <span class="summary-value">{{ mrn.weigh_out_time.strftime('%Y-%m-%d %H:%M') }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Security Officer</span>
-                        <span class="summary-value">{{ mrn.security_officer_name }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Authorized Person</span>
-                        <span class="summary-value">{{ mrn.authorized_person_name }}</span>
-                    </div>
-                    <div class="summary-item">
-                        <span class="summary-label">Recorded At</span>
-                        <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-                    </div>
+                <div class="summary-item">
+                    <span class="summary-label">MRN Number</span>
+                    <span class="summary-value">{{ mrn.mrn_no }}</span>
                 </div>
-                <div class="item-section">
-                    <h2 class="item-section__title">Item details</h2>
-                    {% if mrn.items %}
-                    <div class="item-table-wrapper">
-                        <table class="item-table">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Item</th>
-                                    <th scope="col">First Weight (Kg)</th>
-                                    <th scope="col">Second Weight (Kg)</th>
-                                    <th scope="col">Qty (Ton)</th>
-                                    <th scope="col">Unit Price</th>
-                                    <th scope="col">Wet Factor</th>
-                                    <th scope="col">Approved Unit Price</th>
-                                    <th scope="col">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for line in mrn.items %}
-                                <tr>
-                                    <td>{{ line.item.name if line.item else "—" }}</td>
-                                    <td>
-                                        {% if line.first_weight_kg is not none %}
-                                            {{ '%.3f'|format(line.first_weight_kg) }}
-                                        {% else %}
-                                            —
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if line.second_weight_kg is not none %}
-                                            {{ '%.3f'|format(line.second_weight_kg) }}
-                                        {% else %}
-                                            —
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ '%.3f'|format(line.qty_ton) }}</td>
-                                    <td>{{ '%.2f'|format(line.unit_price) }}</td>
-                                    <td>{{ '%.3f'|format(line.wet_factor) }}</td>
-                                    <td>{{ '%.2f'|format(line.approved_unit_price) }}</td>
-                                    <td>{{ '%.2f'|format(line.amount) }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <th scope="row" colspan="3">Totals</th>
-                                    <th>{{ '%.3f'|format(mrn.qty_ton) }}</th>
-                                    <th></th>
-                                    <th></th>
-                                    <th></th>
-                                    <th>{{ '%.2f'|format(mrn.amount) }}</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                    {% else %}
-                    <p class="empty-state">No item details recorded.</p>
-                    {% endif %}
+                <div class="summary-item">
+                    <span class="summary-label">Supplier</span>
+                    <span class="summary-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
                 </div>
-                <footer class="print-footer">
-                    <div class="signature-block">
-                        <span class="signature-line"></span>
-                        <span class="signature-label">Verified Officer</span>
-                    </div>
-                    <div class="signature-block">
-                        <span class="signature-line"></span>
-                        <span class="signature-label">Approved Officer</span>
-                    </div>
-                </footer>
-            </div>
-        </section>
-    </div>
+                <div class="summary-item">
+                    <span class="summary-label">Vehicle No</span>
+                    <span class="summary-value">{{ mrn.vehicle_no or "—" }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Total Qty (Ton)</span>
+                    <span class="summary-value">{{ '%.3f'|format(mrn.qty_ton) }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Total Amount</span>
+                    <span class="summary-value">{{ '%.2f'|format(mrn.amount) }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Weighing Slip No</span>
+                    <span class="summary-value">{{ mrn.weighing_slip_no }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Weigh Bridge In-time</span>
+                    <span class="summary-value">{{ mrn.weigh_in_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Weigh Bridge Out-time</span>
+                    <span class="summary-value">{{ mrn.weigh_out_time.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Security Officer</span>
+                    <span class="summary-value">{{ mrn.security_officer_name }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Authorized Person</span>
+                    <span class="summary-value">{{ mrn.authorized_person_name }}</span>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-label">Recorded At</span>
+                    <span class="summary-value">{{ mrn.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+            </section>
+            <section class="item-section" aria-label="Item details">
+                <h2 class="item-section__title">Item details</h2>
+                {% if mrn.items %}
+                <div class="item-table-wrapper">
+                    <table class="item-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Item</th>
+                                <th scope="col">First Weight (Kg)</th>
+                                <th scope="col">Second Weight (Kg)</th>
+                                <th scope="col">Qty (Ton)</th>
+                                <th scope="col">Unit Price</th>
+                                <th scope="col">Wet Factor</th>
+                                <th scope="col">Approved Unit Price</th>
+                                <th scope="col">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in mrn.items %}
+                            <tr>
+                                <td>{{ line.item.name if line.item else "—" }}</td>
+                                <td>
+                                    {% if line.first_weight_kg is not none %}
+                                        {{ '%.3f'|format(line.first_weight_kg) }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if line.second_weight_kg is not none %}
+                                        {{ '%.3f'|format(line.second_weight_kg) }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>{{ '%.3f'|format(line.qty_ton) }}</td>
+                                <td>{{ '%.2f'|format(line.unit_price) }}</td>
+                                <td>{{ '%.3f'|format(line.wet_factor) }}</td>
+                                <td>{{ '%.2f'|format(line.approved_unit_price) }}</td>
+                                <td>{{ '%.2f'|format(line.amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th scope="row" colspan="3">Totals</th>
+                                <th>{{ '%.3f'|format(mrn.qty_ton) }}</th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th>{{ '%.2f'|format(mrn.amount) }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <p class="empty-state">No item details recorded.</p>
+                {% endif %}
+            </section>
+            <footer class="print-footer">
+                <div class="signature-block">
+                    <span class="signature-line"></span>
+                    <span class="signature-label">Verified Officer</span>
+                </div>
+                <div class="signature-block">
+                    <span class="signature-line"></span>
+                    <span class="signature-label">Approved Officer</span>
+                </div>
+            </footer>
+        </article>
+    </main>
 
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
-        let user;
 
+        let user;
         try {
             user = userRaw ? JSON.parse(userRaw) : null;
-        } catch (_) {
+        } catch (error) {
             user = null;
         }
 
         if (!token || !user) {
             window.location.href = "/";
         }
-
-        const roleLabels = {
-            admin: "Admin",
-            production_manager: "Production Manager",
-            maintenance_manager: "Maintenance Manager",
-            technician: "Technician",
-        };
-
-        const userNameEl = document.getElementById("user-name");
-        const userRoleEl = document.getElementById("user-role");
-        const logoutButton = document.getElementById("logout");
-
-        userNameEl.textContent = user?.name || "Unknown";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
-
-        logoutButton.addEventListener("click", () => {
-            localStorage.removeItem("samprox_token");
-            localStorage.removeItem("samprox_user");
-            window.location.href = "/";
-        });
     </script>
 </body>
 </html>

@@ -345,6 +345,26 @@
                         </p>
                     </div>
                     <div class="salary-section__controls">
+                        <div class="salary-summary" id="salary-summary" hidden>
+                            <span class="salary-summary__label">Total Production Salary</span>
+                            <span class="salary-summary__value" id="salary-summary-total">—</span>
+                            <div class="salary-summary__breakdown">
+                                <span class="salary-summary__breakdown-item">
+                                    <span class="salary-summary__breakdown-label">Production</span>
+                                    <span
+                                        class="salary-summary__breakdown-value"
+                                        id="salary-summary-production"
+                                    >—</span>
+                                </span>
+                                <span class="salary-summary__breakdown-item">
+                                    <span class="salary-summary__breakdown-label">Casual</span>
+                                    <span
+                                        class="salary-summary__breakdown-value"
+                                        id="salary-summary-casual"
+                                    >—</span>
+                                </span>
+                            </div>
+                        </div>
                         <label class="salary-section__month" for="salary-month-selector">
                             Salary month
                             <input
@@ -1026,6 +1046,12 @@
         };
         const salaryTableBody = document.getElementById("salary-table-body");
         const salaryEmptyState = document.getElementById("salary-empty-state");
+        const salarySummaryContainer = document.getElementById("salary-summary");
+        const salarySummaryTotal = document.getElementById("salary-summary-total");
+        const salarySummaryProduction = document.getElementById(
+            "salary-summary-production",
+        );
+        const salarySummaryCasual = document.getElementById("salary-summary-casual");
         const salaryMonthSelector = document.getElementById("salary-month-selector");
         const attendanceModal = document.getElementById("attendance-modal");
         const attendanceModalClose = document.getElementById("attendance-modal-close");
@@ -4232,6 +4258,10 @@
 
             salaryTableBody.innerHTML = "";
 
+            if (salarySummaryContainer) {
+                salarySummaryContainer.hidden = true;
+            }
+
             if (!Array.isArray(activeMembers) || activeMembers.length === 0) {
                 if (salaryEmptyState) {
                     salaryEmptyState.hidden = false;
@@ -4244,8 +4274,21 @@
             }
 
             const monthStore = salaryDataStore[currentSalaryMonth] || {};
+            let productionGrossTotal = 0;
+            let casualGrossTotal = 0;
+            let hasProductionMembers = false;
+            let hasCasualMembers = false;
 
             activeMembers.forEach((member, index) => {
+                const normalizedPayCategory = getMemberPayCategory(member)
+                    .trim()
+                    .toLowerCase();
+                if (normalizedPayCategory === "production") {
+                    hasProductionMembers = true;
+                } else if (normalizedPayCategory === "casual") {
+                    hasCasualMembers = true;
+                }
+
                 const memberKey = computeMemberKey(member, index);
                 const record = memberKey ? monthStore[memberKey] || {} : {};
                 const isFactoryMember = isFactoryPayCategory(member);
@@ -4322,6 +4365,17 @@
                 );
                 if (Number.isFinite(netPayAmount)) {
                     combinedRecord.netPay = formatNumberForInput(netPayAmount);
+                }
+
+                const grossSalaryAmount = parseNumericAmount(
+                    combinedRecord?.grossSalary,
+                );
+                if (Number.isFinite(grossSalaryAmount)) {
+                    if (normalizedPayCategory === "production") {
+                        productionGrossTotal += grossSalaryAmount;
+                    } else if (normalizedPayCategory === "casual") {
+                        casualGrossTotal += grossSalaryAmount;
+                    }
                 }
 
                 const row = document.createElement("tr");
@@ -4427,6 +4481,32 @@
 
                 salaryTableBody.appendChild(row);
             });
+
+            if (salarySummaryContainer) {
+                const shouldShowSummary = hasProductionMembers || hasCasualMembers;
+                if (!shouldShowSummary) {
+                    salarySummaryContainer.hidden = true;
+                } else {
+                    const combinedTotal = productionGrossTotal + casualGrossTotal;
+                    salarySummaryContainer.hidden = false;
+
+                    if (salarySummaryTotal) {
+                        salarySummaryTotal.textContent = numberFormatter.format(
+                            combinedTotal,
+                        );
+                    }
+                    if (salarySummaryProduction) {
+                        salarySummaryProduction.textContent = numberFormatter.format(
+                            productionGrossTotal,
+                        );
+                    }
+                    if (salarySummaryCasual) {
+                        salarySummaryCasual.textContent = numberFormatter.format(
+                            casualGrossTotal,
+                        );
+                    }
+                }
+            }
         };
 
         const setActiveMembers = (members) => {

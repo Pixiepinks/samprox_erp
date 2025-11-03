@@ -804,7 +804,7 @@ body {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
 }
 
-.modal {
+.modal:not(dialog) {
     position: fixed;
     inset: 0;
     display: flex;
@@ -3223,6 +3223,10 @@ dialog.modal {
     width: min(640px, 90vw);
     background: rgba(255, 255, 255, 0.98);
     box-shadow: 0 24px 48px rgba(15, 23, 42, 0.16);
+}
+
+dialog.modal:not([open]) {
+    display: none;
 }
 
 dialog.modal[data-polyfill] {

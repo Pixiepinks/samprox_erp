@@ -4,6 +4,7 @@ import sys
 import unittest
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 
 class ReportsApiTestCase(unittest.TestCase):
@@ -661,3 +662,89 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertIsNotNone(top_member)
         self.assertEqual(top_member["regNumber"], "E100")
         self.assertAlmostEqual(top_member["total_cost"], 70170.11, places=2)
+
+    def test_labor_daily_production_cost_ongoing_month_uses_month_work_days(self):
+        models_module = importlib.import_module("models")
+        TeamMember = models_module.TeamMember
+        TeamMemberStatus = models_module.TeamMemberStatus
+        PayCategory = models_module.PayCategory
+        TeamSalaryRecord = models_module.TeamSalaryRecord
+        TeamAttendanceRecord = models_module.TeamAttendanceRecord
+        TeamWorkCalendarDay = models_module.TeamWorkCalendarDay
+
+        db = self.app_module.db
+
+        factory_member = TeamMember(
+            reg_number="E300",
+            name="Factory Ongoing",
+            pay_category=PayCategory.FACTORY.value,
+            status=TeamMemberStatus.ACTIVE.value,
+            join_date=date(2023, 1, 1),
+        )
+
+        db.session.add(factory_member)
+        db.session.commit()
+
+        salary_record = TeamSalaryRecord(
+            team_member_id=factory_member.id,
+            month="2024-10",
+            components={
+                "basicSalary": "30000",
+                "attendanceAllowance": "9000",
+            },
+        )
+
+        attendance_record = TeamAttendanceRecord(
+            team_member_id=factory_member.id,
+            month="2024-10",
+            entries={},
+        )
+
+        non_work_days = [5, 6, 12, 13, 19, 20, 27]
+        calendar_entries = [
+            TeamWorkCalendarDay(date=date(2024, 10, day), is_work_day=False)
+            for day in non_work_days
+        ]
+
+        db.session.add_all([salary_record, attendance_record, *calendar_entries])
+        db.session.commit()
+
+        class FixedDate(date):
+            @classmethod
+            def today(cls):
+                return date(2024, 10, 10)
+
+        with patch("routes.reports.date", FixedDate):
+            response = self.client.get(
+                "/api/reports/labor/daily-production-cost",
+                headers=self._auth_headers(),
+                query_string={"period": "2024-10"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+
+        self.assertEqual(data["period"], "2024-10")
+        self.assertEqual(data["days"], 10)
+        self.assertEqual(data["work_day_count"], 8)
+
+        members_by_reg = {member["regNumber"]: member for member in data["members"]}
+        self.assertIn("E300", members_by_reg)
+        member_id = members_by_reg["E300"]["id"]
+
+        day1 = next(entry for entry in data["daily_totals"] if entry["day"] == 1)
+        expected_daily = Decimal("39000") / Decimal(24)
+        self.assertAlmostEqual(
+            day1["member_costs"][str(member_id)],
+            float(expected_daily.quantize(Decimal("0.01"))),
+            places=2,
+        )
+
+        day5 = next(entry for entry in data["daily_totals"] if entry["day"] == 5)
+        self.assertNotIn(str(member_id), day5["member_costs"])
+        self.assertEqual(day5["total_cost"], 0.0)
+
+        expected_monthly_total = float(
+            (expected_daily * Decimal(8)).quantize(Decimal("0.01"))
+        )
+        self.assertAlmostEqual(data["monthly_total"], expected_monthly_total, places=2)

@@ -165,6 +165,11 @@ class TeamApiTestCase(unittest.TestCase):
         self.assertEqual(body["name"], payload["name"])
         self.assertEqual(body["payCategory"], "Office")
 
+    def test_register_member_with_additional_pay_categories(self):
+        for category in ("Loading", "Transport", "Maintenance"):
+            member = self._create_member({"payCategory": category})
+            self.assertEqual(member["payCategory"], category)
+
     def test_list_members_recovers_from_legacy_status_values(self):
         payload = {
             "regNumber": "TM-030",

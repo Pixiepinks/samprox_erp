@@ -426,6 +426,9 @@ class PayCategory(str, Enum):
     OFFICE = "Office"
     FACTORY = "Factory"
     CASUAL = "Casual"
+    LOADING = "Loading"
+    TRANSPORT = "Transport"
+    MAINTENANCE = "Maintenance"
     OTHER = "Other"
 
     @property

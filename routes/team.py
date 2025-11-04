@@ -1439,6 +1439,9 @@ _PAY_CATEGORY_MAP = {
     "office": PayCategory.OFFICE,
     "factory": PayCategory.FACTORY,
     "casual": PayCategory.CASUAL,
+    "loading": PayCategory.LOADING,
+    "transport": PayCategory.TRANSPORT,
+    "maintenance": PayCategory.MAINTENANCE,
     "other": PayCategory.OTHER,
 }
 

@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from routes.team import _resolve_sales_based_target_allowance
+from routes.team import _count_attendance_days, _resolve_sales_based_target_allowance
 
 
 def test_sales_based_target_allowance_returns_mid_tier_amount():
@@ -33,3 +33,15 @@ def test_sales_based_target_allowance_tolerates_float_rounding_errors():
     )
 
     assert allowance == Decimal("25000")
+
+
+def test_count_attendance_days_includes_work_day_status_without_times():
+    entries = {
+        "2025-10-01": {"dayStatus": "Work Day"},
+        "2025-10-02": {"onTime": "08:00", "offTime": "17:00"},
+        "2025-10-03": {"dayStatus": "Annual Leave"},
+        "2025-09-30": {"dayStatus": "Work Day"},
+        123: {"dayStatus": "Work Day"},
+    }
+
+    assert _count_attendance_days(entries, month="2025-10") == 2

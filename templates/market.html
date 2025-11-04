@@ -213,6 +213,57 @@
                                 required
                             />
                         </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-delivery-note">Delivery Note No <span class="required">*</span></label>
+                            <input
+                                type="text"
+                                id="sales-entry-delivery-note"
+                                name="delivery_note_number"
+                                class="sales-input__control"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-weigh-slip">Weigh Slip No</label>
+                            <input
+                                type="text"
+                                id="sales-entry-weigh-slip"
+                                name="weigh_slip_number"
+                                class="sales-input__control"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-loader-1">Loader 1 Name <span class="required">*</span></label>
+                            <select
+                                id="sales-entry-loader-1"
+                                name="loader1_id"
+                                class="sales-input__control"
+                                required
+                            >
+                                <option value="">Select loader</option>
+                            </select>
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-loader-2">Loader 2 Name</label>
+                            <select
+                                id="sales-entry-loader-2"
+                                name="loader2_id"
+                                class="sales-input__control"
+                            >
+                                <option value="">Select loader</option>
+                            </select>
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales-entry-loader-3">Loader 3 Name</label>
+                            <select
+                                id="sales-entry-loader-3"
+                                name="loader3_id"
+                                class="sales-input__control"
+                            >
+                                <option value="">Select loader</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="sales-entry__actions">
                         <button type="submit" class="button" id="sales-entry-submit">Save entry</button>
@@ -394,6 +445,11 @@
         const entryTypeSelect = document.getElementById("sales-entry-type");
         const entryUnitPriceInput = document.getElementById("sales-entry-unit-price");
         const entryQuantityInput = document.getElementById("sales-entry-quantity");
+        const entryDeliveryNoteInput = document.getElementById("sales-entry-delivery-note");
+        const entryWeighSlipInput = document.getElementById("sales-entry-weigh-slip");
+        const entryLoader1Select = document.getElementById("sales-entry-loader-1");
+        const entryLoader2Select = document.getElementById("sales-entry-loader-2");
+        const entryLoader3Select = document.getElementById("sales-entry-loader-3");
         const entryTotalOutput = document.getElementById("sales-entry-total");
         const entryFeedbackEl = document.getElementById("sales-entry-feedback");
         const entrySubmitButton = document.getElementById("sales-entry-submit");
@@ -415,6 +471,7 @@
         const customerPaymentCoordinatorPhone = document.getElementById("customer-payment-coordinator-phone");
         const customerSpecialNote = document.getElementById("customer-special-note");
         const addCustomerOptionValue = "__create__";
+        const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
         const dialogSupported =
             typeof HTMLDialogElement === "function" &&
             typeof HTMLDialogElement.prototype.showModal === "function";
@@ -517,6 +574,7 @@
         ];
 
         const knownCustomers = new Map();
+        let loaderOptions = [];
         const quantityFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -1084,13 +1142,164 @@
             entryTotalOutput.textContent = formatCurrencyNumber(total || 0);
         }
 
+        function updateLoaderFieldState() {
+            const isActualSale = (entryTypeSelect?.value || "") === "actual";
+            const relatedFields = [
+                entryDeliveryNoteInput,
+                entryWeighSlipInput,
+                ...loaderSelects,
+            ];
+
+            relatedFields.forEach((field) => {
+                if (!field) {
+                    return;
+                }
+
+                field.disabled = !isActualSale;
+                if (field.disabled) {
+                    field.setAttribute("aria-disabled", "true");
+                    if (typeof field.value === "string") {
+                        field.value = "";
+                    }
+                } else {
+                    field.removeAttribute("aria-disabled");
+                }
+            });
+
+            if (entryDeliveryNoteInput) {
+                entryDeliveryNoteInput.required = isActualSale;
+            }
+            if (entryLoader1Select) {
+                entryLoader1Select.required = isActualSale;
+            }
+        }
+
+        function normalizeLoaderMember(member) {
+            if (!member || typeof member !== "object") {
+                return null;
+            }
+
+            const rawId =
+                member.id ?? member.teamMemberId ?? member.team_member_id ?? member.memberId;
+            const parsedId = Number.parseInt(rawId, 10);
+            if (!Number.isFinite(parsedId)) {
+                return null;
+            }
+
+            const regNumber = String(member.regNumber ?? member.reg_number ?? "").trim();
+            const name = String(member.name ?? "").trim();
+            const label = regNumber && name
+                ? `${regNumber} – ${name}`
+                : name || regNumber || String(parsedId);
+
+            return {
+                id: String(parsedId),
+                regNumber,
+                name,
+                label,
+            };
+        }
+
+        function refreshLoaderSelectors() {
+            loaderSelects.forEach((select) => {
+                if (!select) {
+                    return;
+                }
+
+                const previousValue = select.value;
+                select.innerHTML = "";
+
+                const placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = "Select loader";
+                select.appendChild(placeholder);
+
+                loaderOptions.forEach((option) => {
+                    const optionEl = document.createElement("option");
+                    optionEl.value = option.id;
+                    optionEl.textContent = option.label;
+                    select.appendChild(optionEl);
+                });
+
+                if (previousValue) {
+                    const hasPrevious = loaderOptions.some((option) => option.id === previousValue);
+                    select.value = hasPrevious ? previousValue : "";
+                } else {
+                    select.value = "";
+                }
+            });
+
+            updateLoaderFieldState();
+        }
+
+        async function loadLoaderOptions() {
+            if (!token) {
+                loaderOptions = [];
+                refreshLoaderSelectors();
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/team/members", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error("Unable to load loader details");
+                }
+
+                const data = await response.json().catch(() => []);
+                const members = Array.isArray(data) ? data : [];
+                loaderOptions = members
+                    .map((member) => normalizeLoaderMember(member))
+                    .filter(Boolean)
+                    .sort((a, b) => a.label.localeCompare(b.label));
+            } catch (error) {
+                console.error(error);
+                loaderOptions = [];
+            } finally {
+                refreshLoaderSelectors();
+            }
+        }
+
         function collectSalesEntryData() {
+            const saleType = entryTypeSelect?.value || "";
+            const isActualSale = saleType === "actual";
+
+            const readTextValue = (input) => {
+                if (!input || typeof input.value !== "string") {
+                    return "";
+                }
+                return input.value.trim();
+            };
+
+            const readLoaderValue = (select) => {
+                if (!select) {
+                    return null;
+                }
+                const value = select.value;
+                return value ? value : null;
+            };
+
             return {
                 date: entryDateInput?.value || "",
                 customer_id: entryCustomerSelect?.value || "",
-                sale_type: entryTypeSelect?.value || "",
+                sale_type: saleType,
                 unit_price: entryUnitPriceInput?.value || "",
                 quantity_tons: entryQuantityInput?.value || "",
+                delivery_note_number: isActualSale ? readTextValue(entryDeliveryNoteInput) : null,
+                weigh_slip_number: isActualSale ? readTextValue(entryWeighSlipInput) : null,
+                loader1_id: isActualSale ? readLoaderValue(entryLoader1Select) : null,
+                loader2_id: isActualSale ? readLoaderValue(entryLoader2Select) : null,
+                loader3_id: isActualSale ? readLoaderValue(entryLoader3Select) : null,
             };
         }
 
@@ -1099,7 +1308,19 @@
             if (entryCustomerSelect) {
                 entryCustomerSelect.value = "";
             }
+            if (entryDeliveryNoteInput) {
+                entryDeliveryNoteInput.value = "";
+            }
+            if (entryWeighSlipInput) {
+                entryWeighSlipInput.value = "";
+            }
+            loaderSelects.forEach((select) => {
+                if (select) {
+                    select.value = "";
+                }
+            });
             updateEntryTotal();
+            updateLoaderFieldState();
         }
 
         async function createCustomer(customerData) {
@@ -1463,6 +1684,12 @@
             });
         }
 
+        if (entryTypeSelect) {
+            entryTypeSelect.addEventListener("change", () => {
+                updateLoaderFieldState();
+            });
+        }
+
         if (entryForm) {
             entryForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
@@ -1627,9 +1854,12 @@
             });
         }
 
+        updateLoaderFieldState();
         populateCustomerFormOptions();
         refreshCustomerSelectors();
+        refreshLoaderSelectors();
         loadCustomers();
+        loadLoaderOptions();
         loadSalesSummary();
 
         function renderCustomer(customer) {

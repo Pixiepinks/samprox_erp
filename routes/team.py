@@ -16,6 +16,7 @@ from models import (
     MachineAsset,
     PayCategory,
     RoleEnum,
+    SalesActualEntry,
     TeamAttendanceRecord,
     TeamLeaveBalance,
     TeamMember,
@@ -47,6 +48,7 @@ work_calendar_days_schema = WorkCalendarDaySchema(many=True)
 bank_detail_schema = TeamMemberBankDetailSchema()
 
 COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
+LOADING_PAY_RATE = Decimal("1000")
 
 
 _PAY_CATEGORY_NORMALIZATION = (
@@ -1612,6 +1614,108 @@ def _data_error_message(exc: DataError, *, fallback: str) -> str:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@bp.get("/loading-pay")
+@jwt_required()
+def loading_pay_sheet():
+    today = date.today()
+    month_param = request.args.get("month")
+    year_param = request.args.get("year")
+
+    try:
+        month = int(month_param) if month_param else today.month
+        year = int(year_param) if year_param else today.year
+    except (TypeError, ValueError):
+        return jsonify({"msg": "Month and year must be integers."}), 400
+
+    if month < 1 or month > 12:
+        return jsonify({"msg": "Month must be between 1 and 12."}), 400
+
+    if year < 1:
+        return jsonify({"msg": "Year must be a positive integer."}), 400
+
+    if month == 12:
+        period_end = date(year + 1, 1, 1)
+    else:
+        period_end = date(year, month + 1, 1)
+    period_start = date(year, month, 1)
+
+    entries = (
+        SalesActualEntry.query.filter(
+            SalesActualEntry.date >= period_start,
+            SalesActualEntry.date < period_end,
+        ).all()
+    )
+
+    loader_totals: dict[int, Decimal] = {}
+
+    for entry in entries:
+        quantity_value = Decimal(str(entry.quantity_tons or 0))
+        if quantity_value <= 0:
+            continue
+
+        raw_loader_ids = [entry.loader1_id, entry.loader2_id, entry.loader3_id]
+        loader_ids: list[int] = []
+        seen: set[int] = set()
+        for loader_id in raw_loader_ids:
+            if isinstance(loader_id, int) and loader_id not in seen:
+                loader_ids.append(loader_id)
+                seen.add(loader_id)
+
+        if not loader_ids:
+            continue
+
+        share = quantity_value / len(loader_ids)
+
+        for loader_id in loader_ids:
+            loader_totals[loader_id] = loader_totals.get(loader_id, Decimal("0")) + share
+
+    if loader_totals:
+        members = (
+            TeamMember.query.filter(TeamMember.id.in_(loader_totals.keys()))
+            .order_by(TeamMember.name.asc())
+            .all()
+        )
+        member_lookup = {member.id: member for member in members}
+    else:
+        member_lookup = {}
+
+    def _sort_key(member_id: int) -> tuple[str, str, int]:
+        member = member_lookup.get(member_id)
+        if not member:
+            return ("", "", member_id)
+        name = (member.name or "").casefold()
+        reg = member.reg_number or ""
+        return (name, reg, member_id)
+
+    records = []
+    for member_id in sorted(loader_totals.keys(), key=_sort_key):
+        member = member_lookup.get(member_id)
+        if not member:
+            continue
+
+        quantity = loader_totals[member_id].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        pay = (quantity * LOADING_PAY_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        records.append(
+            {
+                "teamMemberId": member.id,
+                "regNumber": member.reg_number,
+                "name": member.name,
+                "loadingQuantity": float(quantity),
+                "loadingPay": float(pay),
+            }
+        )
+
+    return jsonify(
+        {
+            "month": month,
+            "year": year,
+            "rate": float(LOADING_PAY_RATE),
+            "records": records,
+        }
+    )
+
 
 @bp.get("/members")
 @jwt_required()

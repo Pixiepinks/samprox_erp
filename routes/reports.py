@@ -695,7 +695,7 @@ def labor_daily_production_cost():
             entries = attendance_lookup.get(member.id, {})
             entry = entries.get(iso, {})
             overtime_minutes = _calculate_entry_overtime_minutes(
-                iso, entry, work_calendar_lookup
+                iso, entry, work_calendar_lookup, pay_category
             )
             ot_rate = profile.get("ot_rate") or Decimal("0")
             if overtime_minutes and ot_rate > 0:

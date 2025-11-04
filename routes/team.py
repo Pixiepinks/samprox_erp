@@ -49,6 +49,31 @@ bank_detail_schema = TeamMemberBankDetailSchema()
 COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
 
 
+_PAY_CATEGORY_NORMALIZATION = (
+    ("office", "Office"),
+    ("factory", "Factory"),
+    ("casual", "Casual"),
+    ("loading", "Loading"),
+    ("transport", "Transport"),
+    ("maintenance", "Maintenance"),
+    ("other", "Other"),
+)
+
+
+def _build_pay_category_case(lowered_expression: str) -> str:
+    clauses = [f"WHEN {lowered_expression} IN ('office', '') THEN 'Office'"]
+    for key, value in _PAY_CATEGORY_NORMALIZATION:
+        if key == "office":
+            continue
+        clauses.append(f"WHEN {lowered_expression} = '{key}' THEN '{value}'")
+    clauses.append("ELSE 'Office' END")
+    return "CASE " + " ".join(clauses)
+
+
+def _allowed_pay_category_list() -> str:
+    return ", ".join(f"'{key}'" for key, _ in _PAY_CATEGORY_NORMALIZATION)
+
+
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
@@ -159,36 +184,26 @@ def _ensure_schema():
         pay_category_expression = "pay_category::text" if dialect == "postgresql" else "pay_category"
         trimmed_pay_category = f"TRIM({pay_category_expression})"
         lowered_pay_category = f"LOWER({trimmed_pay_category})"
-        normalized_pay_category = "CASE " \
-            f"WHEN {lowered_pay_category} IN ('office', '') THEN 'Office' " \
-            f"WHEN {lowered_pay_category} = 'factory' THEN 'Factory' " \
-            f"WHEN {lowered_pay_category} = 'casual' THEN 'Casual' " \
-            f"WHEN {lowered_pay_category} = 'other' THEN 'Other' " \
-            f"ELSE 'Office' END"
+        normalized_pay_category = _build_pay_category_case(lowered_pay_category)
         pay_category_fixes.extend(
             [
                 f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE {trimmed_pay_category} IS NULL OR {trimmed_pay_category} = ''",
-                f"UPDATE team_member SET pay_category = 'Office' WHERE {lowered_pay_category} NOT IN ('office', 'factory', 'casual', 'other')",
+                f"UPDATE team_member SET pay_category = 'Office' WHERE {lowered_pay_category} NOT IN ({_allowed_pay_category_list()})",
             ]
         )
 
     pay_category_expression = "pay_category::text" if dialect == "postgresql" else "pay_category"
     trimmed_pay_category = f"TRIM({pay_category_expression})"
     lowered_pay_category = f"LOWER({trimmed_pay_category})"
-    normalized_pay_category = (
-        "CASE "
-        f"WHEN {lowered_pay_category} IN ('office', '') THEN 'Office' "
-        f"WHEN {lowered_pay_category} = 'factory' THEN 'Factory' "
-        f"WHEN {lowered_pay_category} = 'casual' THEN 'Casual' "
-        f"WHEN {lowered_pay_category} = 'other' THEN 'Other' "
-        "ELSE 'Office' END"
-    )
+    normalized_pay_category = _build_pay_category_case(lowered_pay_category)
     pay_category_fixes.extend(
         [
             f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE pay_category IS NULL",
-            f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE {lowered_pay_category} NOT IN ('office', 'factory', 'casual', 'other')",
+            f"UPDATE team_member SET pay_category = {normalized_pay_category} WHERE {lowered_pay_category} NOT IN ({_allowed_pay_category_list()})",
         ]
     )
+
+
 
     if statements or status_fixes or pay_category_fixes:
         with engine.begin() as conn:

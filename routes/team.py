@@ -1317,6 +1317,11 @@ def _count_attendance_days(entries: dict | None, *, month: str) -> int:
 
         if on_value or off_value:
             total += 1
+            continue
+
+        day_status = _normalize_day_status(entry.get("dayStatus"))
+        if day_status == "Work Day":
+            total += 1
 
     return total
 

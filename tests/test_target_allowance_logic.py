@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-
 from routes.team import _resolve_sales_based_target_allowance
 
 
@@ -26,3 +25,11 @@ def test_sales_based_target_allowance_returns_zero_outside_thresholds():
     )
 
     assert allowance == Decimal("0")
+
+
+def test_sales_based_target_allowance_tolerates_float_rounding_errors():
+    allowance = _resolve_sales_based_target_allowance(
+        Decimal("448.999999"), Decimal("498.999999")
+    )
+
+    assert allowance == Decimal("25000")

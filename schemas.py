@@ -35,6 +35,9 @@ VALID_PAY_CATEGORIES = {value.lower(): value for value in (
     PayCategory.OFFICE.value,
     PayCategory.FACTORY.value,
     PayCategory.CASUAL.value,
+    PayCategory.LOADING.value,
+    PayCategory.TRANSPORT.value,
+    PayCategory.MAINTENANCE.value,
     PayCategory.OTHER.value,
 )}
 
@@ -242,7 +245,9 @@ class TeamMemberBankDetailSchema(Schema):
         if value is None:
             return
         if value not in VALID_PAY_CATEGORIES.values():
-            raise ValidationError("Pay category must be one of: Office, Factory, Casual, Other.")
+            raise ValidationError(
+                "Pay category must be one of: Office, Factory, Casual, Loading, Transport, Maintenance, Other."
+            )
 
 
 

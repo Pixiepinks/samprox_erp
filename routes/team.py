@@ -48,7 +48,26 @@ work_calendar_days_schema = WorkCalendarDaySchema(many=True)
 bank_detail_schema = TeamMemberBankDetailSchema()
 
 COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
-LOADING_PAY_RATE = Decimal("1000")
+LOADING_PAY_RATE = Decimal("0.20")
+KG_PER_TON = Decimal("1000")
+SARATH_REG_NUMBER = "E011"
+SARATH_LOADING_PAY_SLABS: tuple[tuple[Decimal, Decimal | None, Decimal], ...] = (
+    (Decimal("25000"), Decimal("50000"), Decimal("7500")),
+    (Decimal("50000"), Decimal("75000"), Decimal("15000")),
+    (Decimal("75000"), Decimal("100000"), Decimal("16000")),
+    (Decimal("100000"), Decimal("125000"), Decimal("17500")),
+    (Decimal("125000"), Decimal("150000"), Decimal("20000")),
+    (Decimal("150000"), Decimal("175000"), Decimal("22500")),
+    (Decimal("175000"), Decimal("200000"), Decimal("25000")),
+    (Decimal("200000"), Decimal("225000"), Decimal("27500")),
+    (Decimal("225000"), Decimal("250000"), Decimal("30000")),
+    (Decimal("250000"), Decimal("275000"), Decimal("32500")),
+    (Decimal("275000"), Decimal("300000"), Decimal("35000")),
+    (Decimal("300000"), Decimal("325000"), Decimal("37500")),
+    (Decimal("325000"), Decimal("350000"), Decimal("40000")),
+    (Decimal("350000"), Decimal("375000"), Decimal("42500")),
+    (Decimal("375000"), None, Decimal("45000")),
+)
 
 
 _PAY_CATEGORY_NORMALIZATION = (
@@ -74,6 +93,16 @@ def _build_pay_category_case(lowered_expression: str) -> str:
 
 def _allowed_pay_category_list() -> str:
     return ", ".join(f"'{key}'" for key, _ in _PAY_CATEGORY_NORMALIZATION)
+
+
+def _calculate_slab_loading_pay(quantity_kg: Decimal) -> Decimal | None:
+    for minimum, maximum, amount in SARATH_LOADING_PAY_SLABS:
+        if quantity_kg < minimum:
+            continue
+        if maximum is not None and quantity_kg >= maximum:
+            continue
+        return amount
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1694,16 +1723,28 @@ def loading_pay_sheet():
         if not member:
             continue
 
-        quantity = loader_totals[member_id].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        pay = (quantity * LOADING_PAY_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        base_quantity_tons = loader_totals[member_id]
+        quantity_kg_raw = base_quantity_tons * KG_PER_TON
+        quantity_kg = quantity_kg_raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        pay: Decimal | None = None
+        reg_number = (member.reg_number or "").strip().upper()
+        if reg_number == SARATH_REG_NUMBER:
+            pay = _calculate_slab_loading_pay(quantity_kg_raw)
+
+        if pay is None:
+            pay = (quantity_kg_raw * LOADING_PAY_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        quantity_display = base_quantity_tons.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         records.append(
             {
                 "teamMemberId": member.id,
                 "regNumber": member.reg_number,
                 "name": member.name,
-                "loadingQuantity": float(quantity),
+                "loadingQuantity": float(quantity_kg),
                 "loadingPay": float(pay),
+                "loadingQuantityTons": float(quantity_display),
             }
         )
 

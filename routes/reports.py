@@ -602,6 +602,15 @@ def labor_daily_production_cost():
 
     work_calendar_lookup = _build_work_calendar_lookup(period_param)
 
+    month_work_day_count = 0
+    current_month_day = month_start
+    while current_month_day <= month_end:
+        month_iso = current_month_day.isoformat()
+        is_work_day = work_calendar_lookup.get(month_iso)
+        if is_work_day is not False:
+            month_work_day_count += 1
+        current_month_day += timedelta(days=1)
+
     work_day_flags = []
     for offset in range(active_day_count):
         current = month_start + timedelta(days=offset)
@@ -629,8 +638,8 @@ def labor_daily_production_cost():
             )
             target_allowance = _decimal_from_value(components.get("targetAllowance"))
             base_total = basic + attendance_allowance + target_allowance
-            if work_day_count > 0:
-                profile["base_daily"] = base_total / Decimal(work_day_count)
+            if month_work_day_count > 0:
+                profile["base_daily"] = base_total / Decimal(month_work_day_count)
             else:
                 profile["base_daily"] = Decimal("0")
 

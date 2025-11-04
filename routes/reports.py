@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, jsonify, request
@@ -551,6 +551,14 @@ def labor_daily_production_cost():
 
     month_start, month_end, days_in_month = bounds
 
+    today = date.today()
+    if month_start <= today <= month_end:
+        active_end = today
+    else:
+        active_end = month_end
+
+    active_day_count = max((active_end - month_start).days + 1, 0)
+
     members_query = TeamMember.query.filter(
         TeamMember.pay_category.in_(
             (PayCategory.FACTORY.value, PayCategory.CASUAL.value)
@@ -595,8 +603,8 @@ def labor_daily_production_cost():
     work_calendar_lookup = _build_work_calendar_lookup(period_param)
 
     work_day_flags = []
-    for day in range(1, days_in_month + 1):
-        current = date(month_start.year, month_start.month, day)
+    for offset in range(active_day_count):
+        current = month_start + timedelta(days=offset)
         iso = current.isoformat()
         is_work_day = work_calendar_lookup.get(iso)
         work_day_flags.append((current, is_work_day is not False))
@@ -762,8 +770,8 @@ def labor_daily_production_cost():
             "period": period_param,
             "label": month_start.strftime("%B %Y"),
             "start_date": month_start.isoformat(),
-            "end_date": month_end.isoformat(),
-            "days": days_in_month,
+            "end_date": active_end.isoformat(),
+            "days": active_day_count,
             "work_day_count": work_day_count,
             "monthly_total": float(monthly_total),
             "average_work_day_cost": float(average_work_day_cost),

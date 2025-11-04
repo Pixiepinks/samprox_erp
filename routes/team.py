@@ -1143,6 +1143,24 @@ def _resolve_sales_based_target_allowance(
     if monthly_sales_tons is None or monthly_production_tons is None:
         return Decimal("0")
 
+    try:
+        monthly_sales_tons = monthly_sales_tons.quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    except (AttributeError, InvalidOperation):
+        monthly_sales_tons = _decimal_from_value(monthly_sales_tons).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    try:
+        monthly_production_tons = monthly_production_tons.quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    except (AttributeError, InvalidOperation):
+        monthly_production_tons = _decimal_from_value(monthly_production_tons).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
     lower_bound = Decimal("449")
     upper_bound = Decimal("499")
 

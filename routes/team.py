@@ -16,7 +16,6 @@ from models import (
     MachineAsset,
     PayCategory,
     RoleEnum,
-    SalesActualEntry,
     TeamAttendanceRecord,
     TeamLeaveBalance,
     TeamMember,
@@ -1137,29 +1136,6 @@ def _resolve_target_allowance_base(total_tons: Decimal, *, is_special: bool) -> 
     return Decimal("0")
 
 
-def _resolve_sales_based_target_allowance(
-    monthly_sales_tons: Decimal, monthly_production_tons: Decimal
-) -> Decimal:
-    if monthly_sales_tons is None or monthly_production_tons is None:
-        return Decimal("0")
-
-    lower_bound = Decimal("449")
-    upper_bound = Decimal("499")
-
-    if (
-        monthly_sales_tons >= lower_bound
-        and monthly_sales_tons <= upper_bound
-        and monthly_production_tons >= lower_bound
-        and monthly_production_tons <= upper_bound
-    ):
-        return Decimal("25000")
-
-    if monthly_sales_tons > upper_bound and monthly_production_tons > upper_bound:
-        return Decimal("35000")
-
-    return Decimal("0")
-
-
 def _compute_target_allowance_amounts(month: str) -> dict[int, Decimal]:
     bounds = _get_month_bounds(month)
     if not bounds:
@@ -1199,16 +1175,6 @@ def _compute_target_allowance_amounts(month: str) -> dict[int, Decimal]:
         if day_total > Decimal("0"):
             production_days += 1
 
-    sales_total_value = (
-        db.session.query(func.coalesce(func.sum(SalesActualEntry.quantity_tons), 0.0))
-        .filter(
-            SalesActualEntry.date >= month_start,
-            SalesActualEntry.date <= query_end,
-        )
-        .scalar()
-    )
-    total_sales_tons = _decimal_from_value(sales_total_value)
-
     remaining_days = 0
     if is_current_month:
         remaining_days = max(days_in_month - min(today.day, days_in_month), 0)
@@ -1241,14 +1207,9 @@ def _compute_target_allowance_amounts(month: str) -> dict[int, Decimal]:
             continue
 
         reg_number = _clean_string(getattr(member, "reg_number", ""))
-        reg_number_upper = reg_number.upper()
-        is_special = reg_number_upper == _TARGET_ALLOWANCE_SPECIAL_REG_NO
+        is_special = reg_number.upper() == _TARGET_ALLOWANCE_SPECIAL_REG_NO
 
         base_amount = _resolve_target_allowance_base(total_tons, is_special=is_special)
-        if reg_number_upper in _SALES_BASED_TARGET_ALLOWANCE_REG_NUMBERS:
-            base_amount = _resolve_sales_based_target_allowance(
-                total_sales_tons, total_tons
-            )
         if base_amount <= 0:
             allowances[member.id] = Decimal("0")
             continue
@@ -2165,7 +2126,6 @@ _GROSS_COMPONENT_KEY_MAP = {
 }
 
 _TARGET_ALLOWANCE_SPECIAL_REG_NO = "E005"
-_SALES_BASED_TARGET_ALLOWANCE_REG_NUMBERS = frozenset({"E003", "E004"})
 _TARGET_ALLOWANCE_SLABS: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = (
     (Decimal("300"), Decimal("350"), Decimal("4000"), Decimal("6000")),
     (Decimal("350"), Decimal("400"), Decimal("6000"), Decimal("7000")),

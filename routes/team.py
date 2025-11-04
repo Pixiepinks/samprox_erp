@@ -587,6 +587,7 @@ def _compute_regular_and_overtime_minutes(
     off_value: str | None,
     pay_minutes: int | None,
     work_calendar_lookup: dict[str, bool],
+    pay_category: PayCategory | None = None,
 ) -> tuple[int | None, int | None]:
     if not iso or pay_minutes is None or pay_minutes < 0:
         return None, None
@@ -614,7 +615,8 @@ def _compute_regular_and_overtime_minutes(
         return pay_minutes, 0
 
     regular_limit = 9 * 60
-    if day.weekday() == 5:
+
+    if pay_category == PayCategory.FACTORY and day.weekday() == 5:
         regular_limit = 5 * 60
 
     overtime_minutes = max(pay_minutes - regular_limit, 0)
@@ -624,7 +626,10 @@ def _compute_regular_and_overtime_minutes(
 
 
 def _calculate_entry_overtime_minutes(
-    iso: str, entry: dict, work_calendar_lookup: dict[str, bool]
+    iso: str,
+    entry: dict,
+    work_calendar_lookup: dict[str, bool],
+    pay_category: PayCategory | None,
 ) -> int:
     if not isinstance(entry, dict):
         return 0
@@ -640,7 +645,12 @@ def _calculate_entry_overtime_minutes(
         return 0
 
     _, overtime_minutes = _compute_regular_and_overtime_minutes(
-        iso, on_value, off_value, pay_minutes, work_calendar_lookup
+        iso,
+        on_value,
+        off_value,
+        pay_minutes,
+        work_calendar_lookup,
+        pay_category,
     )
 
     if overtime_minutes is None:
@@ -650,7 +660,10 @@ def _calculate_entry_overtime_minutes(
 
 
 def _calculate_monthly_overtime_minutes(
-    entries: dict | None, month: str, work_calendar_lookup: dict[str, bool]
+    entries: dict | None,
+    month: str,
+    work_calendar_lookup: dict[str, bool],
+    pay_category: PayCategory | None,
 ) -> int:
     if not isinstance(entries, dict) or not month:
         return 0
@@ -660,7 +673,9 @@ def _calculate_monthly_overtime_minutes(
         if not isinstance(iso, str) or not iso.startswith(month):
             continue
 
-        total += _calculate_entry_overtime_minutes(iso, entry, work_calendar_lookup)
+        total += _calculate_entry_overtime_minutes(
+            iso, entry, work_calendar_lookup, pay_category
+        )
 
     return total
 
@@ -947,7 +962,9 @@ def _compute_overtime_amount_for_member(
     if pay_category not in {PayCategory.FACTORY, PayCategory.CASUAL}:
         return Decimal("0")
 
-    total_minutes = _calculate_monthly_overtime_minutes(entries, month, work_calendar_lookup)
+    total_minutes = _calculate_monthly_overtime_minutes(
+        entries, month, work_calendar_lookup, pay_category
+    )
     if total_minutes <= 0:
         return Decimal("0")
 

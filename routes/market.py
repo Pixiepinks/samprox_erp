@@ -13,6 +13,7 @@ from models import (
     CustomerType,
     SalesActualEntry,
     SalesForecastEntry,
+    TeamMember,
 )
 
 bp = Blueprint("market", __name__, url_prefix="/api/market")
@@ -180,6 +181,47 @@ def record_sale_entry():
     if sale_type == "forecast":
         entry = SalesForecastEntry(**entry_kwargs)
     else:
+        def _extract_text(field_name: str, label: str, required: bool = False) -> str | None:
+            raw_value = payload.get(field_name)
+            value = (raw_value or "").strip()
+            if required and not value:
+                raise ValueError(f"{label} is required for actual sale entries.")
+            return value or None
+
+        def _parse_loader(field_name: str, label: str, required: bool = False) -> int | None:
+            raw_value = payload.get(field_name)
+            if raw_value in (None, ""):
+                if required:
+                    raise ValueError(f"{label} is required for actual sale entries.")
+                return None
+
+            try:
+                loader_id = int(raw_value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{label} must reference a valid team member.") from None
+
+            loader = TeamMember.query.get(loader_id)
+            if not loader:
+                raise ValueError(f"{label} must reference an existing team member.")
+            return loader.id
+
+        try:
+            delivery_note_number = _extract_text("delivery_note_number", "Delivery Note No", required=True)
+            weigh_slip_number = _extract_text("weigh_slip_number", "Weigh Slip No")
+            loader1_id = _parse_loader("loader1_id", "Loader 1 Name", required=True)
+            loader2_id = _parse_loader("loader2_id", "Loader 2 Name")
+            loader3_id = _parse_loader("loader3_id", "Loader 3 Name")
+        except ValueError as error:
+            return jsonify({"msg": str(error)}), 400
+
+        entry_kwargs.update(
+            delivery_note_number=delivery_note_number,
+            weigh_slip_number=weigh_slip_number,
+            loader1_id=loader1_id,
+            loader2_id=loader2_id,
+            loader3_id=loader3_id,
+        )
+
         entry = SalesActualEntry(**entry_kwargs)
 
     db.session.add(entry)
@@ -196,6 +238,11 @@ def record_sale_entry():
                     "sale_type": sale_type,
                     "unit_price": unit_price,
                     "quantity_tons": quantity_tons,
+                    "delivery_note_number": getattr(entry, "delivery_note_number", None),
+                    "weigh_slip_number": getattr(entry, "weigh_slip_number", None),
+                    "loader1_id": getattr(entry, "loader1_id", None),
+                    "loader2_id": getattr(entry, "loader2_id", None),
+                    "loader3_id": getattr(entry, "loader3_id", None),
                 }
             }
         ),

@@ -774,6 +774,106 @@ body {
     text-align: center;
 }
 
+.loading-pay {
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.loading-pay__header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1.25rem;
+    align-items: flex-end;
+}
+
+.loading-pay__title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.loading-pay__description {
+    margin: 0.35rem 0 0;
+    font-size: 0.95rem;
+    color: #475569;
+    max-width: 48ch;
+}
+
+.loading-pay__filters {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.loading-pay__filter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.loading-pay__filter-label {
+    font-size: 0.85rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+.loading-pay__select {
+    min-width: 140px;
+}
+
+.loading-pay__rate {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.loading-pay__rate-value {
+    font-weight: 600;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+.loading-pay__table-container {
+    max-height: 18rem;
+    overflow: auto;
+}
+
+.loading-pay__table {
+    min-width: 520px;
+}
+
+.loading-pay__cell {
+    white-space: nowrap;
+}
+
+.loading-pay__cell--number {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.loading-pay__empty {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #94a3b8;
+}
+
+.loading-pay__message {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.loading-pay__message--error {
+    color: #dc2626;
+}
+
 .salary-table {
     min-width: 980px;
     --salary-first-column-width: 6.75rem;

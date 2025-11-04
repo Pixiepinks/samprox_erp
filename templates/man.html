@@ -2011,7 +2011,13 @@
             );
         };
 
-        const computeRegularAndOvertimeMinutes = (iso, onValue, offValue, payMinutes) => {
+        const computeRegularAndOvertimeMinutes = (
+            iso,
+            onValue,
+            offValue,
+            payMinutes,
+            payCategory,
+        ) => {
             if (!iso || !Number.isFinite(payMinutes) || payMinutes < 0) {
                 return { regularMinutes: null, overtimeMinutes: null };
             }
@@ -2046,8 +2052,11 @@
 
             const date = new Date(Date.UTC(info.parts.year, info.parts.month - 1, info.parts.day));
             const dayOfWeek = date.getUTCDay();
+            const normalizedCategory =
+                typeof payCategory === "string" ? payCategory.trim().toLowerCase() : "";
             let regularLimitMinutes = 9 * 60;
-            if (dayOfWeek === 6) {
+
+            if (dayOfWeek === 6 && normalizedCategory === "factory") {
                 regularLimitMinutes = 5 * 60;
             }
 
@@ -2560,6 +2569,7 @@
                     normalizedOn,
                     normalizedOff,
                     payMinutes,
+                    getMemberPayCategory(attendanceModalContext?.member),
                 );
                 regularMinutes = result.regularMinutes;
                 overtimeMinutes = result.overtimeMinutes;
@@ -3873,7 +3883,7 @@
             return Math.abs(rounded) < 0.005 ? 0 : rounded;
         };
 
-        const computeOvertimeMinutesForEntry = (iso, entry) => {
+        const computeOvertimeMinutesForEntry = (iso, entry, member) => {
             if (!iso || !entry || typeof entry !== "object") {
                 return 0;
             }
@@ -3895,12 +3905,13 @@
                 onValue,
                 offValue,
                 payMinutes,
+                getMemberPayCategory(member),
             );
 
             return Number.isFinite(overtimeMinutes) ? overtimeMinutes : 0;
         };
 
-        const getMonthlyOvertimeMinutes = (month, memberKey) => {
+        const getMonthlyOvertimeMinutes = (month, memberKey, member) => {
             const normalized = normalizeMonthValue(month);
             if (!normalized || !memberKey) {
                 return 0;
@@ -3916,7 +3927,7 @@
                 if (typeof iso !== "string" || !iso.startsWith(normalized)) {
                     return;
                 }
-                const minutes = computeOvertimeMinutesForEntry(iso, entry);
+                const minutes = computeOvertimeMinutesForEntry(iso, entry, member);
                 if (Number.isFinite(minutes)) {
                     total += minutes;
                 }
@@ -3931,7 +3942,7 @@
                 return 0;
             }
 
-            const totalMinutes = getMonthlyOvertimeMinutes(normalized, memberKey);
+            const totalMinutes = getMonthlyOvertimeMinutes(normalized, memberKey, member);
             if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
                 return 0;
             }

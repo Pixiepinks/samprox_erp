@@ -2265,6 +2265,10 @@
                 const row = document.createElement("tr");
                 row.dataset.jobId = job.id;
                 const statusText = job.status_label || job.status || "—";
+                const updateStatusCell = canManageMaintenanceJobs
+                    ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
+                    : '—';
+
                 row.innerHTML = `
                     <td data-label="Code">${job.job_code}</td>
                     <td data-label="Title">${job.title}</td>
@@ -2273,13 +2277,7 @@
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
                     <td data-label="Expected">${formatDate(job.expected_completion)}</td>
                     <td data-label="Created">${formatDate(job.created_at, true)}</td>
-                    <td data-label="Update status">
-                        ${
-                            canManageMaintenanceJobs
-                                ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
-                                : '—'
-                        }
-                    </td>
+                    <td data-label="Update status">${updateStatusCell}</td>
                 `;
                 const updateButton = row.querySelector('[data-job-action="update-status"]');
                 if (updateButton) {

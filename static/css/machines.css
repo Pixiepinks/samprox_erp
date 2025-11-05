@@ -1289,6 +1289,11 @@ body {
     overflow: hidden;
 }
 
+.modal__window--wide {
+    width: min(1120px, 100%);
+    max-height: min(92vh, 880px);
+}
+
 .modal__header {
     display: flex;
     align-items: center;
@@ -1333,6 +1338,24 @@ body {
     display: flex;
     flex-direction: column;
     gap: 1.2rem;
+}
+
+.maintenance-modal__body {
+    gap: 0;
+}
+
+.maintenance-modal__body .panel-group {
+    gap: 1.25rem;
+}
+
+.maintenance-modal__body .panel {
+    box-shadow: none;
+    padding: 0;
+    background: transparent;
+}
+
+.maintenance-modal__body .panel__body {
+    padding-top: 0;
 }
 
 .modal__subtitle {

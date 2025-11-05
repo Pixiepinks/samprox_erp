@@ -40,6 +40,45 @@
         </nav>
         <main class="machine-layout">
             <div class="machine-panels">
+                <section id="maintenance-jobs" class="panel-group">
+                    <header class="panel-group__header">
+                        <h2>Maintenance jobs</h2>
+                        <p>Monitor open jobs and refresh the list as work progresses.</p>
+                    </header>
+                    <div class="panel-grid panel-grid--single">
+                        <section class="panel panel--list">
+                            <header class="panel__header">
+                                <div>
+                                    <h3>Maintenance jobs</h3>
+                                    <p class="panel__subtitle">Latest jobs ordered by creation date.</p>
+                                </div>
+                                <button type="button" class="button button--ghost" id="refresh-jobs">Refresh</button>
+                            </header>
+                            <div class="panel__body">
+                                <div class="alert alert--error" id="jobs-error" hidden></div>
+                                <div class="empty-state" id="jobs-empty" hidden>
+                                    <p>No jobs have been created yet.</p>
+                                </div>
+                                <div class="table-wrapper">
+                                    <table class="jobs-table" aria-describedby="jobs-empty">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Code</th>
+                                                <th scope="col">Title</th>
+                                                <th scope="col">Status</th>
+                                                <th scope="col">Priority</th>
+                                                <th scope="col">Assigned</th>
+                                                <th scope="col">Expected completion</th>
+                                                <th scope="col">Created</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="jobs-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </section>
                 <section id="machine-inputs" class="panel-group">
                     <header class="panel-group__header">
                         <h2>Inputs</h2>
@@ -303,37 +342,6 @@
                                         </div>
                                     </fieldset>
                                 </form>
-                            </div>
-                        </section>
-                        <section class="panel panel--list">
-                            <header class="panel__header">
-                                <div>
-                                    <h2>Maintenance jobs</h2>
-                                    <p class="panel__subtitle">Latest jobs ordered by creation date.</p>
-                                </div>
-                                <button type="button" class="button button--ghost" id="refresh-jobs">Refresh</button>
-                            </header>
-                            <div class="panel__body">
-                                <div class="alert alert--error" id="jobs-error" hidden></div>
-                                <div class="empty-state" id="jobs-empty" hidden>
-                                    <p>No jobs have been created yet.</p>
-                                </div>
-                                <div class="table-wrapper">
-                                    <table class="jobs-table" aria-describedby="jobs-empty">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Code</th>
-                                                <th scope="col">Title</th>
-                                                <th scope="col">Status</th>
-                                                <th scope="col">Priority</th>
-                                                <th scope="col">Assigned</th>
-                                                <th scope="col">Expected completion</th>
-                                                <th scope="col">Created</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="jobs-table-body"></tbody>
-                                    </table>
-                                </div>
                             </div>
                         </section>
                     </div>

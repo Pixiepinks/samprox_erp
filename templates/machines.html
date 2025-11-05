@@ -73,6 +73,7 @@
                                                 <th scope="col">Assigned</th>
                                                 <th scope="col">Expected completion</th>
                                                 <th scope="col">Created</th>
+                                                <th scope="col">Update status</th>
                                             </tr>
                                         </thead>
                                         <tbody id="jobs-table-body"></tbody>
@@ -2271,8 +2272,29 @@
                     <td data-label="Priority">${job.priority}</td>
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
                     <td data-label="Expected">${formatDate(job.expected_completion)}</td>
-                    <td data-label="Updated">${formatDate(job.updated_at, true)}</td>
+                    <td data-label="Created">${formatDate(job.created_at, true)}</td>
+                    <td data-label="Update status">
+                        ${
+                            canManageMaintenanceJobs
+                                ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
+                                : '—'
+                        }
+                    </td>
                 `;
+                const updateButton = row.querySelector('[data-job-action="update-status"]');
+                if (updateButton) {
+                    updateButton.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        selectJob(job.id);
+                        if (maintenanceSection) {
+                            maintenanceSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                            const focusable = maintenanceSection.querySelector(
+                                "input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+                            );
+                            focusable?.focus();
+                        }
+                    });
+                }
                 row.addEventListener("click", () => {
                     selectJob(job.id);
                 });

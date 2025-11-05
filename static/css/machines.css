@@ -225,6 +225,10 @@ body {
     gap: 2rem;
 }
 
+.panel-grid--single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .panel--detail {
     grid-column: 1 / -1;
 }

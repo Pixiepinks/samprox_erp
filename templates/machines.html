@@ -52,7 +52,10 @@
                                     <h3>Maintenance jobs</h3>
                                     <p class="panel__subtitle">Latest jobs ordered by creation date.</p>
                                 </div>
-                                <button type="button" class="button button--ghost" id="refresh-jobs">Refresh</button>
+                                <div class="panel__header-actions">
+                                    <button type="button" class="button" data-modal-open="maintenance-job-modal" id="open-create-job">Create job</button>
+                                    <button type="button" class="button button--ghost" id="refresh-jobs">Refresh</button>
+                                </div>
                             </header>
                             <div class="panel__body">
                                 <div class="alert alert--error" id="jobs-error" hidden></div>
@@ -106,7 +109,7 @@
                                             <button type="button" class="input-menu__link" data-modal-open="ckd-modal">Add CKD part to machine</button>
                                         </li>
                                         <li class="input-menu__item">
-                                            <button type="button" class="input-menu__link" data-modal-open="maintenance-modal">Request maintenance job</button>
+                                            <button type="button" class="input-menu__link" data-modal-open="maintenance-job-modal">Request maintenance job</button>
                                         </li>
                                     </ul>
                                 </nav>
@@ -219,131 +222,6 @@
                                 </div>
                             </section>
                         </div>
-                    </div>
-                </section>
-                <section id="maintenance-section" class="panel-group">
-                    <header class="panel-group__header">
-                        <h2>Maintenance management</h2>
-                        <p>Log new work orders and keep track of open jobs.</p>
-                    </header>
-                    <div class="panel-grid">
-                        <section class="panel panel--form">
-                            <header class="panel__header">
-                                <div>
-                                    <h2>Create a maintenance job</h2>
-                                    <p class="panel__subtitle">Log new work orders for the maintenance team.</p>
-                                </div>
-                            </header>
-                            <div class="panel__body">
-                                <div class="alert alert--info" id="creation-notice" hidden></div>
-                                <div class="alert alert--success" id="creation-success" hidden></div>
-                                <div class="alert alert--warning" id="creation-warning" hidden></div>
-                                <div class="alert alert--success" id="maintenance-success" hidden></div>
-                                <div class="alert alert--warning" id="maintenance-warning" hidden></div>
-                                <div class="alert alert--error" id="creation-error" hidden></div>
-                                <form class="form" id="job-form" novalidate>
-                                    <input type="hidden" id="job-id" name="job_id" />
-                                    <fieldset class="form-section" data-production-section>
-                                        <legend>Production Manager</legend>
-                                        <div class="form-grid">
-                                            <div class="input-group">
-                                                <label for="job-code">Job code</label>
-                                                <input id="job-code" name="job_code" type="text" placeholder="JOB-001" readonly />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-date">Date</label>
-                                                <input id="job-date" name="job_date" type="date" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-title">Title <span class="required">*</span></label>
-                                                <input id="job-title" name="title" type="text" placeholder="Routine maintenance" required />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-priority">Priority</label>
-                                                <select id="job-priority" name="priority">
-                                                    <option value="Normal">Normal</option>
-                                                    <option value="Urgent">Urgent</option>
-                                                    <option value="Critical">Critical</option>
-                                                </select>
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-location">Location</label>
-                                                <select id="job-location" name="location">
-                                                    <option value="">Select a location</option>
-                                                    <option value="Plant 1">Plant 1</option>
-                                                    <option value="Plant 2">Plant 2</option>
-                                                    <option value="Plant 3">Plant 3</option>
-                                                    <option value="Warehouse">Warehouse</option>
-                                                </select>
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-expected">Expected completion</label>
-                                                <input id="job-expected" name="expected_completion" type="date" />
-                                            </div>
-                                        </div>
-                                        <div class="input-group">
-                                            <label for="job-description">Description of the job</label>
-                                            <textarea id="job-description" name="description" rows="4" placeholder="Provide any additional details"></textarea>
-                                        </div>
-                                        <div class="input-group">
-                                            <label for="maintenance-email">Email of Maintenance Manager</label>
-                                            <input id="maintenance-email" name="maint_email" type="email" placeholder="manager@example.com" />
-                                        </div>
-                                        <div class="form__footer">
-                                            <div class="button-group">
-                                                <button type="button" class="button" id="submit-to-maintenance">Submit to Maintenance Manager</button>
-                                                <button type="button" class="button button--ghost" id="reset-job-form">Start new job</button>
-                                            </div>
-                                        </div>
-                                    </fieldset>
-
-                                    <fieldset class="form-section" data-maintenance-section>
-                                        <legend>Maintenance Manager</legend>
-                                        <div class="form-grid">
-                                            <div class="input-group">
-                                                <label for="job-start">Job started date</label>
-                                                <input id="job-start" name="job_started_date" type="date" />
-                                            </div>
-                                            <div class="input-group">
-                                                <label for="job-finish">Job finished date</label>
-                                                <input id="job-finish" name="job_finished_date" type="date" />
-                                            </div>
-                                        </div>
-                                        <div class="input-group">
-                                            <label>Materials used</label>
-                                            <div class="table-wrapper" data-materials-table>
-                                                <table class="jobs-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th scope="col">Material name</th>
-                                                            <th scope="col">Units</th>
-                                                            <th scope="col">Cost</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="materials-table-body"></tbody>
-                                                </table>
-                                            </div>
-                                            <div class="button-group button-group--inline">
-                                                <button type="button" class="button button--ghost" id="add-material-row">Add row</button>
-                                                <button type="button" class="button button--ghost" id="remove-material-row">Remove row</button>
-                                            </div>
-                                            <p class="form__hint">Total cost: <span id="materials-total">0.00</span></p>
-                                        </div>
-                                        <div class="input-group">
-                                            <label for="maintenance-notes">Signature / Remarks</label>
-                                            <textarea id="maintenance-notes" name="maintenance_notes" rows="3"></textarea>
-                                        </div>
-                                        <div class="input-group">
-                                            <label for="production-email">Email of Production Manager</label>
-                                            <input id="production-email" name="prod_email" type="email" placeholder="production@example.com" />
-                                        </div>
-                                        <div class="form__footer">
-                                            <button type="button" class="button" id="submit-to-production">Submit to Production Manager</button>
-                                        </div>
-                                    </fieldset>
-                                </form>
-                            </div>
-                        </section>
                     </div>
                 </section>
                 <section id="idle-section" class="panel-group">
@@ -745,19 +623,135 @@
                 </div>
             </div>
         </div>
-        <div class="modal" id="maintenance-modal" role="dialog" aria-modal="true" aria-labelledby="maintenance-modal-title" data-modal hidden>
+        <div class="modal" id="maintenance-job-modal" role="dialog" aria-modal="true" aria-labelledby="maintenance-job-modal-title" data-modal hidden>
             <div class="modal__backdrop" data-modal-close></div>
-            <div class="modal__window" role="document">
+            <div class="modal__window modal__window--wide" role="document">
                 <header class="modal__header" data-modal-handle>
-                    <h2 class="modal__title" id="maintenance-modal-title">Request maintenance job</h2>
+                    <h2 class="modal__title" id="maintenance-job-modal-title">Create a maintenance job</h2>
                     <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
                 </header>
-                <div class="modal__body">
-                    <p class="modal__subtitle">Create a work order for the maintenance team without leaving this page.</p>
-                    <p>Scroll down to the maintenance section to fill in the job form, track priorities and review job status.</p>
-                    <div class="modal__actions">
-                        <button type="button" class="button" data-scroll-target="#maintenance-section" data-modal-close-after>Go to maintenance section</button>
-                    </div>
+                <div class="modal__body maintenance-modal__body">
+                    <section id="maintenance-section" class="panel-group">
+                        <div class="panel-grid">
+                            <section class="panel panel--form">
+                                <header class="panel__header">
+                                    <div>
+                                        <h2>Create a maintenance job</h2>
+                                        <p class="panel__subtitle">Log new work orders for the maintenance team.</p>
+                                    </div>
+                                </header>
+                                <div class="panel__body">
+                                    <div class="alert alert--info" id="creation-notice" hidden></div>
+                                    <div class="alert alert--success" id="creation-success" hidden></div>
+                                    <div class="alert alert--warning" id="creation-warning" hidden></div>
+                                    <div class="alert alert--success" id="maintenance-success" hidden></div>
+                                    <div class="alert alert--warning" id="maintenance-warning" hidden></div>
+                                    <div class="alert alert--error" id="creation-error" hidden></div>
+                                    <form class="form" id="job-form" novalidate>
+                                        <input type="hidden" id="job-id" name="job_id" />
+                                        <fieldset class="form-section" data-production-section>
+                                            <legend>Production Manager</legend>
+                                            <div class="form-grid">
+                                                <div class="input-group">
+                                                    <label for="job-code">Job code</label>
+                                                    <input id="job-code" name="job_code" type="text" placeholder="JOB-001" readonly />
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-date">Date</label>
+                                                    <input id="job-date" name="job_date" type="date" />
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-title">Title <span class="required">*</span></label>
+                                                    <input id="job-title" name="title" type="text" placeholder="Routine maintenance" required />
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-priority">Priority</label>
+                                                    <select id="job-priority" name="priority">
+                                                        <option value="Normal">Normal</option>
+                                                        <option value="Urgent">Urgent</option>
+                                                        <option value="Critical">Critical</option>
+                                                    </select>
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-location">Location</label>
+                                                    <select id="job-location" name="location">
+                                                        <option value="">Select a location</option>
+                                                        <option value="Plant 1">Plant 1</option>
+                                                        <option value="Plant 2">Plant 2</option>
+                                                        <option value="Plant 3">Plant 3</option>
+                                                        <option value="Warehouse">Warehouse</option>
+                                                    </select>
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-expected">Expected completion</label>
+                                                    <input id="job-expected" name="expected_completion" type="date" />
+                                                </div>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="job-description">Description of the job</label>
+                                                <textarea id="job-description" name="description" rows="4" placeholder="Provide any additional details"></textarea>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="maintenance-email">Email of Maintenance Manager</label>
+                                                <input id="maintenance-email" name="maint_email" type="email" placeholder="manager@example.com" />
+                                            </div>
+                                            <div class="form__footer">
+                                                <div class="button-group">
+                                                    <button type="button" class="button" id="submit-to-maintenance">Submit to Maintenance Manager</button>
+                                                    <button type="button" class="button button--ghost" id="reset-job-form">Start new job</button>
+                                                </div>
+                                            </div>
+                                        </fieldset>
+
+                                        <fieldset class="form-section" data-maintenance-section>
+                                            <legend>Maintenance Manager</legend>
+                                            <div class="form-grid">
+                                                <div class="input-group">
+                                                    <label for="job-start">Job started date</label>
+                                                    <input id="job-start" name="job_started_date" type="date" />
+                                                </div>
+                                                <div class="input-group">
+                                                    <label for="job-finish">Job finished date</label>
+                                                    <input id="job-finish" name="job_finished_date" type="date" />
+                                                </div>
+                                            </div>
+                                            <div class="input-group">
+                                                <label>Materials used</label>
+                                                <div class="table-wrapper" data-materials-table>
+                                                    <table class="jobs-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th scope="col">Material name</th>
+                                                                <th scope="col">Units</th>
+                                                                <th scope="col">Cost</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="materials-table-body"></tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="button-group button-group--inline">
+                                                    <button type="button" class="button button--ghost" id="add-material-row">Add row</button>
+                                                    <button type="button" class="button button--ghost" id="remove-material-row">Remove row</button>
+                                                </div>
+                                                <p class="form__hint">Total cost: <span id="materials-total">0.00</span></p>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="maintenance-notes">Signature / Remarks</label>
+                                                <textarea id="maintenance-notes" name="maintenance_notes" rows="3"></textarea>
+                                            </div>
+                                            <div class="input-group">
+                                                <label for="production-email">Email of Production Manager</label>
+                                                <input id="production-email" name="prod_email" type="email" placeholder="production@example.com" />
+                                            </div>
+                                            <div class="form__footer">
+                                                <button type="button" class="button" id="submit-to-production">Submit to Production Manager</button>
+                                            </div>
+                                        </fieldset>
+                                    </form>
+                                </div>
+                            </section>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -1064,11 +1058,13 @@
             addAssetTrigger.title = "Only Production Managers or Admins can add assets.";
         }
 
-        const maintenanceTrigger = document.querySelector('[data-modal-open="maintenance-modal"]');
-        if (maintenanceTrigger && !canManageProductionJobs) {
-            maintenanceTrigger.disabled = true;
-            maintenanceTrigger.setAttribute("aria-disabled", "true");
-            maintenanceTrigger.title = "Only Production Managers or Admins can request maintenance jobs.";
+        const maintenanceTriggers = document.querySelectorAll('[data-modal-open="maintenance-job-modal"]');
+        if (maintenanceTriggers.length && !canManageProductionJobs) {
+            maintenanceTriggers.forEach((trigger) => {
+                trigger.disabled = true;
+                trigger.setAttribute("aria-disabled", "true");
+                trigger.title = "Only Production Managers or Admins can request maintenance jobs.";
+            });
         }
 
         const assetsTableBody = document.getElementById("assets-table-body");

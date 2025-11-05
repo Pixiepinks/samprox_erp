@@ -2283,6 +2283,7 @@
                 if (updateButton) {
                     updateButton.addEventListener("click", (event) => {
                         event.stopPropagation();
+                        openModal("maintenance-job-modal");
                         selectJob(job.id);
                         if (maintenanceSection) {
                             maintenanceSection.scrollIntoView({ behavior: "smooth", block: "start" });

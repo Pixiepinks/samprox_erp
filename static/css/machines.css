@@ -1052,6 +1052,17 @@ body {
     overflow-x: auto;
 }
 
+.table-wrapper--scrollable {
+    --jobs-table-header-height: 2.9rem;
+    --jobs-table-row-height: 3.5rem;
+    --jobs-table-visible-rows: 8;
+    max-height: calc(
+        var(--jobs-table-header-height) +
+        (var(--jobs-table-visible-rows) * var(--jobs-table-row-height))
+    );
+    overflow-y: auto;
+}
+
 .data-table,
 .jobs-table {
     width: 100%;
@@ -1084,6 +1095,11 @@ body {
     --jobs-table-header-height: 2.9rem;
     --jobs-table-sticky-first-width: 8rem;
     --jobs-table-sticky-second-width: 14rem;
+    --jobs-table-row-height: 3.5rem;
+}
+
+.jobs-table tbody tr {
+    height: var(--jobs-table-row-height);
 }
 
 .jobs-loading-status {

@@ -25,6 +25,7 @@ from schemas import (
     ServiceSupplierSchema,
     format_datetime_as_colombo_iso,
 )
+from routes.production import IDLE_SUMMARY_MACHINE_CODES
 
 bp = Blueprint("machines", __name__, url_prefix="/api/machines")
 
@@ -38,6 +39,11 @@ idle_event_schema = MachineIdleEventSchema()
 idle_events_schema = MachineIdleEventSchema(many=True)
 supplier_schema = ServiceSupplierSchema()
 suppliers_schema = ServiceSupplierSchema(many=True)
+
+ALLOWED_IDLE_MONITORING_CODES = tuple(code.upper() for code in IDLE_SUMMARY_MACHINE_CODES)
+ALLOWED_IDLE_MONITORING_CODES_LOWER = {
+    code.lower() for code in ALLOWED_IDLE_MONITORING_CODES
+}
 
 
 CATEGORY_CODE_PREFIXES = {
@@ -393,14 +399,32 @@ def list_idle_events():
             asset_id = int(asset_id)
         except (TypeError, ValueError):
             return jsonify({"msg": "Invalid asset_id"}), 400
+        asset = MachineAsset.query.get(asset_id)
+        if not asset:
+            return jsonify([])
+        asset_code = (asset.code or "").strip().upper()
+        if asset_code not in ALLOWED_IDLE_MONITORING_CODES:
+            return jsonify([])
         query = query.filter(MachineIdleEvent.asset_id == asset_id)
 
-    machine_codes = request.args.get("machine_codes")
-    if machine_codes:
-        codes = [code.strip() for code in machine_codes.split(",") if code.strip()]
-        if codes:
-            lowered = [code.lower() for code in codes]
-            query = query.filter(func.lower(MachineAsset.code).in_(lowered))
+    machine_codes_param = request.args.get("machine_codes")
+    if machine_codes_param:
+        raw_codes = [code.strip() for code in machine_codes_param.split(",") if code.strip()]
+        allowed_codes = [
+            code.upper()
+            for code in raw_codes
+            if code.strip().upper() in ALLOWED_IDLE_MONITORING_CODES
+        ]
+        if not allowed_codes:
+            return jsonify([])
+        lowered = [code.lower() for code in allowed_codes]
+    else:
+        lowered = list(ALLOWED_IDLE_MONITORING_CODES_LOWER)
+
+    if not lowered:
+        return jsonify([])
+
+    query = query.filter(func.lower(MachineAsset.code).in_(lowered))
 
     start_param = request.args.get("start_date")
     end_param = request.args.get("end_date")
@@ -471,6 +495,12 @@ def create_idle_event():
         return jsonify({"msg": "asset_id is required"}), 400
 
     asset = MachineAsset.query.get_or_404(asset_id)
+    asset_code = (asset.code or "").strip().upper()
+    if asset_code not in ALLOWED_IDLE_MONITORING_CODES:
+        return (
+            jsonify({"msg": "Idle monitoring is only enabled for select machines."}),
+            400,
+        )
 
     analysis_date = None
     try:

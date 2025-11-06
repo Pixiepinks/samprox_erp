@@ -72,6 +72,7 @@
                                                 <th scope="col">Priority</th>
                                                 <th scope="col">Assigned</th>
                                                 <th scope="col">Expected completion</th>
+                                                <th scope="col">Total cost</th>
                                                 <th scope="col">Created</th>
                                                 <th scope="col">Update status</th>
                                             </tr>
@@ -1611,6 +1612,14 @@
             return withTime ? date.toLocaleString() : date.toLocaleDateString();
         }
 
+        function formatTotalCost(value) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return "Total cost: 0.00";
+            }
+            return `Total cost: ${number.toFixed(2)}`;
+        }
+
         function formatDuration(minutes) {
             if (minutes == null) return "—";
             if (minutes < 60) return `${minutes} min`;
@@ -2276,6 +2285,7 @@
                     <td data-label="Priority">${job.priority}</td>
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
                     <td data-label="Expected">${formatDate(job.expected_completion)}</td>
+                    <td data-label="Total cost">${formatTotalCost(job.total_cost)}</td>
                     <td data-label="Created">${formatDate(job.created_at, true)}</td>
                     <td data-label="Update status">${updateStatusCell}</td>
                 `;

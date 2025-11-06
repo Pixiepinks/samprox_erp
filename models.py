@@ -113,6 +113,9 @@ class MaintenanceJob(db.Model):
     job_code = db.Column(db.String(40), unique=True, nullable=False)
     job_date = db.Column(db.Date, nullable=False, default=date.today)
     title = db.Column(db.String(255), nullable=False)
+    job_category = db.Column(
+        db.String(120), nullable=False, default="Mechanical / Machine Issues"
+    )
     priority = db.Column(db.String(20), nullable=False, default="Normal")
     location = db.Column(db.String(120))
     description = db.Column(db.Text)
@@ -134,6 +137,12 @@ class MaintenanceJob(db.Model):
 
     assigned_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     assigned_to = db.relationship("User", foreign_keys=[assigned_to_id])
+
+    asset_id = db.Column(db.Integer, db.ForeignKey("machine_asset.id"))
+    asset = db.relationship("MachineAsset", foreign_keys=[asset_id])
+
+    part_id = db.Column(db.Integer, db.ForeignKey("machine_part.id"))
+    part = db.relationship("MachinePart", foreign_keys=[part_id])
 
     materials = db.relationship(
         "MaintenanceMaterial",

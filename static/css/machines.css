@@ -989,6 +989,24 @@ body {
     min-height: 120px;
 }
 
+.input-group--error input,
+.input-group--error select,
+.input-group--error textarea {
+    border-color: rgba(239, 68, 68, 0.7);
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+    background: #fff;
+}
+
+.form__error {
+    color: #b91c1c;
+    font-size: 0.85rem;
+}
+
+.form__hint {
+    color: #475569;
+    font-size: 0.85rem;
+}
+
 .form__footer {
     display: flex;
     justify-content: flex-end;

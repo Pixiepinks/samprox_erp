@@ -1,9 +1,50 @@
-from flask import Blueprint, abort, redirect, render_template, url_for
+from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask_jwt_extended import get_jwt, verify_jwt_in_request
 
 from material import MaterialValidationError, get_mrn_detail, list_material_items
 from schemas import MaterialItemSchema
 
+from models import RoleEnum
+
 bp = Blueprint("ui", __name__)
+
+
+def _current_role() -> RoleEnum | None:
+    """Return the current user's role if a JWT is provided."""
+
+    try:
+        verify_jwt_in_request(optional=True)
+    except Exception:  # pragma: no cover - defensive safety net
+        return None
+
+    try:
+        claims = get_jwt()
+    except RuntimeError:
+        return None
+
+    role = claims.get("role") if claims else None
+    if not role:
+        return None
+
+    try:
+        return RoleEnum(role)
+    except ValueError:
+        return None
+
+
+@bp.before_request
+def _restrict_maintenance_manager_routes():
+    """Redirect maintenance managers to the machines page for disallowed routes."""
+
+    endpoint = request.endpoint
+    if endpoint is None:
+        return None
+    if endpoint in {"ui.machines_page", "ui.login_page"}:
+        return None
+
+    role = _current_role()
+    if role == RoleEnum.maintenance_manager:
+        return redirect(url_for("ui.machines_page"))
 
 
 @bp.get("/")

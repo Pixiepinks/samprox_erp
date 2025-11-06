@@ -183,6 +183,10 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
+            window.location.replace("/machines");
+        }
+
         const roleLabels = {
             admin: "Admin",
             production_manager: "Production Manager",

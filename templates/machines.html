@@ -1007,6 +1007,17 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "maintenance_manager") {
+            document.querySelectorAll(".subnav__link").forEach((link) => {
+                const href = link.getAttribute("href");
+                if (!href || href.endsWith("/machines")) {
+                    return;
+                }
+
+                link.remove();
+            });
+        }
+
         const roleLabels = {
             admin: "Admin",
             production_manager: "Production Manager",

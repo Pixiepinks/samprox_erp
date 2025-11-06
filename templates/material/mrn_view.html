@@ -359,6 +359,10 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
+            window.location.replace("/machines");
+        }
+
         window.addEventListener("load", () => {
             setTimeout(() => {
                 window.print();

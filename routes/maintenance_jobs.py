@@ -16,6 +16,8 @@ from sqlalchemy.orm import joinedload
 
 from extensions import db, mail
 from models import (
+    MachineAsset,
+    MachinePart,
     MaintenanceJob,
     MaintenanceJobStatus,
     MaintenanceMaterial,
@@ -83,6 +85,55 @@ def _generate_job_code() -> str:
     return f"JOB-{number:03d}"
 
 
+def _coerce_optional_int(value, field_label: str) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        value = stripped
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive guard
+        raise ValueError(f"Invalid {field_label}.") from exc
+    return number or None
+
+
+def _resolve_asset_and_part(payload: dict) -> tuple[Optional[int], Optional[int], Optional[MachineAsset], Optional[MachinePart], Optional[str]]:
+    try:
+        asset_id = _coerce_optional_int(payload.get("asset_id"), "asset selection")
+        part_id = _coerce_optional_int(payload.get("part_id"), "part selection")
+    except ValueError as exc:
+        return None, None, None, None, str(exc)
+
+    asset = None
+    if asset_id is not None:
+        asset = MachineAsset.query.get(asset_id)
+        if not asset:
+            return None, None, None, None, "Selected asset could not be found."
+
+    part = None
+    if part_id is not None:
+        part = MachinePart.query.get(part_id)
+        if not part:
+            return None, None, None, None, "Selected part could not be found."
+
+    if part and asset and part.asset_id != asset.id:
+        return None, None, None, None, "Selected part does not belong to the chosen asset."
+
+    if asset and part is None:
+        parts_count = MachinePart.query.filter_by(asset_id=asset.id).count()
+        if parts_count > 0:
+            return None, None, None, None, "Select a part for the chosen asset."
+
+    if part and asset is None:
+        asset_id = part.asset_id
+        asset = part.asset or MachineAsset.query.get(part.asset_id)
+
+    return asset_id, part_id, asset, part, None
+
+
 def _find_user_by_email(email: Optional[str]) -> Optional[User]:
     if not email:
         return None
@@ -144,6 +195,8 @@ def list_jobs():
         MaintenanceJob.query.order_by(MaintenanceJob.created_at.desc())
         .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.assigned_to))
+        .options(joinedload(MaintenanceJob.asset))
+        .options(joinedload(MaintenanceJob.part))
         .all()
     )
     return jsonify(jobs_schema.dump(jobs))
@@ -156,6 +209,8 @@ def get_job(job_id: int):
         MaintenanceJob.query.options(joinedload(MaintenanceJob.materials))
         .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.assigned_to))
+        .options(joinedload(MaintenanceJob.asset))
+        .options(joinedload(MaintenanceJob.part))
         .get_or_404(job_id)
     )
     return jsonify(job_schema.dump(job))
@@ -169,9 +224,13 @@ def create_job():
 
     payload = request.get_json() or {}
 
-    title = (payload.get("title") or "").strip()
-    if not title:
-        return jsonify({"msg": "Title is required."}), 400
+    job_category = (payload.get("job_category") or payload.get("title") or "").strip()
+    if not job_category:
+        return jsonify({"msg": "Job category is required."}), 400
+
+    asset_id, part_id, asset, part, asset_error = _resolve_asset_and_part(payload)
+    if asset_error:
+        return jsonify({"msg": asset_error}), 400
 
     priority = (payload.get("priority") or "Normal").strip().title()
     if priority not in _ALLOWED_PRIORITIES:
@@ -208,7 +267,8 @@ def create_job():
     job = MaintenanceJob(
         job_code=job_code,
         job_date=job_date or date.today(),
-        title=title,
+        title=job_category,
+        job_category=job_category,
         priority=priority,
         location=(payload.get("location") or None),
         description=(payload.get("description") or None),
@@ -218,7 +278,14 @@ def create_job():
         created_by_id=user_id,
         status=MaintenanceJobStatus.IN_PROGRESS,
         prod_submitted_at=datetime.utcnow(),
+        asset_id=asset_id,
+        part_id=part_id,
     )
+
+    if asset_id is not None and asset is not None:
+        job.asset = asset
+    if part_id is not None and part is not None:
+        job.part = part
 
     maint_user = _find_user_by_email(maint_email)
     if maint_user:
@@ -232,10 +299,18 @@ def create_job():
         "Hello,",
         "",
         f"A new maintenance job has been assigned: {job.job_code}.",
-        f"Title: {job.title}",
+        f"Job category: {job.job_category}",
         f"Priority: {job.priority}",
         f"Location: {job.location or 'N/A'}",
     ]
+    if job.asset:
+        asset_label_parts = [value for value in [job.asset.code, job.asset.name] if value]
+        asset_label = " — ".join(asset_label_parts) if asset_label_parts else "N/A"
+        body_lines.append(f"Asset: {asset_label}")
+    if job.part:
+        part_label_parts = [value for value in [job.part.part_number, job.part.name] if value]
+        part_label = " — ".join(part_label_parts) if part_label_parts else "N/A"
+        body_lines.append(f"Part: {part_label}")
     if job.expected_completion:
         body_lines.append(
             f"Expected completion: {job.expected_completion.strftime('%Y-%m-%d')}"
@@ -263,7 +338,12 @@ def create_job():
 @bp.patch("/<int:job_id>")
 @jwt_required()
 def update_job(job_id: int):
-    job = MaintenanceJob.query.options(joinedload(MaintenanceJob.materials)).get_or_404(job_id)
+    job = (
+        MaintenanceJob.query.options(joinedload(MaintenanceJob.materials))
+        .options(joinedload(MaintenanceJob.asset))
+        .options(joinedload(MaintenanceJob.part))
+        .get_or_404(job_id)
+    )
 
     role = _current_role()
     if role not in {RoleEnum.maintenance_manager, RoleEnum.admin, RoleEnum.production_manager}:
@@ -273,7 +353,7 @@ def update_job(job_id: int):
 
     if role in {RoleEnum.production_manager, RoleEnum.admin} and job.status == MaintenanceJobStatus.NEW:
         # allow minor updates before submission
-        updatable_fields = {"title", "priority", "location", "description", "expected_completion", "maint_email", "job_date"}
+        updatable_fields = {"priority", "location", "description", "expected_completion", "maint_email", "job_date"}
         for field in updatable_fields:
             if field not in payload:
                 continue
@@ -294,6 +374,31 @@ def update_job(job_id: int):
                     return jsonify({"msg": str(exc)}), 400
             else:
                 setattr(job, field, value or None)
+
+        if "job_category" in payload or ("title" in payload and "job_category" not in payload):
+            raw_category = payload.get("job_category")
+            if "job_category" not in payload:
+                raw_category = payload.get("title")
+            if isinstance(raw_category, str):
+                category_value = raw_category.strip()
+            elif raw_category is None:
+                category_value = ""
+            else:
+                category_value = str(raw_category).strip()
+            if not category_value:
+                return jsonify({"msg": "Job category is required."}), 400
+            job.job_category = category_value
+            job.title = category_value
+
+        if "asset_id" in payload or "part_id" in payload:
+            asset_id, part_id, asset, part, asset_error = _resolve_asset_and_part(payload)
+            if asset_error:
+                return jsonify({"msg": asset_error}), 400
+            job.asset_id = asset_id
+            job.part_id = part_id
+            job.asset = asset if asset_id is not None else None
+            job.part = part if part_id is not None else None
+
         db.session.commit()
         return jsonify(job_schema.dump(job))
 
@@ -367,9 +472,17 @@ def update_job(job_id: int):
         "Hello,",
         "",
         f"Maintenance job {job.job_code} has been completed.",
-        f"Title: {job.title}",
+        f"Job category: {job.job_category}",
         f"Total cost: {total_cost_value:.2f}",
     ]
+    if job.asset:
+        asset_label_parts = [value for value in [job.asset.code, job.asset.name] if value]
+        asset_label = " — ".join(asset_label_parts) if asset_label_parts else "N/A"
+        body_lines.append(f"Asset: {asset_label}")
+    if job.part:
+        part_label_parts = [value for value in [job.part.part_number, job.part.name] if value]
+        part_label = " — ".join(part_label_parts) if part_label_parts else "N/A"
+        body_lines.append(f"Part: {part_label}")
     if duration_text:
         body_lines.append(duration_text)
     if job.maintenance_notes:

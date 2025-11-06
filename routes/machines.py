@@ -307,6 +307,36 @@ def list_parts(asset_id: int):
     return jsonify(parts_schema.dump(parts))
 
 
+@bp.get("/parts")
+@jwt_required()
+def list_all_parts():
+    query = MachinePart.query.options(joinedload(MachinePart.asset))
+
+    raw_asset_id = request.args.get("asset_id")
+    if raw_asset_id not in (None, ""):
+        try:
+            asset_id = int(str(raw_asset_id).strip())
+        except (TypeError, ValueError):
+            return jsonify({"msg": "Invalid asset_id."}), 400
+        query = query.filter(MachinePart.asset_id == asset_id)
+
+    parts = query.order_by(MachinePart.part_number.asc(), MachinePart.name.asc()).all()
+
+    def serialize_part(part: MachinePart) -> dict:
+        asset = getattr(part, "asset", None)
+        return {
+            "id": part.id,
+            "asset_id": part.asset_id,
+            "asset_code": getattr(asset, "code", None),
+            "asset_name": getattr(asset, "name", None),
+            "part_number": part.part_number,
+            "part_name": part.name,
+            "name": part.name,
+        }
+
+    return jsonify([serialize_part(part) for part in parts])
+
+
 @bp.post("/parts/<int:part_id>/replacements")
 @jwt_required()
 def log_replacement(part_id: int):

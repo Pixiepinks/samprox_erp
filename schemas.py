@@ -354,6 +354,7 @@ class MaintenanceJobSchema(Schema):
     job_code = fields.Str()
     job_date = fields.Date()
     title = fields.Str()
+    job_category = fields.Str()
     priority = fields.Str()
     location = fields.Str(allow_none=True)
     description = fields.Str(allow_none=True)
@@ -371,6 +372,16 @@ class MaintenanceJobSchema(Schema):
     updated_at = fields.DateTime()
     created_by = fields.Nested(UserSchema)
     assigned_to = fields.Nested(UserSchema, allow_none=True)
+    asset_id = fields.Int(allow_none=True)
+    part_id = fields.Int(allow_none=True)
+    asset = fields.Nested(
+        "MachineAssetSchema", only=("id", "code", "name"), allow_none=True
+    )
+    part = fields.Nested(
+        "MachinePartSchema",
+        only=("id", "name", "part_number", "asset_id"),
+        allow_none=True,
+    )
     materials = fields.Nested(MaintenanceMaterialSchema, many=True)
 
     status_label = fields.Method("get_status_label")

@@ -67,7 +67,7 @@
                                         <thead>
                                             <tr>
                                                 <th scope="col">Code</th>
-                                                <th scope="col">Title</th>
+                                                <th scope="col">Job category</th>
                                                 <th scope="col">Status</th>
                                                 <th scope="col">Priority</th>
                                                 <th scope="col">Assigned</th>
@@ -661,9 +661,30 @@
                                                     <label for="job-date">Date</label>
                                                     <input id="job-date" name="job_date" type="date" />
                                                 </div>
-                                                <div class="input-group">
-                                                    <label for="job-title">Title <span class="required">*</span></label>
-                                                    <input id="job-title" name="title" type="text" placeholder="Routine maintenance" required />
+                                                <div class="input-group" data-field-group="job_category">
+                                                    <label for="job-category">Job Category <span class="required">*</span></label>
+                                                    <select id="job-category" name="job_category" required>
+                                                        <option value="">Select a category</option>
+                                                        <option value="Mechanical / Machine Issues">Mechanical / Machine Issues</option>
+                                                        <option value="Electrical &amp; Power Related">Electrical &amp; Power Related</option>
+                                                        <option value="Preventive / Routine Maintenance">Preventive / Routine Maintenance</option>
+                                                        <option value="Utility / Plant Support">Utility / Plant Support</option>
+                                                        <option value="Safety &amp; Facility Maintenance">Safety &amp; Facility Maintenance</option>
+                                                        <option value="Vehicle Engine &amp; PowerTrain">Vehicle Engine &amp; PowerTrain</option>
+                                                        <option value="Transmission &amp; Drivetrain">Transmission &amp; Drivetrain</option>
+                                                        <option value="Tyres &amp; Suspension">Tyres &amp; Suspension</option>
+                                                        <option value="Vehicle Electrical &amp; Lighting">Vehicle Electrical &amp; Lighting</option>
+                                                        <option value="Brakes &amp; Safety">Brakes &amp; Safety</option>
+                                                        <option value="Body Exterior">Body Exterior</option>
+                                                        <option value="Hydrulic system">Hydrulic system</option>
+                                                        <option value="Cooling System">Cooling System</option>
+                                                        <option value="Structural &amp; Civil Maintenance">Structural &amp; Civil Maintenance</option>
+                                                        <option value="Doors, Windows and Fixture">Doors, Windows and Fixture</option>
+                                                        <option value="Plumbing &amp; Water System">Plumbing &amp; Water System</option>
+                                                        <option value="Ventilation &amp; Environment">Ventilation &amp; Environment</option>
+                                                        <option value="Housekeeping &amp; Safety">Housekeeping &amp; Safety</option>
+                                                    </select>
+                                                    <p class="form__error" data-field-error="job_category" hidden></p>
                                                 </div>
                                                 <div class="input-group">
                                                     <label for="job-priority">Priority</label>
@@ -687,6 +708,23 @@
                                                     <label for="job-expected">Expected completion</label>
                                                     <input id="job-expected" name="expected_completion" type="date" />
                                                 </div>
+                                            </div>
+                                            <div class="input-group" data-field-group="asset_id">
+                                                <label for="job-asset">Asset name</label>
+                                                <input id="job-asset-search" type="search" placeholder="Search assets" data-select-filter="job-asset" autocomplete="off" />
+                                                <select id="job-asset" name="asset_id">
+                                                    <option value="">Select an asset</option>
+                                                </select>
+                                                <p class="form__error" data-field-error="asset_id" hidden></p>
+                                            </div>
+                                            <div class="input-group" data-field-group="part_id">
+                                                <label for="job-part">Part name (CKD) <span class="required" data-part-required hidden>*</span></label>
+                                                <input id="job-part-search" type="search" placeholder="Search parts" data-select-filter="job-part" aria-describedby="job-part-hint" autocomplete="off" />
+                                                <select id="job-part" name="part_id">
+                                                    <option value="">Select a part</option>
+                                                </select>
+                                                <p class="form__hint" id="job-part-hint">Select an asset to filter parts.</p>
+                                                <p class="form__error" data-field-error="part_id" hidden></p>
                                             </div>
                                             <div class="input-group">
                                                 <label for="job-description">Description of the job</label>
@@ -1067,6 +1105,12 @@
                 trigger.setAttribute("aria-disabled", "true");
                 trigger.title = "Only Production Managers or Admins can request maintenance jobs.";
             });
+        } else if (maintenanceTriggers.length) {
+            maintenanceTriggers.forEach((trigger) => {
+                trigger.addEventListener("click", () => {
+                    prepareNewJobForm();
+                });
+            });
         }
 
         const assetsTableBody = document.getElementById("assets-table-body");
@@ -1103,7 +1147,13 @@
         const jobIdInput = document.getElementById("job-id");
         const jobCodeInput = document.getElementById("job-code");
         const jobDateInput = document.getElementById("job-date");
-        const jobTitleInput = document.getElementById("job-title");
+        const jobCategorySelect = document.getElementById("job-category");
+        const jobAssetSearchInput = document.getElementById("job-asset-search");
+        const jobAssetSelect = document.getElementById("job-asset");
+        const jobPartSearchInput = document.getElementById("job-part-search");
+        const jobPartSelect = document.getElementById("job-part");
+        const jobPartHint = document.getElementById("job-part-hint");
+        const partRequiredIndicator = document.querySelector("[data-part-required]");
         const jobPrioritySelect = document.getElementById("job-priority");
         const jobLocationSelect = document.getElementById("job-location");
         const jobExpectedInput = document.getElementById("job-expected");
@@ -1126,6 +1176,43 @@
         const jobsEmpty = document.getElementById("jobs-empty");
         const jobsTableBody = document.getElementById("jobs-table-body");
         const refreshJobsButton = document.getElementById("refresh-jobs");
+
+        const jobFieldErrors = {
+            job_category: document.querySelector('[data-field-error="job_category"]'),
+            asset_id: document.querySelector('[data-field-error="asset_id"]'),
+            part_id: document.querySelector('[data-field-error="part_id"]'),
+        };
+
+        document.querySelectorAll('[data-select-filter]').forEach((input) => {
+            const targetId = input.getAttribute("data-select-filter");
+            if (!targetId) return;
+            const targetSelect = document.getElementById(targetId);
+            if (!targetSelect) return;
+            const applyFilter = () => filterSelectOptions(targetSelect, input.value);
+            input.addEventListener("input", applyFilter);
+            input.addEventListener("search", applyFilter);
+        });
+
+        if (jobCategorySelect) {
+            jobCategorySelect.addEventListener("change", () => {
+                setFieldError("job_category", "");
+            });
+        }
+
+        if (jobAssetSelect) {
+            jobAssetSelect.addEventListener("change", () => {
+                setFieldError("asset_id", "");
+                if (jobPartSearchInput) jobPartSearchInput.value = "";
+                const assetId = jobAssetSelect.value || null;
+                Promise.resolve(refreshPartOptionsForAsset(assetId, { presetValue: "" })).catch(() => {});
+            });
+        }
+
+        if (jobPartSelect) {
+            jobPartSelect.addEventListener("change", () => {
+                setFieldError("part_id", "");
+            });
+        }
 
         const idleEntryForm = document.getElementById("idle-entry-form");
         const idleEntryNotice = document.getElementById("idle-entry-notice");
@@ -1166,6 +1253,10 @@
         let assets = [];
         let currentAssetId = null;
         let currentParts = [];
+        let maintenanceParts = [];
+        let maintenancePartsRequest = 0;
+        let latestPartFilterRequest = 0;
+        let isPartSelectionRequired = false;
         let latestCodeRequest = 0;
 
         const SHIFT_DURATION_HOURS = 12;
@@ -1179,6 +1270,280 @@
         let idleInitialized = false;
         let idleEvents = [];
         const idleSummaryCache = new Map();
+
+        function setFieldError(field, message) {
+            const errorEl = jobFieldErrors[field];
+            if (!errorEl) return;
+            const group = errorEl.closest("[data-field-group]");
+            if (message) {
+                errorEl.textContent = message;
+                errorEl.hidden = false;
+                if (group) group.classList.add("input-group--error");
+            } else {
+                errorEl.textContent = "";
+                errorEl.hidden = true;
+                if (group) group.classList.remove("input-group--error");
+            }
+        }
+
+        function clearFieldErrors() {
+            Object.keys(jobFieldErrors).forEach((field) => setFieldError(field, ""));
+        }
+
+        function filterSelectOptions(select, query) {
+            if (!select) return;
+            const normalized = (query || "").toString().toLowerCase().trim();
+            Array.from(select.options).forEach((option, index) => {
+                if (index === 0) {
+                    option.hidden = false;
+                    return;
+                }
+                const label = (option.dataset.label || option.textContent || "").toLowerCase();
+                option.hidden = Boolean(normalized) && !label.includes(normalized);
+            });
+            if (!normalized) return;
+            const selectedOption = select.selectedOptions[0];
+            if (selectedOption && selectedOption.hidden) {
+                select.value = "";
+            }
+        }
+
+        function formatAssetLabel(asset) {
+            if (!asset) return "";
+            const parts = [];
+            if (asset.code) parts.push(asset.code);
+            if (asset.name) parts.push(asset.name);
+            return parts.join(" — ") || asset.name || asset.code || "";
+        }
+
+        const ACTIVE_ASSET_STATUSES = new Set(["operational", "active"]);
+
+        function isAssetSelectable(asset) {
+            if (!asset) return false;
+            const statusRaw = typeof asset.status === "string" ? asset.status.trim() : "";
+            if (!statusRaw) return true;
+            return ACTIVE_ASSET_STATUSES.has(statusRaw.toLowerCase());
+        }
+
+        function populateMaintenanceAssetSelect({ ensureAsset } = {}) {
+            if (!jobAssetSelect) return;
+            const previousValue = jobAssetSelect.value;
+            const searchQuery = jobAssetSearchInput?.value?.trim().toLowerCase() || "";
+
+            jobAssetSelect.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select an asset";
+            placeholder.dataset.label = "";
+            jobAssetSelect.appendChild(placeholder);
+
+            const selectableAssets = Array.isArray(assets)
+                ? assets
+                      .filter((asset) => isAssetSelectable(asset))
+                      .sort((a, b) => (a.code || "").localeCompare(b.code || ""))
+                : [];
+
+            selectableAssets.forEach((asset) => {
+                if (asset?.id == null) return;
+                const option = document.createElement("option");
+                option.value = String(asset.id);
+                const label = formatAssetLabel(asset) || `Asset #${asset.id}`;
+                option.textContent = label;
+                option.dataset.label = label.toLowerCase();
+                jobAssetSelect.appendChild(option);
+            });
+
+            const ensureCandidates = [];
+            if (ensureAsset && ensureAsset.id != null) {
+                ensureCandidates.push(ensureAsset);
+            }
+            if (previousValue && !jobAssetSelect.querySelector(`option[value="${previousValue}"]`)) {
+                const assetFromList = assets.find((item) => String(item.id) === previousValue);
+                if (assetFromList) {
+                    ensureCandidates.push(assetFromList);
+                } else if (currentMaintenanceJob?.asset && String(currentMaintenanceJob.asset.id) === previousValue) {
+                    ensureCandidates.push(currentMaintenanceJob.asset);
+                }
+            }
+
+            ensureCandidates.forEach((asset) => {
+                const value = String(asset.id);
+                if (!jobAssetSelect.querySelector(`option[value="${value}"]`)) {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    const label = formatAssetLabel(asset) || `Asset #${value}`;
+                    option.textContent = label;
+                    option.dataset.label = label.toLowerCase();
+                    jobAssetSelect.appendChild(option);
+                }
+            });
+
+            if (previousValue && jobAssetSelect.querySelector(`option[value="${previousValue}"]`)) {
+                jobAssetSelect.value = previousValue;
+            } else if (ensureCandidates.length) {
+                jobAssetSelect.value = String(ensureCandidates[0].id);
+            } else {
+                jobAssetSelect.value = "";
+            }
+
+            if (searchQuery) {
+                filterSelectOptions(jobAssetSelect, searchQuery);
+            }
+        }
+
+        function normalizeMaintenancePart(part) {
+            if (!part) return null;
+            const id = part.id != null ? Number(part.id) : null;
+            if (id == null || Number.isNaN(id)) return null;
+            const assetId = part.asset_id != null ? Number(part.asset_id) : null;
+            const partNumberRaw = part.part_number != null ? String(part.part_number).trim() : "";
+            const partNameRaw = part.part_name || part.name || "";
+            return {
+                id,
+                asset_id: Number.isNaN(assetId) ? null : assetId,
+                part_number: partNumberRaw,
+                part_name: partNameRaw,
+                name: partNameRaw,
+            };
+        }
+
+        function sortMaintenanceParts(a, b) {
+            const numberA = (a.part_number || "").toLowerCase();
+            const numberB = (b.part_number || "").toLowerCase();
+            if (numberA && numberB && numberA !== numberB) {
+                return numberA.localeCompare(numberB);
+            }
+            const nameA = (a.part_name || "").toLowerCase();
+            const nameB = (b.part_name || "").toLowerCase();
+            return nameA.localeCompare(nameB);
+        }
+
+        async function loadMaintenanceParts(force = false) {
+            if (!force && maintenanceParts.length > 0) {
+                return maintenanceParts.slice();
+            }
+            const requestId = ++maintenancePartsRequest;
+            const parts = await fetchJson("/api/machines/parts");
+            if (maintenancePartsRequest !== requestId) {
+                return maintenanceParts.slice();
+            }
+            maintenanceParts = Array.isArray(parts)
+                ? parts
+                      .map((item) => normalizeMaintenancePart(item))
+                      .filter(Boolean)
+                      .sort(sortMaintenanceParts)
+                : [];
+            return maintenanceParts.slice();
+        }
+
+        function updatePartRequirement(assetId, parts) {
+            const hasAsset = assetId != null && assetId !== "";
+            const availableParts = Array.isArray(parts) ? parts.length : 0;
+            isPartSelectionRequired = Boolean(hasAsset && availableParts > 0);
+            if (partRequiredIndicator) {
+                partRequiredIndicator.hidden = !isPartSelectionRequired;
+            }
+            if (!isPartSelectionRequired) {
+                setFieldError("part_id", "");
+            }
+        }
+
+        function updatePartHint(assetId, parts) {
+            if (!jobPartHint) return;
+            const hasAsset = assetId != null && assetId !== "";
+            if (!hasAsset) {
+                jobPartHint.textContent = "Select an asset to filter parts.";
+                jobPartHint.hidden = false;
+            } else if (!Array.isArray(parts) || parts.length === 0) {
+                jobPartHint.textContent = "No CKD parts are registered for the selected asset.";
+                jobPartHint.hidden = false;
+            } else {
+                jobPartHint.textContent = "";
+                jobPartHint.hidden = true;
+            }
+        }
+
+        function fillPartSelect(parts, { selectedValue = "", assetId = null } = {}) {
+            if (!jobPartSelect) return;
+            const searchQuery = jobPartSearchInput?.value?.trim().toLowerCase() || "";
+            jobPartSelect.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.dataset.label = "";
+            if (Array.isArray(parts) && parts.length > 0) {
+                placeholder.textContent = "Select a part";
+            } else if (assetId) {
+                placeholder.textContent = "No parts available for this asset";
+            } else {
+                placeholder.textContent = "No parts available";
+            }
+            jobPartSelect.appendChild(placeholder);
+
+            (parts || []).forEach((part) => {
+                if (!part) return;
+                const option = document.createElement("option");
+                option.value = String(part.id);
+                const partNumber = part.part_number || "";
+                const partName = part.part_name || part.name || "";
+                option.textContent = partNumber ? `${partNumber} — ${partName}` : partName;
+                option.dataset.label = option.textContent.toLowerCase();
+                jobPartSelect.appendChild(option);
+            });
+
+            if (selectedValue && jobPartSelect.querySelector(`option[value="${selectedValue}"]`)) {
+                jobPartSelect.value = String(selectedValue);
+            } else {
+                jobPartSelect.value = "";
+            }
+
+            if (searchQuery) {
+                filterSelectOptions(jobPartSelect, searchQuery);
+            }
+        }
+
+        async function refreshPartOptionsForAsset(assetId, { presetValue = "" } = {}) {
+            if (!jobPartSelect) return;
+            const requestId = ++latestPartFilterRequest;
+            if (jobPartSearchInput) jobPartSearchInput.disabled = true;
+            jobPartSelect.disabled = true;
+            jobPartSelect.innerHTML = "";
+            const loadingOption = document.createElement("option");
+            loadingOption.value = "";
+            loadingOption.textContent = "Loading parts…";
+            loadingOption.dataset.label = "";
+            jobPartSelect.appendChild(loadingOption);
+            updatePartHint(assetId, []);
+            setFieldError("part_id", "");
+
+            try {
+                const parts = await loadMaintenanceParts();
+                if (latestPartFilterRequest !== requestId) return;
+                const filteredParts = assetId
+                    ? parts.filter((part) => String(part.asset_id) === String(assetId))
+                    : parts.slice();
+                fillPartSelect(filteredParts, { selectedValue: presetValue, assetId });
+                updatePartRequirement(assetId, filteredParts);
+                updatePartHint(assetId, filteredParts);
+                const disableSelect = assetId ? filteredParts.length === 0 : parts.length === 0;
+                jobPartSelect.disabled = disableSelect;
+                if (jobPartSearchInput) {
+                    jobPartSearchInput.disabled = disableSelect;
+                }
+            } catch (error) {
+                if (latestPartFilterRequest !== requestId) return;
+                jobPartSelect.innerHTML = "";
+                const errorOption = document.createElement("option");
+                errorOption.value = "";
+                errorOption.textContent = "Unable to load parts";
+                errorOption.dataset.label = "";
+                jobPartSelect.appendChild(errorOption);
+                jobPartSelect.disabled = true;
+                if (jobPartSearchInput) jobPartSearchInput.disabled = true;
+                updatePartRequirement(null, []);
+                updatePartHint(null, []);
+                setFieldError("part_id", error.message || "Unable to load CKD parts.");
+            }
+        }
 
         function buildIdleSummaryCacheKey(monthKey, machineCodes) {
             const month = typeof monthKey === "string" ? monthKey.slice(0, 7) : "";
@@ -1482,10 +1847,11 @@
 
         function populateJobForm(job) {
             currentMaintenanceJob = job || null;
+            clearFieldErrors();
             if (!job) {
                 if (jobIdInput) jobIdInput.value = "";
                 if (jobCodeInput) jobCodeInput.value = "";
-                if (jobTitleInput) jobTitleInput.value = "";
+                if (jobCategorySelect) jobCategorySelect.value = "";
                 if (jobDateInput) jobDateInput.value = "";
                 if (jobExpectedInput) jobExpectedInput.value = "";
                 if (jobDescriptionInput) jobDescriptionInput.value = "";
@@ -1494,18 +1860,28 @@
                 if (jobStartInput) jobStartInput.value = "";
                 if (jobFinishInput) jobFinishInput.value = "";
                 if (maintenanceNotesInput) maintenanceNotesInput.value = "";
+                if (jobAssetSelect) jobAssetSelect.value = "";
+                if (jobAssetSearchInput) jobAssetSearchInput.value = "";
+                if (jobPartSelect) jobPartSelect.value = "";
+                if (jobPartSearchInput) jobPartSearchInput.value = "";
+                populateMaintenanceAssetSelect();
+                Promise.resolve(refreshPartOptionsForAsset(null, { presetValue: "" })).catch(() => {});
                 setMaterials([]);
                 updateMaterialsTotal();
                 if (canManageMaintenanceJobs) {
                     setMaintenanceFieldsDisabled(true);
                 }
+                updatePartRequirement(null, []);
+                updatePartHint(null, []);
                 return;
             }
 
             if (jobIdInput) jobIdInput.value = job.id || "";
             if (jobCodeInput) jobCodeInput.value = job.job_code || "";
             if (jobDateInput && job.job_date) jobDateInput.value = job.job_date;
-            if (jobTitleInput) jobTitleInput.value = job.title || "";
+            if (jobCategorySelect) {
+                jobCategorySelect.value = job.job_category || job.title || "";
+            }
             populateSelect(jobPrioritySelect, job.priority || "Normal");
             populateSelect(jobLocationSelect, job.location || "");
             if (jobExpectedInput) jobExpectedInput.value = job.expected_completion || "";
@@ -1517,6 +1893,18 @@
             if (jobStartInput) jobStartInput.value = job.job_started_date || "";
             if (jobFinishInput) jobFinishInput.value = job.job_finished_date || "";
             if (maintenanceNotesInput) maintenanceNotesInput.value = job.maintenance_notes || "";
+            const assetIdValue = job.asset_id != null ? String(job.asset_id) : "";
+            const assetForSelect = job.asset && job.asset.id != null ? job.asset : assetIdValue ? { id: Number(assetIdValue), code: job.asset?.code, name: job.asset?.name } : null;
+            populateMaintenanceAssetSelect({ ensureAsset: assetForSelect });
+            if (jobAssetSelect) {
+                jobAssetSelect.value = assetIdValue;
+            }
+            if (jobAssetSearchInput) jobAssetSearchInput.value = "";
+            const partIdValue = job.part_id != null ? String(job.part_id) : "";
+            if (jobPartSearchInput) jobPartSearchInput.value = "";
+            Promise.resolve(
+                refreshPartOptionsForAsset(assetIdValue || null, { presetValue: partIdValue })
+            ).catch(() => {});
             setMaterials(job.materials || []);
             updateMaterialsTotal();
         }
@@ -1755,6 +2143,8 @@
             } else if (idleMachineSelect.options.length > 0) {
                 idleMachineSelect.value = idleMachineSelect.options[0].value;
             }
+
+            populateMaintenanceAssetSelect();
         }
 
         function renderMachineCards() {
@@ -2271,7 +2661,7 @@
 
                 row.innerHTML = `
                     <td data-label="Code">${job.job_code}</td>
-                    <td data-label="Title">${job.title}</td>
+                    <td data-label="Job category">${job.job_category || job.title || "—"}</td>
                     <td data-label="Status">${statusText}</td>
                     <td data-label="Priority">${job.priority}</td>
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
@@ -2343,14 +2733,29 @@
             submitToMaintenanceButton.addEventListener("click", async () => {
                 if (!canManageProductionJobs) return;
                 hideJobAlerts();
+                clearFieldErrors();
                 if (currentMaintenanceJob) {
                     showError("This job has already been submitted to Maintenance.");
                     return;
                 }
 
-                const title = jobTitleInput?.value?.trim();
-                if (!title) {
-                    showError("Title is required.");
+                const jobCategory = jobCategorySelect?.value?.trim();
+                let hasValidationError = false;
+                if (!jobCategory) {
+                    setFieldError("job_category", "Select a job category.");
+                    hasValidationError = true;
+                }
+
+                const assetIdValue = jobAssetSelect?.value?.trim() || "";
+                const partIdValue = jobPartSelect?.value?.trim() || "";
+
+                if (isPartSelectionRequired && !partIdValue) {
+                    setFieldError("part_id", "Select a part for the chosen asset.");
+                    hasValidationError = true;
+                }
+
+                if (hasValidationError) {
+                    showError("Please fix the highlighted fields.");
                     return;
                 }
 
@@ -2361,13 +2766,16 @@
                 const payload = {
                     job_code: jobCodeInput?.value?.trim() || null,
                     job_date: jobDateInput?.value || null,
-                    title,
+                    job_category: jobCategory,
+                    title: jobCategory,
                     priority: jobPrioritySelect?.value || "Normal",
                     location: jobLocationSelect?.value || null,
                     expected_completion: jobExpectedInput?.value || null,
                     description: jobDescriptionInput?.value?.trim() || null,
                     maint_email: maintenanceEmailInput?.value?.trim() || null,
                     prod_email: productionEmailInput?.value?.trim() || user?.email || null,
+                    asset_id: assetIdValue || null,
+                    part_id: partIdValue || null,
                 };
 
                 submitToMaintenanceButton.disabled = true;
@@ -3724,6 +4132,7 @@
         }
 
         Promise.resolve(loadAssets()).catch(() => {});
+        Promise.resolve(loadMaintenanceParts()).catch(() => {});
         Promise.resolve(loadJobs()).catch(() => {});
         Promise.resolve(initializeIdleAnalytics()).catch(() => {});
         Promise.resolve(loadSuppliers()).catch(() => {});

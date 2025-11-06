@@ -92,6 +92,13 @@
                                         <tbody id="jobs-table-body"></tbody>
                                     </table>
                                 </div>
+                                <div class="jobs-loading-status" id="jobs-loading-status" role="status" aria-live="polite" hidden>
+                                    Loading more jobs…
+                                </div>
+                                <button type="button" class="button button--ghost jobs-load-more" id="jobs-load-more" hidden>
+                                    Load more jobs
+                                </button>
+                                <div id="jobs-scroll-sentinel" class="jobs-scroll-sentinel" aria-hidden="true"></div>
                             </div>
                         </section>
                     </div>
@@ -1374,6 +1381,9 @@
         const jobsEmpty = document.getElementById("jobs-empty");
         const jobsTableBody = document.getElementById("jobs-table-body");
         const refreshJobsButton = document.getElementById("refresh-jobs");
+        const jobsLoadingStatus = document.getElementById("jobs-loading-status");
+        const jobsLoadMoreButton = document.getElementById("jobs-load-more");
+        const jobsScrollSentinel = document.getElementById("jobs-scroll-sentinel");
         const jobDetailsModal = document.getElementById("job-details-modal");
         const jobDetailsTitle = document.getElementById("job-details-modal-title");
         const jobDetailsError = document.getElementById("job-details-error");
@@ -3617,98 +3627,204 @@
             });
         }
 
-        async function loadJobs() {
+        const JOBS_PAGE_SIZE = 8;
+        let jobsOffset = 0;
+        let jobsHasMore = true;
+        let jobsLoading = false;
+        let jobsNeedsReset = false;
+        let jobsScrollObserver = null;
+
+        function setJobsLoadingState(isLoading) {
+            if (jobsLoadingStatus) {
+                jobsLoadingStatus.hidden = !isLoading;
+            }
+            if (jobsLoadMoreButton && !jobsScrollObserver) {
+                jobsLoadMoreButton.disabled = isLoading;
+            }
+        }
+
+        function syncJobsControls() {
+            const usingObserver = Boolean(jobsScrollObserver);
+            if (jobsScrollSentinel) {
+                if (usingObserver && jobsHasMore) {
+                    jobsScrollObserver.observe(jobsScrollSentinel);
+                    jobsScrollSentinel.hidden = false;
+                } else {
+                    if (usingObserver) {
+                        jobsScrollObserver.unobserve(jobsScrollSentinel);
+                    }
+                    jobsScrollSentinel.hidden = true;
+                }
+            }
+            if (jobsLoadMoreButton) {
+                const showButton = !usingObserver && jobsHasMore;
+                jobsLoadMoreButton.hidden = !showButton;
+                jobsLoadMoreButton.disabled = !showButton || jobsLoading;
+            }
+        }
+
+        function createJobRow(job) {
+            const row = document.createElement("tr");
+            row.dataset.jobId = job.id;
+            const statusText = job.status_label || job.status || "—";
+            const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
+            const updateStatusCell = canManageMaintenanceJobs
+                ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
+                : '—';
+            const assetName = job.asset?.name || "—";
+            const partDisplay = job.part ? job.part.name || job.part.part_number || "—" : "—";
+
+            row.innerHTML = `
+                <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">${job.job_code}</td>
+                <td data-label="Job category" class="jobs-table__sticky-col">${job.job_category || job.title || "—"}</td>
+                <td data-label="Status">${statusText}</td>
+                <td data-label="Priority">${job.priority || "—"}</td>
+                <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
+                <td data-label="Asset name">${assetName}</td>
+                <td data-label="Part name (CKD)">${partDisplay}</td>
+                <td data-label="Job Date">${formatDate(job.job_date)}</td>
+                <td data-label="Expected completion">${formatDate(job.expected_completion)}</td>
+                <td data-label="Job started date">${formatDate(job.job_started_date)}</td>
+                <td data-label="Job finished date">${formatDate(job.job_finished_date)}</td>
+                <td data-label="Materials used (Cost)">${formatCurrency(materialsTotal)}</td>
+                <td data-label="Outsourced party cost">${formatCurrency(outsourcedTotal)}</td>
+                <td data-label="Internal staff cost">${formatCurrency(internalTotal)}</td>
+                <td data-label="Total cost">${formatCurrency(combinedTotal)}</td>
+                <td data-label="More"><button type="button" class="button button--ghost button--small" data-job-action="view-more">More</button></td>
+                <td data-label="Update status">${updateStatusCell}</td>
+            `;
+
+            const updateButton = row.querySelector('[data-job-action="update-status"]');
+            if (updateButton) {
+                updateButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    openModal("maintenance-job-modal");
+                    selectJob(job.id);
+                    if (maintenanceSection) {
+                        maintenanceSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                        const focusable = maintenanceSection.querySelector(
+                            "input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+                        );
+                        focusable?.focus();
+                    }
+                });
+            }
+
+            const moreButton = row.querySelector('[data-job-action="view-more"]');
+            if (moreButton) {
+                moreButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    openJobDetailsModal(job.id);
+                });
+            }
+
+            row.addEventListener("click", () => {
+                selectJob(job.id);
+            });
+
+            if (selectedJobId && Number(selectedJobId) === Number(job.id)) {
+                row.classList.add("is-selected");
+            }
+
+            return row;
+        }
+
+        function appendJobs(jobs) {
+            if (!jobsTableBody || !Array.isArray(jobs) || jobs.length === 0) {
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            jobs.forEach((job) => {
+                const row = createJobRow(job);
+                fragment.appendChild(row);
+            });
+            jobsTableBody.appendChild(fragment);
+            setSelectedRowHighlight();
+        }
+
+        async function loadJobs({ reset = false } = {}) {
+            if (!jobsTableBody) return;
+            if (jobsLoading) return;
+
+            if (reset) {
+                jobsOffset = 0;
+                jobsHasMore = true;
+                jobsNeedsReset = true;
+                if (jobsEmpty) jobsEmpty.hidden = true;
+            }
+
             if (jobsError) {
                 jobsError.hidden = true;
                 jobsError.textContent = "";
             }
 
+            if (!jobsHasMore && !reset) {
+                syncJobsControls();
+                return;
+            }
+
+            jobsLoading = true;
+            setJobsLoadingState(true);
+
             try {
-                const jobs = await fetchJson("/api/maintenance-jobs");
-                renderJobs(jobs);
+                const params = new URLSearchParams();
+                params.set("limit", JOBS_PAGE_SIZE);
+                params.set("offset", jobsOffset);
+                const jobs = await fetchJson(`/api/maintenance-jobs?${params.toString()}`);
+
+                if (jobsNeedsReset) {
+                    jobsTableBody.innerHTML = "";
+                    jobsNeedsReset = false;
+                }
+
+                if (Array.isArray(jobs) && jobs.length > 0) {
+                    appendJobs(jobs);
+                    jobsOffset += jobs.length;
+                    if (jobs.length < JOBS_PAGE_SIZE) {
+                        jobsHasMore = false;
+                    }
+                    if (jobsEmpty) jobsEmpty.hidden = true;
+                } else {
+                    if (jobsOffset === 0) {
+                        if (jobsEmpty) jobsEmpty.hidden = false;
+                    }
+                    jobsHasMore = false;
+                }
             } catch (error) {
                 if (jobsError) {
                     jobsError.textContent = error.message || "Unable to load jobs";
                     jobsError.hidden = false;
                 }
-                renderJobs([]);
+            } finally {
+                jobsLoading = false;
+                setJobsLoadingState(false);
+                syncJobsControls();
             }
         }
 
-        function renderJobs(jobs) {
-            if (!jobsTableBody) return;
+        if (jobsLoadMoreButton) {
+            jobsLoadMoreButton.addEventListener("click", () => {
+                loadJobs();
+            });
+        }
 
-            jobsTableBody.innerHTML = "";
-
-            if (!Array.isArray(jobs) || jobs.length === 0) {
-                if (jobsEmpty) jobsEmpty.hidden = false;
-                return;
-            }
-
-            if (jobsEmpty) jobsEmpty.hidden = true;
-
-            jobs.forEach((job) => {
-                const row = document.createElement("tr");
-                row.dataset.jobId = job.id;
-                const statusText = job.status_label || job.status || "—";
-                const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
-                const updateStatusCell = canManageMaintenanceJobs
-                    ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
-                    : '—';
-                const assetName = job.asset?.name || "—";
-                const partDisplay = job.part ? job.part.name || job.part.part_number || "—" : "—";
-
-                row.innerHTML = `
-                    <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">${job.job_code}</td>
-                    <td data-label="Job category" class="jobs-table__sticky-col">${job.job_category || job.title || "—"}</td>
-                    <td data-label="Status">${statusText}</td>
-                    <td data-label="Priority">${job.priority || "—"}</td>
-                    <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
-                    <td data-label="Asset name">${assetName}</td>
-                    <td data-label="Part name (CKD)">${partDisplay}</td>
-                    <td data-label="Job Date">${formatDate(job.job_date)}</td>
-                    <td data-label="Expected completion">${formatDate(job.expected_completion)}</td>
-                    <td data-label="Job started date">${formatDate(job.job_started_date)}</td>
-                    <td data-label="Job finished date">${formatDate(job.job_finished_date)}</td>
-                    <td data-label="Materials used (Cost)">${formatCurrency(materialsTotal)}</td>
-                    <td data-label="Outsourced party cost">${formatCurrency(outsourcedTotal)}</td>
-                    <td data-label="Internal staff cost">${formatCurrency(internalTotal)}</td>
-                    <td data-label="Total cost">${formatCurrency(combinedTotal)}</td>
-                    <td data-label="More"><button type="button" class="button button--ghost button--small" data-job-action="view-more">More</button></td>
-                    <td data-label="Update status">${updateStatusCell}</td>
-                `;
-                const updateButton = row.querySelector('[data-job-action="update-status"]');
-                if (updateButton) {
-                    updateButton.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        openModal("maintenance-job-modal");
-                        selectJob(job.id);
-                        if (maintenanceSection) {
-                            maintenanceSection.scrollIntoView({ behavior: "smooth", block: "start" });
-                            const focusable = maintenanceSection.querySelector(
-                                "input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
-                            );
-                            focusable?.focus();
+        if ("IntersectionObserver" in window && jobsScrollSentinel) {
+            jobsScrollObserver = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting) {
+                            loadJobs();
                         }
                     });
-                }
-                const moreButton = row.querySelector('[data-job-action="view-more"]');
-                if (moreButton) {
-                    moreButton.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        openJobDetailsModal(job.id);
-                    });
-                }
-                row.addEventListener("click", () => {
-                    selectJob(job.id);
-                });
-                if (selectedJobId && Number(selectedJobId) === Number(job.id)) {
-                    row.classList.add("is-selected");
-                }
-                jobsTableBody.appendChild(row);
-            });
-            setSelectedRowHighlight();
+                },
+                { root: null, rootMargin: "0px 0px 200px 0px" }
+            );
+            jobsScrollObserver.observe(jobsScrollSentinel);
+        } else if (jobsScrollSentinel) {
+            jobsScrollSentinel.hidden = true;
         }
+        syncJobsControls();
 
         function showJobDetailsLoading() {
             if (jobDetailsError) {
@@ -4091,7 +4207,9 @@
             document.getElementById("machine-outputs")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
 
-        refreshJobsButton?.addEventListener("click", loadJobs);
+        refreshJobsButton?.addEventListener("click", () => {
+            loadJobs({ reset: true });
+        });
 
         if (addMaterialRowButton) {
             addMaterialRowButton.addEventListener("click", () => {
@@ -4296,7 +4414,7 @@
                         const detail = notification?.message ? ` ${notification.message}` : "";
                         showSuccess(creationSuccess, `${baseSuccessMessage}${detail}`);
                     }
-                    await loadJobs();
+                    await loadJobs({ reset: true });
                 } catch (error) {
                     showError(error.message || "Unable to submit job to Maintenance Manager.");
                 } finally {
@@ -4370,7 +4488,7 @@
                         const detail = notification?.message ? ` ${notification.message}` : "";
                         showSuccess(maintenanceSuccess, `${baseSuccessMessage}${detail}`);
                     }
-                    await loadJobs();
+                    await loadJobs({ reset: true });
                 } catch (error) {
                     showError(error.message || "Unable to submit maintenance details.");
                 } finally {
@@ -4385,7 +4503,7 @@
             populateJobForm(null);
         }
 
-        loadJobs();
+        loadJobs({ reset: true });
 
 
         function hideIdleMessages() {
@@ -5694,7 +5812,7 @@
 
         Promise.resolve(loadAssets()).catch(() => {});
         Promise.resolve(loadMaintenanceParts()).catch(() => {});
-        Promise.resolve(loadJobs()).catch(() => {});
+        Promise.resolve(loadJobs({ reset: true })).catch(() => {});
         Promise.resolve(initializeIdleAnalytics()).catch(() => {});
         Promise.resolve(loadEmployees()).catch(() => {});
         Promise.resolve(loadSuppliers()).catch(() => {});

@@ -21,7 +21,9 @@ from models import (
     MaintenanceJob,
     MaintenanceJobStatus,
     MaintenanceMaterial,
+    MaintenanceOutsourcedService,
     RoleEnum,
+    ServiceSupplier,
     User,
 )
 from schemas import MaintenanceJobSchema
@@ -197,6 +199,12 @@ def list_jobs():
         .options(joinedload(MaintenanceJob.assigned_to))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
+        .options(joinedload(MaintenanceJob.materials))
+        .options(
+            joinedload(MaintenanceJob.outsourced_services).joinedload(
+                MaintenanceOutsourcedService.supplier
+            )
+        )
         .all()
     )
     return jsonify(jobs_schema.dump(jobs))
@@ -211,6 +219,11 @@ def get_job(job_id: int):
         .options(joinedload(MaintenanceJob.assigned_to))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
+        .options(
+            joinedload(MaintenanceJob.outsourced_services).joinedload(
+                MaintenanceOutsourcedService.supplier
+            )
+        )
         .get_or_404(job_id)
     )
     return jsonify(job_schema.dump(job))
@@ -434,10 +447,68 @@ def update_job(job_id: int):
                 cost_decimal = Decimal(str(cost_value))
             except (ValueError, ArithmeticError):
                 return jsonify({"msg": f"Invalid cost for material '{name}'."}), 400
+            if cost_decimal < 0:
+                return jsonify({"msg": f"Cost for material '{name}' must be non-negative."}), 400
         material = MaintenanceMaterial(material_name=name, units=units, cost=cost_decimal)
         job.materials.append(material)
         if cost_decimal is not None:
             total_cost += cost_decimal
+
+    outsourced_payload = payload.get("outsourced_services") or []
+    job.outsourced_services[:] = []
+    start_date = job.job_started_date
+    end_date = job.job_finished_date
+    for item in outsourced_payload:
+        if not isinstance(item, dict):
+            continue
+        supplier_id_raw = item.get("supplier_id")
+        description = (item.get("service_description") or "").strip()
+        if not supplier_id_raw and not description and not item.get("service_date") and not item.get("cost"):
+            continue
+        try:
+            supplier_id = int(supplier_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "Select a valid outsourced party."}), 400
+        supplier = ServiceSupplier.query.get(supplier_id)
+        if not supplier:
+            return jsonify({"msg": "Selected outsourced party does not exist."}), 400
+        if not description:
+            return jsonify({"msg": "Service description is required for outsourced services."}), 400
+        try:
+            service_date = _parse_date(item.get("service_date"), "service_date")
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+        if service_date is None:
+            return jsonify({"msg": "Service date is required for outsourced services."}), 400
+        if start_date and service_date < start_date:
+            return jsonify({"msg": "Service date cannot be before the job started date."}), 400
+        if end_date and service_date > end_date:
+            return jsonify({"msg": "Service date cannot be after the job finished date."}), 400
+        cost_value = item.get("cost")
+        try:
+            cost_decimal = Decimal(str(cost_value))
+        except (TypeError, ValueError, ArithmeticError):
+            return jsonify({"msg": "Cost is required for outsourced services."}), 400
+        if cost_decimal < 0:
+            return jsonify({"msg": "Cost must be non-negative for outsourced services."}), 400
+        hours_value = item.get("engaged_hours")
+        engaged_hours = None
+        if hours_value not in (None, ""):
+            try:
+                engaged_hours = Decimal(str(hours_value))
+            except (TypeError, ValueError, ArithmeticError):
+                return jsonify({"msg": "Invalid engaged hours for outsourced services."}), 400
+            if engaged_hours < 0:
+                return jsonify({"msg": "Engaged hours must be non-negative for outsourced services."}), 400
+        outsourced_service = MaintenanceOutsourcedService(
+            supplier=supplier,
+            service_date=service_date,
+            service_description=description,
+            engaged_hours=engaged_hours,
+            cost=cost_decimal,
+        )
+        job.outsourced_services.append(outsourced_service)
+        total_cost += cost_decimal
 
     job.total_cost = total_cost
     job.maint_submitted_at = datetime.utcnow()

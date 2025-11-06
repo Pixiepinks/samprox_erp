@@ -772,8 +772,30 @@
                                                 <div class="button-group button-group--inline">
                                                     <button type="button" class="button button--ghost" id="add-material-row">Add row</button>
                                                     <button type="button" class="button button--ghost" id="remove-material-row">Remove row</button>
+                                                    </div>
+                                                    <p class="form__hint">Total cost: <span id="materials-total">0.00</span></p>
+                                            </div>
+                                            <div class="input-group">
+                                                <label>Outsourced party cost</label>
+                                                <div class="table-wrapper" data-outsourced-table>
+                                                    <table class="jobs-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th scope="col">Outsourced Party</th>
+                                                                <th scope="col">Service Date</th>
+                                                                <th scope="col">Service Description</th>
+                                                                <th scope="col">Engaged Hours</th>
+                                                                <th scope="col">Cost (Rs.)</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="outsourced-table-body"></tbody>
+                                                    </table>
                                                 </div>
-                                                <p class="form__hint">Total cost: <span id="materials-total">0.00</span></p>
+                                                <div class="button-group button-group--inline">
+                                                    <button type="button" class="button button--ghost" id="add-outsourced-row">Add row</button>
+                                                    <button type="button" class="button button--ghost" id="remove-outsourced-row">Remove row</button>
+                                                </div>
+                                                <p class="form__hint">Total outsourced cost: Rs. <span id="outsourced-total">0.00</span></p>
                                             </div>
                                             <div class="input-group">
                                                 <label for="maintenance-notes">Signature / Remarks</label>
@@ -1170,6 +1192,10 @@
         const removeMaterialRowButton = document.getElementById("remove-material-row");
         const materialsTableBody = document.getElementById("materials-table-body");
         const materialsTotalEl = document.getElementById("materials-total");
+        const addOutsourcedRowButton = document.getElementById("add-outsourced-row");
+        const removeOutsourcedRowButton = document.getElementById("remove-outsourced-row");
+        const outsourcedTableBody = document.getElementById("outsourced-table-body");
+        const outsourcedTotalEl = document.getElementById("outsourced-total");
         const productionSection = document.querySelector("[data-production-section]");
         const maintenanceSection = document.querySelector("[data-maintenance-section]");
         const resetJobFormButton = document.getElementById("reset-job-form");
@@ -1215,6 +1241,22 @@
             });
         }
 
+        if (jobStartInput) {
+            const handleStartChange = () => {
+                updateOutsourcedDateConstraints();
+            };
+            jobStartInput.addEventListener("change", handleStartChange);
+            jobStartInput.addEventListener("input", handleStartChange);
+        }
+
+        if (jobFinishInput) {
+            const handleFinishChange = () => {
+                updateOutsourcedDateConstraints();
+            };
+            jobFinishInput.addEventListener("change", handleFinishChange);
+            jobFinishInput.addEventListener("input", handleFinishChange);
+        }
+
         const idleEntryForm = document.getElementById("idle-entry-form");
         const idleEntryNotice = document.getElementById("idle-entry-notice");
         const idleEntrySuccess = document.getElementById("idle-entry-success");
@@ -1238,6 +1280,7 @@
         let machineCards = Array.from(
             machineCardsContainer?.querySelectorAll("[data-machine-card]") || []
         );
+        let serviceSuppliers = [];
 
         let currentMaintenanceJob = null;
         let selectedJobId = null;
@@ -1687,6 +1730,8 @@
             });
             if (addMaterialRowButton) addMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (removeMaterialRowButton) removeMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (addOutsourcedRowButton) addOutsourcedRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (removeOutsourcedRowButton) removeOutsourcedRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (submitToProductionButton) {
                 submitToProductionButton.disabled = disabled || !canManageMaintenanceJobs;
             }
@@ -1736,6 +1781,295 @@
             while (body.firstChild) {
                 body.removeChild(body.firstChild);
             }
+        }
+
+        function getSupplierLabel(supplier) {
+            if (!supplier) return "";
+            const name = supplier.name || "";
+            const contact = supplier.contact_person?.trim();
+            return contact ? `${name} — ${contact}` : name;
+        }
+
+        function fillSupplierSelectOptions(select, { selectedValue = "", fallbackLabel = "" } = {}) {
+            if (!select) return;
+            const hasSuppliers = Array.isArray(serviceSuppliers) && serviceSuppliers.length > 0;
+            const previousValue = selectedValue ? String(selectedValue) : "";
+            select.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = hasSuppliers ? "Select outsourced party" : "No suppliers available";
+            select.appendChild(placeholder);
+
+            if (hasSuppliers) {
+                serviceSuppliers.forEach((supplier) => {
+                    if (!supplier) return;
+                    const option = document.createElement("option");
+                    option.value = String(supplier.id);
+                    option.textContent = getSupplierLabel(supplier);
+                    select.appendChild(option);
+                });
+            }
+
+            if (previousValue) {
+                if (!select.querySelector(`option[value="${previousValue}"]`) && fallbackLabel) {
+                    const fallbackOption = document.createElement("option");
+                    fallbackOption.value = previousValue;
+                    fallbackOption.textContent = fallbackLabel;
+                    fallbackOption.dataset.fallback = "true";
+                    select.appendChild(fallbackOption);
+                }
+                select.value = previousValue;
+                const selectedOption = select.options[select.selectedIndex];
+                const labelText = selectedOption ? selectedOption.textContent : fallbackLabel;
+                select.dataset.fallbackLabel = labelText || fallbackLabel || "";
+            } else {
+                select.value = "";
+                select.dataset.fallbackLabel = "";
+            }
+
+            select.disabled = !hasSuppliers;
+            if (select.disabled) {
+                select.value = "";
+                select.dataset.fallbackLabel = "";
+            }
+        }
+
+        function updateOutsourcedSupplierOptions() {
+            if (!outsourcedTableBody) return;
+            outsourcedTableBody
+                .querySelectorAll("select[data-outsourced-party]")
+                .forEach((select) => {
+                    const fallbackLabel = select.dataset.fallbackLabel || "";
+                    fillSupplierSelectOptions(select, {
+                        selectedValue: select.value,
+                        fallbackLabel,
+                    });
+                });
+        }
+
+        function applyOutsourcedDateConstraints(input) {
+            if (!input) return;
+            const minDate = jobStartInput?.value || "";
+            const maxDate = jobFinishInput?.value || "";
+            input.min = minDate;
+            input.max = maxDate;
+        }
+
+        function updateOutsourcedDateConstraints() {
+            if (!outsourcedTableBody) return;
+            outsourcedTableBody.querySelectorAll('input[type="date"]').forEach((input) => {
+                applyOutsourcedDateConstraints(input);
+            });
+        }
+
+        function addOutsourcedRow(service = {}) {
+            if (!outsourcedTableBody) return;
+            const row = document.createElement("tr");
+
+            const supplierCell = document.createElement("td");
+            const supplierSelect = document.createElement("select");
+            supplierSelect.required = true;
+            supplierSelect.dataset.outsourcedParty = "true";
+            const supplierIdValue =
+                service.supplier_id != null
+                    ? String(service.supplier_id)
+                    : service.supplier?.id != null
+                        ? String(service.supplier.id)
+                        : "";
+            const supplierLabel = service.supplier ? getSupplierLabel(service.supplier) : "";
+            supplierSelect.dataset.fallbackLabel = supplierLabel;
+            fillSupplierSelectOptions(supplierSelect, {
+                selectedValue: supplierIdValue,
+                fallbackLabel: supplierLabel,
+            });
+            supplierSelect.addEventListener("change", () => {
+                hideJobAlerts();
+                const selectedOption = supplierSelect.options[supplierSelect.selectedIndex];
+                supplierSelect.dataset.fallbackLabel = selectedOption ? selectedOption.textContent : "";
+            });
+            supplierCell.appendChild(supplierSelect);
+
+            const dateCell = document.createElement("td");
+            const dateInput = document.createElement("input");
+            dateInput.type = "date";
+            dateInput.required = true;
+            if (service.service_date) {
+                dateInput.value = service.service_date;
+            }
+            applyOutsourcedDateConstraints(dateInput);
+            dateInput.addEventListener("change", () => {
+                hideJobAlerts();
+            });
+            dateCell.appendChild(dateInput);
+
+            const descriptionCell = document.createElement("td");
+            const descriptionInput = document.createElement("input");
+            descriptionInput.type = "text";
+            descriptionInput.placeholder = "e.g., Bearing housing machining";
+            descriptionInput.required = true;
+            if (service.service_description) {
+                descriptionInput.value = service.service_description;
+            }
+            descriptionInput.addEventListener("input", () => {
+                hideJobAlerts();
+            });
+            descriptionCell.appendChild(descriptionInput);
+
+            const hoursCell = document.createElement("td");
+            const hoursInput = document.createElement("input");
+            hoursInput.type = "number";
+            hoursInput.min = "0";
+            hoursInput.step = "0.5";
+            if (service.engaged_hours != null && service.engaged_hours !== "") {
+                hoursInput.value = service.engaged_hours;
+            }
+            hoursInput.addEventListener("input", () => {
+                hideJobAlerts();
+            });
+            hoursCell.appendChild(hoursInput);
+
+            const costCell = document.createElement("td");
+            const costInput = document.createElement("input");
+            costInput.type = "number";
+            costInput.min = "0";
+            costInput.step = "0.01";
+            costInput.required = true;
+            costInput.placeholder = "0.00";
+            costInput.dataset.outsourcedCost = "true";
+            if (service.cost != null && service.cost !== "") {
+                costInput.value = service.cost;
+            }
+            costInput.addEventListener("input", () => {
+                hideJobAlerts();
+                updateOutsourcedTotal();
+            });
+            costCell.appendChild(costInput);
+
+            [supplierSelect, dateInput, descriptionInput, hoursInput].forEach((input) => {
+                input.addEventListener("input", () => {
+                    hideJobAlerts();
+                });
+            });
+
+            row.appendChild(supplierCell);
+            row.appendChild(dateCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(hoursCell);
+            row.appendChild(costCell);
+            outsourcedTableBody.appendChild(row);
+        }
+
+        function updateOutsourcedTotal() {
+            if (!outsourcedTableBody || !outsourcedTotalEl) return;
+            let total = 0;
+            outsourcedTableBody.querySelectorAll("input[data-outsourced-cost]").forEach((input) => {
+                const value = parseFloat(input.value);
+                if (!Number.isNaN(value)) {
+                    total += value;
+                }
+            });
+            outsourcedTotalEl.textContent = total.toFixed(2);
+        }
+
+        function setOutsourcedServices(services = []) {
+            clearTableBody(outsourcedTableBody);
+            if (!services || services.length === 0) {
+                addOutsourcedRow();
+            } else {
+                services.forEach((service) => addOutsourcedRow(service));
+            }
+            updateOutsourcedDateConstraints();
+            updateOutsourcedTotal();
+        }
+
+        function parseDateOnly(value) {
+            if (!value) return null;
+            const parsed = new Date(`${value}T00:00:00`);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+            return parsed;
+        }
+
+        function gatherOutsourcedServices() {
+            if (!outsourcedTableBody) return [];
+            const services = [];
+            const startDateValue = jobStartInput?.value || "";
+            const finishDateValue = jobFinishInput?.value || "";
+            const startDate = parseDateOnly(startDateValue);
+            const finishDate = parseDateOnly(finishDateValue);
+
+            const rows = outsourcedTableBody.querySelectorAll("tr");
+            rows.forEach((row, index) => {
+                const supplierSelect = row.querySelector("select[data-outsourced-party]");
+                const dateInput = row.querySelector('input[type="date"]');
+                const descriptionInput = row.querySelector('td:nth-child(3) input');
+                const hoursInput = row.querySelector('td:nth-child(4) input');
+                const costInput = row.querySelector('td:nth-child(5) input');
+
+                const supplierValue = supplierSelect?.value?.trim() || "";
+                const dateValue = dateInput?.value || "";
+                const descriptionValue = descriptionInput?.value?.trim() || "";
+                const hoursValue = hoursInput?.value || "";
+                const costValue = costInput?.value || "";
+
+                if (!supplierValue && !dateValue && !descriptionValue && !hoursValue && !costValue) {
+                    return;
+                }
+
+                const rowNumber = index + 1;
+
+                if (!supplierValue) {
+                    throw new Error(`Select an outsourced party for row ${rowNumber}.`);
+                }
+
+                if (!dateValue) {
+                    throw new Error(`Select a service date for row ${rowNumber}.`);
+                }
+
+                const serviceDate = parseDateOnly(dateValue);
+                if (!serviceDate) {
+                    throw new Error(`Enter a valid service date for row ${rowNumber}.`);
+                }
+                if (startDate && serviceDate < startDate) {
+                    throw new Error(`Service date in row ${rowNumber} cannot be before the job started date.`);
+                }
+                if (finishDate && serviceDate > finishDate) {
+                    throw new Error(`Service date in row ${rowNumber} cannot be after the job finished date.`);
+                }
+
+                if (!descriptionValue) {
+                    throw new Error(`Enter a service description for row ${rowNumber}.`);
+                }
+
+                if (costValue === "") {
+                    throw new Error(`Enter a cost for row ${rowNumber}.`);
+                }
+                const costNumber = Number(costValue);
+                if (!Number.isFinite(costNumber) || costNumber < 0) {
+                    throw new Error(`Enter a valid non-negative cost for row ${rowNumber}.`);
+                }
+
+                let engagedHours = null;
+                if (hoursValue !== "") {
+                    const hoursNumber = Number(hoursValue);
+                    if (!Number.isFinite(hoursNumber) || hoursNumber < 0) {
+                        throw new Error(`Engaged hours in row ${rowNumber} must be zero or more.`);
+                    }
+                    engagedHours = hoursNumber;
+                }
+
+                services.push({
+                    supplier_id: Number(supplierValue),
+                    service_date: dateValue,
+                    service_description: descriptionValue,
+                    engaged_hours: engagedHours,
+                    cost: costNumber,
+                });
+            });
+
+            return services;
         }
 
         function addMaterialRow(material = {}) {
@@ -1869,6 +2203,7 @@
                 Promise.resolve(refreshPartOptionsForAsset(null, { presetValue: "" })).catch(() => {});
                 setMaterials([]);
                 updateMaterialsTotal();
+                setOutsourcedServices([]);
                 if (canManageMaintenanceJobs) {
                     setMaintenanceFieldsDisabled(true);
                 }
@@ -1908,6 +2243,7 @@
             ).catch(() => {});
             setMaterials(job.materials || []);
             updateMaterialsTotal();
+            setOutsourcedServices(job.outsourced_services || []);
         }
 
         function syncSectionState(job) {
@@ -2732,6 +3068,43 @@
             });
         }
 
+        if (addOutsourcedRowButton) {
+            addOutsourcedRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                addOutsourcedRow();
+                updateOutsourcedDateConstraints();
+                updateOutsourcedTotal();
+            });
+        }
+
+        if (removeOutsourcedRowButton) {
+            removeOutsourcedRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                if (!outsourcedTableBody) return;
+                const rows = outsourcedTableBody.querySelectorAll("tr");
+                if (rows.length > 1) {
+                    outsourcedTableBody.removeChild(rows[rows.length - 1]);
+                } else if (rows.length === 1) {
+                    const row = rows[0];
+                    const select = row.querySelector("select[data-outsourced-party]");
+                    const dateInput = row.querySelector('input[type="date"]');
+                    const descriptionInput = row.querySelector('td:nth-child(3) input');
+                    const hoursInput = row.querySelector('td:nth-child(4) input');
+                    const costInput = row.querySelector('td:nth-child(5) input');
+                    if (select) {
+                        select.value = "";
+                        select.dataset.fallbackLabel = "";
+                    }
+                    if (dateInput) dateInput.value = "";
+                    if (descriptionInput) descriptionInput.value = "";
+                    if (hoursInput) hoursInput.value = "";
+                    if (costInput) costInput.value = "";
+                }
+                updateOutsourcedDateConstraints();
+                updateOutsourcedTotal();
+            });
+        }
+
         if (resetJobFormButton) {
             resetJobFormButton.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -2836,12 +3209,21 @@
                     return;
                 }
 
+                let outsourcedServices;
+                try {
+                    outsourcedServices = gatherOutsourcedServices();
+                } catch (outsourcedError) {
+                    showError(outsourcedError.message || "Invalid outsourced service details.");
+                    return;
+                }
+
                 const payload = {
                     job_started_date: jobStartInput?.value || null,
                     job_finished_date: jobFinishInput?.value || null,
                     maintenance_notes: maintenanceNotesInput?.value?.trim() || null,
                     prod_email: productionEmailInput?.value?.trim() || null,
                     materials,
+                    outsourced_services: outsourcedServices,
                 };
 
                 submitToProductionButton.disabled = true;
@@ -4088,13 +4470,28 @@
             }
             try {
                 const suppliers = await fetchJson("/api/machines/service-suppliers");
-                renderSuppliers(suppliers);
+                const sortedSuppliers = Array.isArray(suppliers)
+                    ? suppliers
+                          .slice()
+                          .sort((a, b) => (a?.name || "").localeCompare(b?.name || "", undefined, { sensitivity: "base" }))
+                    : [];
+                renderSuppliers(sortedSuppliers);
+                serviceSuppliers = sortedSuppliers.filter((supplier) => {
+                    if (!supplier) return false;
+                    if (Object.prototype.hasOwnProperty.call(supplier, "is_active")) {
+                        return Boolean(supplier.is_active);
+                    }
+                    return true;
+                });
+                updateOutsourcedSupplierOptions();
             } catch (error) {
                 if (supplierError) {
                     supplierError.textContent = error.message || "Unable to load suppliers";
                     supplierError.hidden = false;
                 }
                 renderSuppliers([]);
+                serviceSuppliers = [];
+                updateOutsourcedSupplierOptions();
             }
         }
 

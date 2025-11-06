@@ -3638,15 +3638,15 @@
             if (jobsLoadingStatus) {
                 jobsLoadingStatus.hidden = !isLoading;
             }
-            if (jobsLoadMoreButton && !jobsScrollObserver) {
-                jobsLoadMoreButton.disabled = isLoading;
+            if (jobsLoadMoreButton) {
+                jobsLoadMoreButton.disabled = isLoading || !jobsHasMore;
             }
         }
 
         function syncJobsControls() {
             const usingObserver = Boolean(jobsScrollObserver);
             if (jobsScrollSentinel) {
-                if (usingObserver && jobsHasMore) {
+                if (usingObserver && jobsHasMore && !jobsLoading) {
                     jobsScrollObserver.observe(jobsScrollSentinel);
                     jobsScrollSentinel.hidden = false;
                 } else {
@@ -3657,7 +3657,7 @@
                 }
             }
             if (jobsLoadMoreButton) {
-                const showButton = !usingObserver && jobsHasMore;
+                const showButton = jobsHasMore;
                 jobsLoadMoreButton.hidden = !showButton;
                 jobsLoadMoreButton.disabled = !showButton || jobsLoading;
             }
@@ -3762,6 +3762,10 @@
             if (!jobsHasMore && !reset) {
                 syncJobsControls();
                 return;
+            }
+
+            if (jobsScrollObserver && jobsScrollSentinel) {
+                jobsScrollObserver.unobserve(jobsScrollSentinel);
             }
 
             jobsLoading = true;

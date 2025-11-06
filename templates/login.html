@@ -98,7 +98,12 @@
                     const data = await response.json();
                     localStorage.setItem("samprox_token", data.access_token);
                     localStorage.setItem("samprox_user", JSON.stringify(data.user));
-                    window.location.href = "/mind";
+
+                    if (data.user?.role === "maintenance_manager") {
+                        window.location.href = "/machines";
+                    } else {
+                        window.location.href = "/mind";
+                    }
                 } catch (error) {
                     errorBox.textContent = error.message || "Unable to sign in";
                     errorBox.hidden = false;

@@ -798,6 +798,29 @@
                                                 <p class="form__hint">Total outsourced cost: Rs. <span id="outsourced-total">0.00</span></p>
                                             </div>
                                             <div class="input-group">
+                                                <label>Internal staff cost</label>
+                                                <div class="table-wrapper" data-internal-staff-table>
+                                                    <table class="jobs-table">
+                                                        <thead>
+                                                            <tr>
+                                                                <th scope="col">Employee</th>
+                                                                <th scope="col">Service Date</th>
+                                                                <th scope="col">Work Description</th>
+                                                                <th scope="col">Engaged Hours</th>
+                                                                <th scope="col">Hourly Rate (Rs.)</th>
+                                                                <th scope="col">Cost (Rs.)</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="internal-staff-table-body"></tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="button-group button-group--inline">
+                                                    <button type="button" class="button button--ghost" id="add-internal-staff-row">Add row</button>
+                                                    <button type="button" class="button button--ghost" id="remove-internal-staff-row">Remove row</button>
+                                                </div>
+                                                <p class="form__hint">Total internal staff cost: Rs. <span id="internal-staff-total">0.00</span></p>
+                                            </div>
+                                            <div class="input-group">
                                                 <label for="maintenance-notes">Signature / Remarks</label>
                                                 <textarea id="maintenance-notes" name="maintenance_notes" rows="3"></textarea>
                                             </div>
@@ -1196,6 +1219,10 @@
         const removeOutsourcedRowButton = document.getElementById("remove-outsourced-row");
         const outsourcedTableBody = document.getElementById("outsourced-table-body");
         const outsourcedTotalEl = document.getElementById("outsourced-total");
+        const addInternalStaffRowButton = document.getElementById("add-internal-staff-row");
+        const removeInternalStaffRowButton = document.getElementById("remove-internal-staff-row");
+        const internalStaffTableBody = document.getElementById("internal-staff-table-body");
+        const internalStaffTotalEl = document.getElementById("internal-staff-total");
         const productionSection = document.querySelector("[data-production-section]");
         const maintenanceSection = document.querySelector("[data-maintenance-section]");
         const resetJobFormButton = document.getElementById("reset-job-form");
@@ -1244,6 +1271,7 @@
         if (jobStartInput) {
             const handleStartChange = () => {
                 updateOutsourcedDateConstraints();
+                updateInternalStaffDateConstraints();
             };
             jobStartInput.addEventListener("change", handleStartChange);
             jobStartInput.addEventListener("input", handleStartChange);
@@ -1252,6 +1280,7 @@
         if (jobFinishInput) {
             const handleFinishChange = () => {
                 updateOutsourcedDateConstraints();
+                updateInternalStaffDateConstraints();
             };
             jobFinishInput.addEventListener("change", handleFinishChange);
             jobFinishInput.addEventListener("input", handleFinishChange);
@@ -1281,6 +1310,7 @@
             machineCardsContainer?.querySelectorAll("[data-machine-card]") || []
         );
         let serviceSuppliers = [];
+        let activeEmployees = [];
 
         let currentMaintenanceJob = null;
         let selectedJobId = null;
@@ -1732,6 +1762,8 @@
             if (removeMaterialRowButton) removeMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (addOutsourcedRowButton) addOutsourcedRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (removeOutsourcedRowButton) removeOutsourcedRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (addInternalStaffRowButton) addInternalStaffRowButton.disabled = disabled || !canManageMaintenanceJobs;
+            if (removeInternalStaffRowButton) removeInternalStaffRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (submitToProductionButton) {
                 submitToProductionButton.disabled = disabled || !canManageMaintenanceJobs;
             }
@@ -1861,6 +1893,377 @@
             outsourcedTableBody.querySelectorAll('input[type="date"]').forEach((input) => {
                 applyOutsourcedDateConstraints(input);
             });
+        }
+
+        function applyInternalStaffDateConstraints(input) {
+            if (!input) return;
+            const minDate = jobStartInput?.value || "";
+            const maxDate = jobFinishInput?.value || "";
+            input.min = minDate;
+            input.max = maxDate;
+        }
+
+        function updateInternalStaffDateConstraints() {
+            if (!internalStaffTableBody) return;
+            internalStaffTableBody.querySelectorAll('input[type="date"]').forEach((input) => {
+                applyInternalStaffDateConstraints(input);
+            });
+        }
+
+        function getEmployeeLabel(employee) {
+            if (!employee) return "";
+            const code =
+                employee.regNumber ||
+                employee.reg_number ||
+                employee.reg_no ||
+                employee.employee_code ||
+                employee.code ||
+                "";
+            const name =
+                employee.name ||
+                employee.full_name ||
+                employee.fullName ||
+                employee.employee_name ||
+                "";
+            const parts = [];
+            if (code) parts.push(code);
+            if (name) parts.push(name);
+            return parts.join(" — ");
+        }
+
+        function fillEmployeeSelectOptions(select, { selectedValue = "", fallbackLabel = "" } = {}) {
+            if (!select) return;
+            const hasEmployees = Array.isArray(activeEmployees) && activeEmployees.length > 0;
+            const previousValue = selectedValue ? String(selectedValue) : "";
+            select.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = hasEmployees
+                ? "Select employee"
+                : "No active employees available";
+            select.appendChild(placeholder);
+
+            if (hasEmployees) {
+                activeEmployees.forEach((employee) => {
+                    if (!employee) return;
+                    const option = document.createElement("option");
+                    option.value = String(employee.id);
+                    option.textContent = getEmployeeLabel(employee) || employee.name || employee.id;
+                    select.appendChild(option);
+                });
+            }
+
+            if (previousValue) {
+                if (!select.querySelector(`option[value="${previousValue}"]`) && fallbackLabel) {
+                    const fallbackOption = document.createElement("option");
+                    fallbackOption.value = previousValue;
+                    fallbackOption.textContent = fallbackLabel;
+                    fallbackOption.dataset.fallback = "true";
+                    select.appendChild(fallbackOption);
+                }
+                select.value = previousValue;
+                const selectedOption = select.options[select.selectedIndex];
+                const labelText = selectedOption ? selectedOption.textContent : fallbackLabel;
+                select.dataset.fallbackLabel = labelText || fallbackLabel || "";
+            } else {
+                select.value = "";
+                select.dataset.fallbackLabel = "";
+            }
+
+            select.disabled = !hasEmployees;
+            if (select.disabled) {
+                if (previousValue && fallbackLabel) {
+                    select.value = previousValue;
+                    select.dataset.fallbackLabel = fallbackLabel;
+                } else {
+                    select.value = "";
+                    select.dataset.fallbackLabel = "";
+                }
+            }
+        }
+
+        function updateInternalStaffEmployeeOptions() {
+            if (!internalStaffTableBody) return;
+            internalStaffTableBody
+                .querySelectorAll("select[data-internal-employee]")
+                .forEach((select) => {
+                    const fallbackLabel = select.dataset.fallbackLabel || "";
+                    fillEmployeeSelectOptions(select, {
+                        selectedValue: select.value,
+                        fallbackLabel,
+                    });
+                });
+        }
+
+        function updateInternalStaffRowCost(row) {
+            if (!row) return;
+            const hoursInput = row.querySelector('td:nth-child(4) input');
+            const rateInput = row.querySelector('td:nth-child(5) input');
+            const costInput = row.querySelector('input[data-internal-cost]');
+            if (!hoursInput || !rateInput || !costInput) return;
+            const hoursValue = hoursInput.value;
+            const rateValue = rateInput.value;
+            const hoursNumber = Number(hoursValue);
+            const rateNumber = Number(rateValue);
+            if (
+                hoursValue !== ""
+                && rateValue !== ""
+                && Number.isFinite(hoursNumber)
+                && Number.isFinite(rateNumber)
+            ) {
+                const computed = hoursNumber * rateNumber;
+                if (Number.isFinite(computed)) {
+                    costInput.value = computed.toFixed(2);
+                }
+            }
+        }
+
+        function addInternalStaffRow(entry = {}) {
+            if (!internalStaffTableBody) return;
+            const row = document.createElement("tr");
+
+            const employeeCell = document.createElement("td");
+            const employeeSelect = document.createElement("select");
+            employeeSelect.required = true;
+            employeeSelect.dataset.internalEmployee = "true";
+            const employeeIdValue =
+                entry.employee_id != null
+                    ? String(entry.employee_id)
+                    : entry.employee?.id != null
+                        ? String(entry.employee.id)
+                        : "";
+            const fallbackEmployee =
+                entry.employee ||
+                (entry.employee_code || entry.employee_name
+                    ? { employee_code: entry.employee_code, employee_name: entry.employee_name }
+                    : null);
+            const employeeLabel = getEmployeeLabel(fallbackEmployee) || "";
+            employeeSelect.dataset.fallbackLabel = employeeLabel;
+            fillEmployeeSelectOptions(employeeSelect, {
+                selectedValue: employeeIdValue,
+                fallbackLabel: employeeLabel,
+            });
+            employeeSelect.addEventListener("change", () => {
+                hideJobAlerts();
+                const selectedOption = employeeSelect.options[employeeSelect.selectedIndex];
+                employeeSelect.dataset.fallbackLabel = selectedOption ? selectedOption.textContent : "";
+            });
+            employeeCell.appendChild(employeeSelect);
+
+            const dateCell = document.createElement("td");
+            const dateInput = document.createElement("input");
+            dateInput.type = "date";
+            dateInput.required = true;
+            if (entry.service_date) {
+                dateInput.value = entry.service_date;
+            } else if (todayDateString) {
+                dateInput.value = todayDateString;
+            }
+            applyInternalStaffDateConstraints(dateInput);
+            dateInput.addEventListener("change", () => {
+                hideJobAlerts();
+            });
+            dateCell.appendChild(dateInput);
+
+            const descriptionCell = document.createElement("td");
+            const descriptionInput = document.createElement("input");
+            descriptionInput.type = "text";
+            descriptionInput.placeholder = "e.g., Bearing replacement | Oil pump service";
+            descriptionInput.required = true;
+            if (entry.work_description) {
+                descriptionInput.value = entry.work_description;
+            }
+            descriptionInput.addEventListener("input", () => {
+                hideJobAlerts();
+            });
+            descriptionCell.appendChild(descriptionInput);
+
+            const hoursCell = document.createElement("td");
+            const hoursInput = document.createElement("input");
+            hoursInput.type = "number";
+            hoursInput.min = "0";
+            hoursInput.step = "0.5";
+            hoursInput.placeholder = "0";
+            if (entry.engaged_hours != null) {
+                hoursInput.value = entry.engaged_hours;
+            }
+            hoursInput.addEventListener("input", () => {
+                hideJobAlerts();
+                updateInternalStaffRowCost(row);
+                updateInternalStaffTotal();
+            });
+            hoursCell.appendChild(hoursInput);
+
+            const rateCell = document.createElement("td");
+            const rateInput = document.createElement("input");
+            rateInput.type = "number";
+            rateInput.min = "0";
+            rateInput.step = "0.01";
+            rateInput.placeholder = "0.00";
+            if (entry.hourly_rate != null) {
+                rateInput.value = entry.hourly_rate;
+            }
+            rateInput.addEventListener("input", () => {
+                hideJobAlerts();
+                updateInternalStaffRowCost(row);
+                updateInternalStaffTotal();
+            });
+            rateCell.appendChild(rateInput);
+
+            const costCell = document.createElement("td");
+            const costInput = document.createElement("input");
+            costInput.type = "number";
+            costInput.min = "0";
+            costInput.step = "0.01";
+            costInput.placeholder = "0.00";
+            costInput.dataset.internalCost = "true";
+            if (entry.cost != null) {
+                costInput.value = entry.cost;
+            }
+            costInput.addEventListener("input", () => {
+                hideJobAlerts();
+                updateInternalStaffTotal();
+            });
+            costCell.appendChild(costInput);
+
+            row.appendChild(employeeCell);
+            row.appendChild(dateCell);
+            row.appendChild(descriptionCell);
+            row.appendChild(hoursCell);
+            row.appendChild(rateCell);
+            row.appendChild(costCell);
+
+            internalStaffTableBody.appendChild(row);
+            updateInternalStaffRowCost(row);
+            updateInternalStaffTotal();
+        }
+
+        function updateInternalStaffTotal() {
+            if (!internalStaffTableBody || !internalStaffTotalEl) return;
+            let total = 0;
+            internalStaffTableBody.querySelectorAll("input[data-internal-cost]").forEach((input) => {
+                const value = parseFloat(input.value);
+                if (!Number.isNaN(value)) {
+                    total += value;
+                }
+            });
+            internalStaffTotalEl.textContent = total.toFixed(2);
+        }
+
+        function setInternalStaffCosts(costs = []) {
+            clearTableBody(internalStaffTableBody);
+            if (!costs || costs.length === 0) {
+                addInternalStaffRow({});
+            } else {
+                costs.forEach((cost) => addInternalStaffRow(cost));
+            }
+            updateInternalStaffDateConstraints();
+            updateInternalStaffEmployeeOptions();
+            updateInternalStaffTotal();
+        }
+
+        function gatherInternalStaffCosts() {
+            if (!internalStaffTableBody) return [];
+            const costs = [];
+            const startDateValue = jobStartInput?.value || "";
+            const finishDateValue = jobFinishInput?.value || "";
+            const startDate = parseDateOnly(startDateValue);
+            const finishDate = parseDateOnly(finishDateValue);
+
+            const rows = internalStaffTableBody.querySelectorAll("tr");
+            rows.forEach((row, index) => {
+                const employeeSelect = row.querySelector("select[data-internal-employee]");
+                const dateInput = row.querySelector('input[type="date"]');
+                const descriptionInput = row.querySelector('td:nth-child(3) input');
+                const hoursInput = row.querySelector('td:nth-child(4) input');
+                const rateInput = row.querySelector('td:nth-child(5) input');
+                const costInput = row.querySelector('td:nth-child(6) input');
+
+                const employeeValue = employeeSelect?.value?.trim() || "";
+                const dateValue = dateInput?.value || "";
+                const descriptionValue = descriptionInput?.value?.trim() || "";
+                const hoursValue = hoursInput?.value || "";
+                const rateValue = rateInput?.value || "";
+                const costValue = costInput?.value || "";
+
+                if (
+                    !employeeValue
+                    && !descriptionValue
+                    && !hoursValue
+                    && !rateValue
+                    && !costValue
+                ) {
+                    return;
+                }
+
+                const rowNumber = index + 1;
+
+                if (!employeeValue) {
+                    throw new Error(`Select an employee for row ${rowNumber}.`);
+                }
+
+                const employeeIdNumber = Number(employeeValue);
+                if (!Number.isFinite(employeeIdNumber) || employeeIdNumber <= 0) {
+                    throw new Error(`Select a valid employee for row ${rowNumber}.`);
+                }
+
+                if (!dateValue) {
+                    throw new Error(`Select a service date for row ${rowNumber}.`);
+                }
+
+                const serviceDate = parseDateOnly(dateValue);
+                if (!serviceDate) {
+                    throw new Error(`Enter a valid service date for row ${rowNumber}.`);
+                }
+                if (startDate && serviceDate < startDate) {
+                    throw new Error(`Service date in row ${rowNumber} cannot be before the job started date.`);
+                }
+                if (finishDate && serviceDate > finishDate) {
+                    throw new Error(`Service date in row ${rowNumber} cannot be after the job finished date.`);
+                }
+
+                if (!descriptionValue) {
+                    throw new Error(`Enter a work description for row ${rowNumber}.`);
+                }
+
+                let engagedHours = null;
+                if (hoursValue !== "") {
+                    const hoursNumber = Number(hoursValue);
+                    if (!Number.isFinite(hoursNumber) || hoursNumber < 0) {
+                        throw new Error(`Engaged hours in row ${rowNumber} must be zero or more.`);
+                    }
+                    engagedHours = hoursNumber;
+                }
+
+                let hourlyRate = null;
+                if (rateValue !== "") {
+                    const rateNumber = Number(rateValue);
+                    if (!Number.isFinite(rateNumber) || rateNumber < 0) {
+                        throw new Error(`Hourly rate in row ${rowNumber} must be zero or more.`);
+                    }
+                    hourlyRate = rateNumber;
+                }
+
+                if (costValue === "") {
+                    throw new Error(`Enter a cost for row ${rowNumber}.`);
+                }
+                const costNumber = Number(costValue);
+                if (!Number.isFinite(costNumber) || costNumber < 0) {
+                    throw new Error(`Cost in row ${rowNumber} must be zero or more.`);
+                }
+
+                costs.push({
+                    employee_id: employeeIdNumber,
+                    service_date: dateValue,
+                    work_description: descriptionValue,
+                    engaged_hours: engagedHours,
+                    hourly_rate: hourlyRate,
+                    cost: costNumber,
+                });
+            });
+
+            return costs;
         }
 
         function addOutsourcedRow(service = {}) {
@@ -2204,6 +2607,7 @@
                 setMaterials([]);
                 updateMaterialsTotal();
                 setOutsourcedServices([]);
+                setInternalStaffCosts([]);
                 if (canManageMaintenanceJobs) {
                     setMaintenanceFieldsDisabled(true);
                 }
@@ -2244,6 +2648,7 @@
             setMaterials(job.materials || []);
             updateMaterialsTotal();
             setOutsourcedServices(job.outsourced_services || []);
+            setInternalStaffCosts(job.internal_staff_costs || []);
         }
 
         function syncSectionState(job) {
@@ -2290,6 +2695,7 @@
             setMaterials([]);
             setProductionFieldsDisabled(false);
             setMaintenanceFieldsDisabled(true);
+            setInternalStaffCosts([]);
             if (productionEmailInput) productionEmailInput.value = user?.email || "";
             fetchNextJobCode();
         }
@@ -3105,6 +3511,48 @@
             });
         }
 
+        if (addInternalStaffRowButton) {
+            addInternalStaffRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                addInternalStaffRow();
+                updateInternalStaffDateConstraints();
+                updateInternalStaffEmployeeOptions();
+                updateInternalStaffTotal();
+            });
+        }
+
+        if (removeInternalStaffRowButton) {
+            removeInternalStaffRowButton.addEventListener("click", () => {
+                hideJobAlerts();
+                if (!internalStaffTableBody) return;
+                const rows = internalStaffTableBody.querySelectorAll("tr");
+                if (rows.length > 1) {
+                    internalStaffTableBody.removeChild(rows[rows.length - 1]);
+                } else if (rows.length === 1) {
+                    const row = rows[0];
+                    const select = row.querySelector("select[data-internal-employee]");
+                    const dateInput = row.querySelector('input[type="date"]');
+                    const descriptionInput = row.querySelector('td:nth-child(3) input');
+                    const hoursInput = row.querySelector('td:nth-child(4) input');
+                    const rateInput = row.querySelector('td:nth-child(5) input');
+                    const costInput = row.querySelector('td:nth-child(6) input');
+                    if (select) {
+                        select.value = "";
+                        select.dataset.fallbackLabel = "";
+                    }
+                    if (dateInput) {
+                        dateInput.value = todayDateString || "";
+                    }
+                    if (descriptionInput) descriptionInput.value = "";
+                    if (hoursInput) hoursInput.value = "";
+                    if (rateInput) rateInput.value = "";
+                    if (costInput) costInput.value = "";
+                }
+                updateInternalStaffDateConstraints();
+                updateInternalStaffTotal();
+            });
+        }
+
         if (resetJobFormButton) {
             resetJobFormButton.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -3217,6 +3665,14 @@
                     return;
                 }
 
+                let internalStaffCosts;
+                try {
+                    internalStaffCosts = gatherInternalStaffCosts();
+                } catch (staffError) {
+                    showError(staffError.message || "Invalid internal staff cost details.");
+                    return;
+                }
+
                 const payload = {
                     job_started_date: jobStartInput?.value || null,
                     job_finished_date: jobFinishInput?.value || null,
@@ -3224,6 +3680,7 @@
                     prod_email: productionEmailInput?.value?.trim() || null,
                     materials,
                     outsourced_services: outsourcedServices,
+                    internal_staff_costs: internalStaffCosts,
                 };
 
                 submitToProductionButton.disabled = true;
@@ -4463,6 +4920,37 @@
             });
         }
 
+        async function loadEmployees() {
+            try {
+                const members = await fetchJson("/api/team/members");
+                const filtered = Array.isArray(members)
+                    ? members
+                          .slice()
+                          .filter((member) => {
+                              if (!member) return false;
+                              const statusText = (member.status || "").toString().toLowerCase();
+                              if (!statusText) return true;
+                              return statusText === "active";
+                          })
+                          .sort((a, b) => {
+                              const codeA = (a?.regNumber || a?.reg_number || "").toString();
+                              const codeB = (b?.regNumber || b?.reg_number || "").toString();
+                              if (codeA && codeB) {
+                                  return codeA.localeCompare(codeB, undefined, { sensitivity: "base" });
+                              }
+                              const nameA = (a?.name || "").toString();
+                              const nameB = (b?.name || "").toString();
+                              return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+                          })
+                    : [];
+                activeEmployees = filtered;
+            } catch (error) {
+                console.error("Failed to load employees", error);
+                activeEmployees = [];
+            }
+            updateInternalStaffEmployeeOptions();
+        }
+
         async function loadSuppliers() {
             if (supplierError) {
                 supplierError.hidden = true;
@@ -4542,6 +5030,7 @@
         Promise.resolve(loadMaintenanceParts()).catch(() => {});
         Promise.resolve(loadJobs()).catch(() => {});
         Promise.resolve(initializeIdleAnalytics()).catch(() => {});
+        Promise.resolve(loadEmployees()).catch(() => {});
         Promise.resolve(loadSuppliers()).catch(() => {});
 
     </script>

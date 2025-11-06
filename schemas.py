@@ -363,6 +363,21 @@ class MaintenanceOutsourcedServiceSchema(Schema):
     )
 
 
+class MaintenanceInternalStaffCostSchema(Schema):
+    id = fields.Int()
+    employee_id = fields.Int()
+    service_date = fields.Date()
+    work_description = fields.Str()
+    engaged_hours = fields.Float(allow_none=True)
+    hourly_rate = fields.Float(allow_none=True)
+    cost = fields.Float()
+    employee = fields.Nested(
+        TeamMemberSchema,
+        only=("id", "reg_number", "name", "status"),
+        allow_none=True,
+    )
+
+
 class MaintenanceJobSchema(Schema):
     id = fields.Int()
     job_code = fields.Str()
@@ -398,6 +413,7 @@ class MaintenanceJobSchema(Schema):
     )
     materials = fields.Nested(MaintenanceMaterialSchema, many=True)
     outsourced_services = fields.Nested(MaintenanceOutsourcedServiceSchema, many=True)
+    internal_staff_costs = fields.Nested(MaintenanceInternalStaffCostSchema, many=True)
 
     status_label = fields.Method("get_status_label")
 

@@ -22,8 +22,10 @@ from models import (
     MaintenanceJobStatus,
     MaintenanceMaterial,
     MaintenanceOutsourcedService,
+    MaintenanceInternalStaffCost,
     RoleEnum,
     ServiceSupplier,
+    TeamMember,
     User,
 )
 from schemas import MaintenanceJobSchema
@@ -205,6 +207,11 @@ def list_jobs():
                 MaintenanceOutsourcedService.supplier
             )
         )
+        .options(
+            joinedload(MaintenanceJob.internal_staff_costs).joinedload(
+                MaintenanceInternalStaffCost.employee
+            )
+        )
         .all()
     )
     return jsonify(jobs_schema.dump(jobs))
@@ -222,6 +229,11 @@ def get_job(job_id: int):
         .options(
             joinedload(MaintenanceJob.outsourced_services).joinedload(
                 MaintenanceOutsourcedService.supplier
+            )
+        )
+        .options(
+            joinedload(MaintenanceJob.internal_staff_costs).joinedload(
+                MaintenanceInternalStaffCost.employee
             )
         )
         .get_or_404(job_id)
@@ -454,10 +466,111 @@ def update_job(job_id: int):
         if cost_decimal is not None:
             total_cost += cost_decimal
 
-    outsourced_payload = payload.get("outsourced_services") or []
-    job.outsourced_services[:] = []
     start_date = job.job_started_date
     end_date = job.job_finished_date
+    internal_payload = payload.get("internal_staff_costs") or []
+    job.internal_staff_costs[:] = []
+    for item in internal_payload:
+        if not isinstance(item, dict):
+            continue
+        employee_id_raw = item.get("employee_id")
+        description = (item.get("work_description") or "").strip()
+        date_value = item.get("service_date")
+        hours_value = item.get("engaged_hours")
+        rate_value = item.get("hourly_rate")
+        cost_value = item.get("cost")
+
+        if (
+            not employee_id_raw
+            and not description
+            and not date_value
+            and not hours_value
+            and not rate_value
+            and not cost_value
+        ):
+            continue
+
+        try:
+            employee_id = int(employee_id_raw)
+        except (TypeError, ValueError):
+            return (
+                jsonify({"msg": "Select a valid employee for internal staff cost."}),
+                400,
+            )
+        employee = TeamMember.query.get(employee_id)
+        if not employee:
+            return jsonify({"msg": "Selected employee does not exist."}), 400
+
+        if not description:
+            return jsonify({"msg": "Work description is required for internal staff cost."}), 400
+
+        try:
+            service_date = _parse_date(date_value, "service_date")
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+        if service_date is None:
+            return jsonify({"msg": "Service date is required for internal staff cost."}), 400
+        if start_date and service_date < start_date:
+            return (
+                jsonify({"msg": "Service date cannot be before the job started date."}),
+                400,
+            )
+        if end_date and service_date > end_date:
+            return (
+                jsonify({"msg": "Service date cannot be after the job finished date."}),
+                400,
+            )
+
+        try:
+            cost_decimal = Decimal(str(cost_value))
+        except (TypeError, ValueError, ArithmeticError):
+            return jsonify({"msg": "Cost is required for internal staff cost."}), 400
+        if cost_decimal < 0:
+            return jsonify({"msg": "Cost must be non-negative for internal staff cost."}), 400
+
+        engaged_hours = None
+        if hours_value not in (None, ""):
+            try:
+                engaged_hours = Decimal(str(hours_value))
+            except (TypeError, ValueError, ArithmeticError):
+                return (
+                    jsonify({"msg": "Invalid engaged hours for internal staff cost."}),
+                    400,
+                )
+            if engaged_hours < 0:
+                return (
+                    jsonify({"msg": "Engaged hours must be non-negative for internal staff cost."}),
+                    400,
+                )
+
+        hourly_rate = None
+        if rate_value not in (None, ""):
+            try:
+                hourly_rate = Decimal(str(rate_value))
+            except (TypeError, ValueError, ArithmeticError):
+                return (
+                    jsonify({"msg": "Invalid hourly rate for internal staff cost."}),
+                    400,
+                )
+            if hourly_rate < 0:
+                return (
+                    jsonify({"msg": "Hourly rate must be non-negative for internal staff cost."}),
+                    400,
+                )
+
+        staff_cost = MaintenanceInternalStaffCost(
+            employee=employee,
+            service_date=service_date,
+            work_description=description,
+            engaged_hours=engaged_hours,
+            hourly_rate=hourly_rate,
+            cost=cost_decimal,
+        )
+        job.internal_staff_costs.append(staff_cost)
+        total_cost += cost_decimal
+
+    outsourced_payload = payload.get("outsourced_services") or []
+    job.outsourced_services[:] = []
     for item in outsourced_payload:
         if not isinstance(item, dict):
             continue

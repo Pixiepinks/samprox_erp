@@ -156,6 +156,12 @@ class MaintenanceJob(db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    internal_staff_costs = db.relationship(
+        "MaintenanceInternalStaffCost",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def recalculate_total_cost(self) -> None:
         total = Decimal("0")
@@ -169,6 +175,14 @@ class MaintenanceJob(db.Model):
             total += cost
         for service in self.outsourced_services:
             cost = service.cost or Decimal("0")
+            if not isinstance(cost, Decimal):
+                try:
+                    cost = Decimal(str(cost))
+                except Exception:
+                    cost = Decimal("0")
+            total += cost
+        for staff_cost in self.internal_staff_costs:
+            cost = staff_cost.cost or Decimal("0")
             if not isinstance(cost, Decimal):
                 try:
                     cost = Decimal(str(cost))
@@ -209,6 +223,25 @@ class MaintenanceOutsourcedService(db.Model):
 
     job = db.relationship("MaintenanceJob", back_populates="outsourced_services")
     supplier = db.relationship("ServiceSupplier")
+
+
+class MaintenanceInternalStaffCost(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    maintenance_job_id = db.Column(
+        db.Integer,
+        db.ForeignKey("maintenance_job.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    employee_id = db.Column(db.Integer, db.ForeignKey("team_member.id"), nullable=False)
+    service_date = db.Column(db.Date, nullable=False)
+    work_description = db.Column(db.String(255), nullable=False)
+    engaged_hours = db.Column(db.Numeric(6, 2))
+    hourly_rate = db.Column(db.Numeric(10, 2))
+    cost = db.Column(db.Numeric(12, 2), nullable=False)
+
+    job = db.relationship("MaintenanceJob", back_populates="internal_staff_costs")
+    employee = db.relationship("TeamMember")
 
 class Quotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)

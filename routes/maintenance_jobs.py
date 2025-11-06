@@ -195,7 +195,7 @@ def get_next_code():
 @bp.get("")
 @jwt_required()
 def list_jobs():
-    jobs = (
+    query = (
         MaintenanceJob.query.order_by(MaintenanceJob.created_at.desc())
         .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.assigned_to))
@@ -212,8 +212,17 @@ def list_jobs():
                 MaintenanceInternalStaffCost.employee
             )
         )
-        .all()
     )
+
+    limit = request.args.get("limit", type=int)
+    offset = request.args.get("offset", type=int)
+
+    if offset is not None and offset > 0:
+        query = query.offset(offset)
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+
+    jobs = query.all()
     return jsonify(jobs_schema.dump(jobs))
 
 

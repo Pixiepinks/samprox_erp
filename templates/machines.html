@@ -66,15 +66,27 @@
                                     <table class="jobs-table" aria-describedby="jobs-empty">
                                         <thead>
                                             <tr>
-                                                <th scope="col">Code</th>
-                                                <th scope="col">Job category</th>
-                                                <th scope="col">Status</th>
-                                                <th scope="col">Priority</th>
-                                                <th scope="col">Assigned</th>
+                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col jobs-table__sticky-col--first">Code</th>
+                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col">Job category</th>
+                                                <th scope="col" rowspan="2">Status</th>
+                                                <th scope="col" rowspan="2">Priority</th>
+                                                <th scope="col" rowspan="2">Assigned</th>
+                                                <th scope="col" rowspan="2">Asset name</th>
+                                                <th scope="col" rowspan="2">Part name (CKD)</th>
+                                                <th scope="col" colspan="4" class="jobs-table__group">Dates</th>
+                                                <th scope="col" colspan="4" class="jobs-table__group">Costs</th>
+                                                <th scope="col" rowspan="2">More</th>
+                                                <th scope="col" rowspan="2">Update status</th>
+                                            </tr>
+                                            <tr>
+                                                <th scope="col">Job Date</th>
                                                 <th scope="col">Expected completion</th>
+                                                <th scope="col">Job started date</th>
+                                                <th scope="col">Job finished date</th>
+                                                <th scope="col">Materials used (Cost)</th>
+                                                <th scope="col">Outsourced party cost</th>
+                                                <th scope="col">Internal staff cost</th>
                                                 <th scope="col">Total cost</th>
-                                                <th scope="col">Created</th>
-                                                <th scope="col">Update status</th>
                                             </tr>
                                         </thead>
                                         <tbody id="jobs-table-body"></tbody>
@@ -840,6 +852,138 @@
                 </div>
             </div>
         </div>
+        <div class="modal" id="job-details-modal" role="dialog" aria-modal="true" aria-labelledby="job-details-modal-title" data-modal hidden>
+            <div class="modal__backdrop" data-modal-close></div>
+            <div class="modal__window modal__window--wide" role="document">
+                <header class="modal__header" data-modal-handle>
+                    <h2 class="modal__title" id="job-details-modal-title">Maintenance job</h2>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
+                </header>
+                <div class="modal__body job-details-modal__body">
+                    <div class="alert alert--error" id="job-details-error" hidden></div>
+                    <div class="job-details-modal__loading" id="job-details-loading" hidden>Loading job details…</div>
+                    <div class="job-details-modal__content" data-job-details-content hidden>
+                        <section class="job-details__section">
+                            <h3>Overview</h3>
+                            <dl class="job-details__facts" id="job-details-overview"></dl>
+                        </section>
+                        <section class="job-details__section job-details__section--split">
+                            <div>
+                                <h3>Asset &amp; Part</h3>
+                                <dl class="job-details__facts job-details__facts--inline">
+                                    <div>
+                                        <dt>Asset name</dt>
+                                        <dd id="job-details-asset">—</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Part name (CKD)</dt>
+                                        <dd id="job-details-part">—</dd>
+                                    </div>
+                                </dl>
+                            </div>
+                            <div>
+                                <h3>Timeline</h3>
+                                <ol class="job-timeline" id="job-details-timeline"></ol>
+                            </div>
+                        </section>
+                        <section class="job-details__section job-details__section--columns">
+                            <article class="job-details__card">
+                                <h4>Description of the job</h4>
+                                <p id="job-details-description" class="job-details__text">No description provided.</p>
+                            </article>
+                            <article class="job-details__card">
+                                <h4>Remark</h4>
+                                <p id="job-details-remark" class="job-details__text">No remarks recorded.</p>
+                            </article>
+                        </section>
+                        <section class="job-details__section">
+                            <h3>Materials used</h3>
+                            <div class="table-wrapper">
+                                <table class="jobs-table job-details__table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Item</th>
+                                            <th scope="col">Qty</th>
+                                            <th scope="col">Unit cost</th>
+                                            <th scope="col">Line cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="job-details-materials-body"></tbody>
+                                </table>
+                            </div>
+                            <p class="job-details__subtotal">Subtotal: <span id="job-details-materials-total">Rs. 0.00</span></p>
+                        </section>
+                        <section class="job-details__section job-details__section--stacked">
+                            <div class="job-details__group">
+                                <h3>Outsourced party cost</h3>
+                                <div class="table-wrapper">
+                                    <table class="jobs-table job-details__table">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Party</th>
+                                                <th scope="col">Service date</th>
+                                                <th scope="col">Description</th>
+                                                <th scope="col">Hours/Qty</th>
+                                                <th scope="col">Cost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="job-details-outsourced-body"></tbody>
+                                    </table>
+                                </div>
+                                <p class="job-details__subtotal">Subtotal: <span id="job-details-outsourced-total">Rs. 0.00</span></p>
+                            </div>
+                            <div class="job-details__group">
+                                <h3>Internal staff cost</h3>
+                                <div class="table-wrapper">
+                                    <table class="jobs-table job-details__table">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Employee</th>
+                                                <th scope="col">Role</th>
+                                                <th scope="col">Hours</th>
+                                                <th scope="col">Rate</th>
+                                                <th scope="col">Cost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="job-details-staff-body"></tbody>
+                                    </table>
+                                </div>
+                                <p class="job-details__subtotal">Subtotal: <span id="job-details-staff-total">Rs. 0.00</span></p>
+                            </div>
+                        </section>
+                        <section class="job-details__section job-details__section--totals">
+                            <h3>Totals</h3>
+                            <dl class="job-details__facts job-details__facts--inline">
+                                <div>
+                                    <dt>Materials</dt>
+                                    <dd id="job-details-total-materials">Rs. 0.00</dd>
+                                </div>
+                                <div>
+                                    <dt>Outsourced</dt>
+                                    <dd id="job-details-total-outsourced">Rs. 0.00</dd>
+                                </div>
+                                <div>
+                                    <dt>Internal</dt>
+                                    <dd id="job-details-total-internal">Rs. 0.00</dd>
+                                </div>
+                                <div>
+                                    <dt>Total cost</dt>
+                                    <dd id="job-details-total-cost">Rs. 0.00</dd>
+                                </div>
+                            </dl>
+                        </section>
+                        <section class="job-details__section">
+                            <h3>Updates &amp; attachments</h3>
+                            <div id="job-details-updates" class="job-details__updates">No updates recorded for this job yet.</div>
+                        </section>
+                    </div>
+                </div>
+                <footer class="modal__footer job-details-modal__footer">
+                    <button type="button" class="button button--ghost" data-job-details-action="close">Close</button>
+                    <button type="button" class="button" data-job-details-action="print">Print Job Sheet</button>
+                </footer>
+            </div>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -1230,6 +1374,28 @@
         const jobsEmpty = document.getElementById("jobs-empty");
         const jobsTableBody = document.getElementById("jobs-table-body");
         const refreshJobsButton = document.getElementById("refresh-jobs");
+        const jobDetailsModal = document.getElementById("job-details-modal");
+        const jobDetailsTitle = document.getElementById("job-details-modal-title");
+        const jobDetailsError = document.getElementById("job-details-error");
+        const jobDetailsLoading = document.getElementById("job-details-loading");
+        const jobDetailsContent = jobDetailsModal?.querySelector("[data-job-details-content]");
+        const jobDetailsOverview = document.getElementById("job-details-overview");
+        const jobDetailsAsset = document.getElementById("job-details-asset");
+        const jobDetailsPart = document.getElementById("job-details-part");
+        const jobDetailsTimeline = document.getElementById("job-details-timeline");
+        const jobDetailsDescription = document.getElementById("job-details-description");
+        const jobDetailsRemark = document.getElementById("job-details-remark");
+        const jobDetailsMaterialsBody = document.getElementById("job-details-materials-body");
+        const jobDetailsMaterialsTotal = document.getElementById("job-details-materials-total");
+        const jobDetailsOutsourcedBody = document.getElementById("job-details-outsourced-body");
+        const jobDetailsOutsourcedTotal = document.getElementById("job-details-outsourced-total");
+        const jobDetailsStaffBody = document.getElementById("job-details-staff-body");
+        const jobDetailsStaffTotal = document.getElementById("job-details-staff-total");
+        const jobDetailsTotalsMaterials = document.getElementById("job-details-total-materials");
+        const jobDetailsTotalsOutsourced = document.getElementById("job-details-total-outsourced");
+        const jobDetailsTotalsInternal = document.getElementById("job-details-total-internal");
+        const jobDetailsTotalsCost = document.getElementById("job-details-total-cost");
+        const jobDetailsUpdates = document.getElementById("job-details-updates");
 
         const jobFieldErrors = {
             job_category: document.querySelector('[data-field-error="job_category"]'),
@@ -1314,6 +1480,7 @@
 
         let currentMaintenanceJob = null;
         let selectedJobId = null;
+        const jobDetailsCache = new Map();
 
         const supplierForm = document.getElementById("supplier-form");
         const supplierFormNotice = document.getElementById("supplier-form-notice");
@@ -1388,6 +1555,60 @@
             if (asset.code) parts.push(asset.code);
             if (asset.name) parts.push(asset.name);
             return parts.join(" — ") || asset.name || asset.code || "";
+        }
+
+        function formatPartLabel(part) {
+            if (!part) return "";
+            const parts = [];
+            if (part.part_number) parts.push(part.part_number);
+            if (part.name) parts.push(part.name);
+            return parts.join(" — ") || part.name || part.part_number || "";
+        }
+
+        function sumCost(items) {
+            if (!Array.isArray(items)) return 0;
+            return items.reduce((total, item) => {
+                const value = Number(item?.cost);
+                if (!Number.isFinite(value)) {
+                    return total;
+                }
+                return total + value;
+            }, 0);
+        }
+
+        function deriveUnitCost(units, cost) {
+            if (units == null || cost == null) return null;
+            const quantity = Number.parseFloat(units);
+            const numericCost = Number(cost);
+            if (!Number.isFinite(quantity) || !Number.isFinite(numericCost) || quantity === 0) {
+                return null;
+            }
+            return numericCost / quantity;
+        }
+
+        function formatNumber(value, { fallback = "—", minimumFractionDigits = 0, maximumFractionDigits = 2 } = {}) {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return fallback;
+            }
+            return number.toLocaleString(undefined, {
+                minimumFractionDigits,
+                maximumFractionDigits,
+            });
+        }
+
+        function getJobCostSummary(job) {
+            const materialsTotal = sumCost(job?.materials);
+            const outsourcedTotal = sumCost(job?.outsourced_services);
+            const internalTotal = sumCost(job?.internal_staff_costs);
+            const combined = materialsTotal + outsourcedTotal + internalTotal;
+            const totalCost = Number(job?.total_cost);
+            return {
+                materialsTotal,
+                outsourcedTotal,
+                internalTotal,
+                combinedTotal: Number.isFinite(totalCost) ? totalCost : combined,
+            };
         }
 
         const ACTIVE_ASSET_STATUSES = new Set(["operational", "active"]);
@@ -2668,6 +2889,8 @@
             hideJobAlerts();
             try {
                 const job = await fetchJson(`/api/maintenance-jobs/${jobId}`);
+                const cacheKey = Number.isFinite(Number(jobId)) ? Number(jobId) : jobId;
+                jobDetailsCache.set(cacheKey, job);
                 populateJobForm(job);
                 syncSectionState(job);
             } catch (error) {
@@ -2742,12 +2965,19 @@
             return withTime ? date.toLocaleString() : date.toLocaleDateString();
         }
 
-        function formatTotalCost(value) {
+        function formatCurrency(value, { fallback = "Rs. 0.00" } = {}) {
             const number = Number(value);
             if (!Number.isFinite(number)) {
-                return "Total cost: 0.00";
+                return fallback;
             }
-            return `Total cost: ${number.toFixed(2)}`;
+            return `Rs. ${number.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            })}`;
+        }
+
+        function formatTotalCost(value) {
+            return formatCurrency(value);
         }
 
         function formatDuration(minutes) {
@@ -3003,6 +3233,46 @@
             }
         }
 
+        function showAssetDetail(asset, { focusPart } = {}) {
+            if (!asset || asset.id == null) return;
+            currentAssetId = asset.id;
+            if (assetPartSearchInput) {
+                assetPartSearchInput.value = focusPart ? focusPart : "";
+            }
+            if (assetPartsEmptyMessage) {
+                assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
+            }
+            if (assetDetailTitle) {
+                const code = asset.code ? ` (${asset.code})` : "";
+                assetDetailTitle.textContent = asset.name ? `${asset.name}${code}` : asset.code || "Asset details";
+            }
+            const metaParts = asset.part_count === 1 ? "1 part" : `${asset.part_count || 0} parts`;
+            const metaLocation = asset.location ? ` • ${asset.location}` : "";
+            if (assetDetailMeta) assetDetailMeta.textContent = `${metaParts}${metaLocation}`;
+            const facts = [];
+            if (asset.manufacturer) facts.push(["Manufacturer", asset.manufacturer]);
+            if (asset.model_number) facts.push(["Model", asset.model_number]);
+            if (asset.serial_number) facts.push(["Serial", asset.serial_number]);
+            if (asset.installed_on) facts.push(["Installed", formatDate(asset.installed_on)]);
+            if (asset.status) facts.push(["Status", asset.status]);
+            if (asset.category) facts.push(["Category", asset.category]);
+            if (asset.notes) facts.push(["Notes", asset.notes]);
+            if (assetDetailFacts) {
+                assetDetailFacts.innerHTML = facts.length
+                    ? facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")
+                    : "<p>No additional details provided.</p>";
+            }
+            if (assetDetail) assetDetail.hidden = false;
+            Promise.resolve(loadAssetParts(asset.id))
+                .then(() => {
+                    if (focusPart && assetPartSearchInput) {
+                        assetPartSearchInput.value = focusPart;
+                        assetPartSearchInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    }
+                })
+                .catch(() => {});
+        }
+
         function computeNextPartNumber(parts) {
             if (!Array.isArray(parts) || parts.length === 0) {
                 return "P-001";
@@ -3205,32 +3475,7 @@
             const assetId = Number(button.dataset.assetId);
             const asset = assets.find((item) => item.id === assetId);
             if (!asset) return;
-            currentAssetId = asset.id;
-            if (assetPartSearchInput) {
-                assetPartSearchInput.value = "";
-            }
-            if (assetPartsEmptyMessage) {
-                assetPartsEmptyMessage.textContent = DEFAULT_PARTS_EMPTY_MESSAGE;
-            }
-            if (assetDetailTitle) assetDetailTitle.textContent = `${asset.name} (${asset.code})`;
-            const metaParts = asset.part_count === 1 ? "1 part" : `${asset.part_count || 0} parts`;
-            const metaLocation = asset.location ? ` • ${asset.location}` : "";
-            if (assetDetailMeta) assetDetailMeta.textContent = `${metaParts}${metaLocation}`;
-            const facts = [];
-            if (asset.manufacturer) facts.push(["Manufacturer", asset.manufacturer]);
-            if (asset.model_number) facts.push(["Model", asset.model_number]);
-            if (asset.serial_number) facts.push(["Serial", asset.serial_number]);
-            if (asset.installed_on) facts.push(["Installed", formatDate(asset.installed_on)]);
-            if (asset.status) facts.push(["Status", asset.status]);
-            if (asset.category) facts.push(["Category", asset.category]);
-            if (asset.notes) facts.push(["Notes", asset.notes]);
-            if (assetDetailFacts) {
-                assetDetailFacts.innerHTML = facts.length
-                ? facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")
-                : "<p>No additional details provided.</p>";
-            }
-            if (assetDetail) assetDetail.hidden = false;
-            loadAssetParts(asset.id);
+            showAssetDetail(asset);
         });
 
         closeAssetDetail?.addEventListener("click", () => {
@@ -3406,19 +3651,30 @@
                 const row = document.createElement("tr");
                 row.dataset.jobId = job.id;
                 const statusText = job.status_label || job.status || "—";
+                const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
                 const updateStatusCell = canManageMaintenanceJobs
                     ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
                     : '—';
+                const assetName = job.asset?.name || "—";
+                const partDisplay = job.part ? job.part.name || job.part.part_number || "—" : "—";
 
                 row.innerHTML = `
-                    <td data-label="Code">${job.job_code}</td>
-                    <td data-label="Job category">${job.job_category || job.title || "—"}</td>
+                    <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">${job.job_code}</td>
+                    <td data-label="Job category" class="jobs-table__sticky-col">${job.job_category || job.title || "—"}</td>
                     <td data-label="Status">${statusText}</td>
-                    <td data-label="Priority">${job.priority}</td>
+                    <td data-label="Priority">${job.priority || "—"}</td>
                     <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
-                    <td data-label="Expected">${formatDate(job.expected_completion)}</td>
-                    <td data-label="Total cost">${formatTotalCost(job.total_cost)}</td>
-                    <td data-label="Created">${formatDate(job.created_at, true)}</td>
+                    <td data-label="Asset name">${assetName}</td>
+                    <td data-label="Part name (CKD)">${partDisplay}</td>
+                    <td data-label="Job Date">${formatDate(job.job_date)}</td>
+                    <td data-label="Expected completion">${formatDate(job.expected_completion)}</td>
+                    <td data-label="Job started date">${formatDate(job.job_started_date)}</td>
+                    <td data-label="Job finished date">${formatDate(job.job_finished_date)}</td>
+                    <td data-label="Materials used (Cost)">${formatCurrency(materialsTotal)}</td>
+                    <td data-label="Outsourced party cost">${formatCurrency(outsourcedTotal)}</td>
+                    <td data-label="Internal staff cost">${formatCurrency(internalTotal)}</td>
+                    <td data-label="Total cost">${formatCurrency(combinedTotal)}</td>
+                    <td data-label="More"><button type="button" class="button button--ghost button--small" data-job-action="view-more">More</button></td>
                     <td data-label="Update status">${updateStatusCell}</td>
                 `;
                 const updateButton = row.querySelector('[data-job-action="update-status"]');
@@ -3436,6 +3692,13 @@
                         }
                     });
                 }
+                const moreButton = row.querySelector('[data-job-action="view-more"]');
+                if (moreButton) {
+                    moreButton.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        openJobDetailsModal(job.id);
+                    });
+                }
                 row.addEventListener("click", () => {
                     selectJob(job.id);
                 });
@@ -3447,6 +3710,387 @@
             setSelectedRowHighlight();
         }
 
+        function showJobDetailsLoading() {
+            if (jobDetailsError) {
+                jobDetailsError.textContent = "";
+                jobDetailsError.hidden = true;
+            }
+            if (jobDetailsLoading) jobDetailsLoading.hidden = false;
+            if (jobDetailsContent) jobDetailsContent.hidden = true;
+        }
+
+        function showJobDetailsContent() {
+            if (jobDetailsLoading) jobDetailsLoading.hidden = true;
+            if (jobDetailsError) jobDetailsError.hidden = true;
+            if (jobDetailsContent) jobDetailsContent.hidden = false;
+        }
+
+        function showJobDetailsError(message) {
+            if (jobDetailsLoading) jobDetailsLoading.hidden = true;
+            if (jobDetailsContent) jobDetailsContent.hidden = true;
+            if (jobDetailsError) {
+                jobDetailsError.textContent = message || "Unable to load job details.";
+                jobDetailsError.hidden = false;
+            }
+        }
+
+        function resetJobDetailsFields() {
+            if (jobDetailsTitle) jobDetailsTitle.textContent = "Maintenance job";
+            if (jobDetailsOverview) jobDetailsOverview.innerHTML = "";
+            if (jobDetailsAsset) jobDetailsAsset.textContent = "—";
+            if (jobDetailsPart) jobDetailsPart.textContent = "—";
+            if (jobDetailsTimeline) jobDetailsTimeline.innerHTML = "";
+            if (jobDetailsDescription) jobDetailsDescription.textContent = "No description provided.";
+            if (jobDetailsRemark) jobDetailsRemark.textContent = "No remarks recorded.";
+            if (jobDetailsMaterialsBody) {
+                jobDetailsMaterialsBody.innerHTML = "";
+                const emptyRow = document.createElement("tr");
+                const emptyCell = document.createElement("td");
+                emptyCell.colSpan = 4;
+                emptyCell.className = "job-details__empty";
+                emptyCell.textContent = "No materials recorded.";
+                emptyRow.appendChild(emptyCell);
+                jobDetailsMaterialsBody.appendChild(emptyRow);
+            }
+            if (jobDetailsMaterialsTotal) jobDetailsMaterialsTotal.textContent = formatCurrency(0);
+            if (jobDetailsOutsourcedBody) {
+                jobDetailsOutsourcedBody.innerHTML = "";
+                const emptyRow = document.createElement("tr");
+                const emptyCell = document.createElement("td");
+                emptyCell.colSpan = 5;
+                emptyCell.className = "job-details__empty";
+                emptyCell.textContent = "No outsourced services recorded.";
+                emptyRow.appendChild(emptyCell);
+                jobDetailsOutsourcedBody.appendChild(emptyRow);
+            }
+            if (jobDetailsOutsourcedTotal) jobDetailsOutsourcedTotal.textContent = formatCurrency(0);
+            if (jobDetailsStaffBody) {
+                jobDetailsStaffBody.innerHTML = "";
+                const emptyRow = document.createElement("tr");
+                const emptyCell = document.createElement("td");
+                emptyCell.colSpan = 5;
+                emptyCell.className = "job-details__empty";
+                emptyCell.textContent = "No internal staff costs recorded.";
+                emptyRow.appendChild(emptyCell);
+                jobDetailsStaffBody.appendChild(emptyRow);
+            }
+            if (jobDetailsStaffTotal) jobDetailsStaffTotal.textContent = formatCurrency(0);
+            if (jobDetailsTotalsMaterials) jobDetailsTotalsMaterials.textContent = formatCurrency(0);
+            if (jobDetailsTotalsOutsourced) jobDetailsTotalsOutsourced.textContent = formatCurrency(0);
+            if (jobDetailsTotalsInternal) jobDetailsTotalsInternal.textContent = formatCurrency(0);
+            if (jobDetailsTotalsCost) jobDetailsTotalsCost.textContent = formatCurrency(0);
+            if (jobDetailsUpdates) {
+                jobDetailsUpdates.textContent = "No updates recorded for this job yet.";
+            }
+        }
+
+        function populateJobDetails(job) {
+            if (!job) return;
+            const statusText = job.status_label || job.status || "—";
+            const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
+
+            if (jobDetailsTitle) {
+                const category = job.job_category || job.title || "Job details";
+                jobDetailsTitle.textContent = job.job_code ? `${job.job_code} • ${category}` : category;
+            }
+
+            if (jobDetailsOverview) {
+                jobDetailsOverview.innerHTML = "";
+                const assignedParts = [];
+                if (job.assigned_to?.name) assignedParts.push(job.assigned_to.name);
+                if (job.assigned_to?.email) assignedParts.push(`(${job.assigned_to.email})`);
+                const assignedLabel = assignedParts.length
+                    ? assignedParts.join(" ")
+                    : job.maint_email || "—";
+                const overviewItems = [
+                    ["Code", job.job_code || "—"],
+                    ["Job category", job.job_category || job.title || "—"],
+                    ["Priority", job.priority || "—"],
+                    ["Status", statusText],
+                    ["Assigned to", assignedLabel],
+                    ["Location", job.location || "—"],
+                ];
+                overviewItems.forEach(([label, value]) => {
+                    const wrapper = document.createElement("div");
+                    const dt = document.createElement("dt");
+                    dt.textContent = label;
+                    const dd = document.createElement("dd");
+                    const displayValue = value == null || value === "" ? "—" : value;
+                    dd.textContent = displayValue;
+                    wrapper.append(dt, dd);
+                    jobDetailsOverview.appendChild(wrapper);
+                });
+            }
+
+            if (jobDetailsAsset) {
+                jobDetailsAsset.innerHTML = "";
+                const asset = job.asset;
+                if (asset && asset.id != null) {
+                    const link = document.createElement("a");
+                    link.href = "#";
+                    link.dataset.jobDetailsLink = "asset";
+                    link.dataset.assetId = String(asset.id);
+                    link.textContent = formatAssetLabel(asset) || asset.name || asset.code || `Asset #${asset.id}`;
+                    jobDetailsAsset.appendChild(link);
+                } else {
+                    jobDetailsAsset.textContent = "—";
+                }
+            }
+
+            if (jobDetailsPart) {
+                jobDetailsPart.innerHTML = "";
+                const part = job.part;
+                if (part && part.id != null) {
+                    const link = document.createElement("a");
+                    link.href = "#";
+                    link.dataset.jobDetailsLink = "part";
+                    if (part.asset_id != null) {
+                        link.dataset.assetId = String(part.asset_id);
+                    }
+                    link.dataset.partId = String(part.id);
+                    link.dataset.partLabel = part.name || part.part_number || "";
+                    link.textContent = formatPartLabel(part) || part.name || part.part_number || `Part #${part.id}`;
+                    jobDetailsPart.appendChild(link);
+                } else {
+                    jobDetailsPart.textContent = "—";
+                }
+            }
+
+            if (jobDetailsTimeline) {
+                jobDetailsTimeline.innerHTML = "";
+                const timelineItems = [
+                    ["Job Date", job.job_date],
+                    ["Expected completion", job.expected_completion],
+                    ["Job started date", job.job_started_date],
+                    ["Job finished date", job.job_finished_date],
+                ];
+                timelineItems.forEach(([label, value]) => {
+                    const item = document.createElement("li");
+                    item.className = "job-timeline__item";
+                    if (!value) {
+                        item.classList.add("job-timeline__item--pending");
+                    }
+                    const labelEl = document.createElement("span");
+                    labelEl.className = "job-timeline__label";
+                    labelEl.textContent = label;
+                    const valueEl = document.createElement("span");
+                    valueEl.className = "job-timeline__value";
+                    valueEl.textContent = formatDate(value);
+                    item.append(labelEl, valueEl);
+                    jobDetailsTimeline.appendChild(item);
+                });
+            }
+
+            if (jobDetailsDescription) {
+                jobDetailsDescription.textContent = job.description || "No description provided.";
+            }
+            if (jobDetailsRemark) {
+                jobDetailsRemark.textContent = job.maintenance_notes || "No remarks recorded.";
+            }
+
+            if (jobDetailsMaterialsBody) {
+                jobDetailsMaterialsBody.innerHTML = "";
+                const materials = Array.isArray(job.materials) ? job.materials : [];
+                if (materials.length === 0) {
+                    const emptyRow = document.createElement("tr");
+                    const emptyCell = document.createElement("td");
+                    emptyCell.colSpan = 4;
+                    emptyCell.className = "job-details__empty";
+                    emptyCell.textContent = "No materials recorded.";
+                    emptyRow.appendChild(emptyCell);
+                    jobDetailsMaterialsBody.appendChild(emptyRow);
+                } else {
+                    materials.forEach((material) => {
+                        const row = document.createElement("tr");
+                        const itemCell = document.createElement("td");
+                        itemCell.dataset.label = "Item";
+                        itemCell.textContent = material.material_name || "—";
+                        const qtyCell = document.createElement("td");
+                        qtyCell.dataset.label = "Qty";
+                        qtyCell.textContent = material.units || "—";
+                        const unitCostCell = document.createElement("td");
+                        unitCostCell.dataset.label = "Unit cost";
+                        const unitCost = deriveUnitCost(material.units, material.cost);
+                        unitCostCell.textContent = unitCost != null ? formatCurrency(unitCost) : "—";
+                        const lineCostCell = document.createElement("td");
+                        lineCostCell.dataset.label = "Line cost";
+                        lineCostCell.textContent = formatCurrency(material.cost);
+                        row.append(itemCell, qtyCell, unitCostCell, lineCostCell);
+                        jobDetailsMaterialsBody.appendChild(row);
+                    });
+                }
+            }
+            if (jobDetailsMaterialsTotal) jobDetailsMaterialsTotal.textContent = formatCurrency(materialsTotal);
+
+            if (jobDetailsOutsourcedBody) {
+                jobDetailsOutsourcedBody.innerHTML = "";
+                const services = Array.isArray(job.outsourced_services) ? job.outsourced_services : [];
+                if (services.length === 0) {
+                    const emptyRow = document.createElement("tr");
+                    const emptyCell = document.createElement("td");
+                    emptyCell.colSpan = 5;
+                    emptyCell.className = "job-details__empty";
+                    emptyCell.textContent = "No outsourced services recorded.";
+                    emptyRow.appendChild(emptyCell);
+                    jobDetailsOutsourcedBody.appendChild(emptyRow);
+                } else {
+                    services.forEach((service) => {
+                        const row = document.createElement("tr");
+                        const partyCell = document.createElement("td");
+                        partyCell.dataset.label = "Party";
+                        partyCell.textContent = service.supplier?.name || "—";
+                        const dateCell = document.createElement("td");
+                        dateCell.dataset.label = "Service date";
+                        dateCell.textContent = formatDate(service.service_date);
+                        const descriptionCell = document.createElement("td");
+                        descriptionCell.dataset.label = "Description";
+                        descriptionCell.textContent = service.service_description || "—";
+                        const hoursCell = document.createElement("td");
+                        hoursCell.dataset.label = "Hours/Qty";
+                        hoursCell.textContent = formatNumber(service.engaged_hours);
+                        const costCell = document.createElement("td");
+                        costCell.dataset.label = "Cost";
+                        costCell.textContent = formatCurrency(service.cost);
+                        row.append(partyCell, dateCell, descriptionCell, hoursCell, costCell);
+                        jobDetailsOutsourcedBody.appendChild(row);
+                    });
+                }
+            }
+            if (jobDetailsOutsourcedTotal) jobDetailsOutsourcedTotal.textContent = formatCurrency(outsourcedTotal);
+
+            if (jobDetailsStaffBody) {
+                jobDetailsStaffBody.innerHTML = "";
+                const staffCosts = Array.isArray(job.internal_staff_costs) ? job.internal_staff_costs : [];
+                if (staffCosts.length === 0) {
+                    const emptyRow = document.createElement("tr");
+                    const emptyCell = document.createElement("td");
+                    emptyCell.colSpan = 5;
+                    emptyCell.className = "job-details__empty";
+                    emptyCell.textContent = "No internal staff costs recorded.";
+                    emptyRow.appendChild(emptyCell);
+                    jobDetailsStaffBody.appendChild(emptyRow);
+                } else {
+                    staffCosts.forEach((cost) => {
+                        const row = document.createElement("tr");
+                        const employeeCell = document.createElement("td");
+                        employeeCell.dataset.label = "Employee";
+                        const employee = cost.employee;
+                        if (employee && (employee.name || employee.reg_number)) {
+                            const nameParts = [];
+                            if (employee.name) nameParts.push(employee.name);
+                            if (employee.reg_number) nameParts.push(`#${employee.reg_number}`);
+                            employeeCell.textContent = nameParts.join(" ") || "—";
+                        } else {
+                            employeeCell.textContent = "—";
+                        }
+                        const roleCell = document.createElement("td");
+                        roleCell.dataset.label = "Role";
+                        roleCell.textContent = employee?.position || employee?.status || "—";
+                        const hoursCell = document.createElement("td");
+                        hoursCell.dataset.label = "Hours";
+                        hoursCell.textContent = formatNumber(cost.engaged_hours);
+                        const rateCell = document.createElement("td");
+                        rateCell.dataset.label = "Rate";
+                        rateCell.textContent = cost.hourly_rate != null ? formatCurrency(cost.hourly_rate) : "—";
+                        const costCell = document.createElement("td");
+                        costCell.dataset.label = "Cost";
+                        costCell.textContent = formatCurrency(cost.cost);
+                        row.append(employeeCell, roleCell, hoursCell, rateCell, costCell);
+                        jobDetailsStaffBody.appendChild(row);
+                    });
+                }
+            }
+            if (jobDetailsStaffTotal) jobDetailsStaffTotal.textContent = formatCurrency(internalTotal);
+
+            if (jobDetailsTotalsMaterials) jobDetailsTotalsMaterials.textContent = formatCurrency(materialsTotal);
+            if (jobDetailsTotalsOutsourced) jobDetailsTotalsOutsourced.textContent = formatCurrency(outsourcedTotal);
+            if (jobDetailsTotalsInternal) jobDetailsTotalsInternal.textContent = formatCurrency(internalTotal);
+            if (jobDetailsTotalsCost) jobDetailsTotalsCost.textContent = formatCurrency(combinedTotal);
+
+            if (jobDetailsUpdates) {
+                const updates = [];
+                if (job.created_at) {
+                    updates.push(["Created", formatDate(job.created_at, true)]);
+                }
+                if (job.maint_submitted_at) {
+                    updates.push(["Submitted to maintenance", formatDate(job.maint_submitted_at, true)]);
+                }
+                if (job.job_started_date) {
+                    updates.push(["Work started", formatDate(job.job_started_date)]);
+                }
+                if (job.job_finished_date) {
+                    updates.push(["Work finished", formatDate(job.job_finished_date)]);
+                }
+                if (job.updated_at && job.updated_at !== job.created_at) {
+                    updates.push(["Last updated", formatDate(job.updated_at, true)]);
+                }
+                updates.push(["Status", statusText]);
+
+                if (updates.length === 0) {
+                    jobDetailsUpdates.textContent = "No updates recorded for this job yet.";
+                } else {
+                    const list = document.createElement("ul");
+                    list.className = "job-details__updates-list";
+                    updates.forEach(([label, value]) => {
+                        const item = document.createElement("li");
+                        const labelSpan = document.createElement("span");
+                        labelSpan.className = "job-details__updates-label";
+                        labelSpan.textContent = `${label}:`;
+                        const valueSpan = document.createElement("span");
+                        valueSpan.className = "job-details__updates-value";
+                        valueSpan.textContent = value || "—";
+                        item.append(labelSpan, valueSpan);
+                        list.appendChild(item);
+                    });
+                    jobDetailsUpdates.innerHTML = "";
+                    jobDetailsUpdates.appendChild(list);
+                }
+            }
+
+            showJobDetailsContent();
+        }
+
+        async function fetchJobDetails(jobId) {
+            if (!jobId) return null;
+            const numericKey = Number(jobId);
+            const cacheKey = Number.isFinite(numericKey) ? numericKey : jobId;
+            const cached = jobDetailsCache.get(cacheKey);
+            if (cached) return cached;
+            const job = await fetchJson(`/api/maintenance-jobs/${jobId}`);
+            jobDetailsCache.set(cacheKey, job);
+            return job;
+        }
+
+        async function openJobDetailsModal(jobId) {
+            if (!jobId) return;
+            resetJobDetailsFields();
+            showJobDetailsLoading();
+            openModal("job-details-modal");
+            try {
+                const job = await fetchJobDetails(jobId);
+                populateJobDetails(job);
+            } catch (error) {
+                showJobDetailsError(error.message || "Unable to load job details.");
+            }
+        }
+
+        async function focusAssetFromModal(assetId, { focusPart } = {}) {
+            if (assetId == null) return;
+            let asset = assets.find((item) => item.id === Number(assetId));
+            if (!asset) {
+                try {
+                    await loadAssets();
+                } catch (error) {
+                    console.error("Failed to refresh assets", error);
+                }
+                asset = assets.find((item) => item.id === Number(assetId));
+            }
+            if (!asset) return;
+            closeModal(jobDetailsModal);
+            showAssetDetail(asset, { focusPart });
+            document.getElementById("machine-outputs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
         refreshJobsButton?.addEventListener("click", loadJobs);
 
         if (addMaterialRowButton) {
@@ -3456,6 +4100,28 @@
                 updateMaterialsTotal();
             });
         }
+
+        jobDetailsModal?.addEventListener("click", (event) => {
+            const actionButton = event.target.closest("[data-job-details-action]");
+            if (actionButton) {
+                event.preventDefault();
+                const action = actionButton.dataset.jobDetailsAction;
+                if (action === "close") {
+                    closeModal(jobDetailsModal);
+                } else if (action === "print") {
+                    window.print();
+                }
+            }
+
+            const link = event.target.closest("[data-job-details-link]");
+            if (link) {
+                event.preventDefault();
+                const assetId = Number(link.dataset.assetId);
+                if (!Number.isFinite(assetId)) return;
+                const focusPart = link.dataset.jobDetailsLink === "part" ? link.dataset.partLabel || null : null;
+                focusAssetFromModal(assetId, { focusPart });
+            }
+        });
 
         if (removeMaterialRowButton) {
             removeMaterialRowButton.addEventListener("click", () => {

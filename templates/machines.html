@@ -1034,6 +1034,9 @@
             { code: "MCH-0002", name: "Precision Lathe" },
             { code: "MCH-0003", name: "Finishing Line" },
         ];
+        const ALLOWED_IDLE_MACHINE_CODES = new Set(
+            DEFAULT_IDLE_MACHINES.map((machine) => machine.code.toUpperCase())
+        );
         const MAX_MACHINE_CARDS = 6;
         const SECONDARY_IDLE_REASON_MAP = Object.freeze({
             "Machine": [
@@ -1495,7 +1498,7 @@
         const machineCardsContainer = document.querySelector(".idle-machine-grid");
         let machineCards = Array.from(
             machineCardsContainer?.querySelectorAll("[data-machine-card]") || []
-        );
+        ).filter((card) => isIdleMonitoringMachine(card?.dataset?.machineCard));
         let serviceSuppliers = [];
         let activeEmployees = [];
 
@@ -1525,6 +1528,11 @@
         const machineMetadata = new Map(
             DEFAULT_IDLE_MACHINES.map((machine) => [machine.code, { title: machine.name }])
         );
+
+        function isIdleMonitoringMachine(code) {
+            if (!code) return false;
+            return ALLOWED_IDLE_MACHINE_CODES.has(String(code).trim().toUpperCase());
+        }
 
         const today = new Date();
         const todayDateString = today.toISOString().slice(0, 10);
@@ -3108,12 +3116,24 @@
         }
 
         function getIdleMachinesForUi() {
-            if (Array.isArray(assets) && assets.length > 0) {
-                return assets
-                    .slice()
-                    .sort((a, b) => (a.code || "").localeCompare(b.code || ""));
+            const machineMap = new Map();
+            if (Array.isArray(assets)) {
+                assets.forEach((asset) => {
+                    if (!asset || !isIdleMonitoringMachine(asset.code)) {
+                        return;
+                    }
+                    const normalized = asset.code.toUpperCase();
+                    machineMap.set(normalized, asset);
+                });
             }
-            return DEFAULT_IDLE_MACHINES.slice();
+
+            return DEFAULT_IDLE_MACHINES.map((machine) => {
+                const normalized = machine.code.toUpperCase();
+                return machineMap.get(normalized) || {
+                    code: normalized,
+                    name: machine.name,
+                };
+            });
         }
 
         function populateAssetSelects() {
@@ -3202,7 +3222,7 @@
 
             machineCards = Array.from(
                 machineCardsContainer.querySelectorAll("[data-machine-card]")
-            );
+            ).filter((card) => isIdleMonitoringMachine(card.dataset.machineCard));
         }
 
         async function loadAssets() {
@@ -4545,12 +4565,19 @@
         function getTrackedMachineCodes() {
             const codes = new Set();
             machineCards.forEach((card) => {
-                const code = card.dataset.machineCard;
-                if (code) codes.add(code);
+                const code = card?.dataset?.machineCard;
+                if (!isIdleMonitoringMachine(code)) return;
+                codes.add(code.toUpperCase());
             });
-            assets.forEach((asset) => {
-                if (asset?.code) codes.add(asset.code);
-            });
+            if (Array.isArray(assets)) {
+                assets.forEach((asset) => {
+                    if (!isIdleMonitoringMachine(asset?.code)) return;
+                    codes.add(String(asset.code).trim().toUpperCase());
+                });
+            }
+            if (codes.size === 0) {
+                ALLOWED_IDLE_MACHINE_CODES.forEach((code) => codes.add(code));
+            }
             return normalizeMachineCodes(Array.from(codes));
         }
 

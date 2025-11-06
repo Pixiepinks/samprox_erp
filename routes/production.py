@@ -2,6 +2,7 @@
 
 import calendar
 from datetime import date as dt_date, datetime, time as dt_time, timedelta
+from types import SimpleNamespace
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
@@ -89,29 +90,57 @@ def _parse_date(value, *, field_name: str):
         raise ValueError(f"Invalid date for {field_name}")
 
 
-def _parse_machine_codes_param(param_value, default_codes=None):
+def _parse_machine_codes_param(param_value, default_codes=None, allowed_codes=None):
     if default_codes is None:
         default_codes = SUMMARY_MACHINE_CODES
+
+    if allowed_codes is None and default_codes is not None:
+        allowed_codes = default_codes
+
+    allowed_lookup = None
+    allowed_order = None
+    if allowed_codes is not None:
+        allowed_order = []
+        allowed_lookup = set()
+        for code in allowed_codes:
+            normalized_allowed = (code or "").strip().lower()
+            if not normalized_allowed or normalized_allowed in allowed_lookup:
+                continue
+            allowed_lookup.add(normalized_allowed)
+            allowed_order.append(code)
 
     if param_value:
         raw_codes = [code.strip() for code in param_value.split(",") if code.strip()]
     else:
-        raw_codes = list(default_codes)
+        raw_codes = list(default_codes or [])
 
-    machine_codes = []
+    machine_codes: list[str] = []
     seen = set()
     for code in raw_codes:
         normalized = (code or "").strip().upper()
         if not normalized:
             continue
         key = normalized.lower()
+        if allowed_lookup is not None and key not in allowed_lookup:
+            continue
         if key in seen:
             continue
         machine_codes.append(normalized)
         seen.add(key)
 
     if not machine_codes:
-        machine_codes = list(default_codes)
+        fallback_source = allowed_order if allowed_order is not None else (default_codes or [])
+        for code in fallback_source:
+            normalized = (code or "").strip().upper()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if allowed_lookup is not None and key not in allowed_lookup:
+                continue
+            if key in seen:
+                continue
+            machine_codes.append(normalized)
+            seen.add(key)
 
     canonical = {code.lower(): code for code in machine_codes}
     filters = list(canonical.keys())
@@ -1058,25 +1087,40 @@ def _monthly_idle_summary_for_ui():
 
     month_start, month_end, month_days = _month_range(anchor)
 
-    machine_param = (request.args.get("machine_codes") or "").strip()
-    requested_codes = [code.strip() for code in machine_param.split(",") if code.strip()]
-
-    q_assets = MachineAsset.query
-    if requested_codes:
-        lowered = [code.lower() for code in requested_codes]
-        q_assets = q_assets.filter(func.lower(MachineAsset.code).in_(lowered))
-
-    assets = q_assets.order_by(MachineAsset.code.asc()).all()
-
-    machine_codes = [asset.code for asset in assets]
-    if not machine_codes and requested_codes:
-        machine_codes = [code.upper() for code in requested_codes]
-    machines_meta = [{"code": asset.code, "name": asset.name} for asset in assets]
+    machine_param = request.args.get("machine_codes")
+    machine_codes, _, machine_filters = _parse_machine_codes_param(
+        machine_param,
+        default_codes=IDLE_SUMMARY_MACHINE_CODES,
+        allowed_codes=IDLE_SUMMARY_MACHINE_CODES,
+    )
 
     shift_start = dt_time(IDLE_SUMMARY_SHIFT_START_HOUR, 0)
     shift_end = dt_time(IDLE_SUMMARY_SHIFT_END_HOUR, 0)
     period_start_limit = datetime.combine(month_start, dt_time.min)
     period_end_limit = datetime.combine(month_end, dt_time.max)
+
+    assets = (
+        MachineAsset.query.filter(func.lower(MachineAsset.code).in_(machine_filters))
+        .order_by(MachineAsset.code.asc())
+        .all()
+    )
+
+    asset_lookup = {
+        (asset.code or "").strip().upper(): asset for asset in assets if asset.code
+    }
+
+    summary_assets = []
+    machines_meta = []
+    for code in machine_codes:
+        normalized_code = (code or "").strip().upper()
+        if not normalized_code:
+            continue
+        asset = asset_lookup.get(normalized_code)
+        display_name = asset.name if asset and asset.name else normalized_code
+        machines_meta.append({"code": normalized_code, "name": display_name})
+        summary_assets.append(asset or SimpleNamespace(code=normalized_code, name=display_name))
+
+    lowered_filters = [code.lower() for code in machine_codes]
 
     q_events = (
         MachineIdleEvent.query.options(joinedload(MachineIdleEvent.asset))
@@ -1088,9 +1132,8 @@ def _monthly_idle_summary_for_ui():
         )
     )
 
-    if machine_codes:
-        lowered = [code.lower() for code in machine_codes]
-        q_events = q_events.filter(func.lower(MachineAsset.code).in_(lowered))
+    if lowered_filters:
+        q_events = q_events.filter(func.lower(MachineAsset.code).in_(lowered_filters))
 
     events = q_events.all()
 
@@ -1099,15 +1142,15 @@ def _monthly_idle_summary_for_ui():
         asset = event.asset
         if not asset or not asset.code:
             continue
-        events_by_code.setdefault(asset.code, []).append(event)
+        normalized_code = (asset.code or "").strip().upper()
+        if not normalized_code:
+            continue
+        events_by_code.setdefault(normalized_code, []).append(event)
 
     scheduled_minutes = IDLE_SUMMARY_SCHEDULED_MINUTES
     scheduled_hours = round(scheduled_minutes / 60.0, 3)
 
-    totals_minutes = {
-        asset.code: {"idle": 0, "runtime": 0}
-        for asset in assets
-    }
+    totals_minutes = {code: {"idle": 0.0, "runtime": 0.0} for code in machine_codes}
 
     day_entries = []
     current_date = month_start
@@ -1122,9 +1165,12 @@ def _monthly_idle_summary_for_ui():
             "machines": {},
         }
 
-        for asset in assets:
+        for asset in summary_assets:
+            normalized_code = (getattr(asset, "code", "") or "").strip().upper()
+            if not normalized_code:
+                continue
             idle_minutes = 0
-            for event in events_by_code.get(asset.code, []):
+            for event in events_by_code.get(normalized_code, []):
                 event_start = event.started_at
                 event_end = event.ended_at or datetime.utcnow()
                 idle_minutes += _overlap_minutes(
@@ -1140,24 +1186,26 @@ def _monthly_idle_summary_for_ui():
             idle_hours = round(idle_minutes / 60.0, 3)
             runtime_hours = round(runtime_minutes / 60.0, 3)
 
-            day_payload["machines"][asset.code] = {
+            day_payload["machines"][normalized_code] = {
                 "runtime_hours": runtime_hours,
                 "idle_hours": idle_hours,
             }
 
-            totals_minutes[asset.code]["idle"] += idle_minutes
-            totals_minutes[asset.code]["runtime"] += runtime_minutes
+            if normalized_code not in totals_minutes:
+                totals_minutes[normalized_code] = {"idle": 0.0, "runtime": 0.0}
+            totals_minutes[normalized_code]["idle"] += idle_minutes
+            totals_minutes[normalized_code]["runtime"] += runtime_minutes
 
         day_entries.append(day_payload)
         current_date += timedelta(days=1)
         day_index += 1
 
     totals = {}
-    for asset in assets:
-        minutes = totals_minutes.get(asset.code, {"idle": 0, "runtime": 0})
-        totals[asset.code] = {
-            "idle_hours": round(minutes["idle"] / 60.0, 3),
-            "runtime_hours": round(minutes["runtime"] / 60.0, 3),
+    for code in machine_codes:
+        minutes = totals_minutes.get(code, {"idle": 0.0, "runtime": 0.0})
+        totals[code] = {
+            "idle_hours": round((minutes.get("idle", 0.0) or 0.0) / 60.0, 3),
+            "runtime_hours": round((minutes.get("runtime", 0.0) or 0.0) / 60.0, 3),
         }
 
     response = {
@@ -1209,7 +1257,9 @@ def get_monthly_idle_secondary_pareto():
         canonical_codes,
         machine_filters,
     ) = _parse_machine_codes_param(
-        request.args.get("machine_codes"), default_codes=IDLE_SUMMARY_MACHINE_CODES
+        request.args.get("machine_codes"),
+        default_codes=IDLE_SUMMARY_MACHINE_CODES,
+        allowed_codes=IDLE_SUMMARY_MACHINE_CODES,
     )
 
     month_start, month_end, _ = _month_range(anchor)
@@ -1349,7 +1399,11 @@ def get_monthly_idle_summary():
         requested_codes,
         canonical_codes,
         machine_filters,
-    ) = _parse_machine_codes_param(machine_param)
+    ) = _parse_machine_codes_param(
+        machine_param,
+        default_codes=IDLE_SUMMARY_MACHINE_CODES,
+        allowed_codes=IDLE_SUMMARY_MACHINE_CODES,
+    )
 
     if not requested_codes:
         requested_codes = list(IDLE_SUMMARY_MACHINE_CODES)

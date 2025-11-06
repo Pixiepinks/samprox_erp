@@ -349,6 +349,20 @@ class MaintenanceMaterialSchema(Schema):
     cost = fields.Float(allow_none=True)
 
 
+class MaintenanceOutsourcedServiceSchema(Schema):
+    id = fields.Int()
+    supplier_id = fields.Int()
+    service_date = fields.Date()
+    service_description = fields.Str()
+    engaged_hours = fields.Float(allow_none=True)
+    cost = fields.Float()
+    supplier = fields.Nested(
+        "ServiceSupplierSchema",
+        only=("id", "name", "contact_person"),
+        allow_none=True,
+    )
+
+
 class MaintenanceJobSchema(Schema):
     id = fields.Int()
     job_code = fields.Str()
@@ -383,6 +397,7 @@ class MaintenanceJobSchema(Schema):
         allow_none=True,
     )
     materials = fields.Nested(MaintenanceMaterialSchema, many=True)
+    outsourced_services = fields.Nested(MaintenanceOutsourcedServiceSchema, many=True)
 
     status_label = fields.Method("get_status_label")
 

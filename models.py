@@ -150,11 +150,25 @@ class MaintenanceJob(db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    outsourced_services = db.relationship(
+        "MaintenanceOutsourcedService",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def recalculate_total_cost(self) -> None:
         total = Decimal("0")
         for material in self.materials:
             cost = material.cost or Decimal("0")
+            if not isinstance(cost, Decimal):
+                try:
+                    cost = Decimal(str(cost))
+                except Exception:
+                    cost = Decimal("0")
+            total += cost
+        for service in self.outsourced_services:
+            cost = service.cost or Decimal("0")
             if not isinstance(cost, Decimal):
                 try:
                     cost = Decimal(str(cost))
@@ -177,6 +191,24 @@ class MaintenanceMaterial(db.Model):
     cost = db.Column(db.Numeric(12, 2))
 
     job = db.relationship("MaintenanceJob", back_populates="materials")
+
+
+class MaintenanceOutsourcedService(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    maintenance_job_id = db.Column(
+        db.Integer,
+        db.ForeignKey("maintenance_job.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    supplier_id = db.Column(db.Integer, db.ForeignKey("service_supplier.id"), nullable=False)
+    service_date = db.Column(db.Date, nullable=False)
+    service_description = db.Column(db.String(255), nullable=False)
+    engaged_hours = db.Column(db.Numeric(6, 2))
+    cost = db.Column(db.Numeric(12, 2), nullable=False)
+
+    job = db.relationship("MaintenanceJob", back_populates="outsourced_services")
+    supplier = db.relationship("ServiceSupplier")
 
 class Quotation(db.Model):
     id = db.Column(db.Integer, primary_key=True)

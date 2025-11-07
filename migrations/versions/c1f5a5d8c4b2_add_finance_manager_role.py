@@ -42,8 +42,7 @@ def upgrade():
         op.execute(
             sa.text(
                 f"ALTER TYPE {ROLE_ENUM_NAME} ADD VALUE IF NOT EXISTS :value"
-            ),
-            {"value": FINANCE_ROLE_VALUE},
+            ).bindparams(value=FINANCE_ROLE_VALUE)
         )
 
     existing = bind.execute(

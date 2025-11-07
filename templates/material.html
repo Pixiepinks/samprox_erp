@@ -72,6 +72,40 @@
                     </p>
                 </article>
             </div>
+            <div class="material-receipts-card stock-status-card">
+                <div class="material-receipts-card__header stock-status-card__header">
+                    <div>
+                        <h2 class="material-receipts-card__title">Stock Status</h2>
+                        <p class="material-receipts-card__meta">
+                            Review closing balances for each material as at the selected date.
+                        </p>
+                    </div>
+                    <div class="stock-status-card__controls">
+                        <label class="stock-status-card__label" for="stock-status-date">
+                            Closing stock as at
+                        </label>
+                        <input
+                            class="stock-status-card__input"
+                            type="date"
+                            id="stock-status-date"
+                            name="stock-status-date"
+                        />
+                    </div>
+                </div>
+                <p class="empty-state" id="stock-status-empty">Loading stock status…</p>
+                <div class="table-wrapper" id="stock-status-table-wrapper" hidden>
+                    <table class="data-table" id="stock-status-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Item Name</th>
+                                <th scope="col">Qty (Ton)</th>
+                                <th scope="col">Value (Rs.)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stock-status-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
             <div class="material-receipts-card supplier-registry-card">
                 <div class="material-receipts-card__header">
                     <div>
@@ -350,6 +384,10 @@
             window.location.href = "/";
         });
 
+        const stockStatusTableBody = document.getElementById("stock-status-table-body");
+        const stockStatusTableWrapper = document.getElementById("stock-status-table-wrapper");
+        const stockStatusEmptyState = document.getElementById("stock-status-empty");
+        const stockStatusDateInput = document.getElementById("stock-status-date");
         const supplierTableBody = document.getElementById("supplier-table-body");
         const supplierTableWrapper = document.getElementById("supplier-table-wrapper");
         const supplierEmptyState = document.getElementById("supplier-empty-state");
@@ -400,6 +438,99 @@
                 minimumFractionDigits: fractionDigits,
                 maximumFractionDigits: fractionDigits,
             });
+        }
+
+        function isoToday() {
+            const today = new Date();
+            const month = String(today.getMonth() + 1).padStart(2, "0");
+            const day = String(today.getDate()).padStart(2, "0");
+            return `${today.getFullYear()}-${month}-${day}`;
+        }
+
+        function renderStockStatusRows(items) {
+            if (!stockStatusTableBody || !stockStatusTableWrapper || !stockStatusEmptyState) {
+                return;
+            }
+
+            stockStatusTableBody.innerHTML = "";
+
+            if (!Array.isArray(items) || items.length === 0) {
+                stockStatusTableWrapper.hidden = true;
+                stockStatusEmptyState.hidden = false;
+                stockStatusEmptyState.textContent = "No stock data available for the selected date.";
+                return;
+            }
+
+            items.forEach((item) => {
+                const row = document.createElement("tr");
+                if (item.key === "opening_total") {
+                    row.classList.add("stock-status-table__opening-row");
+                }
+
+                const nameCell = document.createElement("td");
+                nameCell.textContent = item.label || item.name || item.key || "—";
+                row.appendChild(nameCell);
+
+                const qtyCell = document.createElement("td");
+                qtyCell.textContent = formatNumber(item.quantity_ton, 3);
+                row.appendChild(qtyCell);
+
+                const valueCell = document.createElement("td");
+                valueCell.textContent = formatNumber(item.value_rs, 2);
+                row.appendChild(valueCell);
+
+                stockStatusTableBody.appendChild(row);
+            });
+
+            stockStatusEmptyState.hidden = true;
+            stockStatusTableWrapper.hidden = false;
+        }
+
+        async function loadStockStatus(asOf) {
+            if (!stockStatusEmptyState || !stockStatusTableBody) {
+                return;
+            }
+
+            stockStatusEmptyState.hidden = false;
+            stockStatusEmptyState.textContent = "Loading stock status…";
+            if (stockStatusTableWrapper) {
+                stockStatusTableWrapper.hidden = true;
+            }
+
+            try {
+                const url = new URL("/api/material/stock-status", window.location.origin);
+                if (asOf) {
+                    url.searchParams.set("as_of", asOf);
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error("Failed to load stock status");
+                }
+                const data = await response.json();
+                renderStockStatusRows(Array.isArray(data.items) ? data.items : []);
+                if (stockStatusDateInput && data.as_of) {
+                    stockStatusDateInput.value = data.as_of;
+                }
+            } catch (error) {
+                console.error(error);
+                stockStatusEmptyState.hidden = false;
+                stockStatusEmptyState.textContent =
+                    "Unable to load stock status right now. Please try again.";
+            }
+        }
+
+        if (stockStatusDateInput) {
+            const defaultDate = isoToday();
+            if (!stockStatusDateInput.value) {
+                stockStatusDateInput.value = defaultDate;
+            }
+            stockStatusDateInput.addEventListener("change", () => {
+                const value = stockStatusDateInput.value || defaultDate;
+                loadStockStatus(value);
+            });
+            loadStockStatus(stockStatusDateInput.value);
+        } else {
+            loadStockStatus(isoToday());
         }
 
         function renderSupplierRows(items) {

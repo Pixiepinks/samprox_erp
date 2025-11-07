@@ -601,6 +601,23 @@ class DailyProductionEntrySchema(Schema):
         return format_datetime_as_colombo_iso(value)
 
 
+class BriquetteMixEntrySchema(Schema):
+    id = fields.Int()
+    date = fields.Date()
+    dry_factor = fields.Decimal(as_string=True, allow_none=True)
+    sawdust_qty_ton = fields.Decimal(as_string=True)
+    wood_shaving_qty_ton = fields.Decimal(as_string=True)
+    wood_powder_qty_ton = fields.Decimal(as_string=True)
+    peanut_husk_qty_ton = fields.Decimal(as_string=True)
+    fire_cut_qty_ton = fields.Decimal(as_string=True)
+    total_material_cost = fields.Decimal(as_string=True)
+    unit_cost_per_kg = fields.Decimal(as_string=True)
+    total_output_kg = fields.Decimal(as_string=True)
+    cost_breakdown = fields.Raw()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+
+
 class ProductionForecastEntrySchema(Schema):
     id = fields.Int()
     date = fields.Date()

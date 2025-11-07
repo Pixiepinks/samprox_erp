@@ -14,6 +14,11 @@ from .services import (
     search_suppliers,
     seed_material_defaults,
 )
+from .briquette import (
+    get_briquette_mix_detail,
+    list_briquette_production_entries,
+    update_briquette_mix,
+)
 
 __all__ = [
     "MaterialValidationError",
@@ -28,4 +33,7 @@ __all__ = [
     "list_recent_mrns",
     "search_suppliers",
     "seed_material_defaults",
+    "get_briquette_mix_detail",
+    "list_briquette_production_entries",
+    "update_briquette_mix",
 ]

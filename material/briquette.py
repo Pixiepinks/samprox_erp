@@ -498,11 +498,17 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
             qty = zero
         if value < zero:
             value = zero
+        unit_cost: Optional[Decimal]
+        if qty > zero:
+            unit_cost = _quantize(value / qty, CURRENCY_QUANT)
+        else:
+            unit_cost = None
         items.append(
             {
                 "key": key,
                 "label": STOCK_STATUS_LABELS.get(key, key.replace("_", " ").title()),
                 "quantity_ton": float(qty),
+                "unit_cost_per_ton": float(unit_cost) if unit_cost is not None else None,
                 "value_rs": float(value),
             }
         )
@@ -512,12 +518,20 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
         briquette_qty = zero
     if briquette_value < zero:
         briquette_value = zero
+    briquette_unit_cost: Optional[Decimal]
+    if briquette_qty > zero:
+        briquette_unit_cost = _quantize(briquette_value / briquette_qty, CURRENCY_QUANT)
+    else:
+        briquette_unit_cost = None
 
     items.append(
         {
             "key": "briquettes",
             "label": STOCK_STATUS_LABELS.get("briquettes", "Briquettes"),
             "quantity_ton": float(briquette_qty),
+            "unit_cost_per_ton": float(briquette_unit_cost)
+            if briquette_unit_cost is not None
+            else None,
             "value_rs": float(briquette_value),
         }
     )
@@ -525,12 +539,20 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
     opening_qty_total, opening_value_total = opening_totals
     opening_qty_total = _quantize(opening_qty_total, TON_QUANT)
     opening_value_total = _quantize(opening_value_total, CURRENCY_QUANT)
+    opening_unit_cost: Optional[Decimal]
+    if opening_qty_total > zero:
+        opening_unit_cost = _quantize(opening_value_total / opening_qty_total, CURRENCY_QUANT)
+    else:
+        opening_unit_cost = None
 
     items.append(
         {
             "key": "opening_total",
             "label": STOCK_STATUS_LABELS.get("opening_total", "Opening stock"),
             "quantity_ton": float(opening_qty_total),
+            "unit_cost_per_ton": float(opening_unit_cost)
+            if opening_unit_cost is not None
+            else None,
             "value_rs": float(opening_value_total),
         }
     )

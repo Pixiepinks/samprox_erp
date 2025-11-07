@@ -1659,6 +1659,34 @@ body.modal-open {
     flex-wrap: wrap;
 }
 
+.material-receipts-card__date {
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 12px;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.95rem;
+    background: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.material-receipts-card__date:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.material-receipts-card__feedback {
+    margin: -0.5rem 0 0;
+    font-size: 0.9rem;
+}
+
+.material-receipts-card__feedback--success {
+    color: #047857;
+}
+
+.material-receipts-card__feedback--error {
+    color: #b91c1c;
+}
+
 .material-receipts-card__search input[type="search"] {
     flex: 1 1 240px;
     border: 1px solid rgba(148, 163, 184, 0.6);

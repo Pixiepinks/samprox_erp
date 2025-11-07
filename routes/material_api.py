@@ -11,6 +11,7 @@ from material import (
     create_item,
     create_mrn,
     create_supplier,
+    ensure_briquette_mix_entry,
     get_briquette_mix_detail,
     get_next_mrn_number,
     get_next_supplier_registration_no,
@@ -128,6 +129,22 @@ def list_briquette_production():
         limit = 30
     data = list_briquette_production_entries(limit=limit)
     return jsonify(data)
+
+
+@bp.post("/briquette-production")
+def create_briquette_production_entry():
+    payload = request.get_json(silent=True) or {}
+    date_value = payload.get("date")
+    if not date_value:
+        return jsonify({"msg": "Date is required."}), 400
+    try:
+        target_date = date.fromisoformat(date_value)
+    except ValueError:
+        return jsonify({"msg": "Invalid date. Use YYYY-MM-DD."}), 400
+
+    data, created = ensure_briquette_mix_entry(target_date)
+    status_code = 201 if created else 200
+    return jsonify(data), status_code
 
 
 @bp.get("/briquette-production/<date_value>")

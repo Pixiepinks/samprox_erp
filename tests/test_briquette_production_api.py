@@ -4,7 +4,7 @@ import sys
 import unittest
 from datetime import date, datetime, time, timezone
 
-from models import DailyProductionEntry
+from models import BriquetteMixEntry, DailyProductionEntry
 
 
 class BriquetteProductionApiTestCase(unittest.TestCase):
@@ -196,6 +196,28 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
         self.assertIsNotNone(day_entry)
         self.assertAlmostEqual(day_entry["total_material_cost"], 10068.5, places=2)
         self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 3.3562, places=4)
+
+    def test_create_briquette_production_entry(self):
+        existing = BriquetteMixEntry.query.filter_by(date=self.production_date).first()
+        self.assertIsNone(existing)
+
+        response = self.client.post(
+            "/api/material/briquette-production",
+            json={"date": self.production_date.isoformat()},
+        )
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        data = response.get_json()
+        self.assertEqual(data["date"], self.production_date.isoformat())
+        self.assertIn("materials", data)
+
+        entry = BriquetteMixEntry.query.filter_by(date=self.production_date).first()
+        self.assertIsNotNone(entry)
+
+        repeat_response = self.client.post(
+            "/api/material/briquette-production",
+            json={"date": self.production_date.isoformat()},
+        )
+        self.assertEqual(repeat_response.status_code, 200)
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

@@ -161,7 +161,20 @@
                             Monitor briquette output alongside the daily material mix and FIFO cost.
                         </p>
                     </div>
+                    <div class="material-receipts-card__actions">
+                        <label class="sr-only" for="briquette-pass-date">Production date</label>
+                        <input
+                            id="briquette-pass-date"
+                            type="date"
+                            class="material-receipts-card__date"
+                            autocomplete="off"
+                        />
+                        <button type="button" class="button button--secondary" id="briquette-pass-button">
+                            Pass production entry
+                        </button>
+                    </div>
                 </div>
+                <p class="material-receipts-card__feedback" id="briquette-pass-feedback" hidden></p>
                 <p class="empty-state" id="briquette-production-empty">Loading briquette production…</p>
                 <div class="table-wrapper" id="briquette-production-table-wrapper" hidden>
                     <table class="data-table" id="briquette-production-table">
@@ -385,6 +398,9 @@
         const briquetteModalClose = document.getElementById("briquette-mix-close");
         const briquetteModalCancel = document.getElementById("briquette-mix-cancel");
         const briquetteSaveButton = document.getElementById("briquette-mix-save");
+        const briquettePassDateInput = document.getElementById("briquette-pass-date");
+        const briquettePassButton = document.getElementById("briquette-pass-button");
+        const briquettePassFeedback = document.getElementById("briquette-pass-feedback");
 
         let briquetteMaterialOrder = [];
         let briquetteMaterialLabels = {};
@@ -579,6 +595,34 @@
                 briquetteModalError.hidden = true;
                 briquetteModalError.textContent = "";
             }
+        }
+
+        function clearBriquettePassFeedback() {
+            if (!briquettePassFeedback) {
+                return;
+            }
+            briquettePassFeedback.hidden = true;
+            briquettePassFeedback.textContent = "";
+            briquettePassFeedback.classList.remove(
+                "material-receipts-card__feedback--error",
+                "material-receipts-card__feedback--success",
+            );
+        }
+
+        function setBriquettePassFeedback(message, { isError = false } = {}) {
+            if (!briquettePassFeedback) {
+                return;
+            }
+            briquettePassFeedback.hidden = false;
+            briquettePassFeedback.textContent = message;
+            briquettePassFeedback.classList.toggle("material-receipts-card__feedback--error", Boolean(isError));
+            briquettePassFeedback.classList.toggle("material-receipts-card__feedback--success", !isError);
+        }
+
+        function currentIsoDate() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            return now.toISOString().slice(0, 10);
         }
 
         function setBriquetteModalFeedback(message, { isError = false } = {}) {
@@ -1064,6 +1108,61 @@
                     if (briquetteSaveButton) {
                         briquetteSaveButton.disabled = false;
                     }
+                }
+            });
+        }
+
+        if (briquettePassDateInput) {
+            const today = currentIsoDate();
+            briquettePassDateInput.value = today;
+            briquettePassDateInput.max = today;
+        }
+
+        if (briquettePassButton) {
+            briquettePassButton.addEventListener("click", async () => {
+                if (!briquettePassDateInput) {
+                    return;
+                }
+
+                const dateValue = briquettePassDateInput.value;
+                if (!dateValue) {
+                    setBriquettePassFeedback("Select a production date before passing the entry.", {
+                        isError: true,
+                    });
+                    return;
+                }
+
+                clearBriquettePassFeedback();
+
+                const originalText = briquettePassButton.textContent;
+                briquettePassButton.disabled = true;
+                briquettePassButton.textContent = "Passing…";
+
+                try {
+                    const response = await fetch("/api/material/briquette-production", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ date: dateValue }),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const message = data?.msg || "Unable to pass production entry.";
+                        throw new Error(message);
+                    }
+
+                    const formattedDate = formatDate(dateValue) || dateValue;
+                    setBriquettePassFeedback(`Production entry ready for ${formattedDate}.`);
+                    loadBriquetteProductionEntries();
+                } catch (error) {
+                    console.error(error);
+                    setBriquettePassFeedback(error.message || "Unable to pass production entry.", {
+                        isError: true,
+                    });
+                } finally {
+                    briquettePassButton.disabled = false;
+                    briquettePassButton.textContent = originalText;
                 }
             });
         }

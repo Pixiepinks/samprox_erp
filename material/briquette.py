@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Deque, Dict, Iterable, List, Optional
+from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import case, func
 
@@ -374,29 +374,78 @@ def list_briquette_production_entries(*, limit: int = 30) -> Dict[str, object]:
         .all()
     )
 
-    dates = [getattr(row, "prod_date") for row in rows if isinstance(getattr(row, "prod_date"), date)]
-    mixes = {}
-    if dates:
-        entries = BriquetteMixEntry.query.filter(BriquetteMixEntry.date.in_(dates)).all()
-        mixes = {entry.date: entry for entry in entries}
-
-    results: List[Dict[str, object]] = []
+    production_map: Dict[date, Dict[str, Decimal]] = {}
     for row in rows:
         prod_date = getattr(row, "prod_date", None)
         if not isinstance(prod_date, date):
             continue
         briquette_tons = _quantize(_decimal_from_value(getattr(row, "briquette_tons", 0)), TON_QUANT)
         dryer_tons = _quantize(_decimal_from_value(getattr(row, "dryer_tons", 0)), TON_QUANT)
+        production_map[prod_date] = {
+            "briquette_tons": briquette_tons,
+            "dryer_tons": dryer_tons,
+        }
+
+    candidate_dates = set(production_map.keys())
+    extra_mix_entries = (
+        BriquetteMixEntry.query.order_by(BriquetteMixEntry.date.desc())
+        .limit(normalized_limit)
+        .all()
+    )
+    for entry in extra_mix_entries:
+        if isinstance(entry.date, date):
+            candidate_dates.add(entry.date)
+
+    if candidate_dates:
+        combined_dates = sorted(candidate_dates, reverse=True)[:normalized_limit]
+        mix_entries = (
+            BriquetteMixEntry.query.filter(BriquetteMixEntry.date.in_(combined_dates)).all()
+        )
+        mixes = {entry.date: entry for entry in mix_entries}
+    else:
+        combined_dates = []
+        mixes = {}
+
+    results: List[Dict[str, object]] = []
+    for prod_date in combined_dates:
+        if not isinstance(prod_date, date):
+            continue
+
+        production = production_map.get(
+            prod_date,
+            {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
+        )
+        briquette_tons = _quantize(
+            _decimal_from_value(production.get("briquette_tons", Decimal("0"))),
+            TON_QUANT,
+        )
+        dryer_tons = _quantize(
+            _decimal_from_value(production.get("dryer_tons", Decimal("0"))),
+            TON_QUANT,
+        )
         entry = mixes.get(prod_date)
 
-        material_values = {}
+        material_values: Dict[str, float] = {}
+        has_mix = False
         for key, attr in ENTRY_FIELD_MAP.items():
             raw_value = _decimal_from_value(getattr(entry, attr, "0")) if entry else Decimal("0")
+            if entry and raw_value > Decimal("0"):
+                has_mix = True
             material_values[key] = float(_quantize(raw_value, TON_QUANT))
 
         dry_factor_value = Decimal("0")
         if entry and entry.dry_factor is not None:
             dry_factor_value = _decimal_from_value(entry.dry_factor)
+            if dry_factor_value > Decimal("0"):
+                has_mix = True
+
+        total_material_cost = Decimal("0")
+        unit_cost = Decimal("0")
+        if entry:
+            total_material_cost = _decimal_from_value(entry.total_material_cost)
+            unit_cost = _decimal_from_value(entry.unit_cost_per_kg)
+            if total_material_cost > Decimal("0"):
+                has_mix = True
 
         results.append(
             {
@@ -404,10 +453,10 @@ def list_briquette_production_entries(*, limit: int = 30) -> Dict[str, object]:
                 "briquette_production_ton": float(briquette_tons),
                 "dryer_production_ton": float(dryer_tons),
                 "materials": material_values,
-                "unit_cost_per_kg": float(_quantize(_decimal_from_value(entry.unit_cost_per_kg if entry else 0), UNIT_COST_QUANT)),
-                "total_material_cost": float(_quantize(_decimal_from_value(entry.total_material_cost if entry else 0), CURRENCY_QUANT)),
+                "unit_cost_per_kg": float(_quantize(unit_cost, UNIT_COST_QUANT)),
+                "total_material_cost": float(_quantize(total_material_cost, CURRENCY_QUANT)),
                 "dry_factor": float(_quantize(dry_factor_value, UNIT_COST_QUANT)),
-                "has_mix": entry is not None,
+                "has_mix": has_mix,
             }
         )
 
@@ -481,6 +530,44 @@ def _serialize_mix_entry(
         "material_labels": MATERIAL_LABELS,
         "updated_at": entry.updated_at.isoformat() if entry and entry.updated_at else None,
     }
+
+
+def ensure_briquette_mix_entry(target_date: date) -> Tuple[Dict[str, object], bool]:
+    if not isinstance(target_date, date):
+        raise ValueError("target_date must be a date instance")
+
+    entry = BriquetteMixEntry.query.filter_by(date=target_date).first()
+    created = False
+
+    if entry is None:
+        entry = BriquetteMixEntry(date=target_date)
+        entry.dry_factor = Decimal("0")
+        entry.sawdust_qty_ton = Decimal("0")
+        entry.wood_shaving_qty_ton = Decimal("0")
+        entry.wood_powder_qty_ton = Decimal("0")
+        entry.peanut_husk_qty_ton = Decimal("0")
+        entry.fire_cut_qty_ton = Decimal("0")
+        entry.total_material_cost = Decimal("0")
+        entry.unit_cost_per_kg = Decimal("0")
+        entry.total_output_kg = Decimal("0")
+        entry.cost_breakdown = _ensure_breakdown_structure()
+        db.session.add(entry)
+        created = True
+    elif not isinstance(entry.cost_breakdown, dict) or not entry.cost_breakdown:
+        entry.cost_breakdown = _ensure_breakdown_structure()
+
+    db.session.flush()
+
+    production_map = _load_production_for_dates([target_date])
+    production = production_map.get(
+        target_date,
+        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
+    )
+
+    db.session.commit()
+    db.session.refresh(entry)
+
+    return _serialize_mix_entry(target_date, entry, production), created
 
 
 def get_briquette_mix_detail(target_date: date) -> Dict[str, object]:

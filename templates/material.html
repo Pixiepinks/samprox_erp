@@ -153,7 +153,162 @@
                     </table>
                 </div>
             </div>
+            <div class="material-receipts-card" id="briquette-production-card">
+                <div class="material-receipts-card__header">
+                    <div>
+                        <h2 class="material-receipts-card__title">Production Entry – Briquette Production</h2>
+                        <p class="material-receipts-card__meta">
+                            Monitor briquette output alongside the daily material mix and FIFO cost.
+                        </p>
+                    </div>
+                </div>
+                <p class="empty-state" id="briquette-production-empty">Loading briquette production…</p>
+                <div class="table-wrapper" id="briquette-production-table-wrapper" hidden>
+                    <table class="data-table" id="briquette-production-table">
+                        <thead>
+                            <tr>
+                                <th scope="col" rowspan="2">Date</th>
+                                <th scope="col" rowspan="2">Briquette Production (Ton)</th>
+                                <th scope="col" colspan="5">Material Consumed (Ton)</th>
+                                <th scope="col" rowspan="2">Unit Cost of Briquette (Kg)</th>
+                                <th scope="col" rowspan="2">Total Material Cost</th>
+                                <th scope="col" rowspan="2">Update Mix</th>
+                            </tr>
+                            <tr id="briquette-material-headings">
+                                <th scope="col">Sawdust</th>
+                                <th scope="col">Wood Shaving</th>
+                                <th scope="col">Wood Powder</th>
+                                <th scope="col">Peanut Husk</th>
+                                <th scope="col">Fire Cut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="briquette-production-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </section>
+    </div>
+    <div class="modal" id="briquette-mix-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="briquette-mix-title">
+            <header class="modal__header modal__header--with-actions">
+                <div>
+                    <h2 class="modal__title" id="briquette-mix-title">Update mix</h2>
+                    <p class="modal__subtitle" id="briquette-mix-subtitle">
+                        Adjust material usage and let the system recalculate FIFO costs automatically.
+                    </p>
+                </div>
+                <button type="button" class="modal__close" id="briquette-mix-close" aria-label="Close mix editor">
+                    &times;
+                </button>
+            </header>
+            <div class="modal__body">
+                <form class="modal__form" id="briquette-mix-form">
+                    <div class="modal__grid">
+                        <label class="modal__field">
+                            <span class="modal__label">Date</span>
+                            <input id="briquette-mix-date" type="text" class="modal__input" readonly />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Dry factor</span>
+                            <input
+                                id="briquette-dry-factor"
+                                name="dry_factor"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                class="modal__input"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Sawdust (Ton)</span>
+                            <input id="briquette-sawdust" type="number" class="modal__input" readonly />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Wood Shaving (Ton)</span>
+                            <input
+                                id="briquette-wood-shaving"
+                                name="wood_shaving_ton"
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                class="modal__input"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Wood Powder (Ton)</span>
+                            <input
+                                id="briquette-wood-powder"
+                                name="wood_powder_ton"
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                class="modal__input"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Peanut Husk (Ton)</span>
+                            <input
+                                id="briquette-peanut-husk"
+                                name="peanut_husk_ton"
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                class="modal__input"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Fire Cut (Ton)</span>
+                            <input
+                                id="briquette-fire-cut"
+                                name="fire_cut_ton"
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                class="modal__input"
+                                autocomplete="off"
+                            />
+                        </label>
+                    </div>
+                    <div class="modal__field modal__field--full">
+                        <span class="modal__label">Total briquette output</span>
+                        <p class="modal__hint"><span id="briquette-output-kg">0.00</span> kg</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table data-table--compact" id="briquette-cost-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Material</th>
+                                    <th scope="col">Qty (Kg)</th>
+                                    <th scope="col">Qty (Ton)</th>
+                                    <th scope="col">Purchase Price (Rs/Kg)</th>
+                                    <th scope="col">Total Cost (Rs)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="briquette-cost-table-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="modal__field modal__field--full">
+                        <p class="modal__label">Total material cost</p>
+                        <p class="modal__hint" id="briquette-total-cost">Rs 0.00</p>
+                    </div>
+                    <div class="modal__field modal__field--full">
+                        <p class="modal__label">Unit cost of briquette (per Kg)</p>
+                        <p class="modal__hint" id="briquette-unit-cost">Rs 0.0000</p>
+                    </div>
+                    <p class="modal__feedback" id="briquette-mix-feedback" hidden></p>
+                    <p class="modal__feedback modal__feedback--error" id="briquette-mix-error" hidden></p>
+                    <div class="modal__actions">
+                        <button type="button" class="button button--ghost" id="briquette-mix-cancel">Cancel</button>
+                        <button type="submit" class="button" id="briquette-mix-save">Save mix</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -208,6 +363,33 @@
         const mrnSearchForm = document.getElementById("mrn-search-form");
         const mrnSearchInput = document.getElementById("mrn-search-input");
         const mrnClearButton = document.getElementById("mrn-clear-button");
+        const briquetteTableBody = document.getElementById("briquette-production-table-body");
+        const briquetteTableWrapper = document.getElementById("briquette-production-table-wrapper");
+        const briquetteEmptyState = document.getElementById("briquette-production-empty");
+        const briquetteMaterialHeadings = document.getElementById("briquette-material-headings");
+        const briquetteModal = document.getElementById("briquette-mix-modal");
+        const briquetteModalForm = document.getElementById("briquette-mix-form");
+        const briquetteModalDate = document.getElementById("briquette-mix-date");
+        const briquetteDryFactorInput = document.getElementById("briquette-dry-factor");
+        const briquetteSawdustInput = document.getElementById("briquette-sawdust");
+        const briquetteWoodShavingInput = document.getElementById("briquette-wood-shaving");
+        const briquetteWoodPowderInput = document.getElementById("briquette-wood-powder");
+        const briquettePeanutHuskInput = document.getElementById("briquette-peanut-husk");
+        const briquetteFireCutInput = document.getElementById("briquette-fire-cut");
+        const briquetteOutputKg = document.getElementById("briquette-output-kg");
+        const briquetteCostTableBody = document.getElementById("briquette-cost-table-body");
+        const briquetteTotalCost = document.getElementById("briquette-total-cost");
+        const briquetteUnitCost = document.getElementById("briquette-unit-cost");
+        const briquetteModalFeedback = document.getElementById("briquette-mix-feedback");
+        const briquetteModalError = document.getElementById("briquette-mix-error");
+        const briquetteModalClose = document.getElementById("briquette-mix-close");
+        const briquetteModalCancel = document.getElementById("briquette-mix-cancel");
+        const briquetteSaveButton = document.getElementById("briquette-mix-save");
+
+        let briquetteMaterialOrder = [];
+        let briquetteMaterialLabels = {};
+        let briquetteModalDateValue = null;
+        let briquetteDryerProductionTon = 0;
 
         function formatNumber(value, fractionDigits) {
             const numeric = Number.parseFloat(value);
@@ -317,6 +499,334 @@
                 month: "short",
                 day: "numeric",
             });
+        }
+
+        function renderBriquetteMaterialHeadings(order, labels) {
+            if (!briquetteMaterialHeadings) {
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            if (Array.isArray(order) && order.length) {
+                order.forEach((key) => {
+                    const th = document.createElement("th");
+                    th.scope = "col";
+                    th.textContent = labels?.[key] || key;
+                    fragment.appendChild(th);
+                });
+            } else {
+                ["Sawdust", "Wood Shaving", "Wood Powder", "Peanut Husk", "Fire Cut"].forEach((label) => {
+                    const th = document.createElement("th");
+                    th.scope = "col";
+                    th.textContent = label;
+                    fragment.appendChild(th);
+                });
+            }
+
+            briquetteMaterialHeadings.innerHTML = "";
+            briquetteMaterialHeadings.appendChild(fragment);
+        }
+
+        function renderBriquetteCostBreakdown(rows) {
+            if (!briquetteCostTableBody) {
+                return;
+            }
+
+            briquetteCostTableBody.innerHTML = "";
+            if (!Array.isArray(rows) || rows.length === 0) {
+                const emptyRow = document.createElement("tr");
+                const cell = document.createElement("td");
+                cell.colSpan = 5;
+                cell.textContent = "No cost data available.";
+                emptyRow.appendChild(cell);
+                briquetteCostTableBody.appendChild(emptyRow);
+                return;
+            }
+
+            rows.forEach((row) => {
+                const tr = document.createElement("tr");
+                const materialCell = document.createElement("td");
+                materialCell.textContent = row.label || "—";
+                tr.appendChild(materialCell);
+
+                const qtyKgCell = document.createElement("td");
+                qtyKgCell.textContent = formatNumber(row.quantity_kg, 3);
+                tr.appendChild(qtyKgCell);
+
+                const qtyTonCell = document.createElement("td");
+                qtyTonCell.textContent = formatNumber(row.quantity_ton, 3);
+                tr.appendChild(qtyTonCell);
+
+                const unitPriceCell = document.createElement("td");
+                unitPriceCell.textContent = formatNumber(row.unit_price, 4);
+                tr.appendChild(unitPriceCell);
+
+                const totalCostCell = document.createElement("td");
+                totalCostCell.textContent = formatNumber(row.total_cost, 2);
+                tr.appendChild(totalCostCell);
+
+                briquetteCostTableBody.appendChild(tr);
+            });
+        }
+
+        function clearBriquetteModalFeedback() {
+            if (briquetteModalFeedback) {
+                briquetteModalFeedback.hidden = true;
+                briquetteModalFeedback.textContent = "";
+                briquetteModalFeedback.classList.remove("modal__feedback--success");
+            }
+            if (briquetteModalError) {
+                briquetteModalError.hidden = true;
+                briquetteModalError.textContent = "";
+            }
+        }
+
+        function setBriquetteModalFeedback(message, { isError = false } = {}) {
+            if (isError) {
+                if (briquetteModalError) {
+                    briquetteModalError.hidden = false;
+                    briquetteModalError.textContent = message;
+                }
+                if (briquetteModalFeedback) {
+                    briquetteModalFeedback.hidden = true;
+                    briquetteModalFeedback.textContent = "";
+                    briquetteModalFeedback.classList.remove("modal__feedback--success");
+                }
+                return;
+            }
+
+            if (briquetteModalFeedback) {
+                briquetteModalFeedback.hidden = false;
+                briquetteModalFeedback.textContent = message;
+                briquetteModalFeedback.classList.add("modal__feedback--success");
+            }
+            if (briquetteModalError) {
+                briquetteModalError.hidden = true;
+                briquetteModalError.textContent = "";
+            }
+        }
+
+        function closeBriquetteModal() {
+            if (!briquetteModal) {
+                return;
+            }
+            briquetteModal.classList.remove("modal--open");
+            briquetteModal.setAttribute("hidden", "");
+            briquetteModal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+            briquetteModalDateValue = null;
+            briquetteDryerProductionTon = 0;
+            if (briquetteModalForm) {
+                briquetteModalForm.reset();
+            }
+            clearBriquetteModalFeedback();
+        }
+
+        function updateSawdustPreview() {
+            if (!briquetteDryFactorInput || !briquetteSawdustInput) {
+                return;
+            }
+            const dryFactor = Number.parseFloat(briquetteDryFactorInput.value || "0");
+            if (!Number.isFinite(dryFactor)) {
+                briquetteSawdustInput.value = "0.000";
+                return;
+            }
+            const sawdustTons = Math.max(0, briquetteDryerProductionTon * dryFactor);
+            briquetteSawdustInput.value = sawdustTons.toFixed(3);
+        }
+
+        function populateBriquetteModal(data) {
+            if (!data) {
+                return;
+            }
+            if (briquetteModalDate) {
+                briquetteModalDate.value = formatDate(data.date) || data.date || "—";
+            }
+            if (typeof data.dry_factor === "number" && briquetteDryFactorInput) {
+                briquetteDryFactorInput.value = data.dry_factor.toFixed(4);
+            } else if (briquetteDryFactorInput) {
+                briquetteDryFactorInput.value = "0.0000";
+            }
+            briquetteDryerProductionTon = Number.parseFloat(data.dryer_production_ton || "0") || 0;
+
+            if (briquetteOutputKg) {
+                briquetteOutputKg.textContent = formatNumber(data.briquette_output_kg, 2);
+            }
+
+            const materials = data.materials || {};
+            if (briquetteWoodShavingInput) {
+                const value = Number.parseFloat(materials.wood_shaving) || 0;
+                briquetteWoodShavingInput.value = value.toFixed(3);
+            }
+            if (briquetteWoodPowderInput) {
+                const value = Number.parseFloat(materials.wood_powder) || 0;
+                briquetteWoodPowderInput.value = value.toFixed(3);
+            }
+            if (briquettePeanutHuskInput) {
+                const value = Number.parseFloat(materials.peanut_husk) || 0;
+                briquettePeanutHuskInput.value = value.toFixed(3);
+            }
+            if (briquetteFireCutInput) {
+                const value = Number.parseFloat(materials.fire_cut) || 0;
+                briquetteFireCutInput.value = value.toFixed(3);
+            }
+            if (briquetteSawdustInput) {
+                const sawdustValue = Number.parseFloat(data.sawdust_ton) || 0;
+                briquetteSawdustInput.value = sawdustValue.toFixed(3);
+            }
+
+            if (briquetteTotalCost) {
+                briquetteTotalCost.textContent = `Rs ${formatNumber(data.total_material_cost, 2)}`;
+            }
+            if (briquetteUnitCost) {
+                briquetteUnitCost.textContent = `Rs ${formatNumber(data.unit_cost_per_kg, 4)}`;
+            }
+
+            renderBriquetteCostBreakdown(data.cost_breakdown);
+        }
+
+        async function fetchBriquetteMix(dateIso) {
+            if (!dateIso) {
+                return;
+            }
+            clearBriquetteModalFeedback();
+            if (briquetteSaveButton) {
+                briquetteSaveButton.disabled = true;
+            }
+            try {
+                const response = await fetch(`/api/material/briquette-production/${dateIso}`);
+                if (!response.ok) {
+                    throw new Error("Unable to load mix details.");
+                }
+                const data = await response.json();
+                populateBriquetteModal(data);
+                if (Array.isArray(data.material_order)) {
+                    briquetteMaterialOrder = data.material_order;
+                }
+                if (data.material_labels) {
+                    briquetteMaterialLabels = data.material_labels;
+                }
+                renderBriquetteMaterialHeadings(briquetteMaterialOrder, briquetteMaterialLabels);
+                updateSawdustPreview();
+                if (briquetteSaveButton) {
+                    briquetteSaveButton.disabled = false;
+                }
+            } catch (error) {
+                console.error(error);
+                setBriquetteModalFeedback("Unable to load mix details. Please try again.", { isError: true });
+                if (briquetteSaveButton) {
+                    briquetteSaveButton.disabled = false;
+                }
+            }
+        }
+
+        function openBriquetteModal(dateIso) {
+            if (!briquetteModal || !dateIso) {
+                return;
+            }
+            briquetteModalDateValue = dateIso;
+            briquetteModal.removeAttribute("hidden");
+            briquetteModal.setAttribute("aria-hidden", "false");
+            briquetteModal.classList.add("modal--open");
+            document.body.classList.add("modal-open");
+            if (briquetteSaveButton) {
+                briquetteSaveButton.disabled = true;
+            }
+            clearBriquetteModalFeedback();
+            fetchBriquetteMix(dateIso);
+        }
+
+        function renderBriquetteRows(entries) {
+            if (!briquetteTableBody || !briquetteTableWrapper || !briquetteEmptyState) {
+                return;
+            }
+
+            briquetteTableBody.innerHTML = "";
+
+            if (!Array.isArray(entries) || entries.length === 0) {
+                briquetteTableWrapper.hidden = true;
+                briquetteEmptyState.hidden = false;
+                briquetteEmptyState.textContent = "No briquette production entries recorded yet.";
+                return;
+            }
+
+            entries.forEach((entry) => {
+                const tr = document.createElement("tr");
+                const dateCell = document.createElement("td");
+                dateCell.textContent = formatDate(entry.date) || entry.date || "—";
+                tr.appendChild(dateCell);
+
+                const productionCell = document.createElement("td");
+                productionCell.textContent = formatNumber(entry.briquette_production_ton, 3);
+                tr.appendChild(productionCell);
+
+                if (!Array.isArray(briquetteMaterialOrder) || briquetteMaterialOrder.length === 0) {
+                    briquetteMaterialOrder = Object.keys(entry.materials || {});
+                }
+
+                briquetteMaterialOrder.forEach((key) => {
+                    const cell = document.createElement("td");
+                    const value = (entry.materials && entry.materials[key]) || 0;
+                    cell.textContent = formatNumber(value, 3);
+                    tr.appendChild(cell);
+                });
+
+                const unitCostCell = document.createElement("td");
+                unitCostCell.textContent = formatNumber(entry.unit_cost_per_kg, 4);
+                tr.appendChild(unitCostCell);
+
+                const totalCostCell = document.createElement("td");
+                totalCostCell.textContent = formatNumber(entry.total_material_cost, 2);
+                tr.appendChild(totalCostCell);
+
+                const actionCell = document.createElement("td");
+                const actionButton = document.createElement("button");
+                actionButton.type = "button";
+                actionButton.className = "button button--secondary";
+                actionButton.textContent = entry.has_mix ? "Edit mix" : "Update mix";
+                actionButton.dataset.mixDate = entry.date;
+                actionCell.appendChild(actionButton);
+                tr.appendChild(actionCell);
+
+                briquetteTableBody.appendChild(tr);
+            });
+
+            briquetteEmptyState.hidden = true;
+            briquetteTableWrapper.hidden = false;
+        }
+
+        async function loadBriquetteProductionEntries() {
+            if (!briquetteEmptyState) {
+                return;
+            }
+
+            briquetteEmptyState.hidden = false;
+            briquetteEmptyState.textContent = "Loading briquette production…";
+            if (briquetteTableWrapper) {
+                briquetteTableWrapper.hidden = true;
+            }
+
+            try {
+                const response = await fetch("/api/material/briquette-production");
+                if (!response.ok) {
+                    throw new Error("Failed to load briquette production entries.");
+                }
+                const data = await response.json();
+                if (Array.isArray(data.material_order)) {
+                    briquetteMaterialOrder = data.material_order;
+                }
+                if (data.material_labels) {
+                    briquetteMaterialLabels = data.material_labels;
+                }
+                renderBriquetteMaterialHeadings(briquetteMaterialOrder, briquetteMaterialLabels);
+                renderBriquetteRows(data.entries || []);
+            } catch (error) {
+                console.error(error);
+                if (briquetteEmptyState) {
+                    briquetteEmptyState.hidden = false;
+                    briquetteEmptyState.textContent = "Unable to load briquette production right now.";
+                }
+            }
         }
 
         if (supplierSearchForm) {
@@ -466,8 +976,101 @@
             });
         }
 
+        if (briquetteTableBody) {
+            briquetteTableBody.addEventListener("click", (event) => {
+                const button = event.target.closest("button[data-mix-date]");
+                if (!button) {
+                    return;
+                }
+                const dateIso = button.dataset.mixDate;
+                openBriquetteModal(dateIso);
+            });
+        }
+
+        if (briquetteModalClose) {
+            briquetteModalClose.addEventListener("click", () => {
+                closeBriquetteModal();
+            });
+        }
+
+        if (briquetteModalCancel) {
+            briquetteModalCancel.addEventListener("click", () => {
+                closeBriquetteModal();
+            });
+        }
+
+        if (briquetteModal) {
+            briquetteModal.addEventListener("click", (event) => {
+                if (event.target && event.target.dataset && "modalDismiss" in event.target.dataset) {
+                    closeBriquetteModal();
+                }
+            });
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && briquetteModal && !briquetteModal.hasAttribute("hidden")) {
+                closeBriquetteModal();
+            }
+        });
+
+        if (briquetteDryFactorInput) {
+            briquetteDryFactorInput.addEventListener("input", updateSawdustPreview);
+        }
+
+        if (briquetteModalForm) {
+            briquetteModalForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (!briquetteModalDateValue) {
+                    setBriquetteModalFeedback("No date selected.", { isError: true });
+                    return;
+                }
+
+                if (briquetteSaveButton) {
+                    briquetteSaveButton.disabled = true;
+                }
+                clearBriquetteModalFeedback();
+
+                const payload = {
+                    dry_factor: briquetteDryFactorInput ? briquetteDryFactorInput.value : null,
+                    wood_shaving_ton: briquetteWoodShavingInput ? briquetteWoodShavingInput.value : null,
+                    wood_powder_ton: briquetteWoodPowderInput ? briquetteWoodPowderInput.value : null,
+                    peanut_husk_ton: briquettePeanutHuskInput ? briquettePeanutHuskInput.value : null,
+                    fire_cut_ton: briquetteFireCutInput ? briquetteFireCutInput.value : null,
+                };
+
+                try {
+                    const response = await fetch(`/api/material/briquette-production/${briquetteModalDateValue}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        const message = errorData?.msg || "Unable to save mix details.";
+                        throw new Error(message);
+                    }
+
+                    const data = await response.json();
+                    populateBriquetteModal(data);
+                    setBriquetteModalFeedback("Mix updated successfully.");
+                    loadBriquetteProductionEntries();
+                } catch (error) {
+                    console.error(error);
+                    setBriquetteModalFeedback(error.message || "Unable to save mix details.", { isError: true });
+                } finally {
+                    if (briquetteSaveButton) {
+                        briquetteSaveButton.disabled = false;
+                    }
+                }
+            });
+        }
+
         loadSuppliers("");
         loadMrns("");
+        loadBriquetteProductionEntries();
     </script>
 </body>
 </html>

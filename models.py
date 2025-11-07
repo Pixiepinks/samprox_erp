@@ -731,6 +731,30 @@ class DailyProductionEntry(db.Model):
         )
 
 
+class BriquetteMixEntry(db.Model):
+    """Store per-day briquette material mix and cost calculations."""
+
+    __tablename__ = "briquette_mix_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.Date, nullable=False, unique=True, index=True)
+    dry_factor = db.Column(db.Numeric(10, 4))
+    sawdust_qty_ton = db.Column(db.Numeric(12, 3), nullable=False, default=Decimal("0.000"))
+    wood_shaving_qty_ton = db.Column(db.Numeric(12, 3), nullable=False, default=Decimal("0.000"))
+    wood_powder_qty_ton = db.Column(db.Numeric(12, 3), nullable=False, default=Decimal("0.000"))
+    peanut_husk_qty_ton = db.Column(db.Numeric(12, 3), nullable=False, default=Decimal("0.000"))
+    fire_cut_qty_ton = db.Column(db.Numeric(12, 3), nullable=False, default=Decimal("0.000"))
+    total_material_cost = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    unit_cost_per_kg = db.Column(db.Numeric(12, 4), nullable=False, default=Decimal("0.0000"))
+    total_output_kg = db.Column(db.Numeric(14, 3), nullable=False, default=Decimal("0.000"))
+    cost_breakdown = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<BriquetteMixEntry date={self.date} total_cost={self.total_material_cost}>"
+
+
 class ProductionForecastEntry(db.Model):
     __table_args__ = (
         db.UniqueConstraint(

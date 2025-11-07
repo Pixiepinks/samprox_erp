@@ -16,6 +16,10 @@ class AdminSeedTestCase(unittest.TestCase):
             "RAINBOWS_ADMIN_EMAIL",
             "RAINBOWS_ADMIN_PASSWORD",
             "RAINBOWS_ADMIN_NAME",
+            "RUN_SEED_FINANCE",
+            "FINANCE_EMAIL",
+            "FINANCE_PASSWORD",
+            "FINANCE_NAME",
         ):
             os.environ.pop(var, None)
 
@@ -45,6 +49,10 @@ class AdminSeedTestCase(unittest.TestCase):
             "RAINBOWS_ADMIN_EMAIL",
             "RAINBOWS_ADMIN_PASSWORD",
             "RAINBOWS_ADMIN_NAME",
+            "RUN_SEED_FINANCE",
+            "FINANCE_EMAIL",
+            "FINANCE_PASSWORD",
+            "FINANCE_NAME",
         ):
             os.environ.pop(var, None)
         if "app" in sys.modules:
@@ -112,6 +120,16 @@ class AdminSeedTestCase(unittest.TestCase):
         additional = next(user for user in admins if user.email == second_email)
         self.assertTrue(additional.check_password("123"))
         self.assertEqual(additional.name, "Uresha")
+
+    def test_finance_user_created_with_defaults(self):
+        status, email = self.app_module._ensure_finance_user(flask_app=self.app)
+        self.assertEqual(status, "created")
+        self.assertEqual(email, "finance@samprox.lk")
+
+        finance_user = self.app_module.User.query.filter_by(email=email).one()
+        self.assertEqual(finance_user.role, self.app_module.RoleEnum.finance_manager)
+        self.assertTrue(finance_user.check_password("123"))
+        self.assertTrue(finance_user.active)
 
 
 if __name__ == "__main__":

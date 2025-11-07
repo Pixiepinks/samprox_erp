@@ -983,6 +983,7 @@
             admin: "Admin",
             production_manager: "Production Manager",
             maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
             technician: "Technician",
         };
 
@@ -1155,6 +1156,11 @@
         const workdayModalSave = document.getElementById("workday-modal-save");
 
         const canManageMembers = ["admin", "production_manager"].includes(user?.role);
+        const canManageSalary = [
+            "admin",
+            "production_manager",
+            "finance_manager",
+        ].includes(user?.role);
 
         if (!canManageMembers && formSection) {
             formSection.hidden = true;
@@ -4636,6 +4642,9 @@
                 nameButton.className = "salary-table__name-button";
                 nameButton.textContent = getMemberDisplayName(member);
                 nameButton.addEventListener("click", () => {
+                    if (!canManageSalary) {
+                        return;
+                    }
                     openSalaryModal(member, memberKey);
                 });
                 row.appendChild(createCell("Name", nameButton));
@@ -4723,9 +4732,15 @@
                 salaryButton.type = "button";
                 salaryButton.className = "salary-table__action-button";
                 salaryButton.textContent = "Update salary";
-                salaryButton.addEventListener("click", () => {
-                    openSalaryModal(member, memberKey);
-                });
+                if (canManageSalary) {
+                    salaryButton.addEventListener("click", () => {
+                        openSalaryModal(member, memberKey);
+                    });
+                } else {
+                    salaryButton.disabled = true;
+                    salaryButton.setAttribute("aria-disabled", "true");
+                    salaryButton.title = "You do not have permission to update salary details.";
+                }
                 row.appendChild(createCell("Manage Salary", salaryButton));
 
                 salaryTableBody.appendChild(row);
@@ -5129,6 +5144,10 @@
         };
 
         const openSalaryModal = (member, providedKey) => {
+            if (!canManageSalary) {
+                return;
+            }
+
             if (!salaryModal || !salaryForm) {
                 return;
             }
@@ -5983,6 +6002,11 @@
         if (salaryForm) {
             salaryForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
+
+                if (!canManageSalary) {
+                    closeSalaryModal();
+                    return;
+                }
 
                 if (!salaryModalContext?.memberKey) {
                     closeSalaryModal();

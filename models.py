@@ -47,6 +47,7 @@ class RoleEnum(str, Enum):
     admin = "admin"
     production_manager = "production_manager"
     maintenance_manager = "maintenance_manager"
+    finance_manager = "finance_manager"
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)

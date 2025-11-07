@@ -99,6 +99,7 @@
                             <tr>
                                 <th scope="col">Item Name</th>
                                 <th scope="col">Qty (Ton)</th>
+                                <th scope="col">Unit Cost (Rs./Ton)</th>
                                 <th scope="col">Value (Rs.)</th>
                             </tr>
                         </thead>
@@ -474,6 +475,10 @@
                 const qtyCell = document.createElement("td");
                 qtyCell.textContent = formatNumber(item.quantity_ton, 3);
                 row.appendChild(qtyCell);
+
+                const unitCostCell = document.createElement("td");
+                unitCostCell.textContent = formatNumber(item.unit_cost_per_ton, 2);
+                row.appendChild(unitCostCell);
 
                 const valueCell = document.createElement("td");
                 valueCell.textContent = formatNumber(item.value_rs, 2);

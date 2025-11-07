@@ -39,11 +39,18 @@ def upgrade():
     bind = op.get_bind()
 
     if bind.dialect.name == "postgresql":
-        op.execute(
-            sa.text(
-                f"ALTER TYPE {ROLE_ENUM_NAME} ADD VALUE IF NOT EXISTS :value"
-            ).bindparams(value=FINANCE_ROLE_VALUE)
-        )
+        # Adding a new enum value in PostgreSQL requires the statement to run
+        # outside of the surrounding transaction; otherwise PostgreSQL will
+        # raise "unsafe use of new value" when the value is used later in the
+        # same transaction. Running it inside an autocommit block makes sure the
+        # enum alteration is committed before we insert records that reference
+        # the new value.
+        with op.get_context().autocommit_block():
+            op.execute(
+                sa.text(
+                    f"ALTER TYPE {ROLE_ENUM_NAME} ADD VALUE IF NOT EXISTS :value"
+                ).bindparams(value=FINANCE_ROLE_VALUE)
+            )
 
     existing = bind.execute(
         sa.select(sa.literal(1))

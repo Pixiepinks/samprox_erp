@@ -389,7 +389,10 @@ def get_daily_production():
 @jwt_required()
 def get_daily_production_summary():
     if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
@@ -682,6 +685,7 @@ def get_production_forecast():
         RoleEnum.production_manager,
         RoleEnum.admin,
         RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
@@ -825,7 +829,10 @@ def get_production_forecast_holidays():
 @jwt_required()
 def get_monthly_production_summary():
     if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
@@ -929,7 +936,10 @@ def get_monthly_production_summary():
 @jwt_required()
 def get_monthly_hourly_pulse():
     if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
@@ -1240,7 +1250,10 @@ def _get_secondary_reason_label(event: MachineIdleEvent) -> str:
 @jwt_required()
 def get_monthly_idle_secondary_pareto():
     if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return (
             jsonify({"msg": "You do not have permission to view production."}),
@@ -1385,7 +1398,10 @@ def get_monthly_idle_summary():
         return _monthly_idle_summary_for_ui()
 
     if not require_role(
-        RoleEnum.production_manager, RoleEnum.admin, RoleEnum.maintenance_manager
+        RoleEnum.production_manager,
+        RoleEnum.admin,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 

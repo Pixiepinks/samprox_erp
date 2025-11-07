@@ -5,13 +5,14 @@ import smtplib
 import ssl
 import socket
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request, url_for, current_app
 from flask_jwt_extended import get_jwt, jwt_required
 from flask_mail import Message
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from extensions import db, mail
@@ -36,6 +37,9 @@ jobs_schema = MaintenanceJobSchema(many=True)
 
 _CODE_PATTERN = re.compile(r"(\d+)$")
 _ALLOWED_PRIORITIES = {"Normal", "Urgent", "Critical"}
+_COLOMBO_TZ = ZoneInfo("Asia/Colombo")
+_PENDING_STATUS_VALUES = {"NEW", "IN_PROGRESS", "ON_HOLD"}
+_COMPLETED_STATUS_VALUES = {"COMPLETED"}
 
 
 def _current_role() -> Optional[RoleEnum]:
@@ -72,6 +76,37 @@ def _parse_date(value, field_name: str) -> Optional[date]:
         except ValueError as exc:
             raise ValueError(f"Invalid date for {field_name}") from exc
     raise ValueError(f"Invalid date for {field_name}")
+
+
+def _as_decimal(value) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except Exception:  # pragma: no cover - defensive
+        return Decimal("0")
+
+
+def _status_value(status) -> str:
+    if isinstance(status, MaintenanceJobStatus):
+        return status.value
+    if status is None:
+        return ""
+    return str(status)
+
+
+def _quantize(value: Decimal, pattern: str) -> Decimal:
+    return value.quantize(Decimal(pattern), rounding=ROUND_HALF_UP)
+
+
+def _currency_number(value: Decimal) -> float:
+    return float(_quantize(value, "0.01"))
+
+
+def _hours_number(value: Decimal) -> float:
+    return float(_quantize(value, "0.1"))
 
 
 def _generate_job_code() -> str:
@@ -214,6 +249,24 @@ def list_jobs():
         )
     )
 
+    try:
+        start_date = _parse_date(request.args.get("start_date"), "start_date")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    try:
+        end_date = _parse_date(request.args.get("end_date"), "end_date")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    if start_date:
+        query = query.filter(MaintenanceJob.job_date >= start_date)
+    if end_date:
+        query = query.filter(MaintenanceJob.job_date <= end_date)
+
     limit = request.args.get("limit", type=int)
     offset = request.args.get("offset", type=int)
 
@@ -224,6 +277,205 @@ def list_jobs():
 
     jobs = query.all()
     return jsonify(jobs_schema.dump(jobs))
+
+
+@bp.get("/summary")
+@jwt_required()
+def jobs_summary():
+    try:
+        requested_start = _parse_date(request.args.get("start_date"), "start_date")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    try:
+        requested_end = _parse_date(request.args.get("end_date"), "end_date")
+    except ValueError as exc:
+        return jsonify({"msg": str(exc)}), 400
+
+    min_max_row = db.session.execute(
+        select(
+            func.min(MaintenanceJob.job_date),
+            func.max(MaintenanceJob.job_date),
+        )
+    ).first()
+
+    min_job_date, max_job_date = min_max_row if min_max_row else (None, None)
+
+    today_local = datetime.now(_COLOMBO_TZ).date()
+
+    start_date = requested_start or min_job_date or max_job_date or today_local
+    end_date = requested_end or max_job_date or min_job_date or start_date
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    jobs_query = select(
+        MaintenanceJob.id.label("id"),
+        MaintenanceJob.status.label("status"),
+        MaintenanceJob.expected_completion.label("expected_completion"),
+    ).where(
+        MaintenanceJob.job_date >= start_date,
+        MaintenanceJob.job_date <= end_date,
+    )
+
+    jobs_rows = db.session.execute(jobs_query).all()
+    jobs_initiated = len(jobs_rows)
+    pending_count = 0
+    completed_count = 0
+    overdue_count = 0
+
+    for row in jobs_rows:
+        status_label = _status_value(row.status).upper()
+        if status_label in _COMPLETED_STATUS_VALUES:
+            completed_count += 1
+        if status_label in _PENDING_STATUS_VALUES:
+            pending_count += 1
+        expected_completion = row.expected_completion
+        if (
+            expected_completion
+            and expected_completion < today_local
+            and status_label not in _COMPLETED_STATUS_VALUES
+        ):
+            overdue_count += 1
+
+    materials_total = _as_decimal(
+        db.session.execute(
+            select(func.coalesce(func.sum(MaintenanceMaterial.cost), 0)).join(
+                MaintenanceJob,
+                MaintenanceMaterial.maintenance_job_id == MaintenanceJob.id,
+            )
+            .where(MaintenanceJob.job_date >= start_date)
+            .where(MaintenanceJob.job_date <= end_date)
+        ).scalar()
+    )
+
+    outsourced_rows = db.session.execute(
+        select(
+            MaintenanceOutsourcedService.cost.label("cost"),
+            MaintenanceOutsourcedService.service_date.label("service_date"),
+            MaintenanceJob.job_date.label("job_date"),
+        )
+        .join(
+            MaintenanceJob,
+            MaintenanceOutsourcedService.maintenance_job_id == MaintenanceJob.id,
+        )
+        .where(
+            or_(
+                and_(
+                    MaintenanceOutsourcedService.service_date.isnot(None),
+                    MaintenanceOutsourcedService.service_date >= start_date,
+                    MaintenanceOutsourcedService.service_date <= end_date,
+                ),
+                and_(
+                    MaintenanceOutsourcedService.service_date.is_(None),
+                    MaintenanceJob.job_date >= start_date,
+                    MaintenanceJob.job_date <= end_date,
+                ),
+            )
+        )
+    ).all()
+
+    outsourced_total = Decimal("0")
+    for row in outsourced_rows:
+        service_date = row.service_date or row.job_date
+        if not service_date:
+            continue
+        if service_date < start_date or service_date > end_date:
+            continue
+        outsourced_total += _as_decimal(row.cost)
+
+    internal_rows = db.session.execute(
+        select(
+            MaintenanceInternalStaffCost.cost.label("cost"),
+            MaintenanceInternalStaffCost.hourly_rate.label("hourly_rate"),
+            MaintenanceInternalStaffCost.engaged_hours.label("engaged_hours"),
+            MaintenanceInternalStaffCost.service_date.label("service_date"),
+            MaintenanceJob.job_date.label("job_date"),
+            TeamMember.employee_code.label("employee_code"),
+        )
+        .join(
+            MaintenanceJob,
+            MaintenanceInternalStaffCost.maintenance_job_id == MaintenanceJob.id,
+        )
+        .join(
+            TeamMember,
+            MaintenanceInternalStaffCost.employee_id == TeamMember.id,
+            isouter=True,
+        )
+        .where(
+            or_(
+                and_(
+                    MaintenanceInternalStaffCost.service_date.isnot(None),
+                    MaintenanceInternalStaffCost.service_date >= start_date,
+                    MaintenanceInternalStaffCost.service_date <= end_date,
+                ),
+                and_(
+                    MaintenanceInternalStaffCost.service_date.is_(None),
+                    MaintenanceJob.job_date >= start_date,
+                    MaintenanceJob.job_date <= end_date,
+                ),
+            )
+        )
+    ).all()
+
+    internal_total = Decimal("0")
+    internal_hours_total = Decimal("0")
+    internal_hours_e023 = Decimal("0")
+    internal_hours_other = Decimal("0")
+
+    for row in internal_rows:
+        service_date = row.service_date or row.job_date
+        if not service_date:
+            continue
+        if service_date < start_date or service_date > end_date:
+            continue
+        hours = _as_decimal(row.engaged_hours)
+        internal_hours_total += hours
+        employee_code = (row.employee_code or "").strip().upper()
+        if employee_code == "E023":
+            internal_hours_e023 += hours
+        else:
+            internal_hours_other += hours
+        raw_cost = row.cost
+        cost = _as_decimal(raw_cost)
+        if raw_cost is None:
+            cost = _as_decimal(row.hourly_rate) * hours
+        internal_total += cost
+
+    grand_total = materials_total + outsourced_total + internal_total
+
+    available_start = min_job_date or start_date
+    available_end = max_job_date or end_date
+
+    payload = {
+        "period": {
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        },
+        "available_range": {
+            "start_date": available_start.isoformat() if available_start else None,
+            "end_date": available_end.isoformat() if available_end else None,
+        },
+        "totals": {
+            "material": _currency_number(materials_total),
+            "outsourced": _currency_number(outsourced_total),
+            "internal": _currency_number(internal_total),
+            "grand": _currency_number(grand_total),
+        },
+        "jobs": {
+            "initiated": jobs_initiated,
+            "pending": pending_count,
+            "completed": completed_count,
+            "overdue": overdue_count,
+        },
+        "hours": {
+            "total": _hours_number(internal_hours_total),
+            "e023": _hours_number(internal_hours_e023),
+            "other": _hours_number(internal_hours_other),
+        },
+    }
+
+    return jsonify(payload)
 
 
 @bp.get("/<int:job_id>")

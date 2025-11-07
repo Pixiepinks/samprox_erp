@@ -391,7 +391,7 @@ def jobs_summary():
             MaintenanceInternalStaffCost.engaged_hours.label("engaged_hours"),
             MaintenanceInternalStaffCost.service_date.label("service_date"),
             MaintenanceJob.job_date.label("job_date"),
-            TeamMember.employee_code.label("employee_code"),
+            TeamMember.reg_number.label("employee_code"),
         )
         .join(
             MaintenanceJob,

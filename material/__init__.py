@@ -16,6 +16,7 @@ from .services import (
 )
 from .briquette import (
     DEFAULT_BRIQUETTE_ENTRY_LIMIT,
+    calculate_stock_status,
     get_briquette_mix_detail,
     list_briquette_production_entries,
     update_briquette_mix,
@@ -35,6 +36,7 @@ __all__ = [
     "search_suppliers",
     "seed_material_defaults",
     "DEFAULT_BRIQUETTE_ENTRY_LIMIT",
+    "calculate_stock_status",
     "get_briquette_mix_detail",
     "list_briquette_production_entries",
     "update_briquette_mix",

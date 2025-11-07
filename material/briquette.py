@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Deque, Dict, Iterable, List, Optional
+from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import case, func
 
@@ -18,6 +18,7 @@ from models import (
     MaterialItem,
     MRNHeader,
     MRNLine,
+    SalesActualEntry,
 )
 
 TON_TO_KG = Decimal("1000")
@@ -72,6 +73,17 @@ OPENING_STOCKS_KG = {
     "fire_cut": (Decimal("2000"), Decimal("8.89")),
 }
 
+BRIQUETTE_OPENING_STOCK_TON = Decimal("0")
+BRIQUETTE_OPENING_UNIT_COST_PER_TON = Decimal("0")
+
+STOCK_BASE_DATE = date(2025, 9, 30)
+
+STOCK_STATUS_LABELS = {
+    **MATERIAL_LABELS,
+    "briquettes": "Briquettes",
+    "opening_total": "Opening stock (as at 30-Sep-2025)",
+}
+
 DEFAULT_BRIQUETTE_ENTRY_LIMIT = 120
 MAX_BRIQUETTE_ENTRY_LIMIT = 365
 
@@ -87,6 +99,12 @@ class ReceiptLayer:
     date: date
     quantity_kg: Decimal
     unit_cost: Decimal
+
+
+@dataclass
+class TonInventoryLayer:
+    quantity_ton: Decimal
+    unit_cost_per_ton: Decimal
 
 
 def _quantize(value: Decimal, quant: Decimal) -> Decimal:
@@ -226,6 +244,298 @@ def _initial_last_unit_costs() -> Dict[str, Decimal]:
     for key, (_, unit_price) in OPENING_STOCKS_KG.items():
         lookup[key] = Decimal(unit_price)
     return lookup
+
+
+def _build_opening_layers_ton() -> Tuple[Dict[str, Deque[TonInventoryLayer]], Tuple[Decimal, Decimal]]:
+    inventory: Dict[str, Deque[TonInventoryLayer]] = {key: deque() for key in MATERIAL_ORDER}
+    total_qty = Decimal("0")
+    total_value = Decimal("0")
+
+    for key in MATERIAL_ORDER:
+        qty_kg, unit_price = OPENING_STOCKS_KG.get(key, (Decimal("0"), Decimal("0")))
+        qty_ton = _quantize(Decimal(qty_kg) / TON_TO_KG, TON_QUANT)
+        unit_cost_per_ton = _quantize(Decimal(unit_price) * TON_TO_KG, CURRENCY_QUANT)
+        if qty_ton > 0:
+            inventory[key].append(
+                TonInventoryLayer(quantity_ton=qty_ton, unit_cost_per_ton=unit_cost_per_ton)
+            )
+            total_qty += qty_ton
+            total_value += _quantize(qty_ton * unit_cost_per_ton, CURRENCY_QUANT)
+
+    briquette_opening_qty = _quantize(BRIQUETTE_OPENING_STOCK_TON, TON_QUANT)
+    briquette_opening_cost = _quantize(BRIQUETTE_OPENING_UNIT_COST_PER_TON, CURRENCY_QUANT)
+    if briquette_opening_qty > 0:
+        total_qty += briquette_opening_qty
+        total_value += _quantize(briquette_opening_qty * briquette_opening_cost, CURRENCY_QUANT)
+
+    return inventory, (total_qty, total_value)
+
+
+def _clone_ton_layers(layers: Dict[str, Deque[TonInventoryLayer]]) -> Dict[str, Deque[TonInventoryLayer]]:
+    cloned: Dict[str, Deque[TonInventoryLayer]] = {}
+    for key, queue in layers.items():
+        cloned[key] = deque(
+            TonInventoryLayer(quantity_ton=layer.quantity_ton, unit_cost_per_ton=layer.unit_cost_per_ton)
+            for layer in queue
+        )
+    return cloned
+
+
+def _consume_ton_layers(layers: Deque[TonInventoryLayer], quantity_ton: Decimal) -> None:
+    if quantity_ton <= 0:
+        return
+
+    remaining = _quantize(quantity_ton, TON_QUANT)
+    zero = Decimal("0")
+
+    while remaining > zero and layers:
+        layer = layers[0]
+        take = remaining if layer.quantity_ton >= remaining else layer.quantity_ton
+        if take > zero:
+            layer.quantity_ton = _quantize(layer.quantity_ton - take, TON_QUANT)
+            remaining = _quantize(remaining - take, TON_QUANT)
+        if layer.quantity_ton <= zero:
+            layers.popleft()
+
+
+def _sum_layers(layers: Deque[TonInventoryLayer]) -> Tuple[Decimal, Decimal]:
+    qty = Decimal("0")
+    value = Decimal("0")
+    for layer in layers:
+        qty += layer.quantity_ton
+        value += layer.quantity_ton * layer.unit_cost_per_ton
+    return _quantize(qty, TON_QUANT), _quantize(value, CURRENCY_QUANT)
+
+
+def _initial_briquette_layers() -> Deque[TonInventoryLayer]:
+    layers: Deque[TonInventoryLayer] = deque()
+    qty = _quantize(BRIQUETTE_OPENING_STOCK_TON, TON_QUANT)
+    unit_cost = _quantize(BRIQUETTE_OPENING_UNIT_COST_PER_TON, CURRENCY_QUANT)
+    if qty > 0:
+        layers.append(TonInventoryLayer(quantity_ton=qty, unit_cost_per_ton=unit_cost))
+    return layers
+
+
+def calculate_stock_status(as_of: date) -> Dict[str, object]:
+    if not isinstance(as_of, date):
+        raise TypeError("as_of must be a date instance")
+
+    normalized_date = as_of
+    zero = Decimal("0")
+
+    opening_layers, opening_totals = _build_opening_layers_ton()
+    raw_inventory = _clone_ton_layers(opening_layers)
+    briquette_layers = _initial_briquette_layers()
+
+    if normalized_date > STOCK_BASE_DATE:
+        receipts_by_date: Dict[date, List[Tuple[str, TonInventoryLayer]]] = defaultdict(list)
+
+        receipt_rows = (
+            db.session.query(
+                MRNHeader.date.label("mrn_date"),
+                MRNHeader.created_at.label("header_created_at"),
+                MRNLine.created_at.label("line_created_at"),
+                MRNLine.id.label("line_id"),
+                MaterialItem.name.label("item_name"),
+                MRNLine.qty_ton,
+                MRNLine.approved_unit_price,
+                MRNLine.unit_price,
+            )
+            .join(MRNLine, MRNLine.mrn_id == MRNHeader.id)
+            .join(MaterialItem, MRNLine.item_id == MaterialItem.id)
+            .filter(MRNHeader.date > STOCK_BASE_DATE, MRNHeader.date <= normalized_date)
+            .order_by(
+                MRNHeader.date.asc(),
+                MRNHeader.created_at.asc(),
+                MRNLine.created_at.asc(),
+                MRNLine.id.asc(),
+            )
+            .all()
+        )
+
+        for row in receipt_rows:
+            key = _canonical_material_key(getattr(row, "item_name", None))
+            if key not in raw_inventory:
+                continue
+
+            qty_ton = _quantize(_decimal_from_value(getattr(row, "qty_ton", None)), TON_QUANT)
+            if qty_ton <= zero:
+                continue
+
+            approved_price = _decimal_from_value(getattr(row, "approved_unit_price", None))
+            if approved_price <= zero:
+                approved_price = _decimal_from_value(getattr(row, "unit_price", None))
+            if approved_price < zero:
+                approved_price = zero
+            unit_cost_ton = _quantize(approved_price, CURRENCY_QUANT)
+
+            layer_date = getattr(row, "mrn_date", None)
+            if not isinstance(layer_date, date):
+                created_at = getattr(row, "line_created_at", None) or getattr(row, "header_created_at", None)
+                if isinstance(created_at, datetime):
+                    layer_date = created_at.date()
+                else:
+                    layer_date = normalized_date
+
+            if layer_date > normalized_date:
+                continue
+
+            receipts_by_date[layer_date].append(
+                (key, TonInventoryLayer(quantity_ton=qty_ton, unit_cost_per_ton=unit_cost_ton))
+            )
+
+        consumption_by_date: Dict[date, Dict[str, Decimal]] = defaultdict(dict)
+        mix_unit_cost_map: Dict[date, Decimal] = {}
+
+        mix_entries = (
+            BriquetteMixEntry.query.filter(
+                BriquetteMixEntry.date > STOCK_BASE_DATE,
+                BriquetteMixEntry.date <= normalized_date,
+            )
+            .order_by(BriquetteMixEntry.date.asc())
+            .all()
+        )
+
+        for entry in mix_entries:
+            entry_date = getattr(entry, "date", None)
+            if not isinstance(entry_date, date):
+                continue
+
+            unit_cost_per_kg = _decimal_from_value(getattr(entry, "unit_cost_per_kg", None))
+            if unit_cost_per_kg < zero:
+                unit_cost_per_kg = zero
+            mix_unit_cost_map[entry_date] = _quantize(unit_cost_per_kg, UNIT_COST_QUANT)
+
+            entry_consumption = consumption_by_date[entry_date]
+            for key, attr in ENTRY_FIELD_MAP.items():
+                quantity = _quantize(_decimal_from_value(getattr(entry, attr, None)), TON_QUANT)
+                if quantity > zero:
+                    entry_consumption[key] = _quantize(entry_consumption.get(key, zero) + quantity, TON_QUANT)
+
+        timeline_dates = sorted(set(receipts_by_date.keys()) | set(consumption_by_date.keys()))
+        for day in timeline_dates:
+            for key, layer in receipts_by_date.get(day, []):
+                raw_inventory[key].append(layer)
+            for key, quantity in consumption_by_date.get(day, {}).items():
+                _consume_ton_layers(raw_inventory[key], quantity)
+
+        briquette_receipts_by_date: Dict[date, List[TonInventoryLayer]] = defaultdict(list)
+
+        production_rows = (
+            db.session.query(
+                DailyProductionEntry.date.label("prod_date"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                func.lower(MachineAsset.code).in_(BRIQUETTE_MACHINE_CODES_LOWER),
+                                DailyProductionEntry.quantity_tons,
+                            ),
+                            else_=0.0,
+                        )
+                    ),
+                    0.0,
+                ).label("briquette_tons"),
+            )
+            .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
+            .filter(
+                DailyProductionEntry.date > STOCK_BASE_DATE,
+                DailyProductionEntry.date <= normalized_date,
+            )
+            .group_by(DailyProductionEntry.date)
+            .order_by(DailyProductionEntry.date.asc())
+            .all()
+        )
+
+        for row in production_rows:
+            prod_date = getattr(row, "prod_date", None)
+            if not isinstance(prod_date, date):
+                continue
+
+            qty_ton = _quantize(_decimal_from_value(getattr(row, "briquette_tons", None)), TON_QUANT)
+            if qty_ton <= zero:
+                continue
+
+            unit_cost_per_kg = mix_unit_cost_map.get(prod_date, zero)
+            unit_cost_per_ton = _quantize(unit_cost_per_kg * TON_TO_KG, CURRENCY_QUANT)
+
+            briquette_receipts_by_date[prod_date].append(
+                TonInventoryLayer(quantity_ton=qty_ton, unit_cost_per_ton=unit_cost_per_ton)
+            )
+
+        issues_by_date: Dict[date, Decimal] = defaultdict(lambda: zero)
+
+        issue_rows = (
+            SalesActualEntry.query.filter(
+                SalesActualEntry.date > STOCK_BASE_DATE,
+                SalesActualEntry.date <= normalized_date,
+            )
+            .order_by(SalesActualEntry.date.asc(), SalesActualEntry.id.asc())
+            .all()
+        )
+
+        for row in issue_rows:
+            sale_date = getattr(row, "date", None)
+            if not isinstance(sale_date, date):
+                continue
+            qty = _quantize(_decimal_from_value(getattr(row, "quantity_tons", None)), TON_QUANT)
+            if qty > zero:
+                issues_by_date[sale_date] = _quantize(issues_by_date[sale_date] + qty, TON_QUANT)
+
+        briquette_dates = sorted(set(briquette_receipts_by_date.keys()) | set(issues_by_date.keys()))
+        for day in briquette_dates:
+            for layer in briquette_receipts_by_date.get(day, []):
+                briquette_layers.append(layer)
+            issue_qty = issues_by_date.get(day, zero)
+            if issue_qty > zero:
+                _consume_ton_layers(briquette_layers, issue_qty)
+
+    items: List[Dict[str, object]] = []
+
+    for key in MATERIAL_ORDER:
+        qty, value = _sum_layers(raw_inventory[key])
+        if qty < zero:
+            qty = zero
+        if value < zero:
+            value = zero
+        items.append(
+            {
+                "key": key,
+                "label": STOCK_STATUS_LABELS.get(key, key.replace("_", " ").title()),
+                "quantity_ton": float(qty),
+                "value_rs": float(value),
+            }
+        )
+
+    briquette_qty, briquette_value = _sum_layers(briquette_layers)
+    if briquette_qty < zero:
+        briquette_qty = zero
+    if briquette_value < zero:
+        briquette_value = zero
+
+    items.append(
+        {
+            "key": "briquettes",
+            "label": STOCK_STATUS_LABELS.get("briquettes", "Briquettes"),
+            "quantity_ton": float(briquette_qty),
+            "value_rs": float(briquette_value),
+        }
+    )
+
+    opening_qty_total, opening_value_total = opening_totals
+    opening_qty_total = _quantize(opening_qty_total, TON_QUANT)
+    opening_value_total = _quantize(opening_value_total, CURRENCY_QUANT)
+
+    items.append(
+        {
+            "key": "opening_total",
+            "label": STOCK_STATUS_LABELS.get("opening_total", "Opening stock"),
+            "quantity_ton": float(opening_qty_total),
+            "value_rs": float(opening_value_total),
+        }
+    )
+
+    return {"as_of": normalized_date.isoformat(), "items": items}
 
 
 def _consume_material(

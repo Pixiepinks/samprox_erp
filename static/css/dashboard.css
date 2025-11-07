@@ -1634,6 +1634,48 @@ body.modal-open {
     justify-content: space-between;
 }
 
+.stock-status-card__controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.stock-status-card__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #475569;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.stock-status-card__input {
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 12px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    background: #ffffff;
+    min-width: 180px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stock-status-card__input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+@media (max-width: 640px) {
+    .stock-status-card__controls {
+        align-items: stretch;
+    }
+
+    .stock-status-card__input {
+        width: 100%;
+    }
+}
+
 .material-receipts-card__title {
     margin: 0;
     font-size: 1.35rem;
@@ -1715,6 +1757,17 @@ body.modal-open {
 
 .data-table tbody tr:hover {
     background: rgba(59, 130, 246, 0.08);
+}
+
+#stock-status-table th:nth-child(2),
+#stock-status-table th:nth-child(3),
+#stock-status-table td:nth-child(2),
+#stock-status-table td:nth-child(3) {
+    text-align: right;
+}
+
+#stock-status-table tbody tr.stock-status-table__opening-row td {
+    font-weight: 600;
 }
 
 .data-table__link {

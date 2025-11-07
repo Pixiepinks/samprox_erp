@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request
 from material import (
     DEFAULT_BRIQUETTE_ENTRY_LIMIT,
     MaterialValidationError,
+    calculate_stock_status,
     create_item,
     create_mrn,
     create_supplier,
@@ -157,4 +158,19 @@ def save_briquette_mix(date_value: str):
         data = update_briquette_mix(target_date, payload)
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
+    return jsonify(data)
+
+
+@bp.get("/stock-status")
+def get_stock_status():
+    raw_date = request.args.get("as_of")
+    if raw_date:
+        try:
+            target_date = date.fromisoformat(raw_date)
+        except ValueError:
+            return jsonify({"msg": "Invalid date. Use YYYY-MM-DD."}), 400
+    else:
+        target_date = date.today()
+
+    data = calculate_stock_status(target_date)
     return jsonify(data)

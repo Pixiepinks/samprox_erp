@@ -399,6 +399,69 @@ def _ensure_maintenance_user(
         return "created", normalized_email
 
 
+def _ensure_finance_user(
+    flask_app=None,
+    *,
+    email: Optional[str] = None,
+    password: Optional[str] = None,
+    name: Optional[str] = None,
+    ensure_if_missing: bool = True,
+    force_reset: bool = False,
+):
+    target_app = flask_app or globals().get("app")
+    normalized_email = _normalize_email(email or os.getenv("FINANCE_EMAIL", "finance@samprox.lk"))
+    password = password or os.getenv("FINANCE_PASSWORD", "123")
+    name = name or os.getenv("FINANCE_NAME", "Finance Manager")
+
+    if target_app is None:
+        return "skipped", normalized_email
+
+    with target_app.app_context():
+        try:
+            user = User.query.filter(func.lower(User.email) == normalized_email).first()
+        except (OperationalError, ProgrammingError):
+            return "skipped", normalized_email
+
+        if user:
+            status = "skipped"
+            updated = False
+
+            if user.name != name:
+                user.name = name
+                updated = True
+            if user.role != RoleEnum.finance_manager:
+                user.role = RoleEnum.finance_manager
+                updated = True
+            if not user.active:
+                user.active = True
+                updated = True
+
+            if force_reset:
+                user.set_password(password)
+                status = "reset"
+            elif updated:
+                status = "updated"
+
+            if status != "skipped":
+                db.session.commit()
+
+            return status, normalized_email
+
+        if not ensure_if_missing:
+            return "skipped", normalized_email
+
+        user = User(
+            name=name,
+            email=normalized_email,
+            role=RoleEnum.finance_manager,
+            active=True,
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        return "created", normalized_email
+
+
 def _bootstrap_admin_user(flask_app=None):
     status, normalized_email = _ensure_admin_user(
         flask_app=flask_app,
@@ -438,6 +501,19 @@ def _bootstrap_maintenance_user(flask_app=None):
         print(f"✅ Maintenance user updated: {normalized_email}")
 
 
+def _bootstrap_finance_user(flask_app=None):
+    status, normalized_email = _ensure_finance_user(
+        flask_app=flask_app,
+        force_reset=os.getenv("RUN_SEED_FINANCE") == "1",
+    )
+    if status == "created":
+        print(f"✅ Finance user created: {normalized_email}")
+    elif status == "reset":
+        print(f"✅ Finance password reset: {normalized_email}")
+    elif status == "updated":
+        print(f"✅ Finance user updated: {normalized_email}")
+
+
 def _bootstrap_rainbows_admin_user(flask_app=None):
     status, normalized_email = _ensure_admin_user(
         flask_app=flask_app,
@@ -459,6 +535,7 @@ def _bootstrap_rainbows_admin_user(flask_app=None):
 _bootstrap_admin_user(flask_app=app)
 _bootstrap_accessall_user(flask_app=app)
 _bootstrap_maintenance_user(flask_app=app)
+_bootstrap_finance_user(flask_app=app)
 _bootstrap_rainbows_admin_user(flask_app=app)
 
 
@@ -682,6 +759,33 @@ def seed_accessall(email, password, name):
             click.echo(f"✅ Accessall user updated: {normalized_email}")
         else:
             click.echo(f"ℹ️ Accessall user already up-to-date: {normalized_email}")
+
+
+@app.cli.command("seed-finance")
+@click.option("--email", default="finance@samprox.lk", help="Finance manager email")
+@click.option("--password", default="123", help="Finance manager password")
+@click.option("--name", default="Finance Manager", help="Finance manager display name")
+def seed_finance(email, password, name):
+    """Create or reset the finance manager user."""
+
+    with app.app_context():
+        status, normalized_email = _ensure_finance_user(
+            flask_app=app,
+            email=email,
+            password=password,
+            name=name,
+            ensure_if_missing=True,
+            force_reset=True,
+        )
+
+        if status == "created":
+            click.echo(f"✅ Finance user created: {normalized_email}")
+        elif status == "reset":
+            click.echo(f"✅ Finance password reset: {normalized_email}")
+        elif status == "updated":
+            click.echo(f"✅ Finance user updated: {normalized_email}")
+        else:
+            click.echo(f"ℹ️ Finance user already up-to-date: {normalized_email}")
 
 
 @app.cli.command("seed-rainbows-admin")

@@ -2172,6 +2172,20 @@ def _extract_carry_forward_components(components: dict | None) -> dict[str, str]
 @bp.get("/salary")
 @jwt_required()
 def list_salary_records():
+    if not require_role(
+        RoleEnum.admin,
+        RoleEnum.production_manager,
+        RoleEnum.finance_manager,
+    ):
+        return (
+            jsonify(
+                {
+                    "msg": "Only administrators, production managers, or finance managers can view salary details.",
+                }
+            ),
+            403,
+        )
+
     month = _normalize_month(request.args.get("month"))
     if not month:
         return jsonify({"msg": "A valid month (YYYY-MM) is required."}), 400
@@ -2341,8 +2355,19 @@ def list_salary_records():
 @bp.put("/salary/<int:member_id>")
 @jwt_required()
 def upsert_salary_record(member_id: int):
-    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
-        return jsonify({"msg": "Only administrators or production managers can update salary details."}), 403
+    if not require_role(
+        RoleEnum.admin,
+        RoleEnum.production_manager,
+        RoleEnum.finance_manager,
+    ):
+        return (
+            jsonify(
+                {
+                    "msg": "Only administrators, production managers, or finance managers can update salary details.",
+                }
+            ),
+            403,
+        )
 
     _ensure_schema()
     _ensure_tracking_tables()

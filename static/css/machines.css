@@ -278,6 +278,70 @@ body {
     gap: 1.2rem;
 }
 
+.production-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.production-chart__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.production-chart__header h3 {
+    margin: 0 0 0.25rem;
+}
+
+.production-chart__header p {
+    margin: 0;
+    color: #475569;
+}
+
+.production-chart__body {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.production-chart__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.production-chart__metric {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 14px;
+    padding: 0.9rem 1.1rem;
+    min-width: 180px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.production-chart__metric-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+}
+
+.production-chart__metric-value {
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: #0f172a;
+}
+
+.production-chart__canvas {
+    position: relative;
+    width: 100%;
+    height: 320px;
+}
+
 .idle-hero {
     display: grid;
     gap: 1.5rem;

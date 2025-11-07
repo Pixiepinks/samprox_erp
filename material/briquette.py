@@ -72,6 +72,9 @@ OPENING_STOCKS_KG = {
     "fire_cut": (Decimal("2000"), Decimal("8.89")),
 }
 
+DEFAULT_BRIQUETTE_ENTRY_LIMIT = 120
+MAX_BRIQUETTE_ENTRY_LIMIT = 365
+
 
 @dataclass
 class InventoryLayer:
@@ -339,11 +342,13 @@ def _recalculate_fifo_costs(production_map: Optional[Dict[date, Dict[str, Decima
     db.session.flush()
 
 
-def list_briquette_production_entries(*, limit: int = 30) -> Dict[str, object]:
+def list_briquette_production_entries(
+    *, limit: int = DEFAULT_BRIQUETTE_ENTRY_LIMIT
+) -> Dict[str, object]:
     try:
-        normalized_limit = max(1, min(int(limit), 90))
+        normalized_limit = max(1, min(int(limit), MAX_BRIQUETTE_ENTRY_LIMIT))
     except (TypeError, ValueError):
-        normalized_limit = 30
+        normalized_limit = DEFAULT_BRIQUETTE_ENTRY_LIMIT
 
     rows = (
         db.session.query(

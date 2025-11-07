@@ -58,6 +58,46 @@
                                 </div>
                             </header>
                             <div class="panel__body">
+                                <div class="jobs-overview">
+                                    <form class="jobs-period" id="jobs-period-form" novalidate>
+                                        <div class="jobs-period__field">
+                                            <label for="jobs-period-start">Period</label>
+                                            <div class="jobs-period__inputs">
+                                                <input type="date" id="jobs-period-start" name="start_date" autocomplete="off" />
+                                                <span class="jobs-period__separator" aria-hidden="true">to</span>
+                                                <input type="date" id="jobs-period-end" name="end_date" autocomplete="off" />
+                                            </div>
+                                        </div>
+                                        <div class="jobs-period__actions">
+                                            <button type="submit" class="button button--small" id="jobs-period-apply">Apply</button>
+                                            <button type="button" class="button button--ghost button--small" id="jobs-period-reset">Reset</button>
+                                        </div>
+                                    </form>
+                                    <p class="jobs-period__error" id="jobs-period-error" hidden></p>
+                                    <div class="jobs-kpis" role="list">
+                                        <article class="jobs-kpi-card" role="listitem">
+                                            <p class="jobs-kpi-card__label">Total Cost</p>
+                                            <p class="jobs-kpi-card__value" data-kpi-total-cost>Rs. 0.00</p>
+                                            <p class="jobs-kpi-card__meta" data-kpi-total-cost-breakdown>
+                                                Material Rs. 0.00 | Outsourced Rs. 0.00 | Internal Rs. 0.00
+                                            </p>
+                                        </article>
+                                        <article class="jobs-kpi-card" role="listitem">
+                                            <p class="jobs-kpi-card__label">Total Jobs Initiated</p>
+                                            <p class="jobs-kpi-card__value" data-kpi-total-jobs>0</p>
+                                            <p class="jobs-kpi-card__meta" data-kpi-total-jobs-breakdown>
+                                                Overdue 0 | Pending 0 | Completed 0
+                                            </p>
+                                        </article>
+                                        <article class="jobs-kpi-card" role="listitem">
+                                            <p class="jobs-kpi-card__label">Internal Staff Hours</p>
+                                            <p class="jobs-kpi-card__value" data-kpi-hours-total>0.0 h</p>
+                                            <p class="jobs-kpi-card__meta" data-kpi-hours-breakdown>
+                                                E023 0.0 h | Other 0.0 h
+                                            </p>
+                                        </article>
+                                    </div>
+                                </div>
                                 <div class="alert alert--error" id="jobs-error" hidden></div>
                                 <div class="empty-state" id="jobs-empty" hidden>
                                     <p>No jobs have been created yet.</p>
@@ -1398,6 +1438,18 @@
         const jobsLoadingStatus = document.getElementById("jobs-loading-status");
         const jobsLoadMoreButton = document.getElementById("jobs-load-more");
         const jobsScrollSentinel = document.getElementById("jobs-scroll-sentinel");
+        const jobsPeriodForm = document.getElementById("jobs-period-form");
+        const jobsPeriodStartInput = document.getElementById("jobs-period-start");
+        const jobsPeriodEndInput = document.getElementById("jobs-period-end");
+        const jobsPeriodApplyButton = document.getElementById("jobs-period-apply");
+        const jobsPeriodResetButton = document.getElementById("jobs-period-reset");
+        const jobsPeriodError = document.getElementById("jobs-period-error");
+        const jobsKpiTotalCost = document.querySelector("[data-kpi-total-cost]");
+        const jobsKpiTotalCostBreakdown = document.querySelector("[data-kpi-total-cost-breakdown]");
+        const jobsKpiTotalJobs = document.querySelector("[data-kpi-total-jobs]");
+        const jobsKpiTotalJobsBreakdown = document.querySelector("[data-kpi-total-jobs-breakdown]");
+        const jobsKpiHoursTotal = document.querySelector("[data-kpi-hours-total]");
+        const jobsKpiHoursBreakdown = document.querySelector("[data-kpi-hours-breakdown]");
         const jobDetailsModal = document.getElementById("job-details-modal");
         const jobDetailsTitle = document.getElementById("job-details-modal-title");
         const jobDetailsError = document.getElementById("job-details-error");
@@ -3664,6 +3716,12 @@
         let jobsLoading = false;
         let jobsNeedsReset = false;
         let jobsScrollObserver = null;
+        const jobsPeriodState = {
+            startDate: null,
+            endDate: null,
+            defaultStart: null,
+            defaultEnd: null,
+        };
 
         function setJobsLoadingState(isLoading) {
             if (jobsLoadingStatus) {
@@ -3671,6 +3729,139 @@
             }
             if (jobsLoadMoreButton) {
                 jobsLoadMoreButton.disabled = isLoading || !jobsHasMore;
+            }
+        }
+
+        function setJobsPeriodLoading(isLoading) {
+            if (jobsPeriodApplyButton) {
+                jobsPeriodApplyButton.disabled = isLoading;
+            }
+            if (jobsPeriodResetButton) {
+                jobsPeriodResetButton.disabled = isLoading;
+            }
+        }
+
+        function setJobsPeriodError(message) {
+            if (!jobsPeriodError) return;
+            if (message) {
+                jobsPeriodError.textContent = message;
+                jobsPeriodError.hidden = false;
+            } else {
+                jobsPeriodError.textContent = "";
+                jobsPeriodError.hidden = true;
+            }
+        }
+
+        function updateJobsPeriodInputs(startDate, endDate) {
+            if (jobsPeriodStartInput) {
+                jobsPeriodStartInput.value = startDate || "";
+            }
+            if (jobsPeriodEndInput) {
+                jobsPeriodEndInput.value = endDate || "";
+            }
+        }
+
+        function updateJobsPeriodBounds(defaultStart, defaultEnd) {
+            const startBound = defaultStart || "";
+            const endBound = defaultEnd || "";
+            if (jobsPeriodStartInput) {
+                jobsPeriodStartInput.min = startBound;
+                jobsPeriodStartInput.max = endBound || "";
+            }
+            if (jobsPeriodEndInput) {
+                jobsPeriodEndInput.min = startBound;
+                jobsPeriodEndInput.max = endBound || "";
+            }
+        }
+
+        function updateJobsKpis(summary) {
+            const totals = summary?.totals || {};
+            const jobs = summary?.jobs || {};
+            const hours = summary?.hours || {};
+
+            if (jobsKpiTotalCost) {
+                jobsKpiTotalCost.textContent = formatCurrency(totals.grand);
+            }
+            if (jobsKpiTotalCostBreakdown) {
+                const material = formatCurrency(totals.material);
+                const outsourced = formatCurrency(totals.outsourced);
+                const internal = formatCurrency(totals.internal);
+                jobsKpiTotalCostBreakdown.textContent = `Material ${material} | Outsourced ${outsourced} | Internal ${internal}`;
+            }
+            if (jobsKpiTotalJobs) {
+                const initiated = Number(jobs.initiated || 0);
+                jobsKpiTotalJobs.textContent = initiated.toLocaleString();
+            }
+            if (jobsKpiTotalJobsBreakdown) {
+                const overdue = Number(jobs.overdue || 0).toLocaleString();
+                const pending = Number(jobs.pending || 0).toLocaleString();
+                const completed = Number(jobs.completed || 0).toLocaleString();
+                jobsKpiTotalJobsBreakdown.textContent = `Overdue ${overdue} | Pending ${pending} | Completed ${completed}`;
+            }
+            if (jobsKpiHoursTotal) {
+                jobsKpiHoursTotal.textContent = formatHours(hours.total);
+            }
+            if (jobsKpiHoursBreakdown) {
+                const e023 = formatHours(hours.e023);
+                const other = formatHours(hours.other);
+                jobsKpiHoursBreakdown.textContent = `E023 ${e023} | Other ${other}`;
+            }
+        }
+
+        async function refreshJobsSummary({ startDate, endDate, updateInputs = false } = {}) {
+            const params = new URLSearchParams();
+            if (startDate) {
+                params.set("start_date", startDate);
+            }
+            if (endDate) {
+                params.set("end_date", endDate);
+            }
+
+            const query = params.toString();
+            const summary = await fetchJson(
+                query ? `/api/maintenance-jobs/summary?${query}` : "/api/maintenance-jobs/summary"
+            );
+
+            const availableRange = summary?.available_range || {};
+            const defaultStart = availableRange.start_date || null;
+            const defaultEnd = availableRange.end_date || null;
+            jobsPeriodState.defaultStart = defaultStart;
+            jobsPeriodState.defaultEnd = defaultEnd;
+            updateJobsPeriodBounds(defaultStart, defaultEnd);
+
+            const period = summary?.period || {};
+            const nextStart = period.start_date || null;
+            const nextEnd = period.end_date || null;
+            jobsPeriodState.startDate = nextStart;
+            jobsPeriodState.endDate = nextEnd;
+
+            if (updateInputs) {
+                updateJobsPeriodInputs(nextStart, nextEnd);
+            }
+
+            updateJobsKpis(summary);
+            return summary;
+        }
+
+        async function refreshJobsData({ startDate, endDate, updateInputs = false } = {}) {
+            await refreshJobsSummary({ startDate, endDate, updateInputs });
+            await loadJobs({ reset: true });
+        }
+
+        async function initializeJobsSection() {
+            setJobsPeriodLoading(true);
+            setJobsPeriodError("");
+            try {
+                await refreshJobsData({ updateInputs: true });
+            } catch (error) {
+                if (jobsError) {
+                    jobsError.textContent = error.message || "Unable to load jobs.";
+                    jobsError.hidden = false;
+                } else {
+                    console.error("Failed to load maintenance jobs", error);
+                }
+            } finally {
+                setJobsPeriodLoading(false);
             }
         }
 
@@ -3806,6 +3997,12 @@
                 const params = new URLSearchParams();
                 params.set("limit", JOBS_PAGE_SIZE);
                 params.set("offset", jobsOffset);
+                if (jobsPeriodState.startDate) {
+                    params.set("start_date", jobsPeriodState.startDate);
+                }
+                if (jobsPeriodState.endDate) {
+                    params.set("end_date", jobsPeriodState.endDate);
+                }
                 const jobs = await fetchJson(`/api/maintenance-jobs?${params.toString()}`);
 
                 if (jobsNeedsReset) {
@@ -3841,6 +4038,54 @@
         if (jobsLoadMoreButton) {
             jobsLoadMoreButton.addEventListener("click", () => {
                 loadJobs();
+            });
+        }
+
+        if (jobsPeriodForm) {
+            jobsPeriodForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const startValue = jobsPeriodStartInput?.value || "";
+                const endValue = jobsPeriodEndInput?.value || "";
+
+                if (startValue && endValue && startValue > endValue) {
+                    setJobsPeriodError("Start date must be on or before end date.");
+                    return;
+                }
+
+                setJobsPeriodError("");
+                setJobsPeriodLoading(true);
+
+                try {
+                    await refreshJobsData({
+                        startDate: startValue || null,
+                        endDate: endValue || null,
+                        updateInputs: true,
+                    });
+                } catch (error) {
+                    setJobsPeriodError(error.message || "Unable to update period.");
+                } finally {
+                    setJobsPeriodLoading(false);
+                }
+            });
+        }
+
+        if (jobsPeriodResetButton) {
+            jobsPeriodResetButton.addEventListener("click", async (event) => {
+                event.preventDefault();
+                setJobsPeriodError("");
+                setJobsPeriodLoading(true);
+
+                try {
+                    await refreshJobsData({
+                        startDate: jobsPeriodState.defaultStart,
+                        endDate: jobsPeriodState.defaultEnd,
+                        updateInputs: true,
+                    });
+                } catch (error) {
+                    setJobsPeriodError(error.message || "Unable to reset period.");
+                } finally {
+                    setJobsPeriodLoading(false);
+                }
             });
         }
 
@@ -4242,8 +4487,20 @@
             document.getElementById("machine-outputs")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
 
-        refreshJobsButton?.addEventListener("click", () => {
-            loadJobs({ reset: true });
+        refreshJobsButton?.addEventListener("click", async () => {
+            setJobsPeriodError("");
+            setJobsPeriodLoading(true);
+            try {
+                await refreshJobsData({
+                    startDate: jobsPeriodState.startDate,
+                    endDate: jobsPeriodState.endDate,
+                    updateInputs: true,
+                });
+            } catch (error) {
+                setJobsPeriodError(error.message || "Unable to refresh jobs.");
+            } finally {
+                setJobsPeriodLoading(false);
+            }
         });
 
         if (addMaterialRowButton) {
@@ -4449,6 +4706,15 @@
                         const detail = notification?.message ? ` ${notification.message}` : "";
                         showSuccess(creationSuccess, `${baseSuccessMessage}${detail}`);
                     }
+                    try {
+                        await refreshJobsSummary({
+                            startDate: jobsPeriodState.startDate,
+                            endDate: jobsPeriodState.endDate,
+                            updateInputs: true,
+                        });
+                    } catch (summaryError) {
+                        console.error("Failed to refresh maintenance job metrics", summaryError);
+                    }
                     await loadJobs({ reset: true });
                 } catch (error) {
                     showError(error.message || "Unable to submit job to Maintenance Manager.");
@@ -4523,6 +4789,15 @@
                         const detail = notification?.message ? ` ${notification.message}` : "";
                         showSuccess(maintenanceSuccess, `${baseSuccessMessage}${detail}`);
                     }
+                    try {
+                        await refreshJobsSummary({
+                            startDate: jobsPeriodState.startDate,
+                            endDate: jobsPeriodState.endDate,
+                            updateInputs: true,
+                        });
+                    } catch (summaryError) {
+                        console.error("Failed to refresh maintenance job metrics", summaryError);
+                    }
                     await loadJobs({ reset: true });
                 } catch (error) {
                     showError(error.message || "Unable to submit maintenance details.");
@@ -4537,8 +4812,6 @@
         } else {
             populateJobForm(null);
         }
-
-        loadJobs({ reset: true });
 
 
         function hideIdleMessages() {
@@ -5854,7 +6127,7 @@
 
         Promise.resolve(loadAssets()).catch(() => {});
         Promise.resolve(loadMaintenanceParts()).catch(() => {});
-        Promise.resolve(loadJobs({ reset: true })).catch(() => {});
+        Promise.resolve(initializeJobsSection()).catch(() => {});
         Promise.resolve(initializeIdleAnalytics()).catch(() => {});
         Promise.resolve(loadEmployees()).catch(() => {});
         Promise.resolve(loadSuppliers()).catch(() => {});

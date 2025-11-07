@@ -15,6 +15,7 @@ from .services import (
     seed_material_defaults,
 )
 from .briquette import (
+    DEFAULT_BRIQUETTE_ENTRY_LIMIT,
     get_briquette_mix_detail,
     list_briquette_production_entries,
     update_briquette_mix,
@@ -33,6 +34,7 @@ __all__ = [
     "list_recent_mrns",
     "search_suppliers",
     "seed_material_defaults",
+    "DEFAULT_BRIQUETTE_ENTRY_LIMIT",
     "get_briquette_mix_detail",
     "list_briquette_production_entries",
     "update_briquette_mix",

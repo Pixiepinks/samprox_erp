@@ -7,6 +7,7 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 from material import (
+    DEFAULT_BRIQUETTE_ENTRY_LIMIT,
     MaterialValidationError,
     create_item,
     create_mrn,
@@ -123,9 +124,9 @@ def get_mrn(mrn_id: str):
 @bp.get("/briquette-production")
 def list_briquette_production():
     try:
-        limit = int(request.args.get("limit", 30))
+        limit = int(request.args.get("limit", DEFAULT_BRIQUETTE_ENTRY_LIMIT))
     except (TypeError, ValueError):
-        limit = 30
+        limit = DEFAULT_BRIQUETTE_ENTRY_LIMIT
     data = list_briquette_production_entries(limit=limit)
     return jsonify(data)
 

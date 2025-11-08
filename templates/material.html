@@ -763,11 +763,11 @@
                 return;
             }
             const dryFactor = Number.parseFloat(briquetteDryFactorInput.value || "0");
-            if (!Number.isFinite(dryFactor)) {
+            if (!Number.isFinite(dryFactor) || dryFactor <= 0) {
                 briquetteSawdustInput.value = "0.000";
                 return;
             }
-            const sawdustTons = Math.max(0, briquetteDryerProductionTon * dryFactor);
+            const sawdustTons = Math.max(0, briquetteDryerProductionTon / dryFactor);
             briquetteSawdustInput.value = sawdustTons.toFixed(3);
         }
 

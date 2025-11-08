@@ -427,13 +427,25 @@
             "briquettes",
         ];
 
-        const CLOSING_STOCK_COLOR_PALETTE = [
-            { background: "rgba(37, 99, 235, 0.82)", border: "rgb(37, 99, 235)" },
-            { background: "rgba(59, 130, 246, 0.82)", border: "rgb(59, 130, 246)" },
-            { background: "rgba(14, 165, 233, 0.82)", border: "rgb(14, 165, 233)" },
-            { background: "rgba(16, 185, 129, 0.82)", border: "rgb(16, 185, 129)" },
-            { background: "rgba(251, 191, 36, 0.82)", border: "rgb(251, 191, 36)" },
-            { background: "rgba(244, 114, 182, 0.82)", border: "rgb(244, 114, 182)" },
+        const CLOSING_STOCK_MATERIAL_COLORS = {
+            wood_shaving: "#8B5A2B",
+            woodshaving: "#8B5A2B",
+            "wood shaving": "#8B5A2B",
+            sawdust: "#FF8C00",
+            "saw dust": "#FF8C00",
+            saw_dust: "#FF8C00",
+            wood_powder: "#F5F5DC",
+            woodpowder: "#F5F5DC",
+            "wood powder": "#F5F5DC",
+        };
+
+        const DEFAULT_CLOSING_STOCK_COLORS = [
+            "#2563EB",
+            "#3B82F6",
+            "#0EA5E9",
+            "#0F766E",
+            "#F59E0B",
+            "#F472B6",
         ];
 
         let closingStockAsOf = null;
@@ -457,6 +469,157 @@
             backgroundColor: "rgba(148, 163, 184, 0.65)",
             borderColor: "rgb(148, 163, 184)",
         };
+
+        const clampColorChannel = (value) => Math.min(Math.max(Math.round(value), 0), 255);
+
+        const normalizeMaterialKey = (value) =>
+            typeof value === "string"
+                ? value
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "_")
+                      .replace(/^_+|_+$/g, "")
+                : typeof value === "number"
+                  ? String(value)
+                  : "";
+
+        const hexToRgb = (hex) => {
+            if (typeof hex !== "string") {
+                return null;
+            }
+
+            const normalized = hex.replace("#", "").trim();
+            if (![3, 6].includes(normalized.length) || /[^0-9a-f]/i.test(normalized)) {
+                return null;
+            }
+
+            const expanded =
+                normalized.length === 3
+                    ? normalized
+                          .split("")
+                          .map((char) => char + char)
+                          .join("")
+                    : normalized;
+            const value = Number.parseInt(expanded, 16);
+            return {
+                r: (value >> 16) & 255,
+                g: (value >> 8) & 255,
+                b: value & 255,
+            };
+        };
+
+        const rgbToRgbaString = (rgb, alpha = 1) => {
+            if (!rgb) {
+                return null;
+            }
+
+            return `rgba(${clampColorChannel(rgb.r)}, ${clampColorChannel(rgb.g)}, ${clampColorChannel(
+                rgb.b,
+            )}, ${Math.min(Math.max(alpha, 0), 1)})`;
+        };
+
+        const hexToRgbaString = (hex, alpha = 1) => {
+            const rgb = hexToRgb(hex);
+            return rgb ? rgbToRgbaString(rgb, alpha) : hex;
+        };
+
+        const adjustHexColor = (hex, amount) => {
+            const rgb = hexToRgb(hex);
+            if (!rgb) {
+                return hex;
+            }
+
+            return rgbToRgbaString(
+                {
+                    r: clampColorChannel(rgb.r + amount),
+                    g: clampColorChannel(rgb.g + amount),
+                    b: clampColorChannel(rgb.b + amount),
+                },
+                1,
+            );
+        };
+
+        const createDoughnutGradient = (canvas, hex) => {
+            if (!canvas?.getContext) {
+                return hexToRgbaString(hex);
+            }
+
+            const context = canvas.getContext("2d");
+            if (!context) {
+                return hexToRgbaString(hex);
+            }
+
+            const height = canvas.height || canvas.clientHeight || 320;
+            const gradient = context.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, adjustHexColor(hex, 45));
+            gradient.addColorStop(0.5, hexToRgbaString(hex));
+            gradient.addColorStop(1, adjustHexColor(hex, -45));
+            return gradient;
+        };
+
+        const getClosingStockBaseColor = (item, index) => {
+            const candidates = [item?.key, item?.name, item?.label];
+            for (const candidate of candidates) {
+                const normalized = normalizeMaterialKey(candidate);
+                if (normalized && CLOSING_STOCK_MATERIAL_COLORS[normalized]) {
+                    return CLOSING_STOCK_MATERIAL_COLORS[normalized];
+                }
+            }
+
+            return DEFAULT_CLOSING_STOCK_COLORS[index % DEFAULT_CLOSING_STOCK_COLORS.length];
+        };
+
+        const buildDoughnutSegmentStyles = (canvas, items) => {
+            const baseColors = items.map((item, index) => getClosingStockBaseColor(item, index));
+            return {
+                baseColors,
+                backgroundColor: baseColors.map((color) => createDoughnutGradient(canvas, color)),
+                borderColor: baseColors.map((color) => adjustHexColor(color, -60)),
+            };
+        };
+
+        const applyDoughnut3dGradients = (chart) => {
+            if (!chart?.canvas) {
+                return;
+            }
+
+            chart.data?.datasets?.forEach((dataset) => {
+                if (!Array.isArray(dataset?.$baseColors)) {
+                    return;
+                }
+
+                dataset.backgroundColor = dataset.$baseColors.map((color) =>
+                    createDoughnutGradient(chart.canvas, color),
+                );
+                dataset.borderColor = dataset.$baseColors.map((color) => adjustHexColor(color, -60));
+            });
+        };
+
+        const registerDoughnut3dPlugin = (() => {
+            let registered = false;
+            return () => {
+                if (registered || !ensureChartJsAvailable()) {
+                    return;
+                }
+
+                Chart.register({
+                    id: "doughnut3dEffect",
+                    afterUpdate: (chart) => {
+                        if (chart.config.type !== "doughnut") {
+                            return;
+                        }
+                        chart.$applyDoughnut3dGradients?.();
+                    },
+                    resize: (chart) => {
+                        if (chart.config.type !== "doughnut") {
+                            return;
+                        }
+                        chart.$applyDoughnut3dGradients?.();
+                    },
+                });
+                registered = true;
+            };
+        })();
 
         const PULSE_MACHINE_SERIES = [
             {
@@ -576,12 +739,9 @@
                 const closingBalance = Number(item?.metrics?.closing_balance ?? item?.quantity_ton ?? 0);
                 return Number.isFinite(closingBalance) ? Math.max(closingBalance, 0) : 0;
             });
-            const backgroundColor = items.map(
-                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].background,
-            );
-            const borderColor = items.map(
-                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].border,
-            );
+            registerDoughnut3dPlugin();
+
+            const segmentStyles = buildDoughnutSegmentStyles(config.canvas, items);
 
             const title = config.getTitle
                 ? config.getTitle(asOf)
@@ -593,15 +753,19 @@
             const dataset = {
                 label: "Closing stock (tons)",
                 data,
-                backgroundColor,
-                borderColor,
-                borderWidth: 1,
-                hoverOffset: 6,
+                backgroundColor: segmentStyles.backgroundColor,
+                borderColor: segmentStyles.borderColor,
+                borderWidth: 2,
+                borderAlign: "inner",
+                hoverOffset: 12,
+                offset: 6,
+                $baseColors: segmentStyles.baseColors,
             };
 
             if (config.instance) {
                 config.instance.data = { labels, datasets: [dataset] };
                 config.instance.options = options;
+                config.instance.$applyDoughnut3dGradients = () => applyDoughnut3dGradients(config.instance);
                 config.instance.update();
             } else {
                 config.instance = new Chart(config.canvas, {
@@ -609,7 +773,10 @@
                     data: { labels, datasets: [dataset] },
                     options,
                 });
+                config.instance.$applyDoughnut3dGradients = () => applyDoughnut3dGradients(config.instance);
             }
+
+            config.instance.$applyDoughnut3dGradients?.();
 
             if (closingStockChartContainer) {
                 closingStockChartContainer.hidden = false;

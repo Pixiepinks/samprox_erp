@@ -516,9 +516,16 @@
         let stockStatusChartInstance = null;
         let stockStatusChartPoints = [];
 
-        function drawCylinderSegment(ctx, element, value, options = {}) {
-            if (!ctx || !element) {
-                return;
+        function clamp(value, min, max) {
+            if (!Number.isFinite(value)) {
+                return min;
+            }
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function computeCylinderGeometry(element, value, options = {}) {
+            if (!element) {
+                return null;
             }
 
             const props = typeof element.getProps === "function"
@@ -537,27 +544,84 @@
                 width = element._model?.width;
             }
             if (!Number.isFinite(width) || width <= 0) {
-                width = 0;
+                return null;
             }
 
             const widthRatio = typeof options.widthRatio === "number" ? options.widthRatio : 1;
             const halfWidth = (width * widthRatio) / 2;
             if (!Number.isFinite(halfWidth) || halfWidth <= 0) {
-                return;
+                return null;
             }
 
             const top = Math.min(y, base);
             const bottom = Math.max(y, base);
             const height = bottom - top;
             if (!Number.isFinite(height) || height <= 0) {
-                return;
+                return null;
             }
 
             const capRatio = typeof options.capRatio === "number" ? options.capRatio : 0.3;
             const capRadius = Math.min(halfWidth, Math.max(height * capRatio, 2));
             if (!Number.isFinite(capRadius) || capRadius <= 0) {
+                return null;
+            }
+
+            const orientation = value >= 0 ? 1 : -1;
+            const headY = orientation > 0 ? top : bottom;
+            const footY = orientation > 0 ? bottom : top;
+
+            return {
+                x,
+                y,
+                base,
+                width,
+                height,
+                top,
+                bottom,
+                halfWidth,
+                capRadius,
+                orientation,
+                headY,
+                footY,
+            };
+        }
+
+        function drawRoundedRect(ctx, x, y, width, height, radius) {
+            const r = clamp(radius, 0, Math.min(width, height) / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + width - r, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+            ctx.lineTo(x + width, y + height - r);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            ctx.lineTo(x + r, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+
+        function drawCylinderSegment(ctx, element, value, options = {}, geometry = null) {
+            if (!ctx || !element) {
                 return;
             }
+
+            const geom = geometry || computeCylinderGeometry(element, value, options);
+            if (!geom) {
+                return;
+            }
+
+            const {
+                x,
+                base,
+                top,
+                bottom,
+                halfWidth,
+                capRadius,
+                orientation,
+                headY,
+                footY,
+            } = geom;
 
             const gradientStops = Array.isArray(options.gradientStops) && options.gradientStops.length
                 ? options.gradientStops
@@ -570,7 +634,7 @@
             const gradient = ctx.createLinearGradient(x - halfWidth, top, x + halfWidth, top);
             gradientStops.forEach((stop, index) => {
                 const offset = typeof stop.offset === "number"
-                    ? Math.min(Math.max(stop.offset, 0), 1)
+                    ? clamp(stop.offset, 0, 1)
                     : gradientStops.length > 1
                         ? index / (gradientStops.length - 1)
                         : 0;
@@ -583,6 +647,44 @@
             const bottomCapColor = options.bottomCapColor || lastStop.color || options.shadowColor || options.baseColor || "#94a3b8";
             const strokeColor = options.strokeColor || "rgba(15, 23, 42, 0.12)";
             const strokeWidth = typeof options.strokeWidth === "number" ? options.strokeWidth : 1;
+
+            const shadowOpacity = typeof options.shadowOpacity === "number" ? options.shadowOpacity : 0.22;
+            if (shadowOpacity > 0) {
+                const shadowOffsetX = typeof options.shadowOffsetX === "number" ? options.shadowOffsetX : 0;
+                const shadowOffsetY = typeof options.shadowOffsetY === "number"
+                    ? options.shadowOffsetY
+                    : capRadius * 0.75 * orientation;
+                const shadowWidthRatio = typeof options.shadowWidthRatio === "number"
+                    ? options.shadowWidthRatio
+                    : 1.18;
+                const shadowHeightRatio = typeof options.shadowHeightRatio === "number"
+                    ? options.shadowHeightRatio
+                    : 0.65;
+                const shadowColor = options.shadowColor || "rgba(15, 23, 42, 0.35)";
+                const shadowFadeColor = options.shadowFadeColor || "rgba(15, 23, 42, 0)";
+                const shadowX = x + shadowOffsetX;
+                const shadowY = base + shadowOffsetY;
+                const shadowRadiusX = halfWidth * shadowWidthRatio;
+                const shadowRadiusY = capRadius * shadowHeightRatio;
+
+                ctx.save();
+                const shadowGradient = ctx.createRadialGradient(
+                    shadowX,
+                    shadowY,
+                    Math.max(shadowRadiusY * 0.25, 1),
+                    shadowX,
+                    shadowY,
+                    Math.max(shadowRadiusX, shadowRadiusY),
+                );
+                shadowGradient.addColorStop(0, shadowColor);
+                shadowGradient.addColorStop(1, shadowFadeColor);
+                ctx.fillStyle = shadowGradient;
+                ctx.beginPath();
+                ctx.ellipse(shadowX, shadowY, shadowRadiusX, shadowRadiusY, 0, 0, Math.PI * 2);
+                ctx.globalAlpha = shadowOpacity;
+                ctx.fill();
+                ctx.restore();
+            }
 
             ctx.save();
             ctx.beginPath();
@@ -603,17 +705,125 @@
                 ctx.stroke();
             }
 
+            const headColor = orientation > 0 ? topCapColor : bottomCapColor;
+            const footColor = orientation > 0 ? bottomCapColor : topCapColor;
+
             ctx.beginPath();
-            ctx.ellipse(x, top, halfWidth, capRadius, 0, Math.PI, 0);
+            ctx.ellipse(
+                x,
+                headY,
+                halfWidth,
+                capRadius,
+                0,
+                orientation > 0 ? Math.PI : 0,
+                orientation > 0 ? 0 : Math.PI,
+            );
             ctx.closePath();
-            ctx.fillStyle = topCapColor;
+            ctx.fillStyle = headColor;
             ctx.fill();
 
             ctx.beginPath();
-            ctx.ellipse(x, bottom, halfWidth, capRadius, 0, 0, Math.PI);
+            ctx.ellipse(
+                x,
+                footY,
+                halfWidth,
+                capRadius,
+                0,
+                orientation > 0 ? 0 : Math.PI,
+                orientation > 0 ? Math.PI : 0,
+            );
             ctx.closePath();
-            ctx.fillStyle = bottomCapColor;
+            ctx.fillStyle = footColor;
             ctx.fill();
+
+            const glossIntensity = typeof options.glossIntensity === "number" ? options.glossIntensity : 0.45;
+            const highlightWidthRatio = typeof options.highlightWidthRatio === "number"
+                ? options.highlightWidthRatio
+                : 0.42;
+            if (glossIntensity > 0 && highlightWidthRatio > 0) {
+                const highlightHalfWidth = halfWidth * clamp(highlightWidthRatio, 0.1, 0.95);
+                const highlightTop = top + capRadius * 0.25;
+                const highlightBottom = bottom - capRadius * 0.2;
+                ctx.beginPath();
+                ctx.moveTo(x - highlightHalfWidth, highlightTop);
+                ctx.lineTo(x - highlightHalfWidth, highlightBottom);
+                ctx.quadraticCurveTo(x - highlightHalfWidth, bottom, x, bottom);
+                ctx.quadraticCurveTo(x + highlightHalfWidth, bottom, x + highlightHalfWidth, highlightBottom);
+                ctx.lineTo(x + highlightHalfWidth, highlightTop);
+                ctx.quadraticCurveTo(x + highlightHalfWidth, top, x, top);
+                ctx.quadraticCurveTo(x - highlightHalfWidth, top, x - highlightHalfWidth, highlightTop);
+                ctx.closePath();
+
+                const highlightGradient = ctx.createLinearGradient(
+                    x - highlightHalfWidth,
+                    top,
+                    x + highlightHalfWidth,
+                    top,
+                );
+                highlightGradient.addColorStop(0, "rgba(255, 255, 255, 0)");
+                highlightGradient.addColorStop(0.5, options.highlightColor || "rgba(255, 255, 255, 0.9)");
+                highlightGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+                ctx.fillStyle = highlightGradient;
+                ctx.globalAlpha = glossIntensity;
+                ctx.fill();
+            }
+
+            const topGlossIntensity = typeof options.topGlossIntensity === "number"
+                ? options.topGlossIntensity
+                : 0.65;
+            if (topGlossIntensity > 0) {
+                ctx.beginPath();
+                ctx.ellipse(
+                    x,
+                    headY,
+                    halfWidth,
+                    capRadius,
+                    0,
+                    orientation > 0 ? Math.PI : 0,
+                    orientation > 0 ? 0 : Math.PI,
+                );
+                ctx.closePath();
+                const highlightY = headY - orientation * capRadius * 0.55;
+                const radialGradient = ctx.createRadialGradient(
+                    x,
+                    highlightY,
+                    Math.max(capRadius * 0.15, 1),
+                    x,
+                    headY,
+                    Math.max(capRadius, halfWidth),
+                );
+                radialGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+                radialGradient.addColorStop(0.6, "rgba(255, 255, 255, 0.15)");
+                radialGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+                ctx.fillStyle = radialGradient;
+                ctx.globalAlpha = topGlossIntensity;
+                ctx.fill();
+            }
+
+            const rimShadowIntensity = typeof options.rimShadowIntensity === "number"
+                ? options.rimShadowIntensity
+                : 0.35;
+            if (rimShadowIntensity > 0) {
+                const rimGradient = ctx.createLinearGradient(x, footY - capRadius, x, footY + capRadius);
+                rimGradient.addColorStop(0, "rgba(15, 23, 42, 0)");
+                rimGradient.addColorStop(0.5, `rgba(15, 23, 42, ${rimShadowIntensity})`);
+                rimGradient.addColorStop(1, "rgba(15, 23, 42, 0)");
+                ctx.beginPath();
+                ctx.ellipse(
+                    x,
+                    footY,
+                    halfWidth,
+                    capRadius,
+                    0,
+                    orientation > 0 ? 0 : Math.PI,
+                    orientation > 0 ? Math.PI : 0,
+                );
+                ctx.closePath();
+                ctx.fillStyle = rimGradient;
+                ctx.globalAlpha = 1;
+                ctx.fill();
+            }
+
             ctx.restore();
         }
 
@@ -626,6 +836,7 @@
 
                 const ctx = chart.ctx;
                 const defaults = pluginOptions?.defaults || {};
+                const pluginValueLabelDefaults = pluginOptions?.valueLabel || {};
 
                 chart.data.datasets.forEach((dataset, datasetIndex) => {
                     const meta = chart.getDatasetMeta(datasetIndex);
@@ -646,7 +857,88 @@
                             ...(dataset.cylinder || {}),
                         };
 
-                        drawCylinderSegment(ctx, element, value, options);
+                        const geometry = computeCylinderGeometry(element, value, options);
+                        drawCylinderSegment(ctx, element, value, options, geometry);
+
+                        let valueLabelOptions = null;
+                        if (pluginValueLabelDefaults && pluginValueLabelDefaults !== true) {
+                            valueLabelOptions = { ...pluginValueLabelDefaults };
+                            if (valueLabelOptions.enabled === false) {
+                                valueLabelOptions = null;
+                            }
+                        }
+
+                        if (dataset.valueLabel) {
+                            if (dataset.valueLabel.enabled === false) {
+                                valueLabelOptions = null;
+                            } else {
+                                valueLabelOptions = {
+                                    ...(valueLabelOptions || {}),
+                                    ...dataset.valueLabel,
+                                    enabled: true,
+                                };
+                            }
+                        }
+
+                        if (valueLabelOptions?.enabled && geometry) {
+                            const formatter = typeof valueLabelOptions.formatter === "function"
+                                ? valueLabelOptions.formatter
+                                : (raw) => formatChartTons(Math.abs(raw));
+                            const labelText = formatter(value, {
+                                chart,
+                                dataset,
+                                datasetIndex,
+                                dataIndex,
+                                geometry,
+                            });
+
+                            if (labelText) {
+                                const fontFamily = valueLabelOptions.fontFamily
+                                    || "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+                                const fontWeight = valueLabelOptions.fontWeight || "600";
+                                const fontSize = valueLabelOptions.fontSize || 12;
+                                const paddingX = valueLabelOptions.paddingX ?? 8;
+                                const paddingY = valueLabelOptions.paddingY ?? 4;
+                                const borderRadius = valueLabelOptions.borderRadius ?? 6;
+                                const offset = valueLabelOptions.offset ?? 16;
+                                const textColor = valueLabelOptions.color || "#0f172a";
+                                const backgroundColor = valueLabelOptions.backgroundColor;
+                                const borderColor = valueLabelOptions.borderColor || "rgba(15, 23, 42, 0.08)";
+                                const borderWidth = valueLabelOptions.borderWidth ?? 1;
+
+                                ctx.save();
+                                ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+                                ctx.textAlign = "center";
+                                ctx.textBaseline = "middle";
+
+                                const textMetrics = ctx.measureText(labelText);
+                                const boxWidth = textMetrics.width + paddingX * 2;
+                                const boxHeight = fontSize + paddingY * 2;
+                                const targetY = geometry.headY;
+                                const labelY = geometry.orientation > 0
+                                    ? targetY - offset
+                                    : targetY + offset;
+                                const labelX = geometry.x;
+                                const boxX = labelX - boxWidth / 2;
+                                const boxY = labelY - boxHeight / 2;
+
+                                if (backgroundColor) {
+                                    ctx.fillStyle = backgroundColor;
+                                    drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, borderRadius);
+                                    ctx.fill();
+
+                                    if (borderWidth > 0 && borderColor) {
+                                        ctx.lineWidth = borderWidth;
+                                        ctx.strokeStyle = borderColor;
+                                        ctx.stroke();
+                                    }
+                                }
+
+                                ctx.fillStyle = textColor;
+                                ctx.fillText(labelText, labelX, labelY);
+                                ctx.restore();
+                            }
+                        }
                     });
                 });
 
@@ -804,17 +1096,29 @@
                     grouped: false,
                     order: 0,
                     cylinder: {
-                        widthRatio: 0.85,
+                        widthRatio: 0.82,
                         capRatio: 0.28,
                         gradientStops: [
-                            { offset: 0, color: "rgba(226, 232, 240, 0.95)" },
-                            { offset: 0.45, color: "rgba(203, 213, 225, 0.95)" },
-                            { offset: 1, color: "rgba(148, 163, 184, 0.95)" },
+                            { offset: 0, color: "rgba(191, 219, 254, 0.95)" },
+                            { offset: 0.25, color: "rgba(147, 197, 253, 0.98)" },
+                            { offset: 0.55, color: "rgba(96, 165, 250, 0.98)" },
+                            { offset: 0.85, color: "rgba(59, 130, 246, 0.98)" },
+                            { offset: 1, color: "rgba(30, 64, 175, 0.98)" },
                         ],
-                        topCapColor: "rgba(226, 232, 240, 0.95)",
-                        bottomCapColor: "rgba(148, 163, 184, 0.95)",
-                        strokeColor: "rgba(71, 85, 105, 0.25)",
+                        topCapColor: "rgba(191, 219, 254, 0.98)",
+                        bottomCapColor: "rgba(30, 64, 175, 0.98)",
+                        strokeColor: "rgba(30, 64, 175, 0.28)",
                         strokeWidth: 1,
+                        shadowOpacity: 0.24,
+                        shadowColor: "rgba(30, 58, 138, 0.45)",
+                        shadowFadeColor: "rgba(30, 64, 175, 0)",
+                        shadowWidthRatio: 1.25,
+                        shadowHeightRatio: 0.58,
+                        glossIntensity: 0.35,
+                        highlightWidthRatio: 0.4,
+                        topGlossIntensity: 0.6,
+                        rimShadowIntensity: 0.28,
+                        highlightColor: "rgba(255, 255, 255, 0.85)",
                     },
                 },
                 {
@@ -825,18 +1129,47 @@
                     borderWidth: 0,
                     grouped: false,
                     order: 1,
+                    valueLabel: {
+                        enabled: true,
+                        formatter(value, context) {
+                            const index = context?.dataIndex;
+                            const point = typeof index === "number" ? stockStatusChartPoints[index] : null;
+                            const tons = formatChartTons(Math.abs(value));
+                            return point?.label ? `${point.label}: ${tons} t` : `${tons} t`;
+                        },
+                        backgroundColor: "rgba(254, 243, 199, 0.95)",
+                        color: "rgba(113, 63, 18, 0.95)",
+                        borderColor: "rgba(217, 119, 6, 0.35)",
+                        borderWidth: 1,
+                        offset: 24,
+                        paddingX: 10,
+                        paddingY: 4,
+                        fontSize: 12,
+                    },
                     cylinder: {
                         widthRatio: 0.6,
-                        capRatio: 0.3,
+                        capRatio: 0.32,
                         gradientStops: [
-                            { offset: 0, color: "rgba(253, 230, 138, 0.95)" },
-                            { offset: 0.5, color: "rgba(250, 204, 21, 0.95)" },
-                            { offset: 1, color: "rgba(217, 119, 6, 0.95)" },
+                            { offset: 0, color: "rgba(254, 249, 195, 0.98)" },
+                            { offset: 0.22, color: "rgba(253, 224, 71, 0.98)" },
+                            { offset: 0.55, color: "rgba(251, 191, 36, 0.98)" },
+                            { offset: 0.82, color: "rgba(217, 119, 6, 0.98)" },
+                            { offset: 1, color: "rgba(120, 53, 15, 0.98)" },
                         ],
-                        topCapColor: "rgba(253, 224, 71, 0.95)",
-                        bottomCapColor: "rgba(180, 83, 9, 0.95)",
-                        strokeColor: "rgba(120, 53, 15, 0.28)",
+                        topCapColor: "rgba(254, 243, 199, 0.98)",
+                        bottomCapColor: "rgba(120, 53, 15, 0.98)",
+                        strokeColor: "rgba(124, 45, 18, 0.32)",
                         strokeWidth: 1,
+                        shadowOpacity: 0.28,
+                        shadowColor: "rgba(124, 45, 18, 0.4)",
+                        shadowFadeColor: "rgba(124, 45, 18, 0)",
+                        shadowWidthRatio: 1.18,
+                        shadowHeightRatio: 0.6,
+                        glossIntensity: 0.55,
+                        highlightWidthRatio: 0.38,
+                        highlightColor: "rgba(255, 255, 255, 0.95)",
+                        topGlossIntensity: 0.8,
+                        rimShadowIntensity: 0.32,
                     },
                 },
                 {
@@ -847,18 +1180,47 @@
                     borderWidth: 0,
                     grouped: false,
                     order: 2,
+                    valueLabel: {
+                        enabled: true,
+                        formatter(value, context) {
+                            const index = context?.dataIndex;
+                            const point = typeof index === "number" ? stockStatusChartPoints[index] : null;
+                            const tons = formatChartTons(Math.abs(value));
+                            return point?.impactLabel ? `${point.impactLabel} ${tons} t` : `${tons} t`;
+                        },
+                        backgroundColor: "rgba(248, 113, 113, 0.92)",
+                        color: "#fff",
+                        borderColor: "rgba(127, 29, 29, 0.4)",
+                        borderWidth: 1,
+                        offset: 28,
+                        paddingX: 10,
+                        paddingY: 4,
+                        fontSize: 12,
+                    },
                     cylinder: {
-                        widthRatio: 0.45,
-                        capRatio: 0.32,
+                        widthRatio: 0.48,
+                        capRatio: 0.34,
                         gradientStops: [
-                            { offset: 0, color: "rgba(252, 165, 165, 0.92)" },
-                            { offset: 0.45, color: "rgba(248, 113, 113, 0.95)" },
-                            { offset: 1, color: "rgba(185, 28, 28, 0.95)" },
+                            { offset: 0, color: "rgba(254, 202, 202, 0.95)" },
+                            { offset: 0.25, color: "rgba(252, 165, 165, 0.97)" },
+                            { offset: 0.55, color: "rgba(248, 113, 113, 0.98)" },
+                            { offset: 0.82, color: "rgba(220, 38, 38, 0.98)" },
+                            { offset: 1, color: "rgba(153, 27, 27, 0.98)" },
                         ],
-                        topCapColor: "rgba(248, 113, 113, 0.95)",
-                        bottomCapColor: "rgba(153, 27, 27, 0.95)",
+                        topCapColor: "rgba(254, 202, 202, 0.98)",
+                        bottomCapColor: "rgba(153, 27, 27, 0.98)",
                         strokeColor: "rgba(127, 29, 29, 0.3)",
                         strokeWidth: 1,
+                        shadowOpacity: 0.24,
+                        shadowColor: "rgba(127, 29, 29, 0.38)",
+                        shadowFadeColor: "rgba(127, 29, 29, 0)",
+                        shadowWidthRatio: 1.1,
+                        shadowHeightRatio: 0.58,
+                        glossIntensity: 0.48,
+                        highlightWidthRatio: 0.36,
+                        highlightColor: "rgba(255, 255, 255, 0.9)",
+                        topGlossIntensity: 0.7,
+                        rimShadowIntensity: 0.34,
                     },
                 },
             ];
@@ -873,6 +1235,20 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     clip: false,
+                    animation: {
+                        duration: 900,
+                        easing: "easeOutCubic",
+                    },
+                    animations: {
+                        x: {
+                            duration: 650,
+                            easing: "easeOutCubic",
+                        },
+                        y: {
+                            duration: 900,
+                            easing: "easeOutCubic",
+                        },
+                    },
                     layout: {
                         padding: {
                             top: 16,
@@ -982,6 +1358,15 @@
                         cylinderBarPlugin: {
                             zeroLineColor: "rgba(37, 99, 235, 0.6)",
                             zeroLineWidth: 1.5,
+                            valueLabel: {
+                                fontFamily:
+                                    "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                fontWeight: "600",
+                                borderRadius: 8,
+                                paddingX: 8,
+                                paddingY: 4,
+                                color: "#0f172a",
+                            },
                         },
                     },
                     interaction: {

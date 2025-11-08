@@ -52,13 +52,40 @@
                 </header>
                 <div class="production-chart__body">
                     <div class="production-chart__summary" id="closing-stock-summary" aria-live="polite"></div>
-                    <div class="production-chart__canvas" id="closing-stock-chart-container" hidden>
-                        <canvas
-                            id="closing-stock-chart"
-                            height="320"
-                            aria-label="Closing stock distribution doughnut chart"
-                            role="img"
-                        ></canvas>
+                    <div class="closing-stock__charts" id="closing-stock-chart-container" hidden>
+                        <div class="closing-stock__chart" id="closing-stock-chart-primary">
+                            <div class="production-chart__canvas" id="closing-stock-chart-wrapper">
+                                <canvas
+                                    id="closing-stock-chart"
+                                    height="320"
+                                    aria-label="Closing stock distribution doughnut chart"
+                                    role="img"
+                                ></canvas>
+                            </div>
+                            <p class="closing-stock__chart-message" id="closing-stock-chart-message" role="status" hidden></p>
+                        </div>
+                        <div class="closing-stock__chart" id="closing-stock-chart-previous-day">
+                            <div class="production-chart__canvas" id="closing-stock-previous-day-chart-wrapper">
+                                <canvas
+                                    id="closing-stock-previous-day-chart"
+                                    height="320"
+                                    aria-label="Previous day closing stock distribution doughnut chart"
+                                    role="img"
+                                ></canvas>
+                            </div>
+                            <p class="closing-stock__chart-message" id="closing-stock-previous-day-message" role="status" hidden></p>
+                        </div>
+                        <div class="closing-stock__chart" id="closing-stock-chart-last-month">
+                            <div class="production-chart__canvas" id="closing-stock-last-month-chart-wrapper">
+                                <canvas
+                                    id="closing-stock-last-month-chart"
+                                    height="320"
+                                    aria-label="Last month closing stock distribution doughnut chart"
+                                    role="img"
+                                ></canvas>
+                            </div>
+                            <p class="closing-stock__chart-message" id="closing-stock-last-month-message" role="status" hidden></p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -252,6 +279,18 @@
         const closingStockSummaryContainer = document.getElementById("closing-stock-summary");
         const closingStockChartCanvas = document.getElementById("closing-stock-chart");
         const closingStockChartContainer = document.getElementById("closing-stock-chart-container");
+        const closingStockChartWrapper = document.getElementById("closing-stock-chart-wrapper");
+        const closingStockPreviousDayChartCanvas = document.getElementById("closing-stock-previous-day-chart");
+        const closingStockPreviousDayChartWrapper = document.getElementById(
+            "closing-stock-previous-day-chart-wrapper",
+        );
+        const closingStockLastMonthChartCanvas = document.getElementById("closing-stock-last-month-chart");
+        const closingStockLastMonthChartWrapper = document.getElementById(
+            "closing-stock-last-month-chart-wrapper",
+        );
+        const closingStockChartMessage = document.getElementById("closing-stock-chart-message");
+        const closingStockPreviousDayMessage = document.getElementById("closing-stock-previous-day-message");
+        const closingStockLastMonthMessage = document.getElementById("closing-stock-last-month-message");
         const closingStockDateInput = document.getElementById("closing-stock-date");
 
         const authHeaders = {
@@ -291,6 +330,46 @@
 
         const ensureChartJsAvailable = () => typeof Chart !== "undefined";
 
+        const toIsoDate = (date) => {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                return null;
+            }
+
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            return `${date.getFullYear()}-${month}-${day}`;
+        };
+
+        const getPreviousDayIso = (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+
+            date.setDate(date.getDate() - 1);
+            return toIsoDate(date);
+        };
+
+        const getLastDayOfPreviousMonthIso = (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+
+            date.setDate(1);
+            date.setHours(0, 0, 0, 0);
+            date.setMonth(date.getMonth(), 0);
+            return toIsoDate(date);
+        };
+
         const formatIsoDateLabel = (value) => {
             if (!value) {
                 return "";
@@ -304,6 +383,39 @@
                 month: "short",
                 day: "numeric",
             });
+        };
+
+        const closingStockCharts = {
+            today: {
+                canvas: closingStockChartCanvas,
+                wrapper: closingStockChartWrapper,
+                message: closingStockChartMessage,
+                instance: null,
+                getTitle: (asOf) =>
+                    asOf
+                        ? `Closing stock as of ${formatIsoDateLabel(asOf) || asOf}`
+                        : "Closing stock distribution",
+            },
+            previousDay: {
+                canvas: closingStockPreviousDayChartCanvas,
+                wrapper: closingStockPreviousDayChartWrapper,
+                message: closingStockPreviousDayMessage,
+                instance: null,
+                getTitle: (asOf) =>
+                    asOf
+                        ? `Closing stock on ${formatIsoDateLabel(asOf) || asOf}`
+                        : "Previous day closing stock",
+            },
+            lastMonth: {
+                canvas: closingStockLastMonthChartCanvas,
+                wrapper: closingStockLastMonthChartWrapper,
+                message: closingStockLastMonthMessage,
+                instance: null,
+                getTitle: (asOf) =>
+                    asOf
+                        ? `Closing stock on ${formatIsoDateLabel(asOf) || asOf}`
+                        : "Last month closing stock",
+            },
         };
 
         const CLOSING_STOCK_KEYS = [
@@ -324,7 +436,6 @@
             { background: "rgba(244, 114, 182, 0.82)", border: "rgb(244, 114, 182)" },
         ];
 
-        let closingStockChartInstance = null;
         let closingStockAsOf = null;
 
         const MACHINE_SERIES = [
@@ -423,11 +534,105 @@
             `;
         };
 
+        const showClosingStockChartMessage = (config, message) => {
+            if (!config) {
+                return;
+            }
+
+            if (config.instance) {
+                config.instance.destroy();
+                config.instance = null;
+            }
+
+            if (config.wrapper) {
+                config.wrapper.hidden = true;
+            }
+
+            if (config.message) {
+                config.message.textContent = message;
+                config.message.hidden = false;
+            }
+
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = false;
+            }
+        };
+
+        const showClosingStockChartData = (config, items, asOf) => {
+            if (!config?.canvas || !ensureChartJsAvailable()) {
+                return;
+            }
+
+            if (config.message) {
+                config.message.hidden = true;
+            }
+
+            if (config.wrapper) {
+                config.wrapper.hidden = false;
+            }
+
+            const labels = items.map((item) => item?.label || item?.name || item?.key || "—");
+            const data = items.map((item) => {
+                const closingBalance = Number(item?.metrics?.closing_balance ?? item?.quantity_ton ?? 0);
+                return Number.isFinite(closingBalance) ? Math.max(closingBalance, 0) : 0;
+            });
+            const backgroundColor = items.map(
+                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].background,
+            );
+            const borderColor = items.map(
+                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].border,
+            );
+
+            const title = config.getTitle
+                ? config.getTitle(asOf)
+                : asOf
+                  ? `Closing stock as of ${formatIsoDateLabel(asOf) || asOf}`
+                  : "Closing stock distribution";
+            const options = buildClosingStockChartOptions(title);
+
+            const dataset = {
+                label: "Closing stock (tons)",
+                data,
+                backgroundColor,
+                borderColor,
+                borderWidth: 1,
+                hoverOffset: 6,
+            };
+
+            if (config.instance) {
+                config.instance.data = { labels, datasets: [dataset] };
+                config.instance.options = options;
+                config.instance.update();
+            } else {
+                config.instance = new Chart(config.canvas, {
+                    type: "doughnut",
+                    data: { labels, datasets: [dataset] },
+                    options,
+                });
+            }
+
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = false;
+            }
+        };
+
         const showClosingStockLoading = () => {
             setClosingStockSummaryMessage("Closing stock", "Loading…");
             if (closingStockChartContainer) {
                 closingStockChartContainer.hidden = true;
             }
+            Object.values(closingStockCharts).forEach((chart) => {
+                if (chart.instance) {
+                    chart.instance.destroy();
+                    chart.instance = null;
+                }
+                if (chart.wrapper) {
+                    chart.wrapper.hidden = true;
+                }
+                if (chart.message) {
+                    chart.message.hidden = true;
+                }
+            });
         };
 
         const showClosingStockError = (message) => {
@@ -435,10 +640,18 @@
             if (closingStockChartContainer) {
                 closingStockChartContainer.hidden = true;
             }
-            if (closingStockChartInstance) {
-                closingStockChartInstance.destroy();
-                closingStockChartInstance = null;
-            }
+            Object.values(closingStockCharts).forEach((chart) => {
+                if (chart.instance) {
+                    chart.instance.destroy();
+                    chart.instance = null;
+                }
+                if (chart.wrapper) {
+                    chart.wrapper.hidden = true;
+                }
+                if (chart.message) {
+                    chart.message.hidden = true;
+                }
+            });
         };
 
         const renderClosingStockSummary = (items) => {
@@ -546,51 +759,12 @@
         });
 
         const renderClosingStockChart = (items, asOf) => {
-            if (!closingStockChartCanvas || !ensureChartJsAvailable()) {
+            if (!Array.isArray(items) || !items.length) {
+                showClosingStockChartMessage(closingStockCharts.today, "No closing stock data available.");
                 return;
             }
 
-            const labels = items.map((item) => item?.label || item?.name || item?.key || "—");
-            const data = items.map((item) => {
-                const closingBalance = Number(item?.metrics?.closing_balance ?? item?.quantity_ton ?? 0);
-                return Number.isFinite(closingBalance) ? Math.max(closingBalance, 0) : 0;
-            });
-            const backgroundColor = items.map(
-                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].background,
-            );
-            const borderColor = items.map(
-                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].border,
-            );
-
-            const title = asOf
-                ? `Closing stock as of ${formatIsoDateLabel(asOf) || asOf}`
-                : "Closing stock distribution";
-            const options = buildClosingStockChartOptions(title);
-
-            const dataset = {
-                label: "Closing stock (tons)",
-                data,
-                backgroundColor,
-                borderColor,
-                borderWidth: 1,
-                hoverOffset: 6,
-            };
-
-            if (closingStockChartInstance) {
-                closingStockChartInstance.data = { labels, datasets: [dataset] };
-                closingStockChartInstance.options = options;
-                closingStockChartInstance.update();
-            } else {
-                closingStockChartInstance = new Chart(closingStockChartCanvas, {
-                    type: "doughnut",
-                    data: { labels, datasets: [dataset] },
-                    options,
-                });
-            }
-
-            if (closingStockChartContainer) {
-                closingStockChartContainer.hidden = false;
-            }
+            showClosingStockChartData(closingStockCharts.today, items, asOf);
         };
 
         const fetchClosingStockStatus = async (asOf) => {
@@ -643,10 +817,69 @@
                 if (closingStockDateInput && closingStockAsOf) {
                     closingStockDateInput.value = closingStockAsOf;
                 }
+
+                loadClosingStockComparisons(closingStockAsOf);
             } catch (error) {
                 console.error(error);
                 showClosingStockError("Unable to load closing stock right now.");
             }
+        };
+
+        const loadClosingStockComparisons = async (baseDate) => {
+            const comparisons = [
+                {
+                    config: closingStockCharts.previousDay,
+                    asOf: getPreviousDayIso(baseDate),
+                    emptyMessage: "No closing stock data available for the previous day.",
+                },
+                {
+                    config: closingStockCharts.lastMonth,
+                    asOf: getLastDayOfPreviousMonthIso(baseDate),
+                    emptyMessage: "No closing stock data available for the last month.",
+                },
+            ];
+
+            comparisons.forEach(({ config, asOf }) => {
+                if (!config) {
+                    return;
+                }
+
+                if (!asOf) {
+                    showClosingStockChartMessage(config, "Select a day to view this comparison.");
+                    return;
+                }
+
+                showClosingStockChartMessage(config, "Loading…");
+            });
+
+            await Promise.all(
+                comparisons.map(async ({ config, asOf, emptyMessage }) => {
+                    if (!config || !asOf) {
+                        return;
+                    }
+
+                    try {
+                        const data = await fetchClosingStockStatus(asOf);
+                        if (!data) {
+                            showClosingStockChartMessage(config, "Unable to load closing stock right now.");
+                            return;
+                        }
+
+                        const items = Array.isArray(data.items) ? data.items : [];
+                        const relevantItems = items.filter((item) => CLOSING_STOCK_KEYS.includes(item?.key));
+
+                        if (!relevantItems.length) {
+                            showClosingStockChartMessage(config, emptyMessage);
+                            return;
+                        }
+
+                        showClosingStockChartData(config, relevantItems, data.as_of || asOf);
+                    } catch (error) {
+                        console.error(error);
+                        showClosingStockChartMessage(config, "Unable to load closing stock right now.");
+                    }
+                }),
+            );
         };
 
         const initializeClosingStockDateInput = () => {

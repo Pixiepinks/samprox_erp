@@ -92,6 +92,14 @@
                         />
                     </div>
                 </div>
+                <div class="stock-status-card__chart" id="stock-status-chart-container" hidden>
+                    <canvas
+                        id="stock-status-chart"
+                        height="320"
+                        aria-label="Stock status cylinder chart"
+                        role="img"
+                    ></canvas>
+                </div>
                 <p class="empty-state" id="stock-status-empty">Loading stock status…</p>
                 <div class="table-wrapper" id="stock-status-table-wrapper" hidden>
                     <table class="data-table" id="stock-status-table">
@@ -366,6 +374,7 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -410,6 +419,8 @@
         const stockStatusTableWrapper = document.getElementById("stock-status-table-wrapper");
         const stockStatusEmptyState = document.getElementById("stock-status-empty");
         const stockStatusDateInput = document.getElementById("stock-status-date");
+        const stockStatusChartContainer = document.getElementById("stock-status-chart-container");
+        const stockStatusChartCanvas = document.getElementById("stock-status-chart");
         const supplierTableBody = document.getElementById("supplier-table-body");
         const supplierTableWrapper = document.getElementById("supplier-table-wrapper");
         const supplierEmptyState = document.getElementById("supplier-empty-state");
@@ -467,6 +478,202 @@
             });
         }
 
+        const chartTonFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        });
+
+        const chartCurrencyFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        });
+
+        function formatChartTons(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) {
+                return "0";
+            }
+            return chartTonFormatter.format(numeric);
+        }
+
+        function formatChartCurrency(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) {
+                return null;
+            }
+            return chartCurrencyFormatter.format(numeric);
+        }
+
+        const STOCK_STATUS_CHART_KEYS = [
+            "sawdust",
+            "wood_shaving",
+            "wood_powder",
+            "peanut_husk",
+            "fire_cut",
+            "briquettes",
+        ];
+
+        let stockStatusChartInstance = null;
+        let stockStatusChartPoints = [];
+
+        function drawCylinderSegment(ctx, element, value, options = {}) {
+            if (!ctx || !element) {
+                return;
+            }
+
+            const props = typeof element.getProps === "function"
+                ? element.getProps(["x", "y", "base", "width", "height"], true)
+                : {};
+
+            const x = Number.isFinite(props.x) ? props.x : element.x || 0;
+            const y = Number.isFinite(props.y) ? props.y : element.y || 0;
+            const base = Number.isFinite(props.base) ? props.base : element.base || 0;
+
+            let width = Number.isFinite(props.width) ? props.width : element.width;
+            if (!Number.isFinite(width) || width <= 0) {
+                width = props.height;
+            }
+            if (!Number.isFinite(width) || width <= 0) {
+                width = element._model?.width;
+            }
+            if (!Number.isFinite(width) || width <= 0) {
+                width = 0;
+            }
+
+            const widthRatio = typeof options.widthRatio === "number" ? options.widthRatio : 1;
+            const halfWidth = (width * widthRatio) / 2;
+            if (!Number.isFinite(halfWidth) || halfWidth <= 0) {
+                return;
+            }
+
+            const top = Math.min(y, base);
+            const bottom = Math.max(y, base);
+            const height = bottom - top;
+            if (!Number.isFinite(height) || height <= 0) {
+                return;
+            }
+
+            const capRatio = typeof options.capRatio === "number" ? options.capRatio : 0.3;
+            const capRadius = Math.min(halfWidth, Math.max(height * capRatio, 2));
+            if (!Number.isFinite(capRadius) || capRadius <= 0) {
+                return;
+            }
+
+            const gradientStops = Array.isArray(options.gradientStops) && options.gradientStops.length
+                ? options.gradientStops
+                : [
+                      { offset: 0, color: options.lightColor || "#f8fafc" },
+                      { offset: 0.5, color: options.baseColor || "#cbd5f5" },
+                      { offset: 1, color: options.shadowColor || "#94a3b8" },
+                  ];
+
+            const gradient = ctx.createLinearGradient(x - halfWidth, top, x + halfWidth, top);
+            gradientStops.forEach((stop, index) => {
+                const offset = typeof stop.offset === "number"
+                    ? Math.min(Math.max(stop.offset, 0), 1)
+                    : gradientStops.length > 1
+                        ? index / (gradientStops.length - 1)
+                        : 0;
+                gradient.addColorStop(offset, stop.color || options.baseColor || "#94a3b8");
+            });
+
+            const firstStop = gradientStops[0] || {};
+            const lastStop = gradientStops[gradientStops.length - 1] || {};
+            const topCapColor = options.topCapColor || firstStop.color || options.lightColor || "#f8fafc";
+            const bottomCapColor = options.bottomCapColor || lastStop.color || options.shadowColor || options.baseColor || "#94a3b8";
+            const strokeColor = options.strokeColor || "rgba(15, 23, 42, 0.12)";
+            const strokeWidth = typeof options.strokeWidth === "number" ? options.strokeWidth : 1;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x - halfWidth, top + capRadius);
+            ctx.lineTo(x - halfWidth, bottom - capRadius);
+            ctx.quadraticCurveTo(x - halfWidth, bottom, x, bottom);
+            ctx.quadraticCurveTo(x + halfWidth, bottom, x + halfWidth, bottom - capRadius);
+            ctx.lineTo(x + halfWidth, top + capRadius);
+            ctx.quadraticCurveTo(x + halfWidth, top, x, top);
+            ctx.quadraticCurveTo(x - halfWidth, top, x - halfWidth, top + capRadius);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            if (strokeWidth > 0) {
+                ctx.lineWidth = strokeWidth;
+                ctx.strokeStyle = strokeColor;
+                ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.ellipse(x, top, halfWidth, capRadius, 0, Math.PI, 0);
+            ctx.closePath();
+            ctx.fillStyle = topCapColor;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(x, bottom, halfWidth, capRadius, 0, 0, Math.PI);
+            ctx.closePath();
+            ctx.fillStyle = bottomCapColor;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        const cylinderBarPlugin = {
+            id: "cylinderBarPlugin",
+            afterDatasetsDraw(chart, _args, pluginOptions) {
+                if (!chart || !chart.ctx) {
+                    return;
+                }
+
+                const ctx = chart.ctx;
+                const defaults = pluginOptions?.defaults || {};
+
+                chart.data.datasets.forEach((dataset, datasetIndex) => {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    if (!meta || meta.hidden || dataset.hidden) {
+                        return;
+                    }
+
+                    meta.data.forEach((element, dataIndex) => {
+                        const value = Array.isArray(dataset.data)
+                            ? dataset.data[dataIndex]
+                            : null;
+                        if (!Number.isFinite(value)) {
+                            return;
+                        }
+
+                        const options = {
+                            ...defaults,
+                            ...(dataset.cylinder || {}),
+                        };
+
+                        drawCylinderSegment(ctx, element, value, options);
+                    });
+                });
+
+                if (pluginOptions?.drawZeroLine === false) {
+                    return;
+                }
+
+                const yScale = chart.scales?.y;
+                if (!yScale) {
+                    return;
+                }
+                const zeroPixel = yScale.getPixelForValue(0);
+                if (!Number.isFinite(zeroPixel)) {
+                    return;
+                }
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(chart.chartArea.left, zeroPixel);
+                ctx.lineTo(chart.chartArea.right, zeroPixel);
+                ctx.lineWidth = pluginOptions?.zeroLineWidth || 1.5;
+                ctx.strokeStyle = pluginOptions?.zeroLineColor || "rgba(37, 99, 235, 0.6)";
+                ctx.stroke();
+                ctx.restore();
+            },
+        };
+
         function isoToday() {
             const today = new Date();
             const month = String(today.getMonth() + 1).padStart(2, "0");
@@ -485,6 +692,7 @@
                 stockStatusTableWrapper.hidden = true;
                 stockStatusEmptyState.hidden = false;
                 stockStatusEmptyState.textContent = "No stock data available for the selected date.";
+                renderStockStatusChart([]);
                 return;
             }
 
@@ -517,6 +725,285 @@
             stockStatusTableWrapper.hidden = false;
         }
 
+        function renderStockStatusChart(items) {
+            if (!stockStatusChartCanvas) {
+                return;
+            }
+
+            const relevantItems = Array.isArray(items)
+                ? items.filter((item) => STOCK_STATUS_CHART_KEYS.includes(item.key))
+                : [];
+
+            if (relevantItems.length === 0) {
+                if (stockStatusChartInstance) {
+                    stockStatusChartInstance.destroy();
+                    stockStatusChartInstance = null;
+                }
+                stockStatusChartPoints = [];
+                if (stockStatusChartContainer) {
+                    stockStatusChartContainer.hidden = true;
+                }
+                return;
+            }
+
+            const points = relevantItems.map((item) => {
+                const metrics = item?.metrics || {};
+                const key = item?.key || "";
+                const isBriquette = key === "briquettes";
+                const opening = Number(metrics.opening_balance ?? 0);
+                const purchases = Number(metrics.purchases ?? 0);
+                const production = Number(metrics.production ?? 0);
+                const closing = Number(
+                    metrics.closing_balance ?? item?.quantity_ton ?? 0,
+                );
+                const consumption = Number(metrics.consumption ?? 0);
+                const sales = Number(metrics.sales ?? 0);
+
+                const totalAvailableCandidate = Number(
+                    metrics.total_available ??
+                        (isBriquette ? opening + production : opening + purchases),
+                );
+
+                const totalAvailable = Number.isFinite(totalAvailableCandidate)
+                    ? Math.max(totalAvailableCandidate, 0)
+                    : 0;
+                const closingBalance = Number.isFinite(closing) ? Math.max(closing, 0) : 0;
+                const impactValueRaw = isBriquette ? sales : consumption;
+                const impactValue = Number.isFinite(impactValueRaw)
+                    ? Math.max(impactValueRaw, 0)
+                    : 0;
+
+                return {
+                    key,
+                    label: item?.label || item?.name || key,
+                    totalAvailable,
+                    closingBalance,
+                    impactValue,
+                    impactLabel: isBriquette ? "Sales (-)" : "Consumption (-)",
+                    valueRs: Number(item?.value_rs ?? Number.NaN),
+                };
+            });
+
+            const labels = points.map((point) => point.label);
+            const totalData = points.map((point) => point.totalAvailable);
+            const closingData = points.map((point) => point.closingBalance);
+            const impactData = points.map((point) => -Math.abs(point.impactValue));
+
+            const maxTotal = Math.max(...totalData, 0);
+            const maxImpact = Math.max(...points.map((point) => point.impactValue), 0);
+            const suggestedMax = maxTotal > 0 ? maxTotal * 1.1 : 1;
+            const suggestedMin = maxImpact > 0 ? -maxImpact * 1.25 : -Math.max(1, suggestedMax * 0.25);
+
+            const datasets = [
+                {
+                    label: "Total Available",
+                    data: totalData,
+                    backgroundColor: "rgba(0, 0, 0, 0)",
+                    borderColor: "rgba(0, 0, 0, 0)",
+                    borderWidth: 0,
+                    grouped: false,
+                    order: 0,
+                    cylinder: {
+                        widthRatio: 0.85,
+                        capRatio: 0.28,
+                        gradientStops: [
+                            { offset: 0, color: "rgba(226, 232, 240, 0.95)" },
+                            { offset: 0.45, color: "rgba(203, 213, 225, 0.95)" },
+                            { offset: 1, color: "rgba(148, 163, 184, 0.95)" },
+                        ],
+                        topCapColor: "rgba(226, 232, 240, 0.95)",
+                        bottomCapColor: "rgba(148, 163, 184, 0.95)",
+                        strokeColor: "rgba(71, 85, 105, 0.25)",
+                        strokeWidth: 1,
+                    },
+                },
+                {
+                    label: "Closing Stock",
+                    data: closingData,
+                    backgroundColor: "rgba(0, 0, 0, 0)",
+                    borderColor: "rgba(0, 0, 0, 0)",
+                    borderWidth: 0,
+                    grouped: false,
+                    order: 1,
+                    cylinder: {
+                        widthRatio: 0.6,
+                        capRatio: 0.3,
+                        gradientStops: [
+                            { offset: 0, color: "rgba(253, 230, 138, 0.95)" },
+                            { offset: 0.5, color: "rgba(250, 204, 21, 0.95)" },
+                            { offset: 1, color: "rgba(217, 119, 6, 0.95)" },
+                        ],
+                        topCapColor: "rgba(253, 224, 71, 0.95)",
+                        bottomCapColor: "rgba(180, 83, 9, 0.95)",
+                        strokeColor: "rgba(120, 53, 15, 0.28)",
+                        strokeWidth: 1,
+                    },
+                },
+                {
+                    label: "Consumption or Sales (-)",
+                    data: impactData,
+                    backgroundColor: "rgba(0, 0, 0, 0)",
+                    borderColor: "rgba(0, 0, 0, 0)",
+                    borderWidth: 0,
+                    grouped: false,
+                    order: 2,
+                    cylinder: {
+                        widthRatio: 0.45,
+                        capRatio: 0.32,
+                        gradientStops: [
+                            { offset: 0, color: "rgba(252, 165, 165, 0.92)" },
+                            { offset: 0.45, color: "rgba(248, 113, 113, 0.95)" },
+                            { offset: 1, color: "rgba(185, 28, 28, 0.95)" },
+                        ],
+                        topCapColor: "rgba(248, 113, 113, 0.95)",
+                        bottomCapColor: "rgba(153, 27, 27, 0.95)",
+                        strokeColor: "rgba(127, 29, 29, 0.3)",
+                        strokeWidth: 1,
+                    },
+                },
+            ];
+
+            const chartConfig = {
+                type: "bar",
+                data: {
+                    labels,
+                    datasets,
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    clip: false,
+                    layout: {
+                        padding: {
+                            top: 16,
+                            right: 8,
+                            bottom: 24,
+                            left: 8,
+                        },
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false,
+                                drawBorder: false,
+                            },
+                            ticks: {
+                                maxRotation: 0,
+                                minRotation: 0,
+                                font: {
+                                    family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                },
+                            },
+                        },
+                        y: {
+                            beginAtZero: true,
+                            suggestedMax,
+                            suggestedMin,
+                            grid: {
+                                drawBorder: false,
+                                color: (context) =>
+                                    context.tick.value === 0
+                                        ? "rgba(37, 99, 235, 0.45)"
+                                        : "rgba(148, 163, 184, 0.2)",
+                                lineWidth: (context) => (context.tick.value === 0 ? 2 : 1),
+                                drawTicks: false,
+                            },
+                            ticks: {
+                                font: {
+                                    family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                },
+                                callback(value) {
+                                    const numeric = Number(value);
+                                    if (!Number.isFinite(numeric)) {
+                                        return value;
+                                    }
+                                    const digits = Math.abs(numeric) >= 10 ? 0 : 2;
+                                    return formatNumber(numeric, digits);
+                                },
+                            },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                usePointStyle: true,
+                                pointStyle: "rectRounded",
+                                boxWidth: 12,
+                                padding: 16,
+                                font: {
+                                    family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                },
+                            },
+                        },
+                        tooltip: {
+                            backgroundColor: "rgba(15, 23, 42, 0.92)",
+                            borderColor: "rgba(148, 163, 184, 0.35)",
+                            borderWidth: 1,
+                            titleFont: {
+                                family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                weight: "600",
+                            },
+                            bodyFont: {
+                                family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            },
+                            callbacks: {
+                                title(context) {
+                                    const index = context?.[0]?.dataIndex;
+                                    if (typeof index !== "number") {
+                                        return "";
+                                    }
+                                    return stockStatusChartPoints[index]?.label || "";
+                                },
+                                label(context) {
+                                    const datasetLabel = context?.dataset?.label || "";
+                                    const rawValue = Number(context?.raw ?? 0);
+                                    const index = context?.dataIndex;
+                                    const point = typeof index === "number" ? stockStatusChartPoints[index] : null;
+
+                                    if (datasetLabel === "Consumption or Sales (-)" && point) {
+                                        return `${point.impactLabel}: ${formatChartTons(Math.abs(rawValue))} tons`;
+                                    }
+
+                                    return `${datasetLabel}: ${formatChartTons(Math.abs(rawValue))} tons`;
+                                },
+                                afterBody(context) {
+                                    const index = context?.[0]?.dataIndex;
+                                    if (typeof index !== "number") {
+                                        return "";
+                                    }
+                                    const valueText = formatChartCurrency(stockStatusChartPoints[index]?.valueRs);
+                                    if (!valueText) {
+                                        return "";
+                                    }
+                                    return `Stock value: Rs. ${valueText}`;
+                                },
+                            },
+                        },
+                        cylinderBarPlugin: {
+                            zeroLineColor: "rgba(37, 99, 235, 0.6)",
+                            zeroLineWidth: 1.5,
+                        },
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: "nearest",
+                    },
+                },
+                plugins: [cylinderBarPlugin],
+            };
+
+            if (stockStatusChartInstance) {
+                stockStatusChartInstance.destroy();
+            }
+
+            stockStatusChartPoints = points;
+            stockStatusChartInstance = new Chart(stockStatusChartCanvas, chartConfig);
+
+            if (stockStatusChartContainer) {
+                stockStatusChartContainer.hidden = false;
+            }
+        }
+
         async function loadStockStatus(asOf) {
             if (!stockStatusEmptyState || !stockStatusTableBody) {
                 return;
@@ -538,7 +1025,9 @@
                     throw new Error("Failed to load stock status");
                 }
                 const data = await response.json();
-                renderStockStatusRows(Array.isArray(data.items) ? data.items : []);
+                const items = Array.isArray(data.items) ? data.items : [];
+                renderStockStatusRows(items);
+                renderStockStatusChart(items);
                 if (stockStatusDateInput && data.as_of) {
                     stockStatusDateInput.value = data.as_of;
                 }
@@ -547,6 +1036,7 @@
                 stockStatusEmptyState.hidden = false;
                 stockStatusEmptyState.textContent =
                     "Unable to load stock status right now. Please try again.";
+                renderStockStatusChart([]);
             }
         }
 

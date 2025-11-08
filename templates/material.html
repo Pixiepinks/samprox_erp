@@ -799,7 +799,12 @@
                             xName: "label",
                             yName: "totalAvailable",
                             columnFacet: "Cylinder",
+                            columnSpacing: 0,
+                            columnWidth: 0.72,
                             animation: { enable: true, duration: 900 },
+                            border: { width: 2, color: "rgba(37, 99, 235, 0.45)" },
+                            opacity: 0.12,
+                            fill: "rgba(191, 219, 254, 0.2)",
                             dataLabel: {
                                 visible: true,
                                 position: "Outer",
@@ -808,19 +813,8 @@
                                     fontFamily:
                                         "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                                     fontWeight: "600",
-                                    color: "#1e40af",
+                                    color: "#1e3a8a",
                                 },
-                            },
-                            gradient: {
-                                type: "Linear",
-                                x1: "0%",
-                                y1: "0%",
-                                x2: "0%",
-                                y2: "100%",
-                                colorStop: [
-                                    { color: "#bfdbfe", offset: 0, opacity: 1 },
-                                    { color: "#1e40af", offset: 1, opacity: 1 },
-                                ],
                             },
                         },
                         {
@@ -830,6 +824,8 @@
                             xName: "label",
                             yName: "closingBalance",
                             columnFacet: "Cylinder",
+                            columnSpacing: 0,
+                            columnWidth: 0.52,
                             animation: { enable: true, duration: 900, delay: 80 },
                             dataLabel: {
                                 visible: true,
@@ -839,7 +835,7 @@
                                     fontFamily:
                                         "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                                     fontWeight: "600",
-                                    color: "#92400e",
+                                    color: "#78350f",
                                 },
                             },
                             gradient: {
@@ -849,8 +845,8 @@
                                 x2: "0%",
                                 y2: "100%",
                                 colorStop: [
-                                    { color: "#fef3c7", offset: 0, opacity: 1 },
-                                    { color: "#78350f", offset: 1, opacity: 1 },
+                                    { color: "#facc15", offset: 0, opacity: 0.85 },
+                                    { color: "#b45309", offset: 1, opacity: 0.95 },
                                 ],
                             },
                         },
@@ -861,6 +857,8 @@
                             xName: "label",
                             yName: "negativeImpact",
                             columnFacet: "Cylinder",
+                            columnSpacing: 0,
+                            columnWidth: 0.72,
                             animation: { enable: true, duration: 900, delay: 160 },
                             dataLabel: {
                                 visible: true,
@@ -881,8 +879,8 @@
                                 x2: "0%",
                                 y2: "100%",
                                 colorStop: [
-                                    { color: "#fecaca", offset: 0, opacity: 1 },
-                                    { color: "#7f1d1d", offset: 1, opacity: 1 },
+                                    { color: "#fca5a5", offset: 0, opacity: 0.9 },
+                                    { color: "#991b1b", offset: 1, opacity: 0.95 },
                                 ],
                             },
                         },

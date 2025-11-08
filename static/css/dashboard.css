@@ -3256,7 +3256,23 @@ body.modal-open {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.production-chart__select input[type="date"] {
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.65);
+    padding: 0.55rem 0.75rem;
+    font: inherit;
+    background: #fff;
+    min-width: 160px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
 .production-chart__select select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.production-chart__select input[type="date"]:focus {
     outline: none;
     border-color: #2563eb;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);

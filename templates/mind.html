@@ -37,6 +37,31 @@
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <section class="section">
+            <section class="production-chart" aria-labelledby="closing-stock-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="closing-stock-title">Closing stock snapshot</h2>
+                        <p>Distribution of today&#39;s closing stock across core materials.</p>
+                    </div>
+                    <div class="production-chart__controls">
+                        <label class="production-chart__select" for="closing-stock-date">
+                            <span>Day</span>
+                            <input type="date" id="closing-stock-date" name="closing-stock-date" />
+                        </label>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="closing-stock-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas" id="closing-stock-chart-container" hidden>
+                        <canvas
+                            id="closing-stock-chart"
+                            height="320"
+                            aria-label="Closing stock distribution doughnut chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
             <section class="production-chart" aria-labelledby="production-chart-title">
                 <header class="production-chart__header">
                     <div>
@@ -224,6 +249,10 @@
         const materialChartCanvas = document.getElementById("material-chart");
         const laborSummaryContainer = document.getElementById("labor-summary");
         const laborChartCanvas = document.getElementById("labor-chart");
+        const closingStockSummaryContainer = document.getElementById("closing-stock-summary");
+        const closingStockChartCanvas = document.getElementById("closing-stock-chart");
+        const closingStockChartContainer = document.getElementById("closing-stock-chart-container");
+        const closingStockDateInput = document.getElementById("closing-stock-date");
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
@@ -252,6 +281,51 @@
             minimumFractionDigits: 0,
             maximumFractionDigits: 2,
         });
+
+        const isoToday = () => {
+            const today = new Date();
+            const month = String(today.getMonth() + 1).padStart(2, "0");
+            const day = String(today.getDate()).padStart(2, "0");
+            return `${today.getFullYear()}-${month}-${day}`;
+        };
+
+        const ensureChartJsAvailable = () => typeof Chart !== "undefined";
+
+        const formatIsoDateLabel = (value) => {
+            if (!value) {
+                return "";
+            }
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return "";
+            }
+            return parsed.toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
+        };
+
+        const CLOSING_STOCK_KEYS = [
+            "sawdust",
+            "wood_shaving",
+            "wood_powder",
+            "peanut_husk",
+            "fire_cut",
+            "briquettes",
+        ];
+
+        const CLOSING_STOCK_COLOR_PALETTE = [
+            { background: "rgba(37, 99, 235, 0.82)", border: "rgb(37, 99, 235)" },
+            { background: "rgba(59, 130, 246, 0.82)", border: "rgb(59, 130, 246)" },
+            { background: "rgba(14, 165, 233, 0.82)", border: "rgb(14, 165, 233)" },
+            { background: "rgba(16, 185, 129, 0.82)", border: "rgb(16, 185, 129)" },
+            { background: "rgba(251, 191, 36, 0.82)", border: "rgb(251, 191, 36)" },
+            { background: "rgba(244, 114, 182, 0.82)", border: "rgb(244, 114, 182)" },
+        ];
+
+        let closingStockChartInstance = null;
+        let closingStockAsOf = null;
 
         const MACHINE_SERIES = [
             {
@@ -335,6 +409,264 @@
             { background: "rgba(250, 204, 21, 0.75)", border: "rgb(250, 204, 21)" },
             { background: "rgba(148, 163, 184, 0.7)", border: "rgb(148, 163, 184)" },
         ];
+
+        const setClosingStockSummaryMessage = (label, message) => {
+            if (!closingStockSummaryContainer) {
+                return;
+            }
+
+            closingStockSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">${label}</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const showClosingStockLoading = () => {
+            setClosingStockSummaryMessage("Closing stock", "Loading…");
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = true;
+            }
+        };
+
+        const showClosingStockError = (message) => {
+            setClosingStockSummaryMessage("Closing stock", message);
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = true;
+            }
+            if (closingStockChartInstance) {
+                closingStockChartInstance.destroy();
+                closingStockChartInstance = null;
+            }
+        };
+
+        const renderClosingStockSummary = (items) => {
+            if (!closingStockSummaryContainer) {
+                return;
+            }
+
+            let totalTons = 0;
+            let totalValue = 0;
+            let topMaterialLabel = "";
+            let topMaterialTons = 0;
+
+            items.forEach((item) => {
+                const closingBalance = Number(item?.metrics?.closing_balance ?? item?.quantity_ton ?? 0);
+                const normalizedClosing = Number.isFinite(closingBalance) ? Math.max(closingBalance, 0) : 0;
+                const value = Number(item?.value_rs ?? 0);
+                const normalizedValue = Number.isFinite(value) ? Math.max(value, 0) : 0;
+
+                totalTons += normalizedClosing;
+                totalValue += normalizedValue;
+
+                if (normalizedClosing > topMaterialTons) {
+                    topMaterialTons = normalizedClosing;
+                    topMaterialLabel = item?.label || item?.name || item?.key || "—";
+                }
+            });
+
+            const metrics = [
+                {
+                    label: "Total closing stock",
+                    value: `${formatTons(totalTons)} tons`,
+                },
+                {
+                    label: "Inventory value",
+                    value: formatCurrency(totalValue),
+                    isCurrency: true,
+                },
+                {
+                    label: "Top material",
+                    value:
+                        topMaterialLabel && topMaterialTons > 0
+                            ? `${topMaterialLabel} (${formatTons(topMaterialTons)} tons)`
+                            : "—",
+                },
+            ];
+
+            closingStockSummaryContainer.innerHTML = metrics
+                .map((metric) => {
+                    const valueClass = metric.isCurrency
+                        ? "production-chart__metric-value production-chart__metric-value--currency"
+                        : "production-chart__metric-value";
+                    return `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="${valueClass}">${metric.value}</span>
+                        </div>
+                    `;
+                })
+                .join("");
+
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = false;
+            }
+        };
+
+        const buildClosingStockChartOptions = (title) => ({
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "55%",
+            plugins: {
+                legend: {
+                    position: "right",
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: "rectRounded",
+                        color: "#0f172a",
+                    },
+                },
+                title: {
+                    display: true,
+                    align: "start",
+                    text: title,
+                    color: "#0f172a",
+                    font: {
+                        family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                        size: 16,
+                        weight: "600",
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const label = context.label || "";
+                            const value = Number(context.parsed ?? 0);
+                            const dataset = context?.chart?.data?.datasets?.[0];
+                            const total = Array.isArray(dataset?.data)
+                                ? dataset.data.reduce((sum, item) => sum + Number(item || 0), 0)
+                                : 0;
+                            const percent = total > 0 ? (value / total) * 100 : 0;
+                            return `${label}: ${formatTons(value)} tons (${formatPercent(percent)}%)`;
+                        },
+                    },
+                },
+            },
+        });
+
+        const renderClosingStockChart = (items, asOf) => {
+            if (!closingStockChartCanvas || !ensureChartJsAvailable()) {
+                return;
+            }
+
+            const labels = items.map((item) => item?.label || item?.name || item?.key || "—");
+            const data = items.map((item) => {
+                const closingBalance = Number(item?.metrics?.closing_balance ?? item?.quantity_ton ?? 0);
+                return Number.isFinite(closingBalance) ? Math.max(closingBalance, 0) : 0;
+            });
+            const backgroundColor = items.map(
+                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].background,
+            );
+            const borderColor = items.map(
+                (_, index) => CLOSING_STOCK_COLOR_PALETTE[index % CLOSING_STOCK_COLOR_PALETTE.length].border,
+            );
+
+            const title = asOf
+                ? `Closing stock as of ${formatIsoDateLabel(asOf) || asOf}`
+                : "Closing stock distribution";
+            const options = buildClosingStockChartOptions(title);
+
+            const dataset = {
+                label: "Closing stock (tons)",
+                data,
+                backgroundColor,
+                borderColor,
+                borderWidth: 1,
+                hoverOffset: 6,
+            };
+
+            if (closingStockChartInstance) {
+                closingStockChartInstance.data = { labels, datasets: [dataset] };
+                closingStockChartInstance.options = options;
+                closingStockChartInstance.update();
+            } else {
+                closingStockChartInstance = new Chart(closingStockChartCanvas, {
+                    type: "doughnut",
+                    data: { labels, datasets: [dataset] },
+                    options,
+                });
+            }
+
+            if (closingStockChartContainer) {
+                closingStockChartContainer.hidden = false;
+            }
+        };
+
+        const fetchClosingStockStatus = async (asOf) => {
+            const params = new URLSearchParams();
+            if (asOf) {
+                params.set("as_of", asOf);
+            }
+            const query = params.toString();
+            const response = await fetch(`/api/material/stock-status${query ? `?${query}` : ""}`, {
+                headers: authHeaders,
+            });
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load closing stock status.");
+            }
+
+            return response.json();
+        };
+
+        const loadClosingStock = async (asOf) => {
+            if (!closingStockSummaryContainer) {
+                return;
+            }
+
+            showClosingStockLoading();
+
+            try {
+                const data = await fetchClosingStockStatus(asOf);
+                if (!data) {
+                    return;
+                }
+
+                closingStockAsOf = data.as_of || asOf || closingStockAsOf;
+                const items = Array.isArray(data.items) ? data.items : [];
+                const relevantItems = items.filter((item) => CLOSING_STOCK_KEYS.includes(item?.key));
+
+                if (!relevantItems.length) {
+                    showClosingStockError("No closing stock data available.");
+                    return;
+                }
+
+                renderClosingStockSummary(relevantItems);
+                renderClosingStockChart(relevantItems, closingStockAsOf);
+
+                if (closingStockDateInput && closingStockAsOf) {
+                    closingStockDateInput.value = closingStockAsOf;
+                }
+            } catch (error) {
+                console.error(error);
+                showClosingStockError("Unable to load closing stock right now.");
+            }
+        };
+
+        const initializeClosingStockDateInput = () => {
+            const todayValue = isoToday();
+            if (!closingStockDateInput) {
+                return todayValue;
+            }
+
+            closingStockDateInput.max = todayValue;
+            if (!closingStockDateInput.value) {
+                closingStockDateInput.value = todayValue;
+            }
+
+            closingStockDateInput.addEventListener("change", () => {
+                const value = closingStockDateInput.value || closingStockDateInput.max || isoToday();
+                loadClosingStock(value);
+            });
+
+            return closingStockDateInput.value || todayValue;
+        };
 
         const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
             const value = String(index + 1).padStart(2, "0");
@@ -2374,6 +2706,9 @@
             refreshMaterialChart();
             refreshLaborChart();
         };
+
+        const initialClosingStockDate = initializeClosingStockDateInput();
+        loadClosingStock(initialClosingStockDate);
 
         const selectorsInitialized = initializePeriodSelectors();
 

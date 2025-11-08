@@ -94,7 +94,7 @@
                     </div>
                 </div>
                 <div class="stock-status-card__chart" id="stock-status-chart-container" hidden>
-                    <div id="stock-status-chart" role="img" aria-label="Stock movement chart"></div>
+                    <canvas id="stock-status-chart" role="img" aria-label="Stock movement chart"></canvas>
                 </div>
                 <p class="empty-state" id="stock-status-empty">Loading stock status…</p>
                 <div class="table-wrapper" id="stock-status-table-wrapper" hidden>
@@ -370,7 +370,7 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.syncfusion.com/ej2/26.1.35/dist/ej2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" integrity="sha384-8FmKpVzVfU6Ly3OJUokHknsE+Fjr12JOP5tBxOBE31AyGdSzZsv/CrKHr2TRVsyG" crossorigin="anonymous"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -511,8 +511,44 @@
 
         let stockStatusChartInstance = null;
         let stockStatusChartAsOf = null;
-        let stockStatusChartModulesRegistered = false;
+        const stackedBarValueLabelPlugin = {
+            id: "stackedValueLabels",
+            afterDatasetsDraw(chart) {
+                const { ctx, data } = chart;
+                if (!ctx || !data?.datasets) {
+                    return;
+                }
 
+                ctx.save();
+                ctx.font = "600 11px 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+
+                data.datasets.forEach((dataset, datasetIndex) => {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    if (!meta?.data) {
+                        return;
+                    }
+
+                    meta.data.forEach((element, index) => {
+                        const rawValue = dataset.data?.[index];
+                        if (!Number.isFinite(rawValue) || rawValue === 0) {
+                            return;
+                        }
+
+                        const position = element.tooltipPosition();
+                        const isNegative = rawValue < 0;
+                        const offset = isNegative ? 12 : -12;
+                        const label = `${formatChartTons(Math.abs(rawValue))} T`;
+
+                        ctx.fillStyle = dataset.label === "Consumption / Sales" ? "#fee2e2" : "#0f172a";
+                        ctx.fillText(label, position.x, position.y + offset);
+                    });
+                });
+
+                ctx.restore();
+            },
+        };
 
         function formatChartAxis(value) {
             const numeric = Number(value);
@@ -573,26 +609,8 @@
             return { min: minimum, max: maximum, interval };
         }
 
-        function ensureSyncfusionChart() {
-            return typeof ej !== "undefined" && ej?.charts?.Chart3D;
-        }
-
-        function registerStockStatusChartModules() {
-            if (stockStatusChartModulesRegistered || !ensureSyncfusionChart()) {
-                return;
-            }
-            const charts = ej.charts;
-            const dependencies = [
-                charts.ColumnSeries3D,
-                charts.Category3D,
-                charts.Legend3D,
-                charts.Tooltip3D,
-                charts.DataLabel3D,
-            ].filter(Boolean);
-            if (dependencies.length) {
-                charts.Chart3D.Inject(...dependencies);
-            }
-            stockStatusChartModulesRegistered = true;
+        function ensureChartJs() {
+            return typeof Chart !== "undefined";
         }
 
         function buildStockStatusTitle(asOf) {
@@ -653,12 +671,11 @@
             stockStatusTableWrapper.hidden = false;
         }
 
+
         function renderStockStatusChart(items, asOf) {
-            if (!stockStatusChartElement || !ensureSyncfusionChart()) {
+            if (!stockStatusChartElement || !ensureChartJs()) {
                 return;
             }
-
-            registerStockStatusChartModules();
 
             const relevantItems = Array.isArray(items)
                 ? items.filter((item) => STOCK_STATUS_CHART_KEYS.includes(item.key))
@@ -711,186 +728,154 @@
 
             const bounds = computeAxisBounds(points);
             const title = buildStockStatusTitle(asOf || stockStatusChartAsOf);
+            const labels = points.map((point) => point.label);
 
-            if (stockStatusChartInstance) {
-                stockStatusChartInstance.series[0].dataSource = points;
-                stockStatusChartInstance.series[1].dataSource = points;
-                stockStatusChartInstance.series[2].dataSource = points;
-                stockStatusChartInstance.primaryYAxis.minimum = bounds.min;
-                stockStatusChartInstance.primaryYAxis.maximum = bounds.max;
-                stockStatusChartInstance.primaryYAxis.interval = bounds.interval;
-                stockStatusChartInstance.title = title;
-                stockStatusChartInstance.refresh();
-            } else {
-                stockStatusChartInstance = new ej.charts.Chart3D({
-                    width: "100%",
-                    height: "100%",
-                    title,
-                    primaryXAxis: {
-                        valueType: "Category",
-                        title: "Material Name",
-                        labelRotation: 0,
-                        labelStyle: {
-                            fontFamily:
-                                "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                            fontWeight: "500",
-                            size: "12px",
+            const datasets = [
+                {
+                    label: "Total Available",
+                    data: points.map((point) => point.totalAvailable),
+                    backgroundColor: "rgba(59, 130, 246, 0.8)",
+                    borderColor: "rgba(37, 99, 235, 0.95)",
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    stack: "stock",
+                    maxBarThickness: 52,
+                },
+                {
+                    label: "Closing Stock",
+                    data: points.map((point) => point.closingBalance),
+                    backgroundColor: "rgba(234, 179, 8, 0.85)",
+                    borderColor: "rgba(202, 138, 4, 0.95)",
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    stack: "stock",
+                    maxBarThickness: 52,
+                },
+                {
+                    label: "Consumption / Sales",
+                    data: points.map((point) => point.negativeImpact),
+                    backgroundColor: "rgba(239, 68, 68, 0.85)",
+                    borderColor: "rgba(185, 28, 28, 0.95)",
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    stack: "stock",
+                    maxBarThickness: 52,
+                },
+            ];
+
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: "index", intersect: false },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { color: "rgba(148, 163, 184, 0.18)", drawBorder: false },
+                        ticks: {
+                            color: "#1e293b",
+                            font: {
+                                family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                size: 12,
+                                weight: "500",
+                            },
                         },
                     },
-                    primaryYAxis: {
-                        title: "Quantity (Tons)",
-                        minimum: bounds.min,
-                        maximum: bounds.max,
-                        interval: bounds.interval,
-                        labelFormat: "{value}",
-                        labelStyle: {
-                            fontFamily:
-                                "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                            fontWeight: "500",
-                            size: "12px",
+                    y: {
+                        stacked: true,
+                        min: bounds.min,
+                        max: bounds.max,
+                        ticks: {
+                            color: "#475569",
+                            callback: (value) => `${formatChartAxis(value)} T`,
+                            stepSize: bounds.interval,
+                            font: {
+                                family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                size: 12,
+                                weight: "500",
+                            },
                         },
-                        majorGridLines: {
-                            width: 0.6,
-                            color: "rgba(148, 163, 184, 0.3)",
+                        grid: {
+                            color: "rgba(148, 163, 184, 0.22)",
+                            drawBorder: false,
                         },
                     },
-                    depth: 220,
-                    tilt: 0,
-                    rotation: 0,
-                    perspectiveAngle: 45,
-                    wallColor: "#f8fafc",
-                    enableRotation: false,
-                    legendSettings: {
-                        visible: true,
-                        textStyle: {
-                            fontFamily:
-                                "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                            fontWeight: "600",
+                },
+                plugins: {
+                    legend: {
+                        position: "bottom",
+                        align: "start",
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: "rectRounded",
+                            color: "#0f172a",
+                            font: {
+                                family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                                size: 12,
+                                weight: "600",
+                            },
+                        },
+                    },
+                    title: {
+                        display: true,
+                        align: "start",
+                        text: title,
+                        color: "#0f172a",
+                        padding: { bottom: 16 },
+                        font: {
+                            family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            size: 16,
+                            weight: "600",
                         },
                     },
                     tooltip: {
-                        enable: true,
-                        format: "<b>${point.x}</b><br/>${series.name}: ${point.y} T",
-                    },
-                    textRender(args) {
-                        if (args.series && args.series.dataLabel && args.point) {
-                            const value = Number(args.point.y);
-                            if (Number.isFinite(value)) {
-                                args.text = `${formatChartTons(Math.abs(value))} T`;
-                            }
-                        }
-                    },
-                    axisLabelRender(args) {
-                        if (args.axis?.orientation === "Vertical") {
-                            args.text = formatChartAxis(args.value);
-                        }
-                    },
-                    tooltipRender(args) {
-                        if (args.point) {
-                            const tons = formatChartTons(Math.abs(args.point.y));
-                            args.text = `<b>${args.point.x}</b><br/>${args.series.name}: ${tons} T`;
-                        }
-                    },
-                    series: [
-                        {
-                            name: "Total Available",
-                            type: "Column",
-                            dataSource: points,
-                            xName: "label",
-                            yName: "totalAvailable",
-                            columnFacet: "Cylinder",
-                            columnSpacing: 0,
-                            columnWidth: 0.72,
-                            animation: { enable: true, duration: 900 },
-                            border: { width: 2, color: "rgba(37, 99, 235, 0.45)" },
-                            opacity: 0.12,
-                            fill: "rgba(191, 219, 254, 0.2)",
-                            dataLabel: {
-                                visible: true,
-                                position: "Outer",
-                                border: { width: 1, color: "rgba(37, 99, 235, 0.25)" },
-                                textStyle: {
-                                    fontFamily:
-                                        "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                                    fontWeight: "600",
-                                    color: "#1e3a8a",
-                                },
+                        backgroundColor: "#0f172a",
+                        borderColor: "rgba(148, 163, 184, 0.3)",
+                        borderWidth: 1,
+                        titleColor: "#f8fafc",
+                        bodyColor: "#f8fafc",
+                        titleFont: {
+                            family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            weight: "600",
+                        },
+                        bodyFont: {
+                            family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                            weight: "500",
+                        },
+                        callbacks: {
+                            label(context) {
+                                const value = Number(context.raw) || 0;
+                                const tons = formatChartTons(Math.abs(value));
+                                return `${context.dataset.label}: ${tons} T`;
                             },
                         },
-                        {
-                            name: "Closing Stock",
-                            type: "Column",
-                            dataSource: points,
-                            xName: "label",
-                            yName: "closingBalance",
-                            columnFacet: "Cylinder",
-                            columnSpacing: 0,
-                            columnWidth: 0.52,
-                            animation: { enable: true, duration: 900, delay: 80 },
-                            dataLabel: {
-                                visible: true,
-                                position: "Outer",
-                                border: { width: 1, color: "rgba(217, 119, 6, 0.45)" },
-                                textStyle: {
-                                    fontFamily:
-                                        "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                                    fontWeight: "600",
-                                    color: "#78350f",
-                                },
-                            },
-                            gradient: {
-                                type: "Linear",
-                                x1: "0%",
-                                y1: "0%",
-                                x2: "0%",
-                                y2: "100%",
-                                colorStop: [
-                                    { color: "#facc15", offset: 0, opacity: 0.85 },
-                                    { color: "#b45309", offset: 1, opacity: 0.95 },
-                                ],
-                            },
-                        },
-                        {
-                            name: "Consumption or Sales (-)",
-                            type: "Column",
-                            dataSource: points,
-                            xName: "label",
-                            yName: "negativeImpact",
-                            columnFacet: "Cylinder",
-                            columnSpacing: 0,
-                            columnWidth: 0.72,
-                            animation: { enable: true, duration: 900, delay: 160 },
-                            dataLabel: {
-                                visible: true,
-                                position: "Outer",
-                                border: { width: 1, color: "rgba(185, 28, 28, 0.45)" },
-                                textStyle: {
-                                    fontFamily:
-                                        "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                                    fontWeight: "600",
-                                    color: "#fff",
-                                },
-                                connectorStyle: { width: 1 },
-                            },
-                            gradient: {
-                                type: "Linear",
-                                x1: "0%",
-                                y1: "0%",
-                                x2: "0%",
-                                y2: "100%",
-                                colorStop: [
-                                    { color: "#fca5a5", offset: 0, opacity: 0.9 },
-                                    { color: "#991b1b", offset: 1, opacity: 0.95 },
-                                ],
-                            },
-                        },
-                    ],
-                    load(args) {
-                        args.chart.theme = "Material3";
                     },
-                });
+                },
+            };
 
-                stockStatusChartInstance.appendTo("#stock-status-chart");
+            if (stockStatusChartInstance) {
+                stockStatusChartInstance.data.labels = labels;
+                stockStatusChartInstance.data.datasets.forEach((dataset, index) => {
+                    if (datasets[index]) {
+                        dataset.data = datasets[index].data;
+                        dataset.backgroundColor = datasets[index].backgroundColor;
+                        dataset.borderColor = datasets[index].borderColor;
+                    }
+                });
+                stockStatusChartInstance.options.scales.y.min = bounds.min;
+                stockStatusChartInstance.options.scales.y.max = bounds.max;
+                stockStatusChartInstance.options.scales.y.ticks.stepSize = bounds.interval;
+                stockStatusChartInstance.options.plugins.title.text = title;
+                stockStatusChartInstance.update();
+            } else {
+                stockStatusChartInstance = new Chart(stockStatusChartElement, {
+                    type: "bar",
+                    data: { labels, datasets },
+                    options,
+                    plugins: [stackedBarValueLabelPlugin],
+                });
             }
 
             stockStatusChartAsOf = asOf || stockStatusChartAsOf || null;

@@ -138,6 +138,12 @@
                         <span class="sales-entry__summary-value" id="sales-entry-total">0</span>
                     </div>
                 </header>
+                <p
+                    id="sales-entry-mode"
+                    class="sales-entry__mode"
+                    role="status"
+                    aria-live="polite"
+                ></p>
                 <form
                     id="sales-entry-form"
                     class="sales-entry__form"
@@ -457,6 +463,7 @@
         const entryLoader3Select = document.getElementById("sales-entry-loader-3");
         const entryTotalOutput = document.getElementById("sales-entry-total");
         const entryFeedbackEl = document.getElementById("sales-entry-feedback");
+        const entryModeMessageEl = document.getElementById("sales-entry-mode");
         const entrySubmitButton = document.getElementById("sales-entry-submit");
         const customerDialog = document.getElementById("customer-dialog");
         const customerForm = document.getElementById("customer-form");
@@ -477,6 +484,7 @@
         const customerSpecialNote = document.getElementById("customer-special-note");
         const addCustomerOptionValue = "__create__";
         const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
+        let currentEditingEntry = null;
         const dialogSupported =
             typeof HTMLDialogElement === "function" &&
             typeof HTMLDialogElement.prototype.showModal === "function";
@@ -627,6 +635,23 @@
 
         function formatUnitPrice(value) {
             return `Rs ${formatCurrencyNumber(value)} <span class="summary-card__unit">/ ton</span>`;
+        }
+
+        function formatFriendlyDate(value) {
+            if (!value) {
+                return "the selected date";
+            }
+
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return value;
+            }
+
+            return parsed.toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+            });
         }
 
         function formatAverageUnitPrice(amount, quantity) {
@@ -1032,6 +1057,227 @@
             entryFeedbackEl.classList.add("sales-entry__feedback--visible");
         }
 
+        function renderEditingState() {
+            if (!entryForm) {
+                return;
+            }
+
+            if (currentEditingEntry) {
+                entryForm.classList.add("sales-entry__form--editing");
+            } else {
+                entryForm.classList.remove("sales-entry__form--editing");
+            }
+
+            if (entrySubmitButton) {
+                entrySubmitButton.textContent = currentEditingEntry ? "Update entry" : "Save entry";
+            }
+
+            if (!entryModeMessageEl) {
+                return;
+            }
+
+            if (!currentEditingEntry) {
+                entryModeMessageEl.textContent = "";
+                entryModeMessageEl.classList.remove("sales-entry__mode--visible");
+                return;
+            }
+
+            const friendlyType =
+                currentEditingEntry.sale_type === "forecast" ? "forecast" : "actual";
+            const displayDate = formatFriendlyDate(currentEditingEntry.date);
+            entryModeMessageEl.textContent =
+                `Editing existing ${friendlyType} entry for ${displayDate}. Updates will overwrite the saved values.`;
+            entryModeMessageEl.classList.add("sales-entry__mode--visible");
+        }
+
+        function setEditingState(entry, saleType) {
+            if (!entry) {
+                currentEditingEntry = null;
+                renderEditingState();
+                return;
+            }
+
+            const normalizedSaleType = saleType === "forecast" ? "forecast" : "actual";
+            currentEditingEntry = {
+                id: entry.id != null ? String(entry.id) : null,
+                sale_type: normalizedSaleType,
+                date: entry.date || "",
+                customer_id: entry.customer_id != null ? String(entry.customer_id) : "",
+            };
+            renderEditingState();
+        }
+
+        function clearSalesEntryValues() {
+            if (entryUnitPriceInput) {
+                entryUnitPriceInput.value = "";
+            }
+            if (entryQuantityInput) {
+                entryQuantityInput.value = "";
+            }
+            if (entryDeliveryNoteInput) {
+                entryDeliveryNoteInput.value = "";
+            }
+            if (entryWeighSlipInput) {
+                entryWeighSlipInput.value = "";
+            }
+            loaderSelects.forEach((select) => {
+                if (select) {
+                    select.value = "";
+                }
+            });
+            updateEntryTotal();
+        }
+
+        function populateSalesEntryForm(entry, saleType) {
+            if (!entry) {
+                return;
+            }
+
+            const normalizedSaleType = saleType === "forecast" ? "forecast" : "actual";
+
+            if (entryCustomerSelect && entry.customer_id != null) {
+                entryCustomerSelect.value = String(entry.customer_id);
+            }
+
+            if (entryDateInput && entry.date) {
+                entryDateInput.value = entry.date;
+            }
+
+            if (entryTypeSelect) {
+                entryTypeSelect.value = normalizedSaleType;
+            }
+
+            updateLoaderFieldState();
+
+            if (entryUnitPriceInput) {
+                entryUnitPriceInput.value =
+                    entry.unit_price != null ? String(entry.unit_price) : "";
+            }
+            if (entryQuantityInput) {
+                entryQuantityInput.value =
+                    entry.quantity_tons != null ? String(entry.quantity_tons) : "";
+            }
+
+            if (normalizedSaleType === "actual") {
+                if (entryDeliveryNoteInput) {
+                    entryDeliveryNoteInput.value = entry.delivery_note_number || "";
+                }
+                if (entryWeighSlipInput) {
+                    entryWeighSlipInput.value = entry.weigh_slip_number || "";
+                }
+                if (entryLoader1Select) {
+                    entryLoader1Select.value = entry.loader1_id != null ? String(entry.loader1_id) : "";
+                }
+                if (entryLoader2Select) {
+                    entryLoader2Select.value = entry.loader2_id != null ? String(entry.loader2_id) : "";
+                }
+                if (entryLoader3Select) {
+                    entryLoader3Select.value = entry.loader3_id != null ? String(entry.loader3_id) : "";
+                }
+            } else {
+                if (entryDeliveryNoteInput) {
+                    entryDeliveryNoteInput.value = "";
+                }
+                if (entryWeighSlipInput) {
+                    entryWeighSlipInput.value = "";
+                }
+                loaderSelects.forEach((select) => {
+                    if (select) {
+                        select.value = "";
+                    }
+                });
+            }
+
+            updateEntryTotal();
+        }
+
+        async function loadExistingEntryForSelection() {
+            if (!token) {
+                return;
+            }
+
+            const dateValue = entryDateInput?.value || "";
+            const customerValue = entryCustomerSelect?.value || "";
+            const saleTypeValue = entryTypeSelect?.value || "";
+
+            if (
+                !dateValue ||
+                !customerValue ||
+                customerValue === addCustomerOptionValue ||
+                !saleTypeValue
+            ) {
+                setEditingState(null);
+                clearSalesEntryValues();
+                updateLoaderFieldState();
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    customer_id: customerValue,
+                    sale_type: saleTypeValue,
+                    date: dateValue,
+                });
+
+                const response = await fetch(`/api/market/sales?${params.toString()}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (response.status === 404) {
+                    setEditingState(null);
+                    clearSalesEntryValues();
+                    updateLoaderFieldState();
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.msg || "Unable to load saved entry.");
+                }
+
+                if (!data.entry) {
+                    setEditingState(null);
+                    clearSalesEntryValues();
+                    updateLoaderFieldState();
+                    return;
+                }
+
+                populateSalesEntryForm(data.entry, saleTypeValue);
+                setEditingState(data.entry, saleTypeValue);
+            } catch (error) {
+                console.error(error);
+                setEditingState(null);
+                clearSalesEntryValues();
+                updateLoaderFieldState();
+                setEntryFeedback(error?.message || "Unable to load saved entry.", "error");
+            }
+        }
+
+        function handleEntrySelectionChange(event) {
+            if (currentEditingEntry && event?.target === entryDateInput) {
+                currentEditingEntry.date = entryDateInput?.value || "";
+                renderEditingState();
+                return;
+            }
+
+            if (currentEditingEntry) {
+                setEditingState(null);
+                clearSalesEntryValues();
+                updateLoaderFieldState();
+            }
+
+            loadExistingEntryForSelection();
+        }
+
         function formatCustomerLabel(customer) {
             if (!customer) {
                 return "";
@@ -1294,7 +1540,7 @@
                 return value ? value : null;
             };
 
-            return {
+            const payload = {
                 date: entryDateInput?.value || "",
                 customer_id: entryCustomerSelect?.value || "",
                 sale_type: saleType,
@@ -1306,25 +1552,42 @@
                 loader2_id: isActualSale ? readLoaderValue(entryLoader2Select) : null,
                 loader3_id: isActualSale ? readLoaderValue(entryLoader3Select) : null,
             };
+
+            if (currentEditingEntry?.sale_type) {
+                payload.sale_type = currentEditingEntry.sale_type;
+            }
+
+            return payload;
         }
 
-        function resetSalesEntryForm() {
+        function resetSalesEntryForm(options = {}) {
+            const { preserveSelection = false } = options;
+            const preservedSelection = preserveSelection
+                ? {
+                      date: entryDateInput?.value || "",
+                      customer: entryCustomerSelect?.value || "",
+                      saleType: entryTypeSelect?.value || "",
+                  }
+                : null;
+
             entryForm?.reset();
-            if (entryCustomerSelect) {
+            clearSalesEntryValues();
+
+            if (preservedSelection) {
+                if (entryCustomerSelect) {
+                    entryCustomerSelect.value = preservedSelection.customer;
+                }
+                if (entryDateInput) {
+                    entryDateInput.value = preservedSelection.date;
+                }
+                if (entryTypeSelect) {
+                    entryTypeSelect.value = preservedSelection.saleType;
+                }
+            } else if (entryCustomerSelect) {
                 entryCustomerSelect.value = "";
             }
-            if (entryDeliveryNoteInput) {
-                entryDeliveryNoteInput.value = "";
-            }
-            if (entryWeighSlipInput) {
-                entryWeighSlipInput.value = "";
-            }
-            loaderSelects.forEach((select) => {
-                if (select) {
-                    select.value = "";
-                }
-            });
-            updateEntryTotal();
+
+            setEditingState(null);
             updateLoaderFieldState();
         }
 
@@ -1669,11 +1932,18 @@
 
         if (entryCustomerSelect) {
             entryCustomerSelect.addEventListener("change", (event) => {
-                if (event.target.value !== addCustomerOptionValue) {
+                if (event.target.value === addCustomerOptionValue) {
+                    event.target.value = "";
+                    openCustomerDialog();
                     return;
                 }
-                event.target.value = "";
-                openCustomerDialog();
+                handleEntrySelectionChange(event);
+            });
+        }
+
+        if (entryDateInput) {
+            entryDateInput.addEventListener("change", (event) => {
+                handleEntrySelectionChange(event);
             });
         }
 
@@ -1690,8 +1960,9 @@
         }
 
         if (entryTypeSelect) {
-            entryTypeSelect.addEventListener("change", () => {
+            entryTypeSelect.addEventListener("change", (event) => {
                 updateLoaderFieldState();
+                handleEntrySelectionChange(event);
             });
         }
 
@@ -1710,6 +1981,7 @@
                 }
 
                 const payload = collectSalesEntryData();
+                const isEditing = Boolean(currentEditingEntry?.id);
 
                 if (!payload.customer_id || payload.customer_id === addCustomerOptionValue) {
                     setEntryFeedback("Please select a customer before saving the entry.", "error");
@@ -1723,8 +1995,12 @@
                 }
 
                 try {
-                    const response = await fetch("/api/market/sales", {
-                        method: "POST",
+                    const endpoint = isEditing
+                        ? `/api/market/sales/${currentEditingEntry.id}`
+                        : "/api/market/sales";
+                    const method = isEditing ? "PUT" : "POST";
+                    const response = await fetch(endpoint, {
+                        method,
                         headers: {
                             Authorization: `Bearer ${token}`,
                             "Content-Type": "application/json",
@@ -1744,12 +2020,32 @@
                         throw new Error(data.msg || "Unable to save sales entry.");
                     }
 
-                    resetSalesEntryForm();
+                    const normalizedSaleType = payload.sale_type === "forecast" ? "forecast" : "actual";
 
-                    const successMessage = payload.sale_type === "forecast"
-                        ? "Forecast sales entry saved successfully."
-                        : "Actual sales entry saved successfully.";
-                    setEntryFeedback(successMessage, "success");
+                    if (isEditing) {
+                        const successMessage =
+                            normalizedSaleType === "forecast"
+                                ? "Forecast sales entry updated successfully."
+                                : "Actual sales entry updated successfully.";
+                        setEntryFeedback(successMessage, "success");
+
+                        if (data.entry) {
+                            populateSalesEntryForm(data.entry, normalizedSaleType);
+                            setEditingState(data.entry, normalizedSaleType);
+                        } else if (currentEditingEntry) {
+                            currentEditingEntry.date = payload.date || currentEditingEntry.date;
+                            currentEditingEntry.customer_id = payload.customer_id || currentEditingEntry.customer_id;
+                            currentEditingEntry.sale_type = normalizedSaleType;
+                            renderEditingState();
+                        }
+                    } else {
+                        resetSalesEntryForm();
+                        const successMessage =
+                            normalizedSaleType === "forecast"
+                                ? "Forecast sales entry saved successfully."
+                                : "Actual sales entry saved successfully.";
+                        setEntryFeedback(successMessage, "success");
+                    }
 
                     if (typeof loadReport === "function") {
                         loadReport();
@@ -1768,6 +2064,7 @@
             });
         }
 
+        renderEditingState();
         updateEntryTotal();
 
         if (entryAddCustomerButton) {

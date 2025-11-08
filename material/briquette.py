@@ -8,7 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Deque, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func
 
 from extensions import db
 from models import (
@@ -26,6 +26,7 @@ TON_QUANT = Decimal("0.001")
 KG_QUANT = Decimal("0.001")
 CURRENCY_QUANT = Decimal("0.01")
 UNIT_COST_QUANT = Decimal("0.0001")
+HOUR_QUANT = Decimal("0.1")
 
 BRIQUETTE_MACHINE_CODES = ("MCH-0001", "MCH-0002")
 DRYER_MACHINE_CODE = "MCH-0003"
@@ -208,6 +209,21 @@ def _load_production_for_dates(dates: Iterable[date]) -> Dict[date, Dict[str, De
                 ),
                 0.0,
             ).label("dryer_tons"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                func.lower(MachineAsset.code) == DRYER_MACHINE_CODE_LOWER,
+                                DailyProductionEntry.quantity_tons > 0.0,
+                            ),
+                            1.0,
+                        ),
+                        else_=0.0,
+                    )
+                ),
+                0.0,
+            ).label("dryer_hours"),
         )
         .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
         .filter(DailyProductionEntry.date.in_(dates))
@@ -222,9 +238,11 @@ def _load_production_for_dates(dates: Iterable[date]) -> Dict[date, Dict[str, De
             continue
         briquette = _decimal_from_value(getattr(row, "briquette_tons", 0))
         dryer = _decimal_from_value(getattr(row, "dryer_tons", 0))
+        dryer_hours = _decimal_from_value(getattr(row, "dryer_hours", 0))
         production[prod_date] = {
             "briquette_tons": briquette,
             "dryer_tons": dryer,
+            "dryer_hours": dryer_hours,
         }
     return production
 
@@ -623,7 +641,7 @@ def _recalculate_fifo_costs(production_map: Optional[Dict[date, Dict[str, Decima
 
     for entry in entries:
         entry_breakdown = _ensure_breakdown_structure()
-        production = production_map.get(entry.date, {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")})
+        production = production_map.get(entry.date, {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0"), "dryer_hours": Decimal("0")})
         briquette_tons = production.get("briquette_tons", Decimal("0"))
         output_kg = _quantize(briquette_tons * TON_TO_KG, KG_QUANT)
 
@@ -783,6 +801,7 @@ def _serialize_mix_entry(
 ) -> Dict[str, object]:
     briquette_tons = _quantize(production.get("briquette_tons", Decimal("0")), TON_QUANT)
     dryer_tons = _quantize(production.get("dryer_tons", Decimal("0")), TON_QUANT)
+    dryer_hours = _quantize(production.get("dryer_hours", Decimal("0")), HOUR_QUANT)
     output_kg = _quantize(briquette_tons * TON_TO_KG, KG_QUANT)
 
     dry_factor = Decimal("0")
@@ -798,10 +817,21 @@ def _serialize_mix_entry(
 
     sawdust_ton = _quantize(sawdust_value, TON_QUANT)
 
-    materials = {}
+    materials: Dict[str, float] = {}
+    material_decimals: Dict[str, Decimal] = {}
     for key, attr in ENTRY_FIELD_MAP.items():
         value = _decimal_from_value(getattr(entry, attr, "0")) if entry else Decimal("0")
-        materials[key] = float(_quantize(value, TON_QUANT))
+        quantized = _quantize(value, TON_QUANT)
+        material_decimals[key] = quantized
+        materials[key] = float(quantized)
+
+    wood_shaving_value = material_decimals.get("wood_shaving", Decimal("0"))
+    wood_powder_value = material_decimals.get("wood_powder", Decimal("0"))
+    peanut_husk_value = material_decimals.get("peanut_husk", Decimal("0"))
+    dry_material_value = _quantize(
+        dryer_tons + wood_shaving_value + wood_powder_value + peanut_husk_value,
+        TON_QUANT,
+    )
 
     total_cost = _decimal_from_value(entry.total_material_cost) if entry else Decimal("0")
     unit_cost = _decimal_from_value(entry.unit_cost_per_kg) if entry else Decimal("0")
@@ -811,10 +841,13 @@ def _serialize_mix_entry(
         "date": target_date.isoformat(),
         "briquette_production_ton": float(briquette_tons),
         "dryer_production_ton": float(dryer_tons),
+        "dryer_actual_running_hours": float(dryer_hours),
         "briquette_output_kg": float(output_kg),
         "dry_factor": float(_quantize(dry_factor, UNIT_COST_QUANT)),
         "materials": materials,
         "sawdust_ton": float(sawdust_ton),
+        "wood_shaving_ton": float(material_decimals.get("wood_shaving", Decimal("0"))),
+        "dry_material_ton": float(dry_material_value),
         "total_material_cost": float(_quantize(total_cost, CURRENCY_QUANT)),
         "unit_cost_per_kg": float(_quantize(unit_cost, UNIT_COST_QUANT)),
         "cost_breakdown": breakdown,
@@ -828,9 +861,110 @@ def get_briquette_mix_detail(target_date: date) -> Dict[str, object]:
     entry = BriquetteMixEntry.query.filter_by(date=target_date).first()
     production = _load_production_for_dates([target_date]).get(
         target_date,
-        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
+        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0"), "dryer_hours": Decimal("0")},
     )
     return _serialize_mix_entry(target_date, entry, production)
+
+
+def _validate_stock_levels(target_date: date, consumption_today: Dict[str, Decimal]) -> None:
+    if not isinstance(target_date, date):
+        raise TypeError("target_date must be a date instance")
+
+    zero = Decimal("0")
+    normalized_date = target_date
+
+    opening_layers, _ = _build_opening_layers_ton()
+    raw_inventory = _clone_ton_layers(opening_layers)
+
+    receipts_by_date: Dict[date, List[Tuple[str, TonInventoryLayer]]] = defaultdict(list)
+    receipt_layers = _load_receipt_layers()
+    for key, layers in receipt_layers.items():
+        if key not in raw_inventory:
+            continue
+        for layer in layers:
+            layer_date = getattr(layer, "date", None)
+            if not isinstance(layer_date, date) or layer_date > normalized_date:
+                continue
+
+            qty_kg = _decimal_from_value(getattr(layer, "quantity_kg", None))
+            if qty_kg <= zero:
+                continue
+
+            qty_ton = _quantize(qty_kg / TON_TO_KG, TON_QUANT)
+            if qty_ton <= zero:
+                continue
+
+            unit_cost_per_ton = _quantize(
+                _decimal_from_value(getattr(layer, "unit_cost", None)) * TON_TO_KG,
+                CURRENCY_QUANT,
+            )
+
+            receipts_by_date[layer_date].append(
+                (key, TonInventoryLayer(quantity_ton=qty_ton, unit_cost_per_ton=unit_cost_per_ton))
+            )
+
+    consumption_by_date: Dict[date, Dict[str, Decimal]] = defaultdict(dict)
+    if normalized_date > STOCK_BASE_DATE:
+        mix_entries = (
+            BriquetteMixEntry.query.filter(
+                BriquetteMixEntry.date > STOCK_BASE_DATE,
+                BriquetteMixEntry.date <= normalized_date,
+            )
+            .order_by(BriquetteMixEntry.date.asc())
+            .all()
+        )
+
+        for entry in mix_entries:
+            entry_date = getattr(entry, "date", None)
+            if not isinstance(entry_date, date) or entry_date == normalized_date:
+                continue
+
+            entry_consumption = consumption_by_date[entry_date]
+            for key, attr in ENTRY_FIELD_MAP.items():
+                if key not in raw_inventory:
+                    continue
+                quantity = _quantize(_decimal_from_value(getattr(entry, attr, None)), TON_QUANT)
+                if quantity > zero:
+                    entry_consumption[key] = _quantize(
+                        entry_consumption.get(key, zero) + quantity,
+                        TON_QUANT,
+                    )
+
+    today_consumption: Dict[str, Decimal] = {}
+    for key, quantity in (consumption_today or {}).items():
+        if key not in raw_inventory:
+            continue
+        numeric = _quantize(_decimal_from_value(quantity), TON_QUANT)
+        if numeric > zero:
+            today_consumption[key] = numeric
+    consumption_by_date[normalized_date] = today_consumption
+
+    timeline_dates = sorted(
+        {day for day in receipts_by_date.keys() | consumption_by_date.keys() if day <= normalized_date}
+    )
+    if not timeline_dates or timeline_dates[-1] != normalized_date:
+        timeline_dates = sorted(set(timeline_dates) | {normalized_date})
+
+    for day in timeline_dates:
+        for key, layer in receipts_by_date.get(day, []):
+            raw_inventory[key].append(layer)
+
+        day_consumption = consumption_by_date.get(day, {})
+        if day == normalized_date:
+            for key, quantity in day_consumption.items():
+                if quantity <= zero:
+                    continue
+                available_qty, _ = _sum_layers(raw_inventory[key])
+                if quantity > available_qty:
+                    label = MATERIAL_LABELS.get(key, key.replace("_", " ").title())
+                    raise ValueError(
+                        f"Insufficient stock for {label}. Entry not saved. System does not allow negative stock."
+                    )
+
+        for key, quantity in day_consumption.items():
+            if quantity <= zero:
+                continue
+            _consume_ton_layers(raw_inventory[key], quantity)
 
 
 def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[str, object]:
@@ -844,7 +978,6 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
         return _quantize(numeric, places)
 
     dry_factor = _parse_positive_decimal("dry_factor", places=UNIT_COST_QUANT)
-    wood_shaving = _parse_positive_decimal("wood_shaving_ton")
     wood_powder = _parse_positive_decimal("wood_powder_ton")
     peanut_husk = _parse_positive_decimal("peanut_husk_ton")
     fire_cut = _parse_positive_decimal("fire_cut_ton")
@@ -852,13 +985,30 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
     production_map = _load_production_for_dates([target_date])
     production = production_map.get(
         target_date,
-        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
+        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0"), "dryer_hours": Decimal("0")},
     )
-    dryer_tons = production.get("dryer_tons", Decimal("0"))
+    dryer_tons = _quantize(production.get("dryer_tons", Decimal("0")), TON_QUANT)
+    total_output = _quantize(production.get("briquette_tons", Decimal("0")), TON_QUANT)
+
     if dry_factor > 0:
         sawdust = _quantize(dryer_tons / dry_factor, TON_QUANT)
     else:
         sawdust = _quantize(Decimal("0"), TON_QUANT)
+
+    wood_shaving = _quantize(total_output - dryer_tons - wood_powder - peanut_husk, TON_QUANT)
+    if wood_shaving < Decimal("0"):
+        raise ValueError(
+            "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs."
+        )
+
+    consumption_today = {
+        "sawdust": sawdust,
+        "wood_shaving": wood_shaving,
+        "wood_powder": wood_powder,
+        "peanut_husk": peanut_husk,
+        "fire_cut": fire_cut,
+    }
+    _validate_stock_levels(target_date, consumption_today)
 
     entry = BriquetteMixEntry.query.filter_by(date=target_date).first()
     if entry is None:
@@ -879,6 +1029,6 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
 
     production_after = production_map.get(
         target_date,
-        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
+        {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0"), "dryer_hours": Decimal("0")},
     )
     return _serialize_mix_entry(target_date, entry, production_after)

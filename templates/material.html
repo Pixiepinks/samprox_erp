@@ -270,6 +270,7 @@
                                 min="0"
                                 class="modal__input"
                                 autocomplete="off"
+                                readonly
                             />
                         </label>
                         <label class="modal__field">
@@ -306,6 +307,26 @@
                                 min="0"
                                 class="modal__input"
                                 autocomplete="off"
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Dry Material (Ton)</span>
+                            <input
+                                id="briquette-dry-material"
+                                type="number"
+                                step="0.001"
+                                class="modal__input"
+                                readonly
+                            />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Dryer Actual Running Hours</span>
+                            <input
+                                id="briquette-dryer-actual-hours"
+                                type="number"
+                                step="0.1"
+                                class="modal__input"
+                                readonly
                             />
                         </label>
                     </div>
@@ -415,6 +436,8 @@
         const briquetteWoodPowderInput = document.getElementById("briquette-wood-powder");
         const briquettePeanutHuskInput = document.getElementById("briquette-peanut-husk");
         const briquetteFireCutInput = document.getElementById("briquette-fire-cut");
+        const briquetteDryMaterialInput = document.getElementById("briquette-dry-material");
+        const briquetteDryerHoursInput = document.getElementById("briquette-dryer-actual-hours");
         const briquetteOutputKg = document.getElementById("briquette-output-kg");
         const briquetteCostTableBody = document.getElementById("briquette-cost-table-body");
         const briquetteTotalCost = document.getElementById("briquette-total-cost");
@@ -429,6 +452,9 @@
         let briquetteMaterialLabels = {};
         let briquetteModalDateValue = null;
         let briquetteDryerProductionTon = 0;
+        let briquetteTotalOutputTon = 0;
+        let briquetteComputedWoodShavingTon = 0;
+        let briquetteComputedDryMaterialTon = 0;
 
         function formatNumber(value, fractionDigits) {
             const numeric = Number.parseFloat(value);
@@ -752,10 +778,58 @@
             document.body.classList.remove("modal-open");
             briquetteModalDateValue = null;
             briquetteDryerProductionTon = 0;
+            briquetteTotalOutputTon = 0;
+            briquetteComputedWoodShavingTon = 0;
+            briquetteComputedDryMaterialTon = 0;
             if (briquetteModalForm) {
                 briquetteModalForm.reset();
             }
             clearBriquetteModalFeedback();
+        }
+
+        function parseTonInput(input) {
+            if (!input) {
+                return 0;
+            }
+            const numeric = Number.parseFloat(input.value);
+            return Number.isFinite(numeric) ? numeric : 0;
+        }
+
+        function updateDerivedMaterialValues() {
+            const woodPowder = parseTonInput(briquetteWoodPowderInput);
+            const peanutHusk = parseTonInput(briquettePeanutHuskInput);
+            const dryerTons = Number.isFinite(briquetteDryerProductionTon)
+                ? briquetteDryerProductionTon
+                : 0;
+            const totalOutput = Number.isFinite(briquetteTotalOutputTon)
+                ? briquetteTotalOutputTon
+                : 0;
+
+            const woodShavingRaw = totalOutput - dryerTons - woodPowder - peanutHusk;
+            if (Number.isFinite(woodShavingRaw)) {
+                briquetteComputedWoodShavingTon = Number(woodShavingRaw.toFixed(3));
+                if (briquetteWoodShavingInput) {
+                    briquetteWoodShavingInput.value = briquetteComputedWoodShavingTon.toFixed(3);
+                }
+            } else {
+                briquetteComputedWoodShavingTon = 0;
+                if (briquetteWoodShavingInput) {
+                    briquetteWoodShavingInput.value = "0.000";
+                }
+            }
+
+            const dryMaterialRaw = dryerTons + woodShavingRaw + woodPowder + peanutHusk;
+            if (Number.isFinite(dryMaterialRaw)) {
+                briquetteComputedDryMaterialTon = Number(dryMaterialRaw.toFixed(3));
+                if (briquetteDryMaterialInput) {
+                    briquetteDryMaterialInput.value = briquetteComputedDryMaterialTon.toFixed(3);
+                }
+            } else {
+                briquetteComputedDryMaterialTon = 0;
+                if (briquetteDryMaterialInput) {
+                    briquetteDryMaterialInput.value = "0.000";
+                }
+            }
         }
 
         function updateSawdustPreview() {
@@ -783,16 +857,30 @@
             } else if (briquetteDryFactorInput) {
                 briquetteDryFactorInput.value = "0.0000";
             }
-            briquetteDryerProductionTon = Number.parseFloat(data.dryer_production_ton || "0") || 0;
+            const dryerValue = Number(data.dryer_production_ton);
+            briquetteDryerProductionTon = Number.isFinite(dryerValue) ? dryerValue : 0;
+
+            const totalOutputTon = Number(data.briquette_production_ton);
+            briquetteTotalOutputTon = Number.isFinite(totalOutputTon) ? totalOutputTon : 0;
 
             if (briquetteOutputKg) {
                 briquetteOutputKg.textContent = formatNumber(data.briquette_output_kg, 2);
             }
 
+            if (briquetteDryerHoursInput) {
+                const hoursValue = Number(data.dryer_actual_running_hours);
+                if (Number.isFinite(hoursValue)) {
+                    briquetteDryerHoursInput.value = hoursValue.toFixed(1);
+                } else {
+                    briquetteDryerHoursInput.value = "0.0";
+                }
+            }
+
             const materials = data.materials || {};
             if (briquetteWoodShavingInput) {
-                const value = Number.parseFloat(materials.wood_shaving) || 0;
-                briquetteWoodShavingInput.value = value.toFixed(3);
+                const value = Number(data.wood_shaving_ton ?? materials.wood_shaving);
+                const numeric = Number.isFinite(value) ? value : 0;
+                briquetteWoodShavingInput.value = numeric.toFixed(3);
             }
             if (briquetteWoodPowderInput) {
                 const value = Number.parseFloat(materials.wood_powder) || 0;
@@ -805,6 +893,11 @@
             if (briquetteFireCutInput) {
                 const value = Number.parseFloat(materials.fire_cut) || 0;
                 briquetteFireCutInput.value = value.toFixed(3);
+            }
+            if (briquetteDryMaterialInput) {
+                const value = Number(data.dry_material_ton);
+                const numeric = Number.isFinite(value) ? value : 0;
+                briquetteDryMaterialInput.value = numeric.toFixed(3);
             }
             if (briquetteSawdustInput) {
                 const sawdustValue = Number.parseFloat(data.sawdust_ton) || 0;
@@ -844,12 +937,13 @@
                 }
                 renderBriquetteMaterialHeadings(briquetteMaterialOrder, briquetteMaterialLabels);
                 updateSawdustPreview();
-                if (briquetteSaveButton) {
-                    briquetteSaveButton.disabled = false;
-                }
-            } catch (error) {
-                console.error(error);
-                setBriquetteModalFeedback("Unable to load mix details. Please try again.", { isError: true });
+            if (briquetteSaveButton) {
+                briquetteSaveButton.disabled = false;
+            }
+            updateDerivedMaterialValues();
+        } catch (error) {
+            console.error(error);
+            setBriquetteModalFeedback("Unable to load mix details. Please try again.", { isError: true });
                 if (briquetteSaveButton) {
                     briquetteSaveButton.disabled = false;
                 }
@@ -1153,6 +1247,18 @@
             briquetteDryFactorInput.addEventListener("input", updateSawdustPreview);
         }
 
+        if (briquetteWoodPowderInput) {
+            briquetteWoodPowderInput.addEventListener("input", () => {
+                updateDerivedMaterialValues();
+            });
+        }
+
+        if (briquettePeanutHuskInput) {
+            briquettePeanutHuskInput.addEventListener("input", () => {
+                updateDerivedMaterialValues();
+            });
+        }
+
         if (briquetteModalForm) {
             briquetteModalForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
@@ -1166,9 +1272,36 @@
                 }
                 clearBriquetteModalFeedback();
 
+                updateDerivedMaterialValues();
+                if (Number.isFinite(briquetteComputedWoodShavingTon)) {
+                    if (Math.round(briquetteComputedWoodShavingTon * 1000) < 0) {
+                        setBriquetteModalFeedback(
+                            "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs.",
+                            { isError: true },
+                        );
+                        if (briquetteSaveButton) {
+                            briquetteSaveButton.disabled = false;
+                        }
+                        return;
+                    }
+                }
+
+                const woodShavingForPayload = Number.isFinite(briquetteComputedWoodShavingTon)
+                    ? briquetteComputedWoodShavingTon.toFixed(3)
+                    : briquetteWoodShavingInput
+                    ? (() => {
+                          const fallbackValue = Number.parseFloat(
+                              briquetteWoodShavingInput.value || "0",
+                          );
+                          return Number.isFinite(fallbackValue)
+                              ? fallbackValue.toFixed(3)
+                              : "0.000";
+                      })()
+                    : "0.000";
+
                 const payload = {
                     dry_factor: briquetteDryFactorInput ? briquetteDryFactorInput.value : null,
-                    wood_shaving_ton: briquetteWoodShavingInput ? briquetteWoodShavingInput.value : null,
+                    wood_shaving_ton: woodShavingForPayload,
                     wood_powder_ton: briquetteWoodPowderInput ? briquetteWoodPowderInput.value : null,
                     peanut_husk_ton: briquettePeanutHuskInput ? briquettePeanutHuskInput.value : null,
                     fire_cut_ton: briquetteFireCutInput ? briquetteFireCutInput.value : null,

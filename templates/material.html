@@ -855,6 +855,10 @@
                 },
             };
 
+            if (stockStatusChartContainer) {
+                stockStatusChartContainer.hidden = false;
+            }
+
             if (stockStatusChartInstance) {
                 stockStatusChartInstance.data.labels = labels;
                 stockStatusChartInstance.data.datasets.forEach((dataset, index) => {
@@ -879,9 +883,7 @@
             }
 
             stockStatusChartAsOf = asOf || stockStatusChartAsOf || null;
-            if (stockStatusChartContainer) {
-                stockStatusChartContainer.hidden = false;
-            }
+            stockStatusChartInstance?.resize();
         }
 
         async function loadStockStatus(asOf) {

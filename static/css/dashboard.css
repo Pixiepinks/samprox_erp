@@ -3077,6 +3077,29 @@ body.modal-open {
     font-variant-numeric: tabular-nums;
 }
 
+.sales-report__cell--actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.sales-report__actions {
+    display: inline-flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.sales-report__action-button {
+    white-space: nowrap;
+}
+
+.sales-report__actions-placeholder {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 .sales-report__empty {
     margin: 0;
     padding: 1rem 1.2rem;

@@ -2164,6 +2164,77 @@
         loadLoaderOptions();
         loadSalesSummary();
 
+        function beginEditingEntry(customerId, dateValue, saleType, options = {}) {
+            if (!entryForm) {
+                return;
+            }
+
+            const normalizedType = saleType === "forecast" ? "forecast" : "actual";
+            const normalizedCustomerId =
+                customerId !== undefined && customerId !== null ? String(customerId) : "";
+            const normalizedDate = dateValue || "";
+            const { loadExistingEntry = true } = options;
+
+            if (entryCustomerSelect) {
+                entryCustomerSelect.value = normalizedCustomerId;
+            }
+            if (entryTypeSelect) {
+                entryTypeSelect.value = normalizedType;
+            }
+            if (entryDateInput) {
+                entryDateInput.value = normalizedDate;
+            }
+
+            updateLoaderFieldState();
+
+            if (loadExistingEntry) {
+                loadExistingEntryForSelection();
+            } else {
+                setEditingState(null);
+                clearSalesEntryValues();
+                renderEditingState();
+                setEntryFeedback("");
+            }
+
+            if (typeof entryForm.scrollIntoView === "function") {
+                entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+
+            if (entryDateInput && typeof entryDateInput.focus === "function") {
+                window.setTimeout(() => {
+                    try {
+                        entryDateInput.focus({ preventScroll: true });
+                    } catch (_) {
+                        entryDateInput.focus();
+                    }
+                }, 180);
+            }
+        }
+
+        function createSalesActionButton({
+            label,
+            saleType,
+            customerId,
+            date,
+            hasEntry,
+        }) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "button button--ghost button--small sales-report__action-button";
+            button.textContent = label;
+            const saleTypeLabel = saleType === "forecast" ? "forecast" : "actual";
+            button.setAttribute(
+                "aria-label",
+                `${label} entry for ${formatFriendlyDate(date) || date} (${saleTypeLabel})`,
+            );
+            button.addEventListener("click", () => {
+                beginEditingEntry(customerId, date, saleType, {
+                    loadExistingEntry: Boolean(hasEntry),
+                });
+            });
+            return button;
+        }
+
         function renderCustomer(customer) {
             const card = document.createElement("article");
             card.className = "sales-report__customer";
@@ -2236,25 +2307,31 @@
 
             const thead = document.createElement("thead");
             const headRow = document.createElement("tr");
-            ["Date", "Forecast qty (tons)", "Actual qty (tons)", "Variance qty (tons)"].forEach(
-                (label, index) => {
-                    const th = document.createElement("th");
-                    th.textContent = label;
-                    if (index > 0) {
-                        th.className = "sales-report__cell--numeric";
-                    }
-                    headRow.appendChild(th);
+            const tableColumns = [
+                { label: "Date" },
+                { label: "Forecast qty (tons)", className: "sales-report__cell--numeric" },
+                { label: "Actual qty (tons)", className: "sales-report__cell--numeric" },
+                { label: "Variance qty (tons)", className: "sales-report__cell--numeric" },
+                { label: "Actions", className: "sales-report__cell--actions" },
+            ];
+            tableColumns.forEach(({ label, className }) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                if (className) {
+                    th.className = className;
                 }
-            );
+                headRow.appendChild(th);
+            });
             thead.appendChild(headRow);
             table.appendChild(thead);
 
             const tbody = document.createElement("tbody");
+            const customerId = customer.customer_id ?? customer.id ?? null;
 
             if (!customer.dates.length) {
                 const row = document.createElement("tr");
                 const cell = document.createElement("td");
-                cell.colSpan = 4;
+                cell.colSpan = tableColumns.length;
                 cell.className = "sales-report__empty-row";
                 cell.textContent = "No sales recorded for this customer.";
                 row.appendChild(cell);
@@ -2288,6 +2365,48 @@
                         varianceCell.classList.add("sales-report__variance--negative");
                     }
                     row.appendChild(varianceCell);
+
+                    const actionsCell = document.createElement("td");
+                    actionsCell.className = "sales-report__cell--actions";
+                    const actionsWrapper = document.createElement("div");
+                    actionsWrapper.className = "sales-report__actions";
+
+                    const hasForecastEntry = Boolean(entry.has_forecast_entry);
+                    const hasActualEntry = Boolean(entry.has_actual_entry);
+
+                    if (hasForecastEntry && customerId !== null) {
+                        actionsWrapper.appendChild(
+                            createSalesActionButton({
+                                label: "Edit forecast",
+                                saleType: "forecast",
+                                customerId,
+                                date: entry.date,
+                                hasEntry: true,
+                            }),
+                        );
+                    }
+
+                    if (hasActualEntry && customerId !== null) {
+                        actionsWrapper.appendChild(
+                            createSalesActionButton({
+                                label: "Edit actual",
+                                saleType: "actual",
+                                customerId,
+                                date: entry.date,
+                                hasEntry: true,
+                            }),
+                        );
+                    }
+
+                    if (actionsWrapper.children.length === 0) {
+                        const placeholder = document.createElement("span");
+                        placeholder.className = "sales-report__actions-placeholder";
+                        placeholder.textContent = "No entries";
+                        actionsWrapper.appendChild(placeholder);
+                    }
+
+                    actionsCell.appendChild(actionsWrapper);
+                    row.appendChild(actionsCell);
 
                     tbody.appendChild(row);
                 });

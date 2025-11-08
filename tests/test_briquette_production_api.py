@@ -177,9 +177,9 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         mix_data = response.get_json()
 
-        self.assertAlmostEqual(mix_data["sawdust_ton"], 0.2, places=3)
-        self.assertAlmostEqual(mix_data["total_material_cost"], 10068.5, places=2)
-        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 3.3562, places=4)
+        self.assertAlmostEqual(mix_data["sawdust_ton"], 1.25, places=3)
+        self.assertAlmostEqual(mix_data["total_material_cost"], 18594.5, places=2)
+        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 6.1982, places=4)
 
         breakdown = {item["key"]: item for item in mix_data["cost_breakdown"]}
         self.assertIn("wood_powder", breakdown)
@@ -194,8 +194,8 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(day_entry)
-        self.assertAlmostEqual(day_entry["total_material_cost"], 10068.5, places=2)
-        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 3.3562, places=4)
+        self.assertAlmostEqual(day_entry["total_material_cost"], 18594.5, places=2)
+        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 6.1982, places=4)
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

@@ -789,10 +789,14 @@ def _serialize_mix_entry(
     if entry and entry.dry_factor is not None:
         dry_factor = _decimal_from_value(entry.dry_factor)
 
-    sawdust_ton = _quantize(
-        _decimal_from_value(entry.sawdust_qty_ton) if entry else dryer_tons * dry_factor,
-        TON_QUANT,
-    )
+    if entry and entry.sawdust_qty_ton is not None:
+        sawdust_value = _decimal_from_value(entry.sawdust_qty_ton)
+    elif dry_factor > 0:
+        sawdust_value = dryer_tons / dry_factor
+    else:
+        sawdust_value = Decimal("0")
+
+    sawdust_ton = _quantize(sawdust_value, TON_QUANT)
 
     materials = {}
     for key, attr in ENTRY_FIELD_MAP.items():
@@ -851,7 +855,10 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
         {"briquette_tons": Decimal("0"), "dryer_tons": Decimal("0")},
     )
     dryer_tons = production.get("dryer_tons", Decimal("0"))
-    sawdust = _quantize(dryer_tons * dry_factor, TON_QUANT)
+    if dry_factor > 0:
+        sawdust = _quantize(dryer_tons / dry_factor, TON_QUANT)
+    else:
+        sawdust = _quantize(Decimal("0"), TON_QUANT)
 
     entry = BriquetteMixEntry.query.filter_by(date=target_date).first()
     if entry is None:

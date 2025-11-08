@@ -345,6 +345,15 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
     raw_inventory = _clone_ton_layers(opening_layers)
     briquette_layers = _initial_briquette_layers()
 
+    material_opening_balances: Dict[str, Decimal] = {
+        key: _sum_layers(raw_inventory[key])[0] for key in MATERIAL_ORDER
+    }
+    material_purchases: Dict[str, Decimal] = {key: zero for key in MATERIAL_ORDER}
+    material_consumption: Dict[str, Decimal] = {key: zero for key in MATERIAL_ORDER}
+    briquette_opening_balance = _sum_layers(briquette_layers)[0]
+    briquette_production = zero
+    briquette_sales = zero
+
     if normalized_date > STOCK_BASE_DATE:
         receipts_by_date: Dict[date, List[Tuple[str, TonInventoryLayer]]] = defaultdict(list)
 
@@ -432,10 +441,37 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
 
         timeline_dates = sorted(set(receipts_by_date.keys()) | set(consumption_by_date.keys()))
         for day in timeline_dates:
-            for key, layer in receipts_by_date.get(day, []):
-                raw_inventory[key].append(layer)
-            for key, quantity in consumption_by_date.get(day, {}).items():
-                _consume_ton_layers(raw_inventory[key], quantity)
+            if day < normalized_date:
+                for key, layer in receipts_by_date.get(day, []):
+                    raw_inventory[key].append(layer)
+                for key, quantity in consumption_by_date.get(day, {}).items():
+                    _consume_ton_layers(raw_inventory[key], quantity)
+                material_opening_balances = {
+                    key: _sum_layers(raw_inventory[key])[0] for key in MATERIAL_ORDER
+                }
+                continue
+
+            if day == normalized_date:
+                material_opening_balances = {
+                    key: _sum_layers(raw_inventory[key])[0] for key in MATERIAL_ORDER
+                }
+                for key, layer in receipts_by_date.get(day, []):
+                    raw_inventory[key].append(layer)
+                    material_purchases[key] = _quantize(
+                        material_purchases.get(key, zero) + layer.quantity_ton,
+                        TON_QUANT,
+                    )
+                for key, quantity in consumption_by_date.get(day, {}).items():
+                    if quantity > zero:
+                        material_consumption[key] = _quantize(
+                            material_consumption.get(key, zero) + quantity,
+                            TON_QUANT,
+                        )
+                    _consume_ton_layers(raw_inventory[key], quantity)
+                break
+
+            if day > normalized_date:
+                break
 
         briquette_receipts_by_date: Dict[date, List[TonInventoryLayer]] = defaultdict(list)
 
@@ -502,11 +538,31 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
 
         briquette_dates = sorted(set(briquette_receipts_by_date.keys()) | set(issues_by_date.keys()))
         for day in briquette_dates:
-            for layer in briquette_receipts_by_date.get(day, []):
-                briquette_layers.append(layer)
-            issue_qty = issues_by_date.get(day, zero)
-            if issue_qty > zero:
-                _consume_ton_layers(briquette_layers, issue_qty)
+            if day < normalized_date:
+                for layer in briquette_receipts_by_date.get(day, []):
+                    briquette_layers.append(layer)
+                issue_qty = issues_by_date.get(day, zero)
+                if issue_qty > zero:
+                    _consume_ton_layers(briquette_layers, issue_qty)
+                briquette_opening_balance = _sum_layers(briquette_layers)[0]
+                continue
+
+            if day == normalized_date:
+                briquette_opening_balance = _sum_layers(briquette_layers)[0]
+                for layer in briquette_receipts_by_date.get(day, []):
+                    briquette_layers.append(layer)
+                    briquette_production = _quantize(
+                        briquette_production + layer.quantity_ton,
+                        TON_QUANT,
+                    )
+                issue_qty = issues_by_date.get(day, zero)
+                if issue_qty > zero:
+                    briquette_sales = _quantize(briquette_sales + issue_qty, TON_QUANT)
+                    _consume_ton_layers(briquette_layers, issue_qty)
+                break
+
+            if day > normalized_date:
+                break
 
     items: List[Dict[str, object]] = []
 
@@ -521,6 +577,10 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
             unit_cost = _quantize(value / qty, CURRENCY_QUANT)
         else:
             unit_cost = None
+        opening_qty = _quantize(material_opening_balances.get(key, zero), TON_QUANT)
+        purchases_qty = _quantize(material_purchases.get(key, zero), TON_QUANT)
+        consumption_qty = _quantize(material_consumption.get(key, zero), TON_QUANT)
+        total_available_qty = _quantize(opening_qty + purchases_qty, TON_QUANT)
         items.append(
             {
                 "key": key,
@@ -528,6 +588,15 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
                 "quantity_ton": float(qty),
                 "unit_cost_per_ton": float(unit_cost) if unit_cost is not None else None,
                 "value_rs": float(value),
+                "metrics": {
+                    "opening_balance": float(opening_qty),
+                    "purchases": float(purchases_qty),
+                    "production": None,
+                    "sales": None,
+                    "consumption": float(consumption_qty),
+                    "closing_balance": float(qty),
+                    "total_available": float(total_available_qty),
+                },
             }
         )
 
@@ -542,6 +611,14 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
     else:
         briquette_unit_cost = None
 
+    briquette_opening_qty = _quantize(briquette_opening_balance, TON_QUANT)
+    briquette_production_qty = _quantize(briquette_production, TON_QUANT)
+    briquette_sales_qty = _quantize(briquette_sales, TON_QUANT)
+    briquette_total_available = _quantize(
+        briquette_opening_qty + briquette_production_qty,
+        TON_QUANT,
+    )
+
     items.append(
         {
             "key": "briquettes",
@@ -551,6 +628,15 @@ def calculate_stock_status(as_of: date) -> Dict[str, object]:
             if briquette_unit_cost is not None
             else None,
             "value_rs": float(briquette_value),
+            "metrics": {
+                "opening_balance": float(briquette_opening_qty),
+                "purchases": 0.0,
+                "production": float(briquette_production_qty),
+                "sales": float(briquette_sales_qty),
+                "consumption": 0.0,
+                "closing_balance": float(briquette_qty),
+                "total_available": float(briquette_total_available),
+            },
         }
     )
 

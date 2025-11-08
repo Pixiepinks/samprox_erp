@@ -146,6 +146,8 @@ def customer_sales_report():
             "actual_amount": 0.0,
             "forecast_quantity_tons": 0.0,
             "actual_quantity_tons": 0.0,
+            "has_forecast_entry": False,
+            "has_actual_entry": False,
         }
 
     summary = {customer.id: {"customer": customer, "dates": {}} for customer in customers}
@@ -170,6 +172,7 @@ def customer_sales_report():
         bucket["dates"].setdefault(row.date, _empty_day())
         bucket["dates"][row.date]["forecast_amount"] = float(row.amount or 0.0)
         bucket["dates"][row.date]["forecast_quantity_tons"] = float(row.quantity or 0.0)
+        bucket["dates"][row.date]["has_forecast_entry"] = True
 
     actual_rows = (
         db.session.query(
@@ -191,6 +194,7 @@ def customer_sales_report():
         bucket["dates"].setdefault(row.date, _empty_day())
         bucket["dates"][row.date]["actual_amount"] = float(row.amount or 0.0)
         bucket["dates"][row.date]["actual_quantity_tons"] = float(row.quantity or 0.0)
+        bucket["dates"][row.date]["has_actual_entry"] = True
 
     payload = []
     for customer_id_value, bucket in summary.items():
@@ -212,6 +216,8 @@ def customer_sales_report():
                     "actual_amount": entry["actual_amount"],
                     "forecast_quantity_tons": entry["forecast_quantity_tons"],
                     "actual_quantity_tons": entry["actual_quantity_tons"],
+                    "has_forecast_entry": entry["has_forecast_entry"],
+                    "has_actual_entry": entry["has_actual_entry"],
                 }
             )
 

@@ -163,6 +163,8 @@ class ReportsApiTestCase(unittest.TestCase):
                     "actual_amount": 90.0,
                     "forecast_quantity_tons": 10.0,
                     "actual_quantity_tons": 9.0,
+                    "has_forecast_entry": True,
+                    "has_actual_entry": True,
                 },
                 {
                     "date": "2024-05-02",
@@ -170,6 +172,8 @@ class ReportsApiTestCase(unittest.TestCase):
                     "actual_amount": 0.0,
                     "forecast_quantity_tons": 15.0,
                     "actual_quantity_tons": 0.0,
+                    "has_forecast_entry": True,
+                    "has_actual_entry": False,
                 },
                 {
                     "date": "2024-05-03",
@@ -177,6 +181,8 @@ class ReportsApiTestCase(unittest.TestCase):
                     "actual_amount": 200.0,
                     "forecast_quantity_tons": 0.0,
                     "actual_quantity_tons": 20.0,
+                    "has_forecast_entry": False,
+                    "has_actual_entry": True,
                 },
             ],
         )
@@ -196,6 +202,8 @@ class ReportsApiTestCase(unittest.TestCase):
                     "actual_amount": 300.0,
                     "forecast_quantity_tons": 25.0,
                     "actual_quantity_tons": 30.0,
+                    "has_forecast_entry": True,
+                    "has_actual_entry": True,
                 }
             ],
         )

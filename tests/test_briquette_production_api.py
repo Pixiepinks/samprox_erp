@@ -165,7 +165,7 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
 
         payload = {
             "dry_factor": 0.4,
-            "wood_shaving_ton": 0.5,
+            "wood_shaving_ton": 0.0,
             "wood_powder_ton": 0.2,
             "peanut_husk_ton": 0.1,
             "fire_cut_ton": 0.05,
@@ -178,8 +178,11 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
         mix_data = response.get_json()
 
         self.assertAlmostEqual(mix_data["sawdust_ton"], 1.25, places=3)
-        self.assertAlmostEqual(mix_data["total_material_cost"], 18594.5, places=2)
-        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 6.1982, places=4)
+        self.assertAlmostEqual(mix_data["wood_shaving_ton"], 2.2, places=3)
+        self.assertAlmostEqual(mix_data["dry_material_ton"], 3.0, places=3)
+        self.assertAlmostEqual(mix_data["dryer_actual_running_hours"], 1.0, places=1)
+        self.assertAlmostEqual(mix_data["total_material_cost"], 35254.5, places=2)
+        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 11.7515, places=4)
 
         breakdown = {item["key"]: item for item in mix_data["cost_breakdown"]}
         self.assertIn("wood_powder", breakdown)
@@ -194,8 +197,46 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(day_entry)
-        self.assertAlmostEqual(day_entry["total_material_cost"], 18594.5, places=2)
-        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 6.1982, places=4)
+        self.assertAlmostEqual(day_entry["total_material_cost"], 35254.5, places=2)
+        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 11.7515, places=4)
+
+    def test_update_mix_rejects_negative_wood_shaving(self):
+        payload = {
+            "dry_factor": 0.4,
+            "wood_shaving_ton": 0.0,
+            "wood_powder_ton": 3.0,
+            "peanut_husk_ton": 1.0,
+            "fire_cut_ton": 0.0,
+        }
+        response = self.client.post(
+            f"/api/material/briquette-production/{self.production_date.isoformat()}",
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(
+            data["msg"],
+            "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs.",
+        )
+
+    def test_update_mix_rejects_insufficient_stock(self):
+        payload = {
+            "dry_factor": 0.4,
+            "wood_shaving_ton": 0.0,
+            "wood_powder_ton": 1.5,
+            "peanut_husk_ton": 0.2,
+            "fire_cut_ton": 0.05,
+        }
+        response = self.client.post(
+            f"/api/material/briquette-production/{self.production_date.isoformat()}",
+            json=payload,
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(
+            data["msg"],
+            "Insufficient stock for Wood Powder. Entry not saved. System does not allow negative stock.",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

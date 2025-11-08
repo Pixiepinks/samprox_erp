@@ -1673,10 +1673,10 @@ body.modal-open {
     padding: 0.5rem 0 0;
 }
 
-.stock-status-card__chart canvas {
+.stock-status-card__chart #stock-status-chart {
     width: 100%;
     height: 100%;
-    display: block;
+    min-height: 320px;
 }
 
 @media (max-width: 640px) {

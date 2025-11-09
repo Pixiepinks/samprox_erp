@@ -37,6 +37,25 @@
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
         </nav>
         <section class="section">
+            <section class="production-chart" aria-labelledby="unit-economics-title">
+                <header class="production-chart__header">
+                    <div>
+                        <h2 id="unit-economics-title">Unit Economics – Daily Stack (Rs/kg)</h2>
+                        <p>Stacked daily per-kg costs and contribution compared to selling price.</p>
+                    </div>
+                </header>
+                <div class="production-chart__body">
+                    <div class="production-chart__summary" id="unit-economics-summary" aria-live="polite"></div>
+                    <div class="production-chart__canvas">
+                        <canvas
+                            id="unit-economics-chart"
+                            height="320"
+                            aria-label="Daily unit economics stacked bar chart"
+                            role="img"
+                        ></canvas>
+                    </div>
+                </div>
+            </section>
             <section class="production-chart" aria-labelledby="closing-stock-title">
                 <header class="production-chart__header">
                     <div>
@@ -276,6 +295,8 @@
         const materialChartCanvas = document.getElementById("material-chart");
         const laborSummaryContainer = document.getElementById("labor-summary");
         const laborChartCanvas = document.getElementById("labor-chart");
+        const unitEconomicsSummaryContainer = document.getElementById("unit-economics-summary");
+        const unitEconomicsChartCanvas = document.getElementById("unit-economics-chart");
         const closingStockSummaryContainer = document.getElementById("closing-stock-summary");
         const closingStockChartCanvas = document.getElementById("closing-stock-chart");
         const closingStockChartContainer = document.getElementById("closing-stock-chart-container");
@@ -319,6 +340,14 @@
         const hoursFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
             maximumFractionDigits: 2,
+        });
+        const unitValueFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 3,
+        });
+        const kgFormatter = new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
         });
 
         const isoToday = () => {
@@ -520,6 +549,14 @@
             { background: "rgba(250, 204, 21, 0.75)", border: "rgb(250, 204, 21)" },
             { background: "rgba(148, 163, 184, 0.7)", border: "rgb(148, 163, 184)" },
         ];
+
+        const UNIT_ECONOMICS_COLORS = {
+            material: { background: "rgba(37, 99, 235, 0.8)", border: "rgb(37, 99, 235)" },
+            labor: { background: "rgba(16, 185, 129, 0.8)", border: "rgb(16, 185, 129)" },
+            other: { background: "rgba(234, 179, 8, 0.8)", border: "rgb(234, 179, 8)" },
+            contributionPositive: { background: "rgba(129, 140, 248, 0.85)", border: "rgb(129, 140, 248)" },
+            contributionNegative: { background: "rgba(248, 113, 113, 0.85)", border: "rgb(239, 68, 68)" },
+        };
 
         const setClosingStockSummaryMessage = (label, message) => {
             if (!closingStockSummaryContainer) {
@@ -993,6 +1030,7 @@
         const salesPeriodCache = new Map();
         const materialPeriodCache = new Map();
         const laborPeriodCache = new Map();
+        const unitEconomicsPeriodCache = new Map();
 
         const formatTons = (value) => {
             const number = Number(value);
@@ -1024,6 +1062,24 @@
                 return "0";
             }
             return hoursFormatter.format(number);
+        };
+
+        const formatCurrencyPerKg = (value) => {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return "Rs 0/kg";
+            }
+            const formatted = unitValueFormatter.format(Math.abs(number));
+            const prefix = number < 0 ? "-Rs" : "Rs";
+            return `${prefix} ${formatted}/kg`;
+        };
+
+        const formatKg = (value) => {
+            const number = Number(value);
+            if (!Number.isFinite(number)) {
+                return "0";
+            }
+            return kgFormatter.format(number);
         };
 
         const normalizeMachineCode = (code) => (code || "").trim().toUpperCase();
@@ -2201,6 +2257,329 @@
                 .join("");
         };
 
+        const renderUnitEconomicsSummary = (periodData) => {
+            if (!unitEconomicsSummaryContainer) {
+                return;
+            }
+
+            const summary = periodData?.summary ?? {};
+            const daysWithProduction = Number(summary?.days_with_production ?? 0);
+
+            if (!summary || daysWithProduction === 0) {
+                unitEconomicsSummaryContainer.innerHTML = `
+                    <div class="production-chart__metric">
+                        <span class="production-chart__metric-label">Unit economics</span>
+                        <span class="production-chart__metric-value">No production data.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const totalProductionTons = Number(summary?.total_production_tons ?? 0);
+            const avgSellingPrice = Number(summary?.weighted_average_selling_price ?? 0);
+            const avgContribution = Number(summary?.weighted_average_contribution ?? 0);
+            const contributionMargin = Number(summary?.weighted_average_contribution_margin ?? 0);
+
+            const metrics = [
+                {
+                    label: "Total production",
+                    valueText: `${formatTons(totalProductionTons)} tons`,
+                },
+                {
+                    label: "Avg selling price",
+                    valueText: formatCurrencyPerKg(avgSellingPrice),
+                },
+                {
+                    label: "Avg contribution",
+                    valueText: formatCurrencyPerKg(avgContribution),
+                },
+            ];
+
+            if (Number.isFinite(contributionMargin)) {
+                metrics.push({
+                    label: "Contribution margin",
+                    valueText: `${formatPercent(contributionMargin)}%`,
+                });
+            }
+
+            unitEconomicsSummaryContainer.innerHTML = metrics
+                .map(
+                    (metric) => `
+                        <div class="production-chart__metric">
+                            <span class="production-chart__metric-label">${metric.label}</span>
+                            <span class="production-chart__metric-value">${metric.valueText}</span>
+                        </div>
+                    `,
+                )
+                .join("");
+        };
+
+        const showUnitEconomicsSummaryError = (message) => {
+            if (!unitEconomicsSummaryContainer) {
+                return;
+            }
+            unitEconomicsSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Unit economics</span>
+                    <span class="production-chart__metric-value">${message}</span>
+                </div>
+            `;
+        };
+
+        const fetchUnitEconomicsDailyStack = async (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            if (unitEconomicsPeriodCache.has(periodKey)) {
+                return unitEconomicsPeriodCache.get(periodKey);
+            }
+
+            const params = new URLSearchParams({ period: periodKey });
+            const response = await fetch(
+                `/api/reports/production/unit-economics?${params.toString()}`,
+                { headers: authHeaders },
+            );
+
+            if (response.status === 401) {
+                logoutButton.click();
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to load unit economics data.");
+            }
+
+            const data = await response.json();
+            unitEconomicsPeriodCache.set(periodKey, data);
+            return data;
+        };
+
+        const buildUnitEconomicsDataset = async (periodKey) => {
+            const periodData = await fetchUnitEconomicsDailyStack(periodKey);
+            if (!periodData) {
+                return null;
+            }
+
+            const dailyRecords = Array.isArray(periodData.daily)
+                ? periodData.daily.filter((entry) => Number(entry?.production_kg ?? 0) > 0)
+                : [];
+
+            if (dailyRecords.length === 0) {
+                showUnitEconomicsSummaryError("No production data available.");
+                return null;
+            }
+
+            const labels = dailyRecords.map((entry) => entry.day);
+            const materialValues = dailyRecords.map((entry) => Number(entry?.unit_material_cost ?? 0));
+            const laborValues = dailyRecords.map((entry) => Number(entry?.unit_labor_cost ?? 0));
+            const otherValues = dailyRecords.map(
+                (entry) => Number(entry?.unit_other_variable_cost ?? 0),
+            );
+            const contributionValues = dailyRecords.map(
+                (entry) => Number(entry?.unit_contribution ?? 0),
+            );
+
+            const datasets = [
+                {
+                    label: "Unit Material Cost (Rs/kg)",
+                    data: materialValues,
+                    backgroundColor: UNIT_ECONOMICS_COLORS.material.background,
+                    borderColor: UNIT_ECONOMICS_COLORS.material.border,
+                    borderWidth: 1,
+                    stack: "unit-economics",
+                    maxBarThickness: 24,
+                    borderSkipped: false,
+                    borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 6, bottomRight: 6 },
+                },
+                {
+                    label: "Unit Labor Cost (Rs/kg)",
+                    data: laborValues,
+                    backgroundColor: UNIT_ECONOMICS_COLORS.labor.background,
+                    borderColor: UNIT_ECONOMICS_COLORS.labor.border,
+                    borderWidth: 1,
+                    stack: "unit-economics",
+                    maxBarThickness: 24,
+                    borderSkipped: false,
+                    borderRadius: 0,
+                },
+                {
+                    label: "Unit Other Variable Cost (Rs/kg)",
+                    data: otherValues,
+                    backgroundColor: UNIT_ECONOMICS_COLORS.other.background,
+                    borderColor: UNIT_ECONOMICS_COLORS.other.border,
+                    borderWidth: 1,
+                    stack: "unit-economics",
+                    maxBarThickness: 24,
+                    borderSkipped: false,
+                    borderRadius: 0,
+                },
+                {
+                    label: "Unit Contribution (Rs/kg)",
+                    data: contributionValues,
+                    backgroundColor: contributionValues.map((value) =>
+                        value >= 0
+                            ? UNIT_ECONOMICS_COLORS.contributionPositive.background
+                            : UNIT_ECONOMICS_COLORS.contributionNegative.background,
+                    ),
+                    borderColor: contributionValues.map((value) =>
+                        value >= 0
+                            ? UNIT_ECONOMICS_COLORS.contributionPositive.border
+                            : UNIT_ECONOMICS_COLORS.contributionNegative.border,
+                    ),
+                    borderWidth: 1,
+                    stack: "unit-economics",
+                    maxBarThickness: 24,
+                    borderSkipped: false,
+                    borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                },
+            ];
+
+            return {
+                labels,
+                datasets,
+                dailyRecords,
+                sourceData: periodData,
+            };
+        };
+
+        const buildUnitEconomicsChart = async () => {
+            if (!unitEconomicsSummaryContainer || !unitEconomicsChartCanvas) {
+                return;
+            }
+
+            unitEconomicsSummaryContainer.innerHTML = `
+                <div class="production-chart__metric">
+                    <span class="production-chart__metric-label">Loading</span>
+                    <span class="production-chart__metric-value">…</span>
+                </div>
+            `;
+
+            try {
+                const periodKey = getSelectedPeriodKey();
+                const dataset = await buildUnitEconomicsDataset(periodKey);
+                if (!dataset) {
+                    if (window.unitEconomicsChartInstance) {
+                        window.unitEconomicsChartInstance.destroy();
+                        window.unitEconomicsChartInstance = null;
+                    }
+                    return;
+                }
+
+                renderUnitEconomicsSummary(dataset.sourceData);
+
+                if (!ensureChartJsAvailable()) {
+                    return;
+                }
+
+                if (window.unitEconomicsChartInstance) {
+                    window.unitEconomicsChartInstance.destroy();
+                }
+
+                window.unitEconomicsChartInstance = new Chart(unitEconomicsChartCanvas, {
+                    type: "bar",
+                    data: {
+                        labels: dataset.labels,
+                        datasets: dataset.datasets,
+                        dailyRecords: dataset.dailyRecords,
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: "Day of month",
+                                },
+                                grid: {
+                                    display: false,
+                                },
+                            },
+                            y: {
+                                stacked: true,
+                                title: {
+                                    display: true,
+                                    text: "Rs per kg",
+                                },
+                                ticks: {
+                                    callback: (value) => unitValueFormatter.format(value),
+                                },
+                            },
+                        },
+                        interaction: {
+                            mode: "index",
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    usePointStyle: true,
+                                },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const context = contexts[0];
+                                        const record =
+                                            context?.chart?.data?.dailyRecords?.[context.dataIndex];
+                                        if (record) {
+                                            const formattedDate =
+                                                formatIsoDateLabel(record.date) || record.date || "";
+                                            return `Day ${record.day} – ${formattedDate}`;
+                                        }
+                                        const label = context.label || context.parsed.x;
+                                        return label ? `Day ${label}` : "";
+                                    },
+                                    label: (context) => {
+                                        const label = context.dataset.label || "";
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${label}: ${formatCurrencyPerKg(value)}`;
+                                    },
+                                    footer: (contexts) => {
+                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                            return "";
+                                        }
+                                        const context = contexts[0];
+                                        const record =
+                                            context?.chart?.data?.dailyRecords?.[context.dataIndex];
+                                        if (!record) {
+                                            return "";
+                                        }
+
+                                        const lines = [
+                                            `Unit selling price: ${formatCurrencyPerKg(record.unit_selling_price)}`,
+                                            `Production: ${formatKg(record.production_kg)} kg`,
+                                        ];
+
+                                        if (Number(record.sales_quantity_kg ?? 0) > 0) {
+                                            lines.push(
+                                                `Sales quantity: ${formatKg(record.sales_quantity_kg)} kg`,
+                                            );
+                                        }
+
+                                        return lines.join("\n");
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+            } catch (error) {
+                console.error(error);
+                showUnitEconomicsSummaryError("Unable to load unit economics data.");
+                if (window.unitEconomicsChartInstance) {
+                    window.unitEconomicsChartInstance.destroy();
+                    window.unitEconomicsChartInstance = null;
+                }
+            }
+        };
+
         const showSalesSummaryError = (message) => {
             if (!salesSummaryContainer) {
                 return;
@@ -2931,7 +3310,15 @@
             });
         };
 
+        const refreshUnitEconomicsChart = () => {
+            buildUnitEconomicsChart().catch((error) => {
+                console.error(error);
+                showUnitEconomicsSummaryError("Unable to load unit economics data.");
+            });
+        };
+
         const refreshCharts = () => {
+            refreshUnitEconomicsChart();
             refreshProductionChart();
             refreshProductionPulseChart();
             refreshIdleParetoChart();

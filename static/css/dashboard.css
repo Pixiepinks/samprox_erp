@@ -3362,6 +3362,10 @@ body.modal-open {
     pointer-events: none;
 }
 
+.unit-economics__empty-message[hidden] {
+    display: none !important;
+}
+
 @media (max-width: 1024px) {
     .unit-economics__chart {
         flex: 1 1 100%;

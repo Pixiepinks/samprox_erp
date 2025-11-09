@@ -3325,6 +3325,49 @@ body.modal-open {
     height: 320px;
 }
 
+.unit-economics__charts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: stretch;
+}
+
+.unit-economics__chart {
+    flex: 1 1 320px;
+    min-width: 280px;
+}
+
+.unit-economics__canvas {
+    height: 280px;
+}
+
+.unit-economics__canvas canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.unit-economics__empty-message {
+    position: absolute;
+    inset: 0.75rem;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #475569;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px dashed rgba(148, 163, 184, 0.7);
+    padding: 1rem;
+    pointer-events: none;
+}
+
+@media (max-width: 1024px) {
+    .unit-economics__chart {
+        flex: 1 1 100%;
+    }
+}
+
 .closing-stock__charts {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

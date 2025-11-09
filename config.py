@@ -18,6 +18,20 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip().lower()
+    if not text:
+        return default
+    if text in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    return default
+
+
 def _normalize_db_url(url: str) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
@@ -71,13 +85,13 @@ class Config:
     ENV = os.getenv("FLASK_ENV", "production")
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
-    MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "false").lower() == "true"
+    MAIL_USE_TLS = _env_bool("MAIL_USE_TLS", True)
+    MAIL_USE_SSL = _env_bool("MAIL_USE_SSL", False)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreplysamprox@gmail.com")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "zzohpxmeoiahipp")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreplysamprox@gmail.com")
-    MAIL_SUPPRESS_SEND = os.getenv("MAIL_SUPPRESS_SEND", "false").lower() == "true"
+    MAIL_SUPPRESS_SEND = _env_bool("MAIL_SUPPRESS_SEND", False)
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)
-    MAIL_FALLBACK_TO_TLS = os.getenv("MAIL_FALLBACK_TO_TLS", "true").lower() == "true"
+    MAIL_FALLBACK_TO_TLS = _env_bool("MAIL_FALLBACK_TO_TLS", True)
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
-    MAIL_FALLBACK_USE_SSL = os.getenv("MAIL_FALLBACK_USE_SSL", "false").lower() == "true"
+    MAIL_FALLBACK_USE_SSL = _env_bool("MAIL_FALLBACK_USE_SSL", False)

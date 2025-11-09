@@ -942,6 +942,7 @@ def production_unit_economics_daily_stack():
     )
 
     production_by_date: dict[date, Decimal] = {}
+    daily_production_dates: set[date] = set()
     for row in production_rows:
         prod_date = getattr(row, "prod_date", None)
         if not isinstance(prod_date, date):
@@ -950,6 +951,7 @@ def production_unit_economics_daily_stack():
         production_kg = Decimal(str(quantity_tons)) * TON_TO_KG
         if production_kg > 0:
             production_by_date[prod_date] = production_kg
+            daily_production_dates.add(prod_date)
 
     material_rows = (
         BriquetteMixEntry.query.filter(
@@ -976,7 +978,11 @@ def production_unit_economics_daily_stack():
 
         output_kg = Decimal(str(getattr(entry, "total_output_kg", 0) or 0))
         if output_kg > 0:
-            production_by_date[entry_date] = production_by_date.get(entry_date, Decimal("0")) + output_kg
+            if entry_date in daily_production_dates:
+                continue
+            production_by_date[entry_date] = (
+                production_by_date.get(entry_date, Decimal("0")) + output_kg
+            )
 
     labor_by_date: dict[date, Decimal] = {}
     labor_periods: set[str] = set()

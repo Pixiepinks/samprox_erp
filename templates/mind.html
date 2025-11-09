@@ -40,8 +40,8 @@
             <section class="production-chart" aria-labelledby="unit-economics-title">
                 <header class="production-chart__header">
                     <div>
-                        <h2 id="unit-economics-title">Unit Economics – Daily Stack (Rs/kg)</h2>
-                        <p>Stacked daily per-kg costs and contribution compared to selling price.</p>
+                        <h2 id="unit-economics-title">Unit Economics – Average Mix (Rs/kg)</h2>
+                        <p>Average per-kg costs and contribution compared to the selling price.</p>
                     </div>
                     <div class="production-chart__controls">
                         <label class="production-chart__select" for="unit-economics-start-date">
@@ -68,7 +68,7 @@
                         <canvas
                             id="unit-economics-chart"
                             height="320"
-                            aria-label="Daily unit economics stacked bar chart"
+                            aria-label="Average unit economics pie chart"
                             role="img"
                         ></canvas>
                     </div>
@@ -2484,109 +2484,84 @@
                 return null;
             }
 
-            const rangeStartIso = range?.startDate ?? periodData.start_date ?? null;
-            const rangeEndIso = range?.endDate ?? periodData.end_date ?? null;
+            const summary = periodData?.summary ?? {};
+            const daysWithSales = Number(
+                summary?.days_with_sales ?? summary?.days_with_production ?? 0,
+            );
 
-            const rangeStart = parseIsoDate(rangeStartIso);
-            const rangeEnd = parseIsoDate(rangeEndIso);
-
-            if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) {
-                showUnitEconomicsSummaryError("Select a valid date range to view data.");
-                return null;
+            if (!summary || daysWithSales === 0) {
+                return { sourceData: periodData, hasRenderableData: false };
             }
 
-            const recordsByDate = new Map();
-            if (Array.isArray(periodData.daily)) {
-                periodData.daily.forEach((entry) => {
-                    const iso = entry?.date;
-                    if (!iso) {
-                        return;
-                    }
-                    recordsByDate.set(iso, entry);
-                });
-            }
+            const averageMaterialCost = Number(summary?.average_material_cost ?? 0);
+            const averageLaborCost = Number(summary?.average_labor_cost ?? 0);
+            const averageOtherCost = Number(summary?.average_other_variable_cost ?? 0);
+            const averageContribution = Number(summary?.average_contribution ?? 0);
+            const averageSellingPrice = Number(summary?.average_selling_price ?? 0);
 
-            const labels = [];
-            const materialValues = [];
-            const laborValues = [];
-            const otherValues = [];
-            const contributionValues = [];
-            const chartDailyRecords = [];
-
-            let cursor = new Date(rangeStart.getTime());
-            while (cursor <= rangeEnd) {
-                const iso = toIsoDate(cursor);
-                const record = iso ? recordsByDate.get(iso) ?? null : null;
-
-                labels.push(iso ? formatChartDateLabel(iso) : "");
-                materialValues.push(record ? Number(record?.unit_material_cost ?? 0) : null);
-                laborValues.push(record ? Number(record?.unit_labor_cost ?? 0) : null);
-                otherValues.push(record ? Number(record?.unit_other_variable_cost ?? 0) : null);
-                contributionValues.push(record ? Number(record?.unit_contribution ?? 0) : null);
-                chartDailyRecords.push(record);
-
-                cursor.setDate(cursor.getDate() + 1);
-            }
-
-            const datasets = [
+            const segments = [
                 {
+                    key: "material",
                     label: "Unit Material Cost (Rs/kg)",
-                    data: materialValues,
+                    value: averageMaterialCost,
                     backgroundColor: UNIT_ECONOMICS_COLORS.material.background,
                     borderColor: UNIT_ECONOMICS_COLORS.material.border,
-                    borderWidth: 1,
-                    stack: "unit-economics",
-                    maxBarThickness: 24,
-                    borderSkipped: false,
-                    borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 6, bottomRight: 6 },
                 },
                 {
+                    key: "labor",
                     label: "Unit Labor Cost (Rs/kg)",
-                    data: laborValues,
+                    value: averageLaborCost,
                     backgroundColor: UNIT_ECONOMICS_COLORS.labor.background,
                     borderColor: UNIT_ECONOMICS_COLORS.labor.border,
-                    borderWidth: 1,
-                    stack: "unit-economics",
-                    maxBarThickness: 24,
-                    borderSkipped: false,
-                    borderRadius: 0,
                 },
                 {
+                    key: "other",
                     label: "Unit Other Variable Cost (Rs/kg)",
-                    data: otherValues,
+                    value: averageOtherCost,
                     backgroundColor: UNIT_ECONOMICS_COLORS.other.background,
                     borderColor: UNIT_ECONOMICS_COLORS.other.border,
-                    borderWidth: 1,
-                    stack: "unit-economics",
-                    maxBarThickness: 24,
-                    borderSkipped: false,
-                    borderRadius: 0,
                 },
                 {
+                    key: "contribution",
                     label: "Unit Contribution (Rs/kg)",
-                    data: contributionValues,
-                    backgroundColor: contributionValues.map((value) =>
-                        value >= 0
+                    value: averageContribution,
+                    backgroundColor:
+                        averageContribution >= 0
                             ? UNIT_ECONOMICS_COLORS.contributionPositive.background
                             : UNIT_ECONOMICS_COLORS.contributionNegative.background,
-                    ),
-                    borderColor: contributionValues.map((value) =>
-                        value >= 0
+                    borderColor:
+                        averageContribution >= 0
                             ? UNIT_ECONOMICS_COLORS.contributionPositive.border
                             : UNIT_ECONOMICS_COLORS.contributionNegative.border,
-                    ),
-                    borderWidth: 1,
-                    stack: "unit-economics",
-                    maxBarThickness: 24,
-                    borderSkipped: false,
-                    borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
                 },
             ];
 
+            const normalizedSegments = segments.map((segment) => {
+                const numericValue = Number(segment.value);
+                const value = Number.isFinite(numericValue) ? numericValue : 0;
+                const chartValue = Math.abs(value);
+                return { ...segment, value, chartValue };
+            });
+
+            const hasRenderableData = normalizedSegments.some((segment) => segment.chartValue > 0);
+
             return {
-                labels,
-                datasets,
-                dailyRecords: chartDailyRecords,
+                labels: normalizedSegments.map((segment) => segment.label),
+                datasets: [
+                    {
+                        label: "Average unit mix (Rs/kg)",
+                        data: normalizedSegments.map((segment) => segment.chartValue),
+                        backgroundColor: normalizedSegments.map(
+                            (segment) => segment.backgroundColor,
+                        ),
+                        borderColor: normalizedSegments.map((segment) => segment.borderColor),
+                        borderWidth: 1,
+                        segmentActualValues: normalizedSegments.map((segment) => segment.value),
+                    },
+                ],
+                hasRenderableData,
+                averageSellingPrice,
+                segments: normalizedSegments,
                 sourceData: periodData,
             };
         };
@@ -2625,6 +2600,14 @@
 
                 renderUnitEconomicsSummary(dataset.sourceData);
 
+                if (!dataset.hasRenderableData) {
+                    if (window.unitEconomicsChartInstance) {
+                        window.unitEconomicsChartInstance.destroy();
+                        window.unitEconomicsChartInstance = null;
+                    }
+                    return;
+                }
+
                 if (!ensureChartJsAvailable()) {
                     return;
                 }
@@ -2633,99 +2616,44 @@
                     window.unitEconomicsChartInstance.destroy();
                 }
 
+                const averageSellingPrice = Number(dataset.averageSellingPrice ?? 0);
+
                 window.unitEconomicsChartInstance = new Chart(unitEconomicsChartCanvas, {
-                    type: "bar",
+                    type: "pie",
                     data: {
                         labels: dataset.labels,
                         datasets: dataset.datasets,
-                        dailyRecords: dataset.dailyRecords,
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        scales: {
-                            x: {
-                                stacked: true,
-                                title: {
-                                    display: true,
-                                    text: "Date",
-                                },
-                                grid: {
-                                    display: false,
-                                },
-                                ticks: {
-                                    autoSkip: false,
-                                    maxRotation: 45,
-                                    minRotation: 45,
-                                },
-                            },
-                            y: {
-                                stacked: true,
-                                title: {
-                                    display: true,
-                                    text: "Rs per kg",
-                                },
-                                ticks: {
-                                    callback: (value) => unitValueFormatter.format(value),
-                                },
-                            },
-                        },
-                        interaction: {
-                            mode: "index",
-                            intersect: false,
-                        },
                         plugins: {
                             legend: {
                                 display: true,
+                                position: "right",
                                 labels: {
                                     usePointStyle: true,
                                 },
                             },
                             tooltip: {
                                 callbacks: {
-                                    title: (contexts) => {
-                                        if (!Array.isArray(contexts) || contexts.length === 0) {
-                                            return "";
-                                        }
-                                        const context = contexts[0];
-                                        const record =
-                                            context?.chart?.data?.dailyRecords?.[context.dataIndex];
-                                        if (record) {
-                                            const formattedDate =
-                                                formatIsoDateLabel(record.date) || record.date || "";
-                                            return formattedDate;
-                                        }
-                                        const label = context.label || context.parsed.x;
-                                        return label ? `${label}` : "";
-                                    },
                                     label: (context) => {
-                                        const label = context.dataset.label || "";
-                                        const value = Number(context.parsed.y ?? 0);
+                                        const label = context.label || "";
+                                        const actualValues =
+                                            context?.dataset?.segmentActualValues ?? [];
+                                        const actualValue = actualValues[context.dataIndex];
+                                        const value = Number.isFinite(actualValue)
+                                            ? actualValue
+                                            : Number(context.parsed ?? 0);
                                         return `${label}: ${formatCurrencyPerKg(value)}`;
                                     },
-                                    footer: (contexts) => {
-                                        if (!Array.isArray(contexts) || contexts.length === 0) {
+                                    footer: () => {
+                                        if (!Number.isFinite(averageSellingPrice) || averageSellingPrice <= 0) {
                                             return "";
                                         }
-                                        const context = contexts[0];
-                                        const record =
-                                            context?.chart?.data?.dailyRecords?.[context.dataIndex];
-                                        if (!record) {
-                                            return "";
-                                        }
-
-                                        const lines = [
-                                            `Unit selling price: ${formatCurrencyPerKg(record.unit_selling_price)}`,
-                                            `Production: ${formatKg(record.production_kg)} kg`,
-                                        ];
-
-                                        if (Number(record.sales_quantity_kg ?? 0) > 0) {
-                                            lines.push(
-                                                `Sales quantity: ${formatKg(record.sales_quantity_kg)} kg`,
-                                            );
-                                        }
-
-                                        return lines.join("\n");
+                                        return `Avg selling price: ${formatCurrencyPerKg(
+                                            averageSellingPrice,
+                                        )}`;
                                     },
                                 },
                             },

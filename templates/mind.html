@@ -43,6 +43,24 @@
                         <h2 id="unit-economics-title">Unit Economics – Daily Stack (Rs/kg)</h2>
                         <p>Stacked daily per-kg costs and contribution compared to selling price.</p>
                     </div>
+                    <div class="production-chart__controls">
+                        <label class="production-chart__select" for="unit-economics-start-date">
+                            <span>Start</span>
+                            <input
+                                type="date"
+                                id="unit-economics-start-date"
+                                name="unit-economics-start-date"
+                            />
+                        </label>
+                        <label class="production-chart__select" for="unit-economics-end-date">
+                            <span>End</span>
+                            <input
+                                type="date"
+                                id="unit-economics-end-date"
+                                name="unit-economics-end-date"
+                            />
+                        </label>
+                    </div>
                 </header>
                 <div class="production-chart__body">
                     <div class="production-chart__summary" id="unit-economics-summary" aria-live="polite"></div>
@@ -297,6 +315,8 @@
         const laborChartCanvas = document.getElementById("labor-chart");
         const unitEconomicsSummaryContainer = document.getElementById("unit-economics-summary");
         const unitEconomicsChartCanvas = document.getElementById("unit-economics-chart");
+        const unitEconomicsStartDateInput = document.getElementById("unit-economics-start-date");
+        const unitEconomicsEndDateInput = document.getElementById("unit-economics-end-date");
         const closingStockSummaryContainer = document.getElementById("closing-stock-summary");
         const closingStockChartCanvas = document.getElementById("closing-stock-chart");
         const closingStockChartContainer = document.getElementById("closing-stock-chart-container");
@@ -369,6 +389,19 @@
             return `${date.getFullYear()}-${month}-${day}`;
         };
 
+        const parseIsoDate = (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return null;
+            }
+
+            return parsed;
+        };
+
         const getPreviousDayIso = (value) => {
             if (!value) {
                 return null;
@@ -397,6 +430,87 @@
             date.setHours(0, 0, 0, 0);
             date.setMonth(date.getMonth(), 0);
             return toIsoDate(date);
+        };
+
+        const formatChartDateLabel = (value) => {
+            if (!value) {
+                return "";
+            }
+
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return value;
+            }
+
+            return parsed.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+            });
+        };
+
+        const getSelectedUnitEconomicsRange = () => {
+            if (!unitEconomicsStartDateInput || !unitEconomicsEndDateInput) {
+                return null;
+            }
+
+            const startDate = unitEconomicsStartDateInput.value;
+            const endDate = unitEconomicsEndDateInput.value;
+
+            if (!startDate || !endDate) {
+                return null;
+            }
+
+            if (startDate > endDate) {
+                return null;
+            }
+
+            return { startDate, endDate };
+        };
+
+        const buildUnitEconomicsRangeKey = (range) => {
+            if (!range?.startDate || !range?.endDate) {
+                return null;
+            }
+
+            return `${range.startDate}__${range.endDate}`;
+        };
+
+        const syncUnitEconomicsDateConstraints = () => {
+            if (!unitEconomicsStartDateInput || !unitEconomicsEndDateInput) {
+                return;
+            }
+
+            const startDate = unitEconomicsStartDateInput.value;
+            const endDate = unitEconomicsEndDateInput.value;
+
+            if (startDate) {
+                unitEconomicsEndDateInput.min = startDate;
+            }
+
+            if (endDate) {
+                unitEconomicsStartDateInput.max = endDate;
+            }
+        };
+
+        const initializeUnitEconomicsDateInputs = () => {
+            if (!unitEconomicsStartDateInput || !unitEconomicsEndDateInput) {
+                return;
+            }
+
+            const todayIso = isoToday();
+            const todayDate = parseIsoDate(todayIso);
+            const defaultStart = todayDate
+                ? new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)
+                : new Date();
+            const startIso = toIsoDate(defaultStart);
+
+            unitEconomicsStartDateInput.value = startIso;
+            unitEconomicsEndDateInput.value = todayIso;
+            unitEconomicsStartDateInput.max = todayIso;
+            unitEconomicsEndDateInput.max = todayIso;
+            unitEconomicsEndDateInput.min = startIso;
+
+            syncUnitEconomicsDateConstraints();
         };
 
         const formatIsoDateLabel = (value) => {
@@ -2263,27 +2377,32 @@
             }
 
             const summary = periodData?.summary ?? {};
-            const daysWithProduction = Number(summary?.days_with_production ?? 0);
+            const daysWithSales = Number(summary?.days_with_sales ?? summary?.days_with_production ?? 0);
 
-            if (!summary || daysWithProduction === 0) {
+            if (!summary || daysWithSales === 0) {
                 unitEconomicsSummaryContainer.innerHTML = `
                     <div class="production-chart__metric">
                         <span class="production-chart__metric-label">Unit economics</span>
-                        <span class="production-chart__metric-value">No production data.</span>
+                        <span class="production-chart__metric-value">No sales in the selected period.</span>
                     </div>
                 `;
                 return;
             }
 
-            const totalProductionTons = Number(summary?.total_production_tons ?? 0);
-            const avgSellingPrice = Number(summary?.weighted_average_selling_price ?? 0);
-            const avgContribution = Number(summary?.weighted_average_contribution ?? 0);
-            const contributionMargin = Number(summary?.weighted_average_contribution_margin ?? 0);
+            const avgSellingPrice = Number(
+                summary?.average_selling_price ?? summary?.weighted_average_selling_price ?? 0,
+            );
+            const avgContribution = Number(
+                summary?.average_contribution ?? summary?.weighted_average_contribution ?? 0,
+            );
+            const contributionMargin = Number(
+                summary?.contribution_margin_percent ?? summary?.weighted_average_contribution_margin ?? 0,
+            );
 
             const metrics = [
                 {
-                    label: "Total production",
-                    valueText: `${formatTons(totalProductionTons)} tons`,
+                    label: "Days with sales",
+                    valueText: String(daysWithSales),
                 },
                 {
                     label: "Avg selling price",
@@ -2326,16 +2445,20 @@
             `;
         };
 
-        const fetchUnitEconomicsDailyStack = async (periodKey) => {
-            if (!periodKey) {
+        const fetchUnitEconomicsDailyStack = async (range) => {
+            const cacheKey = buildUnitEconomicsRangeKey(range);
+            if (!cacheKey) {
                 return null;
             }
 
-            if (unitEconomicsPeriodCache.has(periodKey)) {
-                return unitEconomicsPeriodCache.get(periodKey);
+            if (unitEconomicsPeriodCache.has(cacheKey)) {
+                return unitEconomicsPeriodCache.get(cacheKey);
             }
 
-            const params = new URLSearchParams({ period: periodKey });
+            const params = new URLSearchParams({
+                start_date: range.startDate,
+                end_date: range.endDate,
+            });
             const response = await fetch(
                 `/api/reports/production/unit-economics?${params.toString()}`,
                 { headers: authHeaders },
@@ -2351,34 +2474,59 @@
             }
 
             const data = await response.json();
-            unitEconomicsPeriodCache.set(periodKey, data);
+            unitEconomicsPeriodCache.set(cacheKey, data);
             return data;
         };
 
-        const buildUnitEconomicsDataset = async (periodKey) => {
-            const periodData = await fetchUnitEconomicsDailyStack(periodKey);
+        const buildUnitEconomicsDataset = async (range) => {
+            const periodData = await fetchUnitEconomicsDailyStack(range);
             if (!periodData) {
                 return null;
             }
 
-            const dailyRecords = Array.isArray(periodData.daily)
-                ? periodData.daily.filter((entry) => Number(entry?.production_kg ?? 0) > 0)
-                : [];
+            const rangeStartIso = range?.startDate ?? periodData.start_date ?? null;
+            const rangeEndIso = range?.endDate ?? periodData.end_date ?? null;
 
-            if (dailyRecords.length === 0) {
-                showUnitEconomicsSummaryError("No production data available.");
+            const rangeStart = parseIsoDate(rangeStartIso);
+            const rangeEnd = parseIsoDate(rangeEndIso);
+
+            if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) {
+                showUnitEconomicsSummaryError("Select a valid date range to view data.");
                 return null;
             }
 
-            const labels = dailyRecords.map((entry) => entry.day);
-            const materialValues = dailyRecords.map((entry) => Number(entry?.unit_material_cost ?? 0));
-            const laborValues = dailyRecords.map((entry) => Number(entry?.unit_labor_cost ?? 0));
-            const otherValues = dailyRecords.map(
-                (entry) => Number(entry?.unit_other_variable_cost ?? 0),
-            );
-            const contributionValues = dailyRecords.map(
-                (entry) => Number(entry?.unit_contribution ?? 0),
-            );
+            const recordsByDate = new Map();
+            if (Array.isArray(periodData.daily)) {
+                periodData.daily.forEach((entry) => {
+                    const iso = entry?.date;
+                    if (!iso) {
+                        return;
+                    }
+                    recordsByDate.set(iso, entry);
+                });
+            }
+
+            const labels = [];
+            const materialValues = [];
+            const laborValues = [];
+            const otherValues = [];
+            const contributionValues = [];
+            const chartDailyRecords = [];
+
+            let cursor = new Date(rangeStart.getTime());
+            while (cursor <= rangeEnd) {
+                const iso = toIsoDate(cursor);
+                const record = iso ? recordsByDate.get(iso) ?? null : null;
+
+                labels.push(iso ? formatChartDateLabel(iso) : "");
+                materialValues.push(record ? Number(record?.unit_material_cost ?? 0) : null);
+                laborValues.push(record ? Number(record?.unit_labor_cost ?? 0) : null);
+                otherValues.push(record ? Number(record?.unit_other_variable_cost ?? 0) : null);
+                contributionValues.push(record ? Number(record?.unit_contribution ?? 0) : null);
+                chartDailyRecords.push(record);
+
+                cursor.setDate(cursor.getDate() + 1);
+            }
 
             const datasets = [
                 {
@@ -2438,7 +2586,7 @@
             return {
                 labels,
                 datasets,
-                dailyRecords,
+                dailyRecords: chartDailyRecords,
                 sourceData: periodData,
             };
         };
@@ -2456,8 +2604,17 @@
             `;
 
             try {
-                const periodKey = getSelectedPeriodKey();
-                const dataset = await buildUnitEconomicsDataset(periodKey);
+                const selectedRange = getSelectedUnitEconomicsRange();
+                if (!selectedRange) {
+                    showUnitEconomicsSummaryError("Select a valid start and end date.");
+                    if (window.unitEconomicsChartInstance) {
+                        window.unitEconomicsChartInstance.destroy();
+                        window.unitEconomicsChartInstance = null;
+                    }
+                    return;
+                }
+
+                const dataset = await buildUnitEconomicsDataset(selectedRange);
                 if (!dataset) {
                     if (window.unitEconomicsChartInstance) {
                         window.unitEconomicsChartInstance.destroy();
@@ -2491,10 +2648,15 @@
                                 stacked: true,
                                 title: {
                                     display: true,
-                                    text: "Day of month",
+                                    text: "Date",
                                 },
                                 grid: {
                                     display: false,
+                                },
+                                ticks: {
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    minRotation: 45,
                                 },
                             },
                             y: {
@@ -2531,10 +2693,10 @@
                                         if (record) {
                                             const formattedDate =
                                                 formatIsoDateLabel(record.date) || record.date || "";
-                                            return `Day ${record.day} – ${formattedDate}`;
+                                            return formattedDate;
                                         }
                                         const label = context.label || context.parsed.x;
-                                        return label ? `Day ${label}` : "";
+                                        return label ? `${label}` : "";
                                     },
                                     label: (context) => {
                                         const label = context.dataset.label || "";
@@ -3317,6 +3479,37 @@
             });
         };
 
+        const normalizeUnitEconomicsRange = (changedField) => {
+            if (!unitEconomicsStartDateInput || !unitEconomicsEndDateInput) {
+                return;
+            }
+
+            let startValue = unitEconomicsStartDateInput.value;
+            let endValue = unitEconomicsEndDateInput.value;
+
+            if (startValue && endValue && startValue > endValue) {
+                if (changedField === "start") {
+                    unitEconomicsEndDateInput.value = startValue;
+                    endValue = startValue;
+                } else if (changedField === "end") {
+                    unitEconomicsStartDateInput.value = endValue;
+                    startValue = endValue;
+                }
+            }
+
+            syncUnitEconomicsDateConstraints();
+        };
+
+        const handleUnitEconomicsStartChange = () => {
+            normalizeUnitEconomicsRange("start");
+            refreshUnitEconomicsChart();
+        };
+
+        const handleUnitEconomicsEndChange = () => {
+            normalizeUnitEconomicsRange("end");
+            refreshUnitEconomicsChart();
+        };
+
         const refreshCharts = () => {
             refreshUnitEconomicsChart();
             refreshProductionChart();
@@ -3326,6 +3519,8 @@
             refreshMaterialChart();
             refreshLaborChart();
         };
+
+        initializeUnitEconomicsDateInputs();
 
         const initialClosingStockDate = initializeClosingStockDateInput();
         loadClosingStock(initialClosingStockDate);
@@ -3356,6 +3551,14 @@
             compareToggle.classList.toggle("button--active", !isActive);
             refreshCharts();
         });
+
+        if (unitEconomicsStartDateInput) {
+            unitEconomicsStartDateInput.addEventListener("change", handleUnitEconomicsStartChange);
+        }
+
+        if (unitEconomicsEndDateInput) {
+            unitEconomicsEndDateInput.addEventListener("change", handleUnitEconomicsEndChange);
+        }
 
         if (selectorsInitialized) {
             refreshCharts();

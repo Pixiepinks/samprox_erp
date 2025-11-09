@@ -54,7 +54,7 @@ OTHER_MATERIAL_FIELD = "material_other"
 UNIT_VALUE_QUANT = Decimal("0.0001")
 KG_QUANT = Decimal("0.001")
 TON_QUANT = Decimal("0.001")
-UNIT_OTHER_VARIABLE_COST_PER_KG = Decimal("0.005")
+UNIT_OTHER_VARIABLE_COST_PER_KG = Decimal("5.00")
 
 
 def _quantize_currency(value: Decimal | None) -> Decimal:
@@ -80,6 +80,15 @@ def _normalize_period_param(period: str | None) -> str | None:
     except ValueError:
         return None
     return anchor.strftime("%Y-%m")
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _did_casual_work(entry: dict | None) -> bool:
@@ -826,15 +835,34 @@ def labor_daily_production_cost():
 @jwt_required()
 def production_unit_economics_daily_stack():
     period_param = _normalize_period_param(request.args.get("period"))
-    if not period_param:
-        today = date.today()
-        period_param = today.strftime("%Y-%m")
+    start_date_param = request.args.get("start_date")
+    end_date_param = request.args.get("end_date")
 
-    bounds = _get_month_bounds(period_param)
-    if not bounds:
-        return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+    today = date.today()
+    start_date = _parse_iso_date(start_date_param)
+    end_date = _parse_iso_date(end_date_param)
 
-    month_start, month_end, _ = bounds
+    if start_date and end_date:
+        if start_date > end_date:
+            return jsonify({"msg": "start_date must be on or before end_date."}), 400
+    elif start_date or end_date:
+        return jsonify({"msg": "Both start_date and end_date are required."}), 400
+    elif period_param:
+        bounds = _get_month_bounds(period_param)
+        if not bounds:
+            return jsonify({"msg": "Invalid period. Use YYYY-MM."}), 400
+        month_start, month_end, _ = bounds
+        start_date = month_start
+        end_date = month_end
+    else:
+        start_date = date(today.year, today.month, 1)
+        end_date = today
+
+    if not start_date or not end_date:
+        return jsonify({"msg": "Unable to determine reporting period."}), 400
+
+    if start_date > end_date:
+        return jsonify({"msg": "start_date must be on or before end_date."}), 400
 
     production_rows = (
         db.session.query(
@@ -843,8 +871,8 @@ def production_unit_economics_daily_stack():
         )
         .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
         .filter(
-            DailyProductionEntry.date >= month_start,
-            DailyProductionEntry.date <= month_end,
+            DailyProductionEntry.date >= start_date,
+            DailyProductionEntry.date <= end_date,
             func.lower(MachineAsset.code).in_(BRIQUETTE_MACHINE_CODES_LOWER),
         )
         .group_by(DailyProductionEntry.date)
@@ -863,8 +891,8 @@ def production_unit_economics_daily_stack():
 
     material_rows = (
         BriquetteMixEntry.query.filter(
-            BriquetteMixEntry.date >= month_start,
-            BriquetteMixEntry.date <= month_end,
+            BriquetteMixEntry.date >= start_date,
+            BriquetteMixEntry.date <= end_date,
         )
         .order_by(BriquetteMixEntry.date.asc())
         .all()
@@ -888,20 +916,30 @@ def production_unit_economics_daily_stack():
         if output_kg > 0:
             production_by_date[entry_date] = production_by_date.get(entry_date, Decimal("0")) + output_kg
 
-    try:
-        labor_payload = _build_labor_daily_cost_payload(period_param)
-    except ValueError:
-        labor_payload = None
-
     labor_by_date: dict[date, Decimal] = {}
-    if labor_payload:
+    labor_periods: set[str] = set()
+    if period_param:
+        labor_periods.add(period_param)
+    else:
+        cursor = date(start_date.year, start_date.month, 1)
+        end_anchor = date(end_date.year, end_date.month, 1)
+        while cursor <= end_anchor:
+            labor_periods.add(cursor.strftime("%Y-%m"))
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+
+    for month_key in sorted(labor_periods):
+        try:
+            labor_payload = _build_labor_daily_cost_payload(month_key)
+        except ValueError:
+            continue
         for entry in labor_payload.get("daily_totals", []):
-            iso_date = entry.get("date")
-            if not iso_date:
+            entry_date = _parse_iso_date(entry.get("date"))
+            if not entry_date:
                 continue
-            try:
-                entry_date = date.fromisoformat(iso_date)
-            except ValueError:
+            if entry_date < start_date or entry_date > end_date:
                 continue
             total_cost = Decimal(str(entry.get("total_cost", 0) or 0))
             labor_by_date[entry_date] = total_cost
@@ -913,8 +951,8 @@ def production_unit_economics_daily_stack():
             func.coalesce(func.sum(SalesActualEntry.quantity_tons), 0.0).label("total_quantity_tons"),
         )
         .filter(
-            SalesActualEntry.date >= month_start,
-            SalesActualEntry.date <= month_end,
+            SalesActualEntry.date >= start_date,
+            SalesActualEntry.date <= end_date,
         )
         .group_by(SalesActualEntry.date)
         .all()
@@ -943,29 +981,29 @@ def production_unit_economics_daily_stack():
     total_cost_amount = Decimal("0")
     total_contribution_amount = Decimal("0")
 
-    for current_date in sorted(production_by_date.keys()):
-        production_kg = production_by_date.get(current_date, Decimal("0"))
-        if production_kg <= 0:
-            continue
-
-        material_cost_total = material_cost_by_date.get(current_date, Decimal("0"))
-        labor_cost_total = labor_by_date.get(current_date, Decimal("0"))
+    current_date = start_date
+    while current_date <= end_date:
         sales_amount = sales_amount_by_date.get(current_date, Decimal("0"))
         sales_quantity_kg = sales_quantity_kg_by_date.get(current_date, Decimal("0"))
 
-        if production_kg > 0:
-            unit_material_cost = _quantize_unit_value(material_cost_total / production_kg)
-            unit_labor_cost = _quantize_unit_value(labor_cost_total / production_kg)
+        if sales_quantity_kg <= 0:
+            current_date += timedelta(days=1)
+            continue
+
+        production_kg = production_by_date.get(current_date, Decimal("0"))
+        material_cost_total = material_cost_by_date.get(current_date, Decimal("0"))
+        labor_cost_total = labor_by_date.get(current_date, Decimal("0"))
+
+        denominator = production_kg if production_kg > 0 else sales_quantity_kg
+        if denominator > 0:
+            unit_material_cost = _quantize_unit_value(material_cost_total / denominator)
+            unit_labor_cost = _quantize_unit_value(labor_cost_total / denominator)
         else:
             unit_material_cost = _quantize_unit_value(Decimal("0"))
             unit_labor_cost = _quantize_unit_value(Decimal("0"))
 
         unit_other_cost = _quantize_unit_value(UNIT_OTHER_VARIABLE_COST_PER_KG)
-
-        if sales_quantity_kg > 0:
-            unit_selling_price = _quantize_unit_value(sales_amount / sales_quantity_kg)
-        else:
-            unit_selling_price = _quantize_unit_value(Decimal("0"))
+        unit_selling_price = _quantize_unit_value(sales_amount / sales_quantity_kg)
 
         unit_total_cost = unit_material_cost + unit_labor_cost + unit_other_cost
         unit_contribution = (unit_selling_price - unit_total_cost).quantize(
@@ -977,94 +1015,121 @@ def production_unit_economics_daily_stack():
         if difference != 0:
             unit_contribution += difference
 
-        production_tons = (production_kg / TON_TO_KG).quantize(TON_QUANT, rounding=ROUND_HALF_UP)
+        if production_kg > 0:
+            production_tons = (production_kg / TON_TO_KG).quantize(
+                TON_QUANT, rounding=ROUND_HALF_UP
+            )
+        else:
+            production_tons = Decimal("0")
+
         total_production_kg += production_kg
         total_sales_qty_kg += sales_quantity_kg
         total_sales_value += sales_amount
-        weighted_material_sum += unit_material_cost * production_kg
-        weighted_labor_sum += unit_labor_cost * production_kg
-        weighted_other_sum += unit_other_cost * production_kg
-        weighted_selling_sum += unit_selling_price * production_kg
-        weighted_contribution_sum += unit_contribution * production_kg
-        total_cost_amount += unit_total_cost * production_kg
-        total_contribution_amount += unit_contribution * production_kg
+        weighted_material_sum += unit_material_cost * sales_quantity_kg
+        weighted_labor_sum += unit_labor_cost * sales_quantity_kg
+        weighted_other_sum += unit_other_cost * sales_quantity_kg
+        weighted_selling_sum += unit_selling_price * sales_quantity_kg
+        weighted_contribution_sum += unit_contribution * sales_quantity_kg
+        total_cost_amount += unit_total_cost * sales_quantity_kg
+        total_contribution_amount += unit_contribution * sales_quantity_kg
 
         daily_payload.append(
             {
                 "day": current_date.day,
                 "date": current_date.isoformat(),
-                "production_kg": float(production_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)),
+                "production_kg": float(
+                    production_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)
+                ),
                 "production_tons": float(production_tons),
                 "material_cost_total": float(_quantize_currency(material_cost_total)),
                 "labor_cost_total": float(_quantize_currency(labor_cost_total)),
                 "sales_amount": float(_quantize_currency(sales_amount)),
-                "sales_quantity_kg": float(sales_quantity_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)),
+                "sales_quantity_kg": float(
+                    sales_quantity_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)
+                ),
                 "unit_material_cost": float(unit_material_cost),
                 "unit_labor_cost": float(unit_labor_cost),
                 "unit_other_variable_cost": float(unit_other_cost),
-                "unit_total_cost": float(unit_total_cost.quantize(UNIT_VALUE_QUANT, rounding=ROUND_HALF_UP)),
+                "unit_total_cost": float(
+                    unit_total_cost.quantize(UNIT_VALUE_QUANT, rounding=ROUND_HALF_UP)
+                ),
                 "unit_selling_price": float(unit_selling_price),
                 "unit_contribution": float(unit_contribution),
             }
         )
 
-    days_with_production = len(daily_payload)
+        current_date += timedelta(days=1)
 
-    if total_production_kg > 0:
-        weighted_average_material_cost = _quantize_unit_value(weighted_material_sum / total_production_kg)
-        weighted_average_labor_cost = _quantize_unit_value(weighted_labor_sum / total_production_kg)
-        weighted_average_other_cost = _quantize_unit_value(weighted_other_sum / total_production_kg)
-        weighted_average_selling_price = _quantize_unit_value(weighted_selling_sum / total_production_kg)
-        weighted_average_total_cost = _quantize_unit_value(total_cost_amount / total_production_kg)
-        weighted_average_contribution = _quantize_unit_value(
-            weighted_contribution_sum / total_production_kg
+    days_with_sales = len(daily_payload)
+
+    if total_sales_qty_kg > 0:
+        average_material_cost = _quantize_unit_value(weighted_material_sum / total_sales_qty_kg)
+        average_labor_cost = _quantize_unit_value(weighted_labor_sum / total_sales_qty_kg)
+        average_other_cost = _quantize_unit_value(weighted_other_sum / total_sales_qty_kg)
+        average_selling_price = _quantize_unit_value(total_sales_value / total_sales_qty_kg)
+        average_total_cost = _quantize_unit_value(total_cost_amount / total_sales_qty_kg)
+        average_contribution = _quantize_unit_value(
+            weighted_contribution_sum / total_sales_qty_kg
         )
     else:
         zero_value = _quantize_unit_value(Decimal("0"))
-        weighted_average_material_cost = zero_value
-        weighted_average_labor_cost = zero_value
-        weighted_average_other_cost = zero_value
-        weighted_average_selling_price = zero_value
-        weighted_average_total_cost = zero_value
-        weighted_average_contribution = zero_value
+        average_material_cost = zero_value
+        average_labor_cost = zero_value
+        average_other_cost = zero_value
+        average_selling_price = zero_value
+        average_total_cost = zero_value
+        average_contribution = zero_value
 
-    if weighted_average_selling_price > 0:
-        weighted_average_contribution_margin = (
-            (weighted_average_contribution / weighted_average_selling_price) * Decimal("100")
+    if average_selling_price > 0:
+        contribution_margin_percent = (
+            (average_contribution / average_selling_price) * Decimal("100")
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     else:
-        weighted_average_contribution_margin = Decimal("0.00")
+        contribution_margin_percent = Decimal("0.00")
+
+    total_production_tons = (
+        total_production_kg / TON_TO_KG
+    ).quantize(TON_QUANT, rounding=ROUND_HALF_UP)
+    total_sales_qty_tons = (
+        total_sales_qty_kg / TON_TO_KG
+    ).quantize(TON_QUANT, rounding=ROUND_HALF_UP)
+
+    range_label = (
+        start_date.strftime("%d %b %Y")
+        if start_date == end_date
+        else f"{start_date.strftime('%d %b %Y')} – {end_date.strftime('%d %b %Y')}"
+    )
 
     summary = {
         "period": period_param,
-        "label": month_start.strftime("%B %Y"),
-        "days_with_production": days_with_production,
-        "total_production_kg": float(total_production_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)),
-        "total_production_tons": float(
-            (total_production_kg / TON_TO_KG).quantize(TON_QUANT, rounding=ROUND_HALF_UP)
+        "label": range_label,
+        "days_with_sales": days_with_sales,
+        "total_production_kg": float(
+            total_production_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)
         ),
-        "total_sales_qty_kg": float(total_sales_qty_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)),
-        "total_sales_qty_tons": float(
-            (total_sales_qty_kg / TON_TO_KG).quantize(TON_QUANT, rounding=ROUND_HALF_UP)
+        "total_production_tons": float(total_production_tons),
+        "total_sales_qty_kg": float(
+            total_sales_qty_kg.quantize(KG_QUANT, rounding=ROUND_HALF_UP)
         ),
+        "total_sales_qty_tons": float(total_sales_qty_tons),
         "total_sales_value": float(_quantize_currency(total_sales_value)),
         "total_contribution_amount": float(
             _quantize_currency(total_contribution_amount)
         ),
-        "weighted_average_selling_price": float(weighted_average_selling_price),
-        "weighted_average_material_cost": float(weighted_average_material_cost),
-        "weighted_average_labor_cost": float(weighted_average_labor_cost),
-        "weighted_average_other_variable_cost": float(weighted_average_other_cost),
-        "weighted_average_total_cost": float(weighted_average_total_cost),
-        "weighted_average_contribution": float(weighted_average_contribution),
-        "weighted_average_contribution_margin": float(weighted_average_contribution_margin),
+        "average_selling_price": float(average_selling_price),
+        "average_material_cost": float(average_material_cost),
+        "average_labor_cost": float(average_labor_cost),
+        "average_other_variable_cost": float(average_other_cost),
+        "average_total_cost": float(average_total_cost),
+        "average_contribution": float(average_contribution),
+        "contribution_margin_percent": float(contribution_margin_percent),
     }
 
     response = {
         "period": period_param,
-        "label": month_start.strftime("%B %Y"),
-        "start_date": month_start.isoformat(),
-        "end_date": month_end.isoformat(),
+        "label": range_label,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
         "daily": daily_payload,
         "summary": summary,
     }

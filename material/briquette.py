@@ -718,6 +718,11 @@ def _recalculate_fifo_costs(production_map: Optional[Dict[date, Dict[str, Decima
 
     if production_map is None:
         production_map = _load_production_for_dates(entry.date for entry in entries)
+    else:
+        missing_dates = [entry.date for entry in entries if entry.date not in production_map]
+        if missing_dates:
+            extra_map = _load_production_for_dates(missing_dates)
+            production_map = {**production_map, **extra_map}
 
     inventory = _build_inventory_from_opening()
     last_unit_cost = _initial_last_unit_costs()

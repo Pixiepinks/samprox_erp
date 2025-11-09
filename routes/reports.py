@@ -102,6 +102,35 @@ def _get_briquette_inventory_value(as_of: date) -> Decimal:
     return Decimal("0")
 
 
+def _get_briquette_inventory_quantity(as_of: date) -> Decimal:
+    if not isinstance(as_of, date):
+        return Decimal("0")
+
+    try:
+        stock_payload = calculate_stock_status(as_of)
+    except Exception:
+        return Decimal("0")
+
+    if not isinstance(stock_payload, dict):
+        return Decimal("0")
+
+    items = stock_payload.get("items", [])
+    if not isinstance(items, list):
+        return Decimal("0")
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("key") != "briquettes":
+            continue
+        quantity_ton = _decimal_from_value(item.get("quantity_ton"))
+        if quantity_ton < 0:
+            return Decimal("0")
+        return quantity_ton
+
+    return Decimal("0")
+
+
 def _normalize_period_param(period: str | None) -> str | None:
     if not period:
         return None
@@ -894,6 +923,9 @@ def production_unit_economics_daily_stack():
     if start_date > end_date:
         return jsonify({"msg": "start_date must be on or before end_date."}), 400
 
+    last_30_start = end_date - timedelta(days=29)
+    data_window_start = start_date if start_date <= last_30_start else last_30_start
+
     production_rows = (
         db.session.query(
             DailyProductionEntry.date.label("prod_date"),
@@ -901,7 +933,7 @@ def production_unit_economics_daily_stack():
         )
         .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
         .filter(
-            DailyProductionEntry.date >= start_date,
+            DailyProductionEntry.date >= data_window_start,
             DailyProductionEntry.date <= end_date,
             func.lower(MachineAsset.code).in_(BRIQUETTE_MACHINE_CODES_LOWER),
         )
@@ -921,7 +953,7 @@ def production_unit_economics_daily_stack():
 
     material_rows = (
         BriquetteMixEntry.query.filter(
-            BriquetteMixEntry.date >= start_date,
+            BriquetteMixEntry.date >= data_window_start,
             BriquetteMixEntry.date <= end_date,
         )
         .order_by(BriquetteMixEntry.date.asc())
@@ -948,17 +980,14 @@ def production_unit_economics_daily_stack():
 
     labor_by_date: dict[date, Decimal] = {}
     labor_periods: set[str] = set()
-    if period_param:
-        labor_periods.add(period_param)
-    else:
-        cursor = date(start_date.year, start_date.month, 1)
-        end_anchor = date(end_date.year, end_date.month, 1)
-        while cursor <= end_anchor:
-            labor_periods.add(cursor.strftime("%Y-%m"))
-            if cursor.month == 12:
-                cursor = date(cursor.year + 1, 1, 1)
-            else:
-                cursor = date(cursor.year, cursor.month + 1, 1)
+    labor_cursor = date(data_window_start.year, data_window_start.month, 1)
+    labor_end_anchor = date(end_date.year, end_date.month, 1)
+    while labor_cursor <= labor_end_anchor:
+        labor_periods.add(labor_cursor.strftime("%Y-%m"))
+        if labor_cursor.month == 12:
+            labor_cursor = date(labor_cursor.year + 1, 1, 1)
+        else:
+            labor_cursor = date(labor_cursor.year, labor_cursor.month + 1, 1)
 
     for month_key in sorted(labor_periods):
         try:
@@ -969,10 +998,55 @@ def production_unit_economics_daily_stack():
             entry_date = _parse_iso_date(entry.get("date"))
             if not entry_date:
                 continue
-            if entry_date < start_date or entry_date > end_date:
+            if entry_date < data_window_start or entry_date > end_date:
                 continue
             total_cost = Decimal(str(entry.get("total_cost", 0) or 0))
             labor_by_date[entry_date] = total_cost
+
+    closing_briquette_qty_ton = _get_briquette_inventory_quantity(end_date)
+
+    selected_period_production_kg = sum(
+        quantity
+        for production_date, quantity in production_by_date.items()
+        if start_date <= production_date <= end_date
+    )
+
+    selected_period_labor_cost = sum(
+        amount
+        for labor_date, amount in labor_by_date.items()
+        if start_date <= labor_date <= end_date
+    )
+
+    last_30_production_kg = sum(
+        quantity
+        for production_date, quantity in production_by_date.items()
+        if last_30_start <= production_date <= end_date
+    )
+
+    last_30_labor_cost = sum(
+        amount
+        for labor_date, amount in labor_by_date.items()
+        if last_30_start <= labor_date <= end_date
+    )
+
+    selected_period_production_ton = (
+        selected_period_production_kg / TON_TO_KG if selected_period_production_kg > 0 else Decimal("0")
+    )
+
+    unit_labor_cost_override: Decimal | None = None
+    if closing_briquette_qty_ton > selected_period_production_ton:
+        if last_30_production_kg > 0:
+            unit_labor_cost_override = _quantize_unit_value(
+                last_30_labor_cost / last_30_production_kg
+            )
+        else:
+            unit_labor_cost_override = _quantize_unit_value(Decimal("0"))
+    elif selected_period_production_kg > 0:
+        unit_labor_cost_override = _quantize_unit_value(
+            selected_period_labor_cost / selected_period_production_kg
+        )
+    elif selected_period_labor_cost > 0:
+        unit_labor_cost_override = _quantize_unit_value(Decimal("0"))
 
     sales_rows = (
         db.session.query(
@@ -1024,10 +1098,15 @@ def production_unit_economics_daily_stack():
         denominator = production_kg if production_kg > 0 else sales_quantity_kg
         if denominator > 0:
             unit_material_cost = _quantize_unit_value(material_cost_total / denominator)
-            unit_labor_cost = _quantize_unit_value(labor_cost_total / denominator)
+            computed_unit_labor_cost = _quantize_unit_value(labor_cost_total / denominator)
         else:
             unit_material_cost = _quantize_unit_value(Decimal("0"))
-            unit_labor_cost = _quantize_unit_value(Decimal("0"))
+            computed_unit_labor_cost = _quantize_unit_value(Decimal("0"))
+
+        if unit_labor_cost_override is not None:
+            unit_labor_cost = unit_labor_cost_override
+        else:
+            unit_labor_cost = computed_unit_labor_cost
 
         unit_other_cost = _quantize_unit_value(UNIT_OTHER_VARIABLE_COST_PER_KG)
         unit_selling_price = _quantize_unit_value(sales_amount / sales_quantity_kg)
@@ -1086,7 +1165,11 @@ def production_unit_economics_daily_stack():
 
     days_with_sales = len(daily_payload)
 
-    period_material_cost_total = sum(material_cost_by_date.values(), Decimal("0"))
+    period_material_cost_total = sum(
+        value
+        for entry_date, value in material_cost_by_date.items()
+        if start_date <= entry_date <= end_date
+    )
     opening_inventory_value = _get_briquette_inventory_value(start_date - timedelta(days=1))
     closing_inventory_value = _get_briquette_inventory_value(end_date)
     material_consumed_value = (
@@ -1101,7 +1184,10 @@ def production_unit_economics_daily_stack():
         average_material_cost = _quantize_unit_value(
             material_consumed_value / total_sales_qty_kg
         )
-        average_labor_cost = _quantize_unit_value(weighted_labor_sum / total_sales_qty_kg)
+        if unit_labor_cost_override is not None:
+            average_labor_cost = unit_labor_cost_override
+        else:
+            average_labor_cost = _quantize_unit_value(weighted_labor_sum / total_sales_qty_kg)
         average_other_cost = _quantize_unit_value(weighted_other_sum / total_sales_qty_kg)
         average_selling_price = _quantize_unit_value(total_sales_value / total_sales_qty_kg)
         average_total_cost = _quantize_unit_value(

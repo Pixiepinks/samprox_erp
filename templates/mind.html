@@ -707,8 +707,8 @@
 
         const BREAKEVEN_FIXED_COST = 2100000;
         const BREAKEVEN_DATASET_COLORS = {
-            contribution: { background: "rgba(59, 130, 246, 0.75)", border: "rgb(37, 99, 235)" },
-            fixedCost: { background: "rgba(248, 113, 113, 0.7)", border: "rgb(239, 68, 68)" },
+            profitPositive: { background: "rgba(34, 197, 94, 0.75)", border: "rgb(22, 163, 74)" },
+            profitNegative: { background: "rgba(248, 113, 113, 0.8)", border: "rgb(239, 68, 68)" },
         };
 
         const setClosingStockSummaryMessage = (label, message) => {
@@ -2560,8 +2560,6 @@
                 return {
                     labels: [],
                     isoLabels: [],
-                    cumulativeContributionValues: [],
-                    fixedCostValues: [],
                     cumulativeProfitValues: [],
                     hasRenderableData: false,
                 };
@@ -2584,8 +2582,6 @@
 
             const labels = [];
             const isoLabels = [];
-            const cumulativeContributionValues = [];
-            const fixedCostValues = [];
             const cumulativeProfitValues = [];
 
             let cumulativeContribution = 0;
@@ -2606,9 +2602,8 @@
                 }
 
                 cumulativeContribution += dailyContribution;
-                cumulativeContributionValues.push(cumulativeContribution);
-                fixedCostValues.push(-BREAKEVEN_FIXED_COST);
-                cumulativeProfitValues.push(cumulativeContribution - BREAKEVEN_FIXED_COST);
+                const cumulativeProfit = cumulativeContribution - BREAKEVEN_FIXED_COST;
+                cumulativeProfitValues.push(cumulativeProfit);
 
                 cursor.setDate(cursor.getDate() + 1);
             }
@@ -2616,8 +2611,6 @@
             return {
                 labels,
                 isoLabels,
-                cumulativeContributionValues,
-                fixedCostValues,
                 cumulativeProfitValues,
                 hasRenderableData: labels.length > 0,
             };
@@ -2731,65 +2724,51 @@
 
             hideBreakevenChartMessage();
 
-            const contributionData = breakevenSeries.cumulativeContributionValues;
-            const fixedCostData = breakevenSeries.fixedCostValues;
+            const profitData = breakevenSeries.cumulativeProfitValues;
+            const profitBackgroundColors = profitData.map((value) =>
+                value >= 0
+                    ? BREAKEVEN_DATASET_COLORS.profitPositive.background
+                    : BREAKEVEN_DATASET_COLORS.profitNegative.background,
+            );
+            const profitBorderColors = profitData.map((value) =>
+                value >= 0
+                    ? BREAKEVEN_DATASET_COLORS.profitPositive.border
+                    : BREAKEVEN_DATASET_COLORS.profitNegative.border,
+            );
 
             if (window.breakevenChartInstance) {
                 const chart = window.breakevenChartInstance;
                 chart.data.labels = breakevenSeries.labels;
 
-                if (Array.isArray(chart.data.datasets) && chart.data.datasets.length >= 2) {
-                    const contributionDataset = chart.data.datasets[0];
-                    const fixedCostDataset = chart.data.datasets[1];
+                let profitDataset = null;
+                if (Array.isArray(chart.data.datasets) && chart.data.datasets.length >= 1) {
+                    profitDataset = chart.data.datasets[0];
+                }
 
-                    Object.assign(contributionDataset, {
-                        label: "Cumulative Contribution",
-                        backgroundColor: BREAKEVEN_DATASET_COLORS.contribution.background,
-                        borderColor: BREAKEVEN_DATASET_COLORS.contribution.border,
-                        borderWidth: 1,
-                        stack: "profit",
-                        barPercentage: 0.8,
-                        categoryPercentage: 0.85,
-                        maxBarThickness: 32,
-                    });
-                    contributionDataset.data = contributionData;
+                if (!profitDataset) {
+                    profitDataset = {};
+                }
 
-                    Object.assign(fixedCostDataset, {
-                        label: "Fixed Cost",
-                        backgroundColor: BREAKEVEN_DATASET_COLORS.fixedCost.background,
-                        borderColor: BREAKEVEN_DATASET_COLORS.fixedCost.border,
-                        borderWidth: 1,
-                        stack: "profit",
-                        barPercentage: 0.8,
-                        categoryPercentage: 0.85,
-                        maxBarThickness: 32,
-                    });
-                    fixedCostDataset.data = fixedCostData;
-                } else {
-                    chart.data.datasets = [
-                        {
-                            label: "Cumulative Contribution",
-                            data: contributionData,
-                            backgroundColor: BREAKEVEN_DATASET_COLORS.contribution.background,
-                            borderColor: BREAKEVEN_DATASET_COLORS.contribution.border,
-                            borderWidth: 1,
-                            stack: "profit",
-                            barPercentage: 0.8,
-                            categoryPercentage: 0.85,
-                            maxBarThickness: 32,
-                        },
-                        {
-                            label: "Fixed Cost",
-                            data: fixedCostData,
-                            backgroundColor: BREAKEVEN_DATASET_COLORS.fixedCost.background,
-                            borderColor: BREAKEVEN_DATASET_COLORS.fixedCost.border,
-                            borderWidth: 1,
-                            stack: "profit",
-                            barPercentage: 0.8,
-                            categoryPercentage: 0.85,
-                            maxBarThickness: 32,
-                        },
-                    ];
+                Object.assign(profitDataset, {
+                    label: "Cumulative Profit",
+                    data: profitData,
+                    backgroundColor: profitBackgroundColors,
+                    borderColor: profitBorderColors,
+                    borderWidth: 1,
+                    barPercentage: 0.8,
+                    categoryPercentage: 0.85,
+                    maxBarThickness: 32,
+                });
+
+                chart.data.datasets = [profitDataset];
+
+                if (chart.options?.scales) {
+                    if (chart.options.scales.x) {
+                        chart.options.scales.x.stacked = false;
+                    }
+                    if (chart.options.scales.y) {
+                        chart.options.scales.y.stacked = false;
+                    }
                 }
 
                 chart.update();
@@ -2800,23 +2779,11 @@
                         labels: breakevenSeries.labels,
                         datasets: [
                             {
-                                label: "Cumulative Contribution",
-                                data: contributionData,
-                                backgroundColor: BREAKEVEN_DATASET_COLORS.contribution.background,
-                                borderColor: BREAKEVEN_DATASET_COLORS.contribution.border,
+                                label: "Cumulative Profit",
+                                data: profitData,
+                                backgroundColor: profitBackgroundColors,
+                                borderColor: profitBorderColors,
                                 borderWidth: 1,
-                                stack: "profit",
-                                barPercentage: 0.8,
-                                categoryPercentage: 0.85,
-                                maxBarThickness: 32,
-                            },
-                            {
-                                label: "Fixed Cost",
-                                data: fixedCostData,
-                                backgroundColor: BREAKEVEN_DATASET_COLORS.fixedCost.background,
-                                borderColor: BREAKEVEN_DATASET_COLORS.fixedCost.border,
-                                borderWidth: 1,
-                                stack: "profit",
                                 barPercentage: 0.8,
                                 categoryPercentage: 0.85,
                                 maxBarThickness: 32,
@@ -2828,7 +2795,7 @@
                         maintainAspectRatio: false,
                         scales: {
                             x: {
-                                stacked: true,
+                                stacked: false,
                                 title: {
                                     display: true,
                                     text: "Date",
@@ -2843,7 +2810,7 @@
                                 },
                             },
                             y: {
-                                stacked: true,
+                                stacked: false,
                                 title: {
                                     display: true,
                                     text: "Profit (Rs)",
@@ -2885,24 +2852,8 @@
                                     },
                                     label: (context) => {
                                         const label = context.dataset?.label ?? "";
-                                        if (label === "Cumulative Contribution") {
-                                            const value = Number(context.parsed.y ?? 0);
-                                            return `${label}: ${formatCurrency(value)}`;
-                                        }
-                                        if (label === "Fixed Cost") {
-                                            return `${label}: ${formatCurrency(BREAKEVEN_FIXED_COST)}`;
-                                        }
-                                        return label;
-                                    },
-                                    afterBody: (items) => {
-                                        if (!Array.isArray(items) || items.length === 0) {
-                                            return [];
-                                        }
-                                        const index = items[0].dataIndex;
-                                        const chart = items[0].chart;
-                                        const profits = chart?.$breakevenMeta?.profits ?? [];
-                                        const profit = Number(profits[index] ?? 0);
-                                        return [`Cumulative Profit: ${formatCurrency(profit)}`];
+                                        const value = Number(context.parsed.y ?? 0);
+                                        return `${label}: ${formatCurrency(value)}`;
                                     },
                                 },
                             },

@@ -29,7 +29,11 @@ from models import (
 )
 
 from material.services import DEFAULT_MATERIAL_ITEM_NAMES
-from material.briquette import BRIQUETTE_MACHINE_CODES_LOWER, TON_TO_KG
+from material.briquette import (
+    BRIQUETTE_MACHINE_CODES_LOWER,
+    TON_TO_KG,
+    calculate_stock_status,
+)
 from routes.team import (
     _build_work_calendar_lookup,
     _calculate_entry_overtime_minutes,
@@ -70,6 +74,32 @@ def _quantize_unit_value(value: Decimal | float | int | None) -> Decimal:
         else:
             value = Decimal(str(value))
     return value.quantize(UNIT_VALUE_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _get_briquette_inventory_value(as_of: date) -> Decimal:
+    if not isinstance(as_of, date):
+        return Decimal("0")
+
+    try:
+        stock_payload = calculate_stock_status(as_of)
+    except Exception:
+        return Decimal("0")
+
+    if not isinstance(stock_payload, dict):
+        return Decimal("0")
+
+    items = stock_payload.get("items", [])
+    if not isinstance(items, list):
+        return Decimal("0")
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("key") != "briquettes":
+            continue
+        return _decimal_from_value(item.get("value_rs"))
+
+    return Decimal("0")
 
 
 def _normalize_period_param(period: str | None) -> str | None:
@@ -973,11 +1003,8 @@ def production_unit_economics_daily_stack():
     total_production_kg = Decimal("0")
     total_sales_qty_kg = Decimal("0")
     total_sales_value = Decimal("0")
-    weighted_material_sum = Decimal("0")
     weighted_labor_sum = Decimal("0")
     weighted_other_sum = Decimal("0")
-    weighted_selling_sum = Decimal("0")
-    weighted_contribution_sum = Decimal("0")
     total_cost_amount = Decimal("0")
     total_contribution_amount = Decimal("0")
 
@@ -1025,11 +1052,8 @@ def production_unit_economics_daily_stack():
         total_production_kg += production_kg
         total_sales_qty_kg += sales_quantity_kg
         total_sales_value += sales_amount
-        weighted_material_sum += unit_material_cost * sales_quantity_kg
         weighted_labor_sum += unit_labor_cost * sales_quantity_kg
         weighted_other_sum += unit_other_cost * sales_quantity_kg
-        weighted_selling_sum += unit_selling_price * sales_quantity_kg
-        weighted_contribution_sum += unit_contribution * sales_quantity_kg
         total_cost_amount += unit_total_cost * sales_quantity_kg
         total_contribution_amount += unit_contribution * sales_quantity_kg
 
@@ -1062,23 +1086,42 @@ def production_unit_economics_daily_stack():
 
     days_with_sales = len(daily_payload)
 
+    period_material_cost_total = sum(material_cost_by_date.values(), Decimal("0"))
+    opening_inventory_value = _get_briquette_inventory_value(start_date - timedelta(days=1))
+    closing_inventory_value = _get_briquette_inventory_value(end_date)
+    material_consumed_value = (
+        opening_inventory_value + period_material_cost_total - closing_inventory_value
+    )
+    if material_consumed_value < Decimal("0"):
+        material_consumed_value = Decimal("0")
+
+    zero_unit_value = _quantize_unit_value(Decimal("0"))
+
     if total_sales_qty_kg > 0:
-        average_material_cost = _quantize_unit_value(weighted_material_sum / total_sales_qty_kg)
+        average_material_cost = _quantize_unit_value(
+            material_consumed_value / total_sales_qty_kg
+        )
         average_labor_cost = _quantize_unit_value(weighted_labor_sum / total_sales_qty_kg)
         average_other_cost = _quantize_unit_value(weighted_other_sum / total_sales_qty_kg)
         average_selling_price = _quantize_unit_value(total_sales_value / total_sales_qty_kg)
-        average_total_cost = _quantize_unit_value(total_cost_amount / total_sales_qty_kg)
-        average_contribution = _quantize_unit_value(
-            weighted_contribution_sum / total_sales_qty_kg
+        average_total_cost = _quantize_unit_value(
+            average_material_cost + average_labor_cost + average_other_cost
         )
+        average_contribution = _quantize_unit_value(average_selling_price - average_total_cost)
+        total_cost_amount = (
+            average_total_cost * total_sales_qty_kg
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        total_contribution_amount = (
+            average_contribution * total_sales_qty_kg
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     else:
-        zero_value = _quantize_unit_value(Decimal("0"))
-        average_material_cost = zero_value
-        average_labor_cost = zero_value
-        average_other_cost = zero_value
-        average_selling_price = zero_value
-        average_total_cost = zero_value
-        average_contribution = zero_value
+        average_material_cost = zero_unit_value
+        average_labor_cost = zero_unit_value
+        average_other_cost = zero_unit_value
+        average_selling_price = zero_unit_value
+        average_total_cost = zero_unit_value
+        average_contribution = zero_unit_value
+        total_contribution_amount = Decimal("0")
 
     if average_selling_price > 0:
         contribution_margin_percent = (

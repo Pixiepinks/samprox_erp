@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Maintenance Job Card</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 20mm;
+        }
+
+        body {
+            font-family: "Helvetica", "Arial", sans-serif;
+            font-size: 12px;
+            color: #1f2937;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 8px;
+        }
+
+        .header-table td {
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .logo-cell {
+            width: 18%;
+        }
+
+        .logo-image {
+            max-height: 60px;
+        }
+
+        .logo-fallback {
+            display: inline-block;
+            padding: 14px;
+            border: 2px solid #2563eb;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+            color: #2563eb;
+        }
+
+        .company-name {
+            font-size: 16px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .company-meta {
+            margin: 2px 0 0;
+        }
+
+        .job-code-box {
+            text-align: right;
+        }
+
+        .job-code-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #6b7280;
+            margin: 0;
+        }
+
+        .job-code-value {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 4px 0 0;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 18px 0 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+
+        th,
+        td {
+            border: 1px solid #d1d5db;
+            padding: 6px 8px;
+        }
+
+        th {
+            background: #f3f4f6;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .summary-table th {
+            width: 22%;
+        }
+
+        .summary-table td {
+            width: 28%;
+        }
+
+        .muted {
+            color: #6b7280;
+            font-size: 11px;
+        }
+
+        .amount {
+            text-align: right;
+        }
+
+        .plain-table th {
+            width: 20%;
+            background: #f3f4f6;
+        }
+
+        .plain-table td {
+            background: #ffffff;
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 10px;
+            color: #6b7280;
+            text-align: right;
+        }
+
+        .description-text {
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <table class="header-table">
+        <tr>
+            <td class="logo-cell">
+                {% if company.logo %}
+                    <img src="{{ company.logo }}" alt="{{ company.name }} logo" class="logo-image" />
+                {% else %}
+                    <div class="logo-fallback">{{ company.name[:1] if company.name else 'S' }}</div>
+                {% endif %}
+            </td>
+            <td>
+                <p class="company-name">{{ company.name }}</p>
+                {% if company.address %}
+                    <p class="company-meta">{{ company.address }}</p>
+                {% endif %}
+                {% if company.contact %}
+                    <p class="company-meta">{{ company.contact }}</p>
+                {% endif %}
+            </td>
+            <td class="job-code-box">
+                <h1>Maintenance Job Card</h1>
+                <p class="job-code-label">Job Code</p>
+                <p class="job-code-value">{{ job.job_code }}</p>
+            </td>
+        </tr>
+    </table>
+
+    <h2 class="section-title">Job Summary</h2>
+    <table class="summary-table">
+        <tbody>
+            <tr>
+                <th>Job Date</th>
+                <td>{{ format_date(job.job_date) }}</td>
+                <th>Job Category</th>
+                <td>{{ job.job_category or '—' }}</td>
+            </tr>
+            <tr>
+                <th>Priority</th>
+                <td>{{ job.priority or '—' }}</td>
+                <th>Location</th>
+                <td>{{ job.location or '—' }}</td>
+            </tr>
+            <tr>
+                <th>Expected Completion</th>
+                <td>{{ format_date(job.expected_completion) }}</td>
+                <th>Job Started</th>
+                <td>{{ format_date(job.job_started_date) }}</td>
+            </tr>
+            <tr>
+                <th>Job Finished</th>
+                <td>{{ format_date(job.job_finished_date) }}</td>
+                <th>Current Status</th>
+                <td>{{ status_label or '—' }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {% if job.description or job.maintenance_notes %}
+        <h2 class="section-title">Description &amp; Remarks</h2>
+        <table class="plain-table">
+            <tbody>
+                {% if job.description %}
+                    <tr>
+                        <th>Description</th>
+                        <td>{{ job.description.replace('\n', '<br/>')|safe }}</td>
+                    </tr>
+                {% endif %}
+                {% if job.maintenance_notes %}
+                    <tr>
+                        <th>Remarks</th>
+                        <td>{{ job.maintenance_notes.replace('\n', '<br/>')|safe }}</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if materials %}
+        <h2 class="section-title">Materials Used</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Unit cost</th>
+                    <th class="amount">Line total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in materials %}
+                    <tr>
+                        <td>{{ line.name or '—' }}</td>
+                        <td>{{ line.quantity_display or '—' }}</td>
+                        <td class="amount">
+                            {% if line.unit_cost is not none %}
+                                {{ format_currency(line.unit_cost) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="amount">{{ format_currency(line.line_total) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if outsourced_services %}
+        <h2 class="section-title">Outsourced Party Cost</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Party</th>
+                    <th>Service date</th>
+                    <th>Description</th>
+                    <th>Hours</th>
+                    <th class="amount">Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in outsourced_services %}
+                    <tr>
+                        <td>{{ row.party or '—' }}</td>
+                        <td>{{ format_date(row.service_date) }}</td>
+                        <td>{{ row.description.replace('\n', '<br/>')|safe if row.description else '—' }}</td>
+                        <td>{{ format_hours(row.hours) }}</td>
+                        <td class="amount">{{ format_currency(row.cost) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if internal_staff %}
+        <h2 class="section-title">Internal Staff Cost</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Service date</th>
+                    <th>Hours</th>
+                    <th>Rate</th>
+                    <th class="amount">Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in internal_staff %}
+                    <tr>
+                        <td>
+                            {{ row.employee or '—' }}
+                            {% if row.description %}
+                                <br /><span class="muted">{{ row.description }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ format_date(row.service_date) }}</td>
+                        <td>{{ format_hours(row.hours) }}</td>
+                        <td class="amount">
+                            {% if row.hourly_rate is not none %}
+                                {{ format_currency(row.hourly_rate) }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td class="amount">{{ format_currency(row.cost) }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    <h2 class="section-title">Cost Summary</h2>
+    <table>
+        <tbody>
+            <tr>
+                <th>Materials total</th>
+                <td class="amount">{{ format_currency(totals.materials) }}</td>
+            </tr>
+            <tr>
+                <th>Outsourced total</th>
+                <td class="amount">{{ format_currency(totals.outsourced) }}</td>
+            </tr>
+            <tr>
+                <th>Internal staff total</th>
+                <td class="amount">{{ format_currency(totals.internal) }}</td>
+            </tr>
+            <tr>
+                <th>Overall total cost</th>
+                <td class="amount">{{ format_currency(totals.overall) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Generated on {{ generated_at.strftime('%d %b %Y %I:%M %p') }}
+    </div>
+</body>
+</html>

@@ -116,6 +116,7 @@
                                                 <th scope="col" colspan="4" class="jobs-table__group">Dates</th>
                                                 <th scope="col" colspan="4" class="jobs-table__group">Costs</th>
                                                 <th scope="col" rowspan="2">More</th>
+                                                <th scope="col" rowspan="2">Download</th>
                                                 <th scope="col" rowspan="2">Update status</th>
                                             </tr>
                                             <tr>
@@ -3324,6 +3325,103 @@
             return response.json();
         }
 
+        function parseFilenameFromContentDisposition(header) {
+            if (!header) return null;
+            const utfMatch = /filename\*=UTF-8''([^;]+)/i.exec(header);
+            if (utfMatch && utfMatch[1]) {
+                try {
+                    return decodeURIComponent(utfMatch[1]);
+                } catch (_) {
+                    return utfMatch[1];
+                }
+            }
+            const quotedMatch = /filename="?([^";]+)"?/i.exec(header);
+            if (quotedMatch && quotedMatch[1]) {
+                return quotedMatch[1];
+            }
+            return null;
+        }
+
+        function buildJobPdfFilename(job, suggestedName) {
+            const fallbackCode = job?.job_code ? String(job.job_code) : `JOB-${job?.id ?? 'card'}`;
+            let baseName = suggestedName ? String(suggestedName).trim() : fallbackCode;
+            if (!baseName) {
+                baseName = fallbackCode;
+            }
+            baseName = baseName.replace(/[\r\n]/g, '').replace(/[^A-Za-z0-9._-]/g, '_');
+
+            if (!baseName.toLowerCase().endsWith('.pdf')) {
+                baseName += '.pdf';
+            }
+            if (!baseName.toUpperCase().startsWith('JOB-')) {
+                baseName = `JOB-${baseName}`;
+            }
+            return baseName;
+        }
+
+        async function downloadJobPdf(job, triggerButton) {
+            if (!job || !job.id) return;
+            const endpoint = `/machines/maintenance-jobs/${job.id}/download-pdf`;
+            const button = triggerButton || null;
+            if (button) {
+                button.disabled = true;
+            }
+            if (jobsError) {
+                jobsError.hidden = true;
+                jobsError.textContent = '';
+            }
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    let message = `Unable to download job card (status ${response.status}).`;
+                    try {
+                        const payload = await response.json();
+                        if (payload?.msg) {
+                            message = payload.msg;
+                        }
+                    } catch (_) {
+                        try {
+                            const text = await response.text();
+                            if (text) {
+                                message = text;
+                            }
+                        } catch (_) {
+                            // ignore
+                        }
+                    }
+                    throw new Error(message);
+                }
+
+                const blob = await response.blob();
+                const header = response.headers.get('Content-Disposition');
+                const suggestedName = parseFilenameFromContentDisposition(header);
+                const filename = buildJobPdfFilename(job, suggestedName);
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(blobUrl);
+            } catch (error) {
+                console.error(error);
+                if (jobsError) {
+                    jobsError.textContent = error.message || 'Unable to download job card.';
+                    jobsError.hidden = false;
+                }
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                }
+            }
+        }
+
         async function refreshAssetCodePreview() {
             if (!canManageAssets || !assetCodeInput || !assetCategorySelect) return;
 
@@ -4499,6 +4597,7 @@
                 <td data-label="Internal staff cost">${formatCurrency(internalTotal)}</td>
                 <td data-label="Total cost">${formatCurrency(combinedTotal)}</td>
                 <td data-label="More"><button type="button" class="button button--ghost button--small" data-job-action="view-more">More</button></td>
+                <td data-label="Download"><button type="button" class="button button--ghost button--small" data-job-action="download-pdf">Download PDF</button></td>
                 <td data-label="Update status">${updateStatusCell}</td>
             `;
 
@@ -4523,6 +4622,14 @@
                 moreButton.addEventListener("click", (event) => {
                     event.stopPropagation();
                     openJobDetailsModal(job.id);
+                });
+            }
+
+            const downloadButton = row.querySelector('[data-job-action="download-pdf"]');
+            if (downloadButton) {
+                downloadButton.addEventListener("click", async (event) => {
+                    event.stopPropagation();
+                    await downloadJobPdf(job, downloadButton);
                 });
             }
 

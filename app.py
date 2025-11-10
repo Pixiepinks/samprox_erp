@@ -38,6 +38,7 @@ from routes import (
     auth,
     jobs,
     maintenance_jobs,
+    maintenance_job_documents,
     quotation,
     labor,
     materials,
@@ -180,6 +181,7 @@ def create_app():
     app.register_blueprint(auth.bp)
     app.register_blueprint(jobs.bp)
     app.register_blueprint(maintenance_jobs.bp)
+    app.register_blueprint(maintenance_job_documents.bp)
     app.register_blueprint(quotation.bp)
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)

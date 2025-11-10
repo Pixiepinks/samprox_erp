@@ -8,4 +8,4 @@ python-dotenv==1.0.1
 marshmallow==3.21.3
 marshmallow-sqlalchemy==1.1.0
 gunicorn==23.0.0
-
+xhtml2pdf==0.2.11

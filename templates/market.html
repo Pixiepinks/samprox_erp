@@ -1192,6 +1192,60 @@
             updateEntryTotal();
         }
 
+        async function loadEntryById(entryId, saleType) {
+            if (!token || !entryId) {
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({ entry_id: entryId });
+                if (saleType) {
+                    params.set("sale_type", saleType);
+                }
+
+                const response = await fetch(`/api/market/sales?${params.toString()}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (response.status === 404) {
+                    setEditingState(null);
+                    clearSalesEntryValues();
+                    updateLoaderFieldState();
+                    return;
+                }
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.msg || "Unable to load saved entry.");
+                }
+
+                if (!data.entry) {
+                    setEditingState(null);
+                    clearSalesEntryValues();
+                    updateLoaderFieldState();
+                    return;
+                }
+
+                populateSalesEntryForm(data.entry, saleType);
+                setEditingState(data.entry, saleType);
+            } catch (error) {
+                console.error(error);
+                setEditingState(null);
+                clearSalesEntryValues();
+                updateLoaderFieldState();
+                setEntryFeedback(error?.message || "Unable to load saved entry.", "error");
+            }
+        }
+
         async function loadExistingEntryForSelection(options = {}) {
             if (!token) {
                 return;
@@ -2185,7 +2239,11 @@
             const normalizedCustomerId =
                 customerId !== undefined && customerId !== null ? String(customerId) : "";
             const normalizedDate = dateValue || "";
-            const { loadExistingEntry = true } = options;
+            const { loadExistingEntry = true, entryId: providedEntryId = null } = options;
+            const normalizedEntryId =
+                providedEntryId !== undefined && providedEntryId !== null
+                    ? String(providedEntryId)
+                    : null;
 
             if (entryCustomerSelect) {
                 entryCustomerSelect.value = normalizedCustomerId;
@@ -2201,7 +2259,11 @@
 
             if (loadExistingEntry) {
                 shouldLoadExistingEntry = true;
-                loadExistingEntryForSelection({ force: true });
+                if (normalizedEntryId && normalizedType === "actual") {
+                    loadEntryById(normalizedEntryId, normalizedType);
+                } else {
+                    loadExistingEntryForSelection({ force: true });
+                }
             } else {
                 shouldLoadExistingEntry = false;
                 setEditingState(null);
@@ -2231,6 +2293,7 @@
             customerId,
             date,
             hasEntry,
+            entryId = null,
         }) {
             const button = document.createElement("button");
             button.type = "button";
@@ -2244,6 +2307,7 @@
             button.addEventListener("click", () => {
                 beginEditingEntry(customerId, date, saleType, {
                     loadExistingEntry: Boolean(hasEntry),
+                    entryId,
                 });
             });
             return button;
@@ -2323,6 +2387,7 @@
             const headRow = document.createElement("tr");
             const tableColumns = [
                 { label: "Date" },
+                { label: "Delivery Note No" },
                 { label: "Forecast qty (tons)", className: "sales-report__cell--numeric" },
                 { label: "Actual qty (tons)", className: "sales-report__cell--numeric" },
                 { label: "Variance qty (tons)", className: "sales-report__cell--numeric" },
@@ -2358,6 +2423,10 @@
                     dateCell.textContent = entry.date;
                     row.appendChild(dateCell);
 
+                    const deliveryNoteCell = document.createElement("td");
+                    deliveryNoteCell.textContent = entry.delivery_note_number || "—";
+                    row.appendChild(deliveryNoteCell);
+
                     const forecastCell = document.createElement("td");
                     forecastCell.textContent = formatNumber(entry.forecast_quantity_tons);
                     forecastCell.className = "sales-report__cell--numeric";
@@ -2387,6 +2456,7 @@
 
                     const hasForecastEntry = Boolean(entry.has_forecast_entry);
                     const hasActualEntry = Boolean(entry.has_actual_entry);
+                    const actualEntryId = entry.actual_entry_id;
 
                     if (hasForecastEntry && customerId !== null) {
                         actionsWrapper.appendChild(
@@ -2400,7 +2470,7 @@
                         );
                     }
 
-                    if (hasActualEntry && customerId !== null) {
+                    if (hasActualEntry && customerId !== null && actualEntryId != null) {
                         actionsWrapper.appendChild(
                             createSalesActionButton({
                                 label: "Edit actual",
@@ -2408,6 +2478,7 @@
                                 customerId,
                                 date: entry.date,
                                 hasEntry: true,
+                                entryId: actualEntryId,
                             }),
                         );
                     }

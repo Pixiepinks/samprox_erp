@@ -80,49 +80,68 @@ class ReportsApiTestCase(unittest.TestCase):
         self.app_module.db.session.add_all([acme, beta])
         self.app_module.db.session.commit()
 
+        acme_forecast_day1 = SalesForecastEntry(
+            customer_id=acme.id,
+            date=date(2024, 5, 1),
+            amount=100.0,
+            unit_price=10.0,
+            quantity_tons=10.0,
+        )
+        acme_forecast_day2 = SalesForecastEntry(
+            customer_id=acme.id,
+            date=date(2024, 5, 2),
+            amount=150.0,
+            unit_price=10.0,
+            quantity_tons=15.0,
+        )
+        beta_forecast_day3 = SalesForecastEntry(
+            customer_id=beta.id,
+            date=date(2024, 5, 3),
+            amount=250.0,
+            unit_price=10.0,
+            quantity_tons=25.0,
+        )
+        acme_actual_day1_primary = SalesActualEntry(
+            customer_id=acme.id,
+            date=date(2024, 5, 1),
+            amount=90.0,
+            unit_price=10.0,
+            quantity_tons=9.0,
+            delivery_note_number="DN-100",
+        )
+        acme_actual_day1_secondary = SalesActualEntry(
+            customer_id=acme.id,
+            date=date(2024, 5, 1),
+            amount=30.0,
+            unit_price=10.0,
+            quantity_tons=3.0,
+            delivery_note_number="DN-101",
+        )
+        acme_actual_day3 = SalesActualEntry(
+            customer_id=acme.id,
+            date=date(2024, 5, 3),
+            amount=200.0,
+            unit_price=10.0,
+            quantity_tons=20.0,
+            delivery_note_number="DN-200",
+        )
+        beta_actual_day3 = SalesActualEntry(
+            customer_id=beta.id,
+            date=date(2024, 5, 3),
+            amount=300.0,
+            unit_price=10.0,
+            quantity_tons=30.0,
+            delivery_note_number="DN-300",
+        )
+
         entries = [
-            SalesForecastEntry(
-                customer_id=acme.id,
-                date=date(2024, 5, 1),
-                amount=100.0,
-                unit_price=10.0,
-                quantity_tons=10.0,
-            ),
-            SalesForecastEntry(
-                customer_id=acme.id,
-                date=date(2024, 5, 2),
-                amount=150.0,
-                unit_price=10.0,
-                quantity_tons=15.0,
-            ),
-            SalesForecastEntry(
-                customer_id=beta.id,
-                date=date(2024, 5, 3),
-                amount=250.0,
-                unit_price=10.0,
-                quantity_tons=25.0,
-            ),
-            SalesActualEntry(
-                customer_id=acme.id,
-                date=date(2024, 5, 1),
-                amount=90.0,
-                unit_price=10.0,
-                quantity_tons=9.0,
-            ),
-            SalesActualEntry(
-                customer_id=acme.id,
-                date=date(2024, 5, 3),
-                amount=200.0,
-                unit_price=10.0,
-                quantity_tons=20.0,
-            ),
-            SalesActualEntry(
-                customer_id=beta.id,
-                date=date(2024, 5, 3),
-                amount=300.0,
-                unit_price=10.0,
-                quantity_tons=30.0,
-            ),
+            acme_forecast_day1,
+            acme_forecast_day2,
+            beta_forecast_day3,
+            acme_actual_day1_primary,
+            acme_actual_day1_secondary,
+            acme_actual_day3,
+            beta_actual_day3,
         ]
         self.app_module.db.session.add_all(entries)
         self.app_module.db.session.commit()
@@ -147,45 +166,62 @@ class ReportsApiTestCase(unittest.TestCase):
         self.assertEqual(beta_report["customer_category"], "plantation")
 
         self.assertAlmostEqual(acme_report["monthly_forecast_total"], 250.0)
-        self.assertAlmostEqual(acme_report["monthly_actual_total"], 290.0)
+        self.assertAlmostEqual(acme_report["monthly_actual_total"], 320.0)
         self.assertAlmostEqual(
             acme_report["monthly_forecast_quantity_tons"], 25.0
         )
-        self.assertAlmostEqual(acme_report["monthly_actual_quantity_tons"], 29.0)
+        self.assertAlmostEqual(acme_report["monthly_actual_quantity_tons"], 32.0)
         self.assertAlmostEqual(acme_report["monthly_average_unit_price"], 10.0)
-        self.assertAlmostEqual(acme_report["monthly_total_sales_amount"], 290.0)
-        self.assertEqual(
-            acme_report["dates"],
-            [
-                {
-                    "date": "2024-05-01",
-                    "forecast_amount": 100.0,
-                    "actual_amount": 90.0,
-                    "forecast_quantity_tons": 10.0,
-                    "actual_quantity_tons": 9.0,
-                    "has_forecast_entry": True,
-                    "has_actual_entry": True,
-                },
-                {
-                    "date": "2024-05-02",
-                    "forecast_amount": 150.0,
-                    "actual_amount": 0.0,
-                    "forecast_quantity_tons": 15.0,
-                    "actual_quantity_tons": 0.0,
-                    "has_forecast_entry": True,
-                    "has_actual_entry": False,
-                },
-                {
-                    "date": "2024-05-03",
-                    "forecast_amount": 0.0,
-                    "actual_amount": 200.0,
-                    "forecast_quantity_tons": 0.0,
-                    "actual_quantity_tons": 20.0,
-                    "has_forecast_entry": False,
-                    "has_actual_entry": True,
-                },
-            ],
-        )
+        self.assertAlmostEqual(acme_report["monthly_total_sales_amount"], 320.0)
+
+        expected_acme_dates = [
+            {
+                "date": "2024-05-01",
+                "forecast_amount": 100.0,
+                "actual_amount": 90.0,
+                "forecast_quantity_tons": 10.0,
+                "actual_quantity_tons": 9.0,
+                "has_forecast_entry": True,
+                "has_actual_entry": True,
+                "delivery_note_number": "DN-100",
+                "actual_entry_id": acme_actual_day1_primary.id,
+            },
+            {
+                "date": "2024-05-01",
+                "forecast_amount": 100.0,
+                "actual_amount": 30.0,
+                "forecast_quantity_tons": 10.0,
+                "actual_quantity_tons": 3.0,
+                "has_forecast_entry": True,
+                "has_actual_entry": True,
+                "delivery_note_number": "DN-101",
+                "actual_entry_id": acme_actual_day1_secondary.id,
+            },
+            {
+                "date": "2024-05-02",
+                "forecast_amount": 150.0,
+                "actual_amount": 0.0,
+                "forecast_quantity_tons": 15.0,
+                "actual_quantity_tons": 0.0,
+                "has_forecast_entry": True,
+                "has_actual_entry": False,
+                "delivery_note_number": None,
+                "actual_entry_id": None,
+            },
+            {
+                "date": "2024-05-03",
+                "forecast_amount": 0.0,
+                "actual_amount": 200.0,
+                "forecast_quantity_tons": 0.0,
+                "actual_quantity_tons": 20.0,
+                "has_forecast_entry": False,
+                "has_actual_entry": True,
+                "delivery_note_number": "DN-200",
+                "actual_entry_id": acme_actual_day3.id,
+            },
+        ]
+
+        self.assertEqual(acme_report["dates"], expected_acme_dates)
 
         self.assertAlmostEqual(beta_report["monthly_forecast_total"], 250.0)
         self.assertAlmostEqual(beta_report["monthly_actual_total"], 300.0)
@@ -204,6 +240,8 @@ class ReportsApiTestCase(unittest.TestCase):
                     "actual_quantity_tons": 30.0,
                     "has_forecast_entry": True,
                     "has_actual_entry": True,
+                    "delivery_note_number": "DN-300",
+                    "actual_entry_id": beta_actual_day3.id,
                 }
             ],
         )

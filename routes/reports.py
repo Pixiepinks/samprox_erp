@@ -228,11 +228,9 @@ def customer_sales_report():
     def _empty_day():
         return {
             "forecast_amount": 0.0,
-            "actual_amount": 0.0,
             "forecast_quantity_tons": 0.0,
-            "actual_quantity_tons": 0.0,
             "has_forecast_entry": False,
-            "has_actual_entry": False,
+            "actual_entries": [],
         }
 
     summary = {customer.id: {"customer": customer, "dates": {}} for customer in customers}
@@ -259,27 +257,29 @@ def customer_sales_report():
         bucket["dates"][row.date]["forecast_quantity_tons"] = float(row.quantity or 0.0)
         bucket["dates"][row.date]["has_forecast_entry"] = True
 
-    actual_rows = (
-        db.session.query(
-            SalesActualEntry.customer_id,
-            SalesActualEntry.date,
-            func.sum(SalesActualEntry.amount).label("amount"),
-            func.sum(SalesActualEntry.quantity_tons).label("quantity"),
+    actual_entries = (
+        SalesActualEntry.query.filter(
+            SalesActualEntry.date >= start_date, SalesActualEntry.date < end_date
         )
-        .filter(SalesActualEntry.date >= start_date, SalesActualEntry.date < end_date)
         .filter(SalesActualEntry.customer_id.in_(customer_ids))
-        .group_by(SalesActualEntry.customer_id, SalesActualEntry.date)
+        .order_by(SalesActualEntry.date.asc(), SalesActualEntry.id.asc())
         .all()
     )
 
-    for row in actual_rows:
-        bucket = summary.get(row.customer_id)
+    for entry in actual_entries:
+        bucket = summary.get(entry.customer_id)
         if not bucket:
             continue
-        bucket["dates"].setdefault(row.date, _empty_day())
-        bucket["dates"][row.date]["actual_amount"] = float(row.amount or 0.0)
-        bucket["dates"][row.date]["actual_quantity_tons"] = float(row.quantity or 0.0)
-        bucket["dates"][row.date]["has_actual_entry"] = True
+
+        day_bucket = bucket["dates"].setdefault(entry.date, _empty_day())
+        day_bucket["actual_entries"].append(
+            {
+                "id": entry.id,
+                "amount": float(entry.amount or 0.0),
+                "quantity_tons": float(entry.quantity_tons or 0.0),
+                "delivery_note_number": entry.delivery_note_number,
+            }
+        )
 
     payload = []
     for customer_id_value, bucket in summary.items():
@@ -291,20 +291,44 @@ def customer_sales_report():
         for day in sorted(bucket["dates"].keys()):
             entry = bucket["dates"][day]
             monthly_forecast_total += entry["forecast_amount"]
-            monthly_actual_total += entry["actual_amount"]
             monthly_forecast_quantity += entry["forecast_quantity_tons"]
-            monthly_actual_quantity += entry["actual_quantity_tons"]
-            dates.append(
-                {
-                    "date": day.isoformat(),
-                    "forecast_amount": entry["forecast_amount"],
-                    "actual_amount": entry["actual_amount"],
-                    "forecast_quantity_tons": entry["forecast_quantity_tons"],
-                    "actual_quantity_tons": entry["actual_quantity_tons"],
-                    "has_forecast_entry": entry["has_forecast_entry"],
-                    "has_actual_entry": entry["has_actual_entry"],
-                }
+
+            actual_rows = sorted(
+                entry["actual_entries"],
+                key=lambda item: ((item["delivery_note_number"] or ""), item["id"]),
             )
+
+            if actual_rows:
+                for actual in actual_rows:
+                    monthly_actual_total += actual["amount"]
+                    monthly_actual_quantity += actual["quantity_tons"]
+                    dates.append(
+                        {
+                            "date": day.isoformat(),
+                            "forecast_amount": entry["forecast_amount"],
+                            "actual_amount": actual["amount"],
+                            "forecast_quantity_tons": entry["forecast_quantity_tons"],
+                            "actual_quantity_tons": actual["quantity_tons"],
+                            "has_forecast_entry": entry["has_forecast_entry"],
+                            "has_actual_entry": True,
+                            "delivery_note_number": actual["delivery_note_number"],
+                            "actual_entry_id": actual["id"],
+                        }
+                    )
+            else:
+                dates.append(
+                    {
+                        "date": day.isoformat(),
+                        "forecast_amount": entry["forecast_amount"],
+                        "actual_amount": 0.0,
+                        "forecast_quantity_tons": entry["forecast_quantity_tons"],
+                        "actual_quantity_tons": 0.0,
+                        "has_forecast_entry": entry["has_forecast_entry"],
+                        "has_actual_entry": False,
+                        "delivery_note_number": None,
+                        "actual_entry_id": None,
+                    }
+                )
 
         if monthly_actual_quantity:
             monthly_average_unit_price = monthly_actual_total / monthly_actual_quantity

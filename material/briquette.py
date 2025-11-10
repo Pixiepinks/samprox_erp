@@ -28,6 +28,8 @@ CURRENCY_QUANT = Decimal("0.01")
 UNIT_COST_QUANT = Decimal("0.0001")
 HOUR_QUANT = Decimal("0.1")
 
+DEFAULT_DRY_FACTOR = Decimal("0.6")
+
 BRIQUETTE_MACHINE_CODES = ("MCH-0001", "MCH-0002")
 DRYER_MACHINE_CODE = "MCH-0003"
 BRIQUETTE_MACHINE_CODES_LOWER = tuple(code.lower() for code in BRIQUETTE_MACHINE_CODES)
@@ -840,7 +842,7 @@ def list_briquette_production_entries(
             raw_value = _decimal_from_value(getattr(entry, attr, "0")) if entry else Decimal("0")
             material_values[key] = float(_quantize(raw_value, TON_QUANT))
 
-        dry_factor_value = Decimal("0")
+        dry_factor_value = DEFAULT_DRY_FACTOR
         if entry and entry.dry_factor is not None:
             dry_factor_value = _decimal_from_value(entry.dry_factor)
 
@@ -895,7 +897,7 @@ def _serialize_mix_entry(
     dryer_hours = _quantize(production.get("dryer_hours", Decimal("0")), HOUR_QUANT)
     output_kg = _quantize(briquette_tons * TON_TO_KG, KG_QUANT)
 
-    dry_factor = Decimal("0")
+    dry_factor = DEFAULT_DRY_FACTOR
     if entry and entry.dry_factor is not None:
         dry_factor = _decimal_from_value(entry.dry_factor)
 

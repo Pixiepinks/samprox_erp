@@ -399,6 +399,9 @@
             technician: "Technician",
         };
 
+        const DEFAULT_DRY_FACTOR = 0.6;
+        const DEFAULT_DRY_FACTOR_DISPLAY = DEFAULT_DRY_FACTOR.toFixed(4);
+
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
@@ -1233,7 +1236,7 @@
             if (typeof data.dry_factor === "number" && briquetteDryFactorInput) {
                 briquetteDryFactorInput.value = data.dry_factor.toFixed(4);
             } else if (briquetteDryFactorInput) {
-                briquetteDryFactorInput.value = "0.0000";
+                briquetteDryFactorInput.value = DEFAULT_DRY_FACTOR_DISPLAY;
             }
             const dryerValue = Number(data.dryer_production_ton);
             briquetteDryerProductionTon = Number.isFinite(dryerValue) ? dryerValue : 0;
@@ -1328,15 +1331,19 @@
             }
         }
 
-        function openBriquetteModal(dateIso) {
+        function openBriquetteModal(dateIso, options = {}) {
             if (!briquetteModal || !dateIso) {
                 return;
             }
+            const { hasMix = false } = options;
             briquetteModalDateValue = dateIso;
             briquetteModal.removeAttribute("hidden");
             briquetteModal.setAttribute("aria-hidden", "false");
             briquetteModal.classList.add("modal--open");
             document.body.classList.add("modal-open");
+            if (briquetteDryFactorInput) {
+                briquetteDryFactorInput.value = hasMix ? "" : DEFAULT_DRY_FACTOR_DISPLAY;
+            }
             if (briquetteSaveButton) {
                 briquetteSaveButton.disabled = true;
             }
@@ -1393,6 +1400,7 @@
                 actionButton.className = "button button--secondary";
                 actionButton.textContent = entry.has_mix ? "Edit mix" : "Update mix";
                 actionButton.dataset.mixDate = entry.date;
+                actionButton.dataset.hasMix = entry.has_mix ? "true" : "false";
                 actionCell.appendChild(actionButton);
                 tr.appendChild(actionCell);
 
@@ -1591,7 +1599,8 @@
                     return;
                 }
                 const dateIso = button.dataset.mixDate;
-                openBriquetteModal(dateIso);
+                const hasMix = button.dataset.hasMix === "true";
+                openBriquetteModal(dateIso, { hasMix });
             });
         }
 

@@ -32,6 +32,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return default
 
 
+def _env_str(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip()
+    if not text:
+        return default
+    return text
+
+
 def _normalize_db_url(url: str) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
@@ -96,3 +106,10 @@ class Config:
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
     MAIL_FALLBACK_USE_SSL = _env_bool("MAIL_FALLBACK_USE_SSL", False)
     MAIL_FALLBACK_SERVER = os.getenv("MAIL_FALLBACK_SERVER")
+    COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
+    COMPANY_ADDRESS = _env_str(
+        "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"
+    )
+    COMPANY_CONTACT = _env_str("COMPANY_CONTACT")
+    COMPANY_TAGLINE = _env_str("COMPANY_TAGLINE", "The Shape of Tomorrow")
+    COMPANY_LOGO_PATH = _env_str("COMPANY_LOGO_PATH", "static/profile_images/GRNLOGO.png")

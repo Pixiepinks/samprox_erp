@@ -212,6 +212,7 @@ def download_job_card(job_id: int):
     company_name = current_app.config.get("COMPANY_NAME", "SAMPROX ERP")
     company_address = current_app.config.get("COMPANY_ADDRESS")
     company_contact = current_app.config.get("COMPANY_CONTACT")
+    company_tagline = current_app.config.get("COMPANY_TAGLINE")
     logo_data = _load_logo_data_uri()
 
     generated_at = datetime.now(_COLOMBO_TZ)
@@ -235,6 +236,7 @@ def download_job_card(job_id: int):
             "name": company_name,
             "address": company_address,
             "contact": company_contact,
+            "tagline": company_tagline,
             "logo": logo_data,
         },
         generated_at=generated_at,

@@ -943,10 +943,42 @@ def get_monthly_hourly_pulse():
     ):
         return jsonify({"msg": "You do not have permission to view production."}), 403
 
-    try:
-        anchor = _parse_period_param(request.args.get("period"))
-    except ValueError as exc:
-        return jsonify({"msg": str(exc)}), 400
+    period_param = request.args.get("period")
+    start_param = request.args.get("start_date")
+    end_param = request.args.get("end_date")
+
+    custom_range = False
+
+    if start_param or end_param:
+        try:
+            range_start = _parse_date(start_param, field_name="start_date")
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+        try:
+            range_end = _parse_date(end_param, field_name="end_date")
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+        if range_start is None or range_end is None:
+            return jsonify({"msg": "Both start_date and end_date are required."}), 400
+
+        if range_end < range_start:
+            return jsonify({"msg": "end_date must be on or after start_date."}), 400
+
+        anchor = range_start
+        period_start = range_start
+        period_end = range_end
+        day_count = (period_end - period_start).days + 1
+        custom_range = True
+    else:
+        try:
+            anchor = _parse_period_param(period_param)
+        except ValueError as exc:
+            return jsonify({"msg": str(exc)}), 400
+
+        period_start, period_end, month_days = _month_range(anchor)
+        day_count = month_days
 
     (
         machine_codes,
@@ -955,8 +987,6 @@ def get_monthly_hourly_pulse():
     ) = _parse_machine_codes_param(
         request.args.get("machine_codes"), default_codes=PULSE_MACHINE_CODES
     )
-
-    month_start, month_end, month_days = _month_range(anchor)
 
     totals_query = (
         db.session.query(
@@ -967,8 +997,8 @@ def get_monthly_hourly_pulse():
         )
         .join(MachineAsset, DailyProductionEntry.asset_id == MachineAsset.id)
         .filter(
-            DailyProductionEntry.date >= month_start,
-            DailyProductionEntry.date <= month_end,
+            DailyProductionEntry.date >= period_start,
+            DailyProductionEntry.date <= period_end,
             func.lower(MachineAsset.code).in_(machine_filters),
         )
         .group_by(
@@ -1007,8 +1037,9 @@ def get_monthly_hourly_pulse():
     peak_payload = None
     effective_hours = {code: 0 for code in machine_codes}
 
-    for day in range(1, month_days + 1):
-        current_date = dt_date(anchor.year, anchor.month, day)
+    for offset in range(day_count):
+        current_date = period_start + timedelta(days=offset)
+        day_index = offset + 1
         for hour_no in range(1, 25):
             machine_values = totals_by_window.get((current_date, hour_no), {})
             hour_start, _ = _production_hour_window(current_date, hour_no)
@@ -1016,8 +1047,9 @@ def get_monthly_hourly_pulse():
 
             payload = {
                 "index": len(hourly_totals) + 1,
-                "day": day,
+                "day": day_index,
                 "hour": hour_no,
+                "date": current_date.isoformat(),
                 "timestamp": format_datetime_as_colombo_iso(hour_start, assume_local=True),
                 "label": label,
             }
@@ -1040,8 +1072,9 @@ def get_monthly_hourly_pulse():
 
             if (peak_payload is None) or (hour_total > peak_payload["total_tons"]):
                 peak_payload = {
-                    "day": day,
+                    "day": day_index,
                     "hour": hour_no,
+                    "date": current_date.isoformat(),
                     "timestamp": payload["timestamp"],
                     "label": label,
                     "total_tons": hour_total,
@@ -1062,6 +1095,7 @@ def get_monthly_hourly_pulse():
         peak = {
             "day": None,
             "hour": None,
+            "date": None,
             "timestamp": None,
             "label": None,
             "total_tons": 0.0,
@@ -1069,12 +1103,22 @@ def get_monthly_hourly_pulse():
     else:
         peak = peak_payload
 
+    if custom_range:
+        if period_start == period_end:
+            label = period_start.strftime("%b %d, %Y")
+        else:
+            label = (
+                f"{period_start.strftime('%b %d, %Y')} – {period_end.strftime('%b %d, %Y')}"
+            )
+    else:
+        label = anchor.strftime("%B %Y")
+
     response = {
         "period": anchor.strftime("%Y-%m"),
-        "label": anchor.strftime("%B %Y"),
-        "start_date": month_start.isoformat(),
-        "end_date": month_end.isoformat(),
-        "days": month_days,
+        "label": label,
+        "start_date": period_start.isoformat(),
+        "end_date": period_end.isoformat(),
+        "days": day_count,
         "hours": len(hourly_totals),
         "machine_codes": machine_codes,
         "hourly_totals": hourly_totals,

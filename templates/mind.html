@@ -191,6 +191,14 @@
                     </div>
                     <div class="production-chart__controls">
                         <label class="production-chart__select">
+                            <span>Start date</span>
+                            <input type="date" id="production-pulse-start-date" />
+                        </label>
+                        <label class="production-chart__select">
+                            <span>End date</span>
+                            <input type="date" id="production-pulse-end-date" />
+                        </label>
+                        <label class="production-chart__select">
                             <span>Machine</span>
                             <select id="production-pulse-machine"></select>
                         </label>
@@ -335,6 +343,8 @@
         const productionPulseSummaryContainer = document.getElementById("production-pulse-summary");
         const productionPulseChartCanvas = document.getElementById("production-pulse-chart");
         const productionPulseMachineSelect = document.getElementById("production-pulse-machine");
+        const productionPulseStartDateInput = document.getElementById("production-pulse-start-date");
+        const productionPulseEndDateInput = document.getElementById("production-pulse-end-date");
         const idleParetoSummaryContainer = document.getElementById("idle-pareto-summary");
         const idleParetoChartCanvas = document.getElementById("idle-pareto-chart");
         const salesSummaryContainer = document.getElementById("sales-summary");
@@ -401,6 +411,11 @@
         const kgFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
             maximumFractionDigits: 0,
+        });
+        const dateRangeFormatter = new Intl.DateTimeFormat(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
         });
 
         const isoToday = () => {
@@ -1217,6 +1232,33 @@
             return hoursFormatter.format(number);
         };
 
+        const formatDateRangeLabel = (startValue, endValue) => {
+            const startDate = parseIsoDate(startValue);
+            const endDate = parseIsoDate(endValue);
+
+            if (!startDate && !endDate) {
+                return "—";
+            }
+
+            if (!startDate || !endDate) {
+                const formattedStart = startDate ? dateRangeFormatter.format(startDate) : "—";
+                const formattedEnd = endDate ? dateRangeFormatter.format(endDate) : "—";
+                if (formattedStart === formattedEnd) {
+                    return formattedStart;
+                }
+                return `${formattedStart} – ${formattedEnd}`;
+            }
+
+            const formattedStart = dateRangeFormatter.format(startDate);
+            const formattedEnd = dateRangeFormatter.format(endDate);
+
+            if (formattedStart === formattedEnd) {
+                return formattedStart;
+            }
+
+            return `${formattedStart} – ${formattedEnd}`;
+        };
+
         const formatCurrencyPerKg = (value) => {
             const number = Number(value);
             if (!Number.isFinite(number)) {
@@ -1343,6 +1385,116 @@
             return nextSelection;
         };
 
+        const getPeriodBounds = (periodKey) => {
+            if (!periodKey) {
+                return null;
+            }
+
+            const [yearStr, monthStr] = periodKey.split("-");
+            const year = Number(yearStr);
+            const month = Number(monthStr);
+
+            if (!Number.isFinite(year) || !Number.isFinite(month)) {
+                return null;
+            }
+
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 0);
+
+            return {
+                start: toIsoDate(startDate),
+                end: toIsoDate(endDate),
+            };
+        };
+
+        const syncProductionPulseDateConstraints = () => {
+            if (!productionPulseStartDateInput || !productionPulseEndDateInput) {
+                return;
+            }
+
+            const startValue = productionPulseStartDateInput.value;
+            const endValue = productionPulseEndDateInput.value;
+
+            productionPulseStartDateInput.max = endValue || "";
+            productionPulseEndDateInput.min = startValue || "";
+        };
+
+        const normalizeProductionPulseRange = (changedField = null) => {
+            if (!productionPulseStartDateInput || !productionPulseEndDateInput) {
+                return;
+            }
+
+            let startValue = productionPulseStartDateInput.value;
+            let endValue = productionPulseEndDateInput.value;
+
+            if (startValue && !endValue) {
+                productionPulseEndDateInput.value = startValue;
+                endValue = startValue;
+            }
+
+            if (endValue && !startValue) {
+                productionPulseStartDateInput.value = endValue;
+                startValue = endValue;
+            }
+
+            if (startValue && endValue && startValue > endValue) {
+                if (changedField === "start") {
+                    productionPulseEndDateInput.value = startValue;
+                    endValue = startValue;
+                } else if (changedField === "end") {
+                    productionPulseStartDateInput.value = endValue;
+                    startValue = endValue;
+                } else {
+                    productionPulseEndDateInput.value = startValue;
+                    endValue = startValue;
+                }
+            }
+
+            syncProductionPulseDateConstraints();
+        };
+
+        const getSelectedPulseRange = () => {
+            if (!productionPulseStartDateInput || !productionPulseEndDateInput) {
+                return null;
+            }
+
+            const startValue = productionPulseStartDateInput.value;
+            const endValue = productionPulseEndDateInput.value;
+
+            if (!startValue || !endValue) {
+                return null;
+            }
+
+            return { startDate: startValue, endDate: endValue };
+        };
+
+        const resetProductionPulseRangeToPeriod = () => {
+            if (!productionPulseStartDateInput || !productionPulseEndDateInput) {
+                return;
+            }
+
+            const periodKey = getSelectedPeriodKey();
+            const bounds = getPeriodBounds(periodKey);
+
+            if (bounds) {
+                productionPulseStartDateInput.value = bounds.start;
+                productionPulseEndDateInput.value = bounds.end;
+            } else {
+                productionPulseStartDateInput.value = "";
+                productionPulseEndDateInput.value = "";
+            }
+
+            normalizeProductionPulseRange();
+        };
+
+        const getPulseRangeCacheKey = (range) => {
+            if (!range || !range.startDate || !range.endDate) {
+                return null;
+            }
+
+            return `${range.startDate}__${range.endDate}`;
+        };
+
         const renderProductionSummary = (periodData, comparisonData = null) => {
             const total = Number(periodData?.total_production ?? 0);
             const average = Number(periodData?.average_day_production ?? 0);
@@ -1414,6 +1566,8 @@
             values,
             effectiveHours,
             idleTotals,
+            startDate,
+            endDate,
         }) => {
             if (!productionPulseSummaryContainer) {
                 return;
@@ -1443,6 +1597,10 @@
             const idleHours = Number(idleTotals?.idle_hours ?? 0);
 
             const summaryMetrics = [
+                {
+                    label: "Date range",
+                    value: formatDateRangeLabel(startDate, endDate),
+                },
                 {
                     label: "Total Production",
                     value: `${formatTons(total)} tons`,
@@ -1611,15 +1769,28 @@
         };
 
         const fetchProductionPulseSummary = async (periodKey) => {
-            if (!periodKey) {
+            const range = getSelectedPulseRange();
+            const cacheKey = getPulseRangeCacheKey(range) || periodKey;
+
+            if (!cacheKey) {
                 return null;
             }
 
-            if (productionPulsePeriodCache.has(periodKey)) {
-                return productionPulsePeriodCache.get(periodKey);
+            if (productionPulsePeriodCache.has(cacheKey)) {
+                return productionPulsePeriodCache.get(cacheKey);
             }
 
-            const params = new URLSearchParams({ period: periodKey });
+            const params = new URLSearchParams();
+            if (periodKey) {
+                params.set("period", periodKey);
+            }
+            if (range?.startDate) {
+                params.set("start_date", range.startDate);
+            }
+            if (range?.endDate) {
+                params.set("end_date", range.endDate);
+            }
+
             const response = await fetch(`/api/production/monthly/hourly-pulse?${params.toString()}`, {
                 headers: authHeaders,
             });
@@ -1634,7 +1805,7 @@
             }
 
             const data = await response.json();
-            productionPulsePeriodCache.set(periodKey, data);
+            productionPulsePeriodCache.set(cacheKey, data);
             return data;
         };
 
@@ -1696,6 +1867,11 @@
         };
 
         const buildProductionPulseDataset = async (periodKey) => {
+            const range = getSelectedPulseRange();
+            if (!range) {
+                return null;
+            }
+
             const periodData = await fetchProductionPulseSummary(periodKey);
             if (!periodData) {
                 return null;
@@ -1751,12 +1927,17 @@
                 periodData?.effective_hours?.[machineCode] ?? 0,
             );
 
+            const startDate = periodData?.start_date ?? range.startDate ?? null;
+            const endDate = periodData?.end_date ?? range.endDate ?? null;
+
             renderProductionPulseSummary({
                 machineCode,
                 hourlyTotals,
                 values,
                 effectiveHours,
                 idleTotals,
+                startDate,
+                endDate,
             });
 
             const dataset = {
@@ -1776,6 +1957,12 @@
 
         const buildProductionPulseChart = async () => {
             if (!productionPulseSummaryContainer || !productionPulseChartCanvas) {
+                return;
+            }
+
+            const range = getSelectedPulseRange();
+            if (!range) {
+                showProductionPulseSummaryError("Select a valid date range.");
                 return;
             }
 
@@ -3771,20 +3958,24 @@
             refreshLaborChart();
         };
 
-        initializeUnitEconomicsDateInputs();
-
         const initialClosingStockDate = initializeClosingStockDateInput();
         loadClosingStock(initialClosingStockDate);
 
         const selectorsInitialized = initializePeriodSelectors();
 
+        resetProductionPulseRangeToPeriod();
+
+        initializeUnitEconomicsDateInputs();
+
         yearSelect.addEventListener("change", () => {
             const previousSelection = getSelectedPeriodKey();
             populateMonthOptions(yearSelect.value, previousSelection);
+            resetProductionPulseRangeToPeriod();
             refreshCharts();
         });
 
         monthSelect.addEventListener("change", () => {
+            resetProductionPulseRangeToPeriod();
             refreshCharts();
         });
 
@@ -3809,6 +4000,20 @@
 
         if (unitEconomicsEndDateInput) {
             unitEconomicsEndDateInput.addEventListener("change", handleUnitEconomicsEndChange);
+        }
+
+        if (productionPulseStartDateInput) {
+            productionPulseStartDateInput.addEventListener("change", () => {
+                normalizeProductionPulseRange("start");
+                refreshProductionPulseChart();
+            });
+        }
+
+        if (productionPulseEndDateInput) {
+            productionPulseEndDateInput.addEventListener("change", () => {
+                normalizeProductionPulseRange("end");
+                refreshProductionPulseChart();
+            });
         }
 
         if (selectorsInitialized) {

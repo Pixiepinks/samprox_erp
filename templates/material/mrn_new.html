@@ -324,8 +324,19 @@
                             <p class="error-text" data-error-for="supplier_id"></p>
                         </div>
                         <div class="field">
-                            <label for="vehicle-no">Vehicle No</label>
-                            <input id="vehicle-no" name="vehicle_no" type="text" placeholder="Enter vehicle number" />
+                            <label for="sourcing-type">Sourcing Type<span class="text-red"> *</span></label>
+                            <select id="sourcing-type" name="sourcing_type" required>
+                                <option value="" disabled selected hidden>Select sourcing type</option>
+                                <option value="Ownsourcing">Ownsourcing</option>
+                                <option value="Outside">Outside</option>
+                            </select>
+                            <p class="error-text" data-error-for="sourcing_type"></p>
+                        </div>
+                        <div class="field">
+                            <label for="vehicle-no">Vehicle No<span class="text-red"> *</span></label>
+                            <select id="vehicle-no" name="vehicle_no" required>
+                                <option value="" disabled selected hidden>Select vehicle number</option>
+                            </select>
                             <p class="error-text" data-error-for="vehicle_no"></p>
                         </div>
                         <div class="field">
@@ -559,7 +570,8 @@
         const supplierInput = document.getElementById("supplier-search");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierMenu = document.getElementById("supplier-menu");
-        const vehicleNoInput = document.getElementById("vehicle-no");
+        const sourcingTypeSelect = document.getElementById("sourcing-type");
+        const vehicleNoSelect = document.getElementById("vehicle-no");
         const mrnForm = document.getElementById("mrn-form");
         const submitBtn = document.getElementById("submit-btn");
         const formAlert = document.getElementById("form-alert");
@@ -569,6 +581,9 @@
         const totalAmountValueEl = document.getElementById("total-amount-value");
         const totalQtyValueEl = document.getElementById("total-qty-value");
         const availableItems = {{ items | tojson }};
+        const INTERNAL_VEHICLES = ["LI-1795", "LB-3237"];
+        const VALID_SOURCING_TYPES = new Set(["Ownsourcing", "Outside"]);
+        const supplierCache = new Map();
         let activeItemSelect = null;
 
         async function populateMrnNumber(force = false) {
@@ -593,6 +608,7 @@
         }
 
         populateMrnNumber();
+        refreshVehicleOptions({ preserveSelection: false });
 
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalAlert = document.getElementById("supplier-modal-alert");
@@ -1204,6 +1220,142 @@
             return new Date(parsed).toISOString();
         }
 
+        function normalizeVehicleValue(value) {
+            if (typeof value !== "string") {
+                return "";
+            }
+            return value.trim().toLowerCase();
+        }
+
+        function extractVehicleNumbers(record) {
+            if (!record || typeof record !== "object") {
+                return [];
+            }
+            const keys = ["vehicleNo1", "vehicleNo2", "vehicleNo3", "vehicle_no_1", "vehicle_no_2", "vehicle_no_3"];
+            const seen = new Set();
+            const vehicles = [];
+            keys.forEach((key) => {
+                const raw = record[key];
+                if (typeof raw !== "string") {
+                    return;
+                }
+                const trimmed = raw.trim();
+                if (!trimmed) {
+                    return;
+                }
+                const normalized = normalizeVehicleValue(trimmed);
+                if (normalized && !seen.has(normalized)) {
+                    seen.add(normalized);
+                    vehicles.push(trimmed);
+                }
+            });
+            return vehicles;
+        }
+
+        function rememberSupplier(record) {
+            if (!record || !record.id) {
+                return;
+            }
+            const cached = { ...record };
+            cached.__vehicleNumbers = extractVehicleNumbers(record);
+            supplierCache.set(record.id, cached);
+        }
+
+        function getSupplierFromCache(id) {
+            if (!id) {
+                return null;
+            }
+            return supplierCache.get(id) || null;
+        }
+
+        function getSupplierVehicles(supplierId) {
+            const record = getSupplierFromCache(supplierId);
+            if (!record) {
+                return [];
+            }
+            if (Array.isArray(record.__vehicleNumbers)) {
+                return record.__vehicleNumbers.slice();
+            }
+            const vehicles = extractVehicleNumbers(record);
+            record.__vehicleNumbers = vehicles;
+            supplierCache.set(supplierId, record);
+            return vehicles.slice();
+        }
+
+        function getAllowedVehicles(sourcingType, supplierId) {
+            if (sourcingType === "Ownsourcing") {
+                return [...INTERNAL_VEHICLES];
+            }
+            if (sourcingType === "Outside") {
+                return getSupplierVehicles(supplierId);
+            }
+            return [];
+        }
+
+        function refreshVehicleOptions({ preserveSelection = true } = {}) {
+            if (!vehicleNoSelect) {
+                return;
+            }
+
+            const sourcingType = sourcingTypeSelect?.value || "";
+            const supplierIdValue = supplierIdInput.value || "";
+            const previousValue = preserveSelection ? vehicleNoSelect.value : "";
+
+            let allowedVehicles = [];
+            let disabled = false;
+            let placeholderText = "Select vehicle number";
+
+            if (!sourcingType) {
+                disabled = true;
+                placeholderText = "Select sourcing type first";
+            } else if (sourcingType === "Ownsourcing") {
+                allowedVehicles = getAllowedVehicles(sourcingType, supplierIdValue);
+            } else if (sourcingType === "Outside") {
+                if (!supplierIdValue) {
+                    disabled = true;
+                    placeholderText = "Select supplier to view vehicles";
+                } else {
+                    allowedVehicles = getAllowedVehicles(sourcingType, supplierIdValue);
+                    if (allowedVehicles.length === 0) {
+                        disabled = true;
+                        placeholderText = "No vehicles registered for supplier";
+                    }
+                }
+            }
+
+            vehicleNoSelect.innerHTML = "";
+
+            const placeholderOption = document.createElement("option");
+            placeholderOption.value = "";
+            placeholderOption.textContent = placeholderText;
+            placeholderOption.disabled = true;
+            placeholderOption.selected = true;
+            placeholderOption.hidden = false;
+            vehicleNoSelect.appendChild(placeholderOption);
+
+            allowedVehicles.forEach((vehicle) => {
+                const option = document.createElement("option");
+                option.value = vehicle;
+                option.textContent = vehicle;
+                vehicleNoSelect.appendChild(option);
+            });
+
+            if (disabled) {
+                vehicleNoSelect.disabled = true;
+                vehicleNoSelect.value = "";
+                return;
+            }
+
+            vehicleNoSelect.disabled = false;
+            const normalizedPrevious = normalizeVehicleValue(previousValue);
+            const match = allowedVehicles.find((value) => normalizeVehicleValue(value) === normalizedPrevious);
+            if (match) {
+                vehicleNoSelect.value = match;
+            } else {
+                vehicleNoSelect.value = "";
+            }
+        }
+
         function toggleSupplierMenu(show) {
             if (show) {
                 supplierMenu.classList.add("active");
@@ -1258,6 +1410,7 @@
             }
 
             suppliers.forEach((supplier) => {
+                rememberSupplier(supplier);
                 const option = document.createElement("button");
                 option.type = "button";
                 option.className = "supplier-option";
@@ -1267,6 +1420,7 @@
                     supplierInput.value = supplier.name;
                     supplierIdInput.value = supplier.id;
                     toggleSupplierMenu(false);
+                    refreshVehicleOptions({ preserveSelection: sourcingTypeSelect?.value === "Ownsourcing" });
                 });
                 supplierMenu.appendChild(option);
             });
@@ -1281,6 +1435,11 @@
             const value = event.target.value;
             supplierIdInput.value = "";
             fetchSuppliers(value);
+            if (sourcingTypeSelect?.value === "Ownsourcing") {
+                refreshVehicleOptions();
+            } else {
+                refreshVehicleOptions({ preserveSelection: false });
+            }
         });
 
         document.addEventListener("click", (event) => {
@@ -1288,6 +1447,13 @@
                 toggleSupplierMenu(false);
             }
         });
+
+        if (sourcingTypeSelect) {
+            sourcingTypeSelect.addEventListener("change", () => {
+                const preserve = sourcingTypeSelect.value === "Ownsourcing";
+                refreshVehicleOptions({ preserveSelection: preserve });
+            });
+        }
 
 
         function openSupplierModal() {
@@ -1443,8 +1609,10 @@
                     );
                     return;
                 }
+                rememberSupplier(supplierRecord);
                 supplierInput.value = supplierRecord.name || values.name;
                 supplierIdInput.value = supplierRecord.id || "";
+                refreshVehicleOptions({ preserveSelection: sourcingTypeSelect?.value === "Ownsourcing" });
                 fetchSuppliers(supplierRecord.name || "");
                 closeSupplierModal();
             } catch (error) {
@@ -1537,12 +1705,16 @@
             }
             supplierInput.value = "";
             supplierIdInput.value = "";
-            if (vehicleNoInput) {
-                vehicleNoInput.value = "";
+            if (sourcingTypeSelect) {
+                sourcingTypeSelect.value = "";
+            }
+            if (vehicleNoSelect) {
+                vehicleNoSelect.value = "";
             }
             clearErrors();
             resetItemRows();
             populateMrnNumber(true);
+            refreshVehicleOptions({ preserveSelection: false });
         });
 
         function validateForm() {
@@ -1551,6 +1723,50 @@
             const rows = collectItemRows();
             if (rows.length === 0) {
                 errors["items"] = "Add at least one item.";
+            }
+
+            const sourcingTypeValue = sourcingTypeSelect?.value || "";
+            const supplierIdValue = supplierIdInput.value || "";
+            const vehicleSelection = vehicleNoSelect?.value || "";
+            const allowedVehicles = getAllowedVehicles(sourcingTypeValue, supplierIdValue);
+
+            if (!sourcingTypeValue || !VALID_SOURCING_TYPES.has(sourcingTypeValue)) {
+                errors["sourcing_type"] = "Select a sourcing type.";
+            }
+
+            if (!vehicleSelection) {
+                if (sourcingTypeValue === "Outside") {
+                    if (!supplierIdValue) {
+                        errors["vehicle_no"] = "Select a supplier before choosing a vehicle.";
+                    } else if (allowedVehicles.length === 0) {
+                        errors["vehicle_no"] = "The selected supplier has no registered vehicles.";
+                    } else {
+                        errors["vehicle_no"] = "Select a vehicle registered to the supplier.";
+                    }
+                } else if (sourcingTypeValue === "Ownsourcing") {
+                    errors["vehicle_no"] = "Select an internal vehicle.";
+                } else {
+                    errors["vehicle_no"] = "Select a vehicle number.";
+                }
+            } else if (sourcingTypeValue === "Ownsourcing") {
+                const match = INTERNAL_VEHICLES.find(
+                    (value) => normalizeVehicleValue(value) === normalizeVehicleValue(vehicleSelection),
+                );
+                if (!match) {
+                    errors["vehicle_no"] = "Select a valid internal vehicle.";
+                }
+            } else if (sourcingTypeValue === "Outside") {
+                if (!supplierIdValue) {
+                    errors["vehicle_no"] = "Select a supplier before choosing a vehicle.";
+                } else if (allowedVehicles.length === 0) {
+                    errors["vehicle_no"] = "The selected supplier has no registered vehicles.";
+                } else if (
+                    !allowedVehicles.some(
+                        (value) => normalizeVehicleValue(value) === normalizeVehicleValue(vehicleSelection),
+                    )
+                ) {
+                    errors["vehicle_no"] = "Select a vehicle registered to the supplier.";
+                }
             }
 
             let totalQty = 0;
@@ -1669,7 +1885,8 @@
             payload.weigh_in_time = normalizeDateValue(payload.weigh_in_time);
             payload.weigh_out_time = normalizeDateValue(payload.weigh_out_time);
             payload.supplier_id = supplierIdInput.value || undefined;
-            payload.vehicle_no = (vehicleNoInput?.value || "").trim() || undefined;
+            payload.sourcing_type = sourcingTypeSelect?.value || undefined;
+            payload.vehicle_no = vehicleNoSelect?.value || undefined;
             payload.items = sanitizedItems.map((item) => ({
                 item_id: item.item_id,
                 first_weight_kg: coerceNumericValue(item.first_weight_kg),

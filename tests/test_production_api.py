@@ -499,6 +499,85 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertIn(third_asset["code"], data["machine_codes"])
 
 
+    def test_hourly_pulse_accepts_custom_date_range(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+
+        def record_output(machine_code, date, hour_no, quantity):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        record_output(first_asset["code"], "2024-05-01", 1, 1.0)
+        record_output(first_asset["code"], "2024-05-02", 5, 2.0)
+        record_output(second_asset["code"], "2024-05-02", 5, 3.5)
+        record_output(first_asset["code"], "2024-05-03", 6, 4.0)
+
+        response = self.client.get(
+            "/api/production/monthly/hourly-pulse",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"start_date": "2024-05-01", "end_date": "2024-05-02"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        self.assertEqual(data["start_date"], "2024-05-01")
+        self.assertEqual(data["end_date"], "2024-05-02")
+        self.assertEqual(data["days"], 2)
+        self.assertEqual(data["hours"], 48)
+        self.assertEqual(data["period"], "2024-05")
+        self.assertEqual(data["label"], "May 01, 2024 – May 02, 2024")
+
+        dates = {item["date"] for item in data["hourly_totals"]}
+        self.assertIn("2024-05-01", dates)
+        self.assertIn("2024-05-02", dates)
+        self.assertNotIn("2024-05-03", dates)
+
+        entries = {(item["date"], item["hour"]): item for item in data["hourly_totals"]}
+        may_first_hour_one = entries[("2024-05-01", 1)]
+        self.assertAlmostEqual(may_first_hour_one["MCH1"], 1.0)
+        self.assertAlmostEqual(may_first_hour_one["total_tons"], 1.0)
+
+        may_second_hour_five = entries[("2024-05-02", 5)]
+        self.assertAlmostEqual(may_second_hour_five["MCH1"], 2.0)
+        self.assertAlmostEqual(may_second_hour_five["MCH2"], 3.5)
+        self.assertAlmostEqual(may_second_hour_five["total_tons"], 5.5)
+
+        self.assertAlmostEqual(data["total_production"], 6.5)
+        total_effective_hours = sum(data["effective_hours"].values())
+        self.assertEqual(total_effective_hours, data["total_effective_hours"])
+        self.assertAlmostEqual(data["average_hour_production"], round(6.5 / total_effective_hours, 3))
+        self.assertEqual(data["peak"]["date"], "2024-05-02")
+        self.assertEqual(data["peak"]["hour"], 5)
+        self.assertAlmostEqual(data["peak"]["total_tons"], 5.5)
+
+        invalid_missing = self.client.get(
+            "/api/production/monthly/hourly-pulse",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"start_date": "2024-05-01"},
+        )
+        self.assertEqual(invalid_missing.status_code, 400)
+        self.assertEqual(invalid_missing.get_json()["msg"], "Both start_date and end_date are required.")
+
+        invalid_order = self.client.get(
+            "/api/production/monthly/hourly-pulse",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"start_date": "2024-05-03", "end_date": "2024-05-01"},
+        )
+        self.assertEqual(invalid_order.status_code, 400)
+        self.assertEqual(
+            invalid_order.get_json()["msg"], "end_date must be on or after start_date."
+        )
+
+
     def test_monthly_idle_summary_accounts_for_shift_hours(self):
         first_asset = self._create_machine()
         second_asset = self._create_machine()

@@ -200,6 +200,15 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(day_entry["total_material_cost"], 35254.5, places=2)
         self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 11.7515, places=4)
 
+    def test_mix_detail_returns_default_dry_factor(self):
+        response = self.client.get(
+            f"/api/material/briquette-production/{self.production_date.isoformat()}"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("dry_factor", data)
+        self.assertAlmostEqual(data["dry_factor"], 0.6, places=4)
+
     def test_update_mix_rejects_negative_wood_shaving(self):
         payload = {
             "dry_factor": 0.4,

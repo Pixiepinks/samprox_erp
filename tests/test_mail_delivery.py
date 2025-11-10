@@ -99,6 +99,32 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         self.assertEqual(email_message["To"], "alpha@example.com, beta@example.com")
         self.assertEqual(email_message["Cc"], "gamma@example.com")
 
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    @patch("flask_mail.smtplib.SMTP")
+    def test_tls_connection_failure_uses_ssl_fallback(self, smtp_mock, smtp_ssl_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=True,
+            MAIL_FALLBACK_PORT=587,
+        )
+
+        smtp_mock.side_effect = OSError("Connection refused")
+        smtp_ssl_mock.return_value.__enter__.return_value.send_message.return_value = None
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        smtp_mock.assert_called_once_with("smtp.example.com", 587, timeout=10.0)
+        smtp_ssl_mock.assert_called_once()
+        args, kwargs = smtp_ssl_mock.call_args
+        self.assertEqual(args, ("smtp.example.com", 465))
+        self.assertEqual(kwargs.get("timeout"), 10.0)
+        self.assertIsNotNone(kwargs.get("context"))
+
 
 if __name__ == "__main__":
     unittest.main()

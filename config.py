@@ -95,3 +95,4 @@ class Config:
     MAIL_FALLBACK_TO_TLS = _env_bool("MAIL_FALLBACK_TO_TLS", True)
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
     MAIL_FALLBACK_USE_SSL = _env_bool("MAIL_FALLBACK_USE_SSL", False)
+    MAIL_FALLBACK_SERVER = os.getenv("MAIL_FALLBACK_SERVER")

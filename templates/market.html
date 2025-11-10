@@ -485,6 +485,7 @@
         const addCustomerOptionValue = "__create__";
         const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
         let currentEditingEntry = null;
+        let shouldLoadExistingEntry = false;
         const dialogSupported =
             typeof HTMLDialogElement === "function" &&
             typeof HTMLDialogElement.prototype.showModal === "function";
@@ -1191,11 +1192,12 @@
             updateEntryTotal();
         }
 
-        async function loadExistingEntryForSelection() {
+        async function loadExistingEntryForSelection(options = {}) {
             if (!token) {
                 return;
             }
 
+            const { force = false } = options;
             const dateValue = entryDateInput?.value || "";
             const customerValue = entryCustomerSelect?.value || "";
             const saleTypeValue = entryTypeSelect?.value || "";
@@ -1206,6 +1208,16 @@
                 customerValue === addCustomerOptionValue ||
                 !saleTypeValue
             ) {
+                setEditingState(null);
+                clearSalesEntryValues();
+                updateLoaderFieldState();
+                return;
+            }
+
+            const shouldFetchExistingEntry = force || shouldLoadExistingEntry;
+            shouldLoadExistingEntry = false;
+
+            if (!shouldFetchExistingEntry) {
                 setEditingState(null);
                 clearSalesEntryValues();
                 updateLoaderFieldState();
@@ -2188,8 +2200,10 @@
             updateLoaderFieldState();
 
             if (loadExistingEntry) {
-                loadExistingEntryForSelection();
+                shouldLoadExistingEntry = true;
+                loadExistingEntryForSelection({ force: true });
             } else {
+                shouldLoadExistingEntry = false;
                 setEditingState(null);
                 clearSalesEntryValues();
                 renderEditingState();

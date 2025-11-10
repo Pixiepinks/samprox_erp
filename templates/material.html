@@ -144,6 +144,7 @@
                                 <th scope="col">Registration no.</th>
                                 <th scope="col">Category</th>
                                 <th scope="col">Primary phone</th>
+                                <th scope="col">Vehicle No 1</th>
                                 <th scope="col">Credit period</th>
                             </tr>
                         </thead>
@@ -969,6 +970,10 @@
                 const phoneCell = document.createElement("td");
                 phoneCell.textContent = item.primaryPhone || item.phone || "—";
                 row.appendChild(phoneCell);
+
+                const vehicleCell = document.createElement("td");
+                vehicleCell.textContent = item.vehicleNo1 || "—";
+                row.appendChild(vehicleCell);
 
                 const creditCell = document.createElement("td");
                 creditCell.textContent = item.creditPeriod || "—";

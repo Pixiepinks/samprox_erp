@@ -4,96 +4,179 @@
     <meta charset="utf-8" />
     <title>Maintenance Job Card</title>
     <style>
+        :root {
+            color-scheme: only light;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
         @page {
             size: A4 portrait;
-            margin: 20mm;
+            margin: 12mm;
         }
 
         body {
-            font-family: "Helvetica", "Arial", sans-serif;
+            margin: 0;
+            font-family: "Inter", "Helvetica", "Arial", sans-serif;
             font-size: 12px;
+            color: #0f172a;
+            background: #e5e7eb;
+            display: flex;
+            justify-content: center;
+            padding: 28px;
+        }
+
+        main {
+            width: 100%;
+            max-width: 210mm;
+        }
+
+        .print-sheet {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+            padding: 28px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        @media print {
+            body {
+                background: #ffffff;
+                padding: 0;
+                display: block;
+            }
+
+            .print-sheet {
+                border-radius: 0;
+                box-shadow: none;
+                padding: 0;
+            }
+        }
+
+        .sheet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 24px;
+        }
+
+        .company-block {
+            display: grid;
+            gap: 2px;
+            font-size: 13px;
+            line-height: 1.35;
             color: #1f2937;
         }
 
-        h1 {
-            font-size: 20px;
-            margin: 0 0 6px;
+        .company-name {
+            font-size: 18px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .logo-block {
+            width: 140px;
+            flex-shrink: 0;
+        }
+
+        .logo-block img {
+            display: block;
+            width: 100%;
+        }
+
+        .title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+            border-top: 2px solid #0f172a;
+            padding-top: 14px;
+        }
+
+        .document-title {
+            margin: 0;
+            font-size: 24px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+            font-weight: 700;
         }
 
-        .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 24px;
-        }
-
-        .header-table td {
-            vertical-align: top;
-            padding: 0;
-        }
-
-        .logo-cell {
-            width: 55%;
-            padding-right: 16px;
-        }
-
-        .logo-image {
-            max-width: 280px;
-            display: block;
-        }
-
-        .job-code-box {
+        .job-code {
             text-align: right;
+            display: grid;
+            gap: 4px;
         }
 
         .job-code-label {
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.12em;
             color: #6b7280;
-            margin: 6px 0 0;
         }
 
         .job-code-value {
             font-size: 22px;
             font-weight: 700;
-            margin: 6px 0 0;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.1em;
+            color: #0f172a;
         }
 
         .section-title {
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
-            margin: 18px 0 8px;
+            margin: 12px 0 8px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            color: #111827;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 12px;
+            font-size: 12px;
         }
 
         th,
         td {
             border: 1px solid #d1d5db;
-            padding: 6px 8px;
+            padding: 8px 10px;
+            vertical-align: top;
         }
 
-        th {
-            background: #f3f4f6;
+        thead th {
+            background: #0f172a;
+            color: #ffffff;
             text-align: left;
             font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        tbody tr:nth-of-type(even) {
+            background: #f9fafb;
         }
 
         .summary-table th {
             width: 22%;
+            background: #f3f4f6;
+            font-weight: 600;
         }
 
         .summary-table td {
             width: 28%;
+            background: #ffffff;
+        }
+
+        .summary-table tbody tr:nth-of-type(even) {
+            background: #ffffff;
         }
 
         .muted {
@@ -103,10 +186,11 @@
 
         .amount {
             text-align: right;
+            white-space: nowrap;
         }
 
         .plain-table th {
-            width: 20%;
+            width: 22%;
             background: #f3f4f6;
         }
 
@@ -114,11 +198,15 @@
             background: #ffffff;
         }
 
+        .plain-table tbody tr:nth-of-type(even) {
+            background: #ffffff;
+        }
+
         .footer {
-            margin-top: 20px;
-            font-size: 10px;
+            font-size: 11px;
             color: #6b7280;
             text-align: right;
+            margin-top: 4px;
         }
 
         .description-text {
@@ -128,21 +216,29 @@
     </style>
 </head>
 <body>
-    <table class="header-table">
-        <tr>
-            <td class="logo-cell">
-                <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Samprox International" class="logo-image" />
-            </td>
-            <td class="job-code-box">
-                <h1>Maintenance Job Card</h1>
-                <p class="job-code-label">Job Code</p>
-                <p class="job-code-value">{{ job.job_code }}</p>
-            </td>
-        </tr>
-    </table>
+    <main>
+        <article class="print-sheet">
+            <header class="sheet-header">
+                <div class="company-block">
+                    <span class="company-name">Samprox International (Pvt) Ltd</span>
+                    <span>16/2, Sasanawardenarama Mawatha,</span>
+                    <span>Galawilawatta, Homagama</span>
+                </div>
+                <div class="logo-block">
+                    <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Samprox International" />
+                </div>
+            </header>
 
-    <h2 class="section-title">Job Summary</h2>
-    <table class="summary-table">
+            <div class="title-row">
+                <h1 class="document-title">Maintenance Job Card</h1>
+                <div class="job-code">
+                    <span class="job-code-label">Job Code</span>
+                    <span class="job-code-value">{{ job.job_code }}</span>
+                </div>
+            </div>
+
+            <h2 class="section-title">Job Summary</h2>
+            <table class="summary-table">
         <tbody>
             <tr>
                 <th>Job Date</th>
@@ -306,8 +402,10 @@
         </tbody>
     </table>
 
-    <div class="footer">
-        Generated on {{ generated_at.strftime('%d %b %Y %I:%M %p') }}
-    </div>
+            <div class="footer">
+                Generated on {{ generated_at.strftime('%d %b %Y %I:%M %p') }}
+            </div>
+        </article>
+    </main>
 </body>
 </html>

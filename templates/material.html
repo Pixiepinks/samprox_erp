@@ -184,6 +184,7 @@
                                 <th scope="col">MRN number</th>
                                 <th scope="col">Date</th>
                                 <th scope="col">Supplier</th>
+                                <th scope="col">Sourcing Type</th>
                                 <th scope="col">Material</th>
                                 <th scope="col">Qty (Ton)</th>
                                 <th scope="col">Amount</th>
@@ -1503,6 +1504,10 @@
                 supplierCell.textContent =
                     (item.supplier && item.supplier.name) || item.vehicle_no || "—";
                 row.appendChild(supplierCell);
+
+                const sourcingCell = document.createElement("td");
+                sourcingCell.textContent = item.sourcing_type || "—";
+                row.appendChild(sourcingCell);
 
                 const materialCell = document.createElement("td");
                 let materialSummary = "—";

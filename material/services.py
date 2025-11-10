@@ -32,6 +32,9 @@ SUPPLIER_CATEGORIES = {
 
 CREDIT_PERIOD_OPTIONS = {"Cash", "3 Days", "7 Days", "1 Month"}
 
+VALID_SOURCING_TYPES = {"Ownsourcing", "Outside"}
+INTERNAL_VEHICLE_NUMBERS = {"LI-1795", "LB-3237"}
+
 
 class MaterialValidationError(Exception):
     """Raised when the payload provided by the client is invalid."""
@@ -438,7 +441,61 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     else:
         errors["supplier_id"] = "Select a supplier."
 
-    vehicle_no = (payload.get("vehicle_no") or "").strip() or None
+    sourcing_type = (payload.get("sourcing_type") or "").strip()
+    if sourcing_type not in VALID_SOURCING_TYPES:
+        errors["sourcing_type"] = "Select a sourcing type."
+
+    supplier_vehicle_numbers: set[str] = set()
+    if supplier:
+        supplier_vehicle_numbers = {
+            value.strip()
+            for value in (
+                supplier.vehicle_no_1,
+                supplier.vehicle_no_2,
+                supplier.vehicle_no_3,
+            )
+            if isinstance(value, str) and value.strip()
+        }
+
+    vehicle_no_raw = (payload.get("vehicle_no") or "").strip()
+    vehicle_no = vehicle_no_raw or None
+
+    if not vehicle_no:
+        errors["vehicle_no"] = "Select a vehicle number."
+    elif sourcing_type == "Ownsourcing":
+        match = next(
+            (
+                internal
+                for internal in INTERNAL_VEHICLE_NUMBERS
+                if internal.lower() == vehicle_no.lower()
+            ),
+            None,
+        )
+        if not match:
+            errors["vehicle_no"] = "Select a valid internal vehicle."
+        else:
+            vehicle_no = match
+    elif sourcing_type == "Outside":
+        if not supplier:
+            errors["vehicle_no"] = "Select a supplier before choosing a vehicle."
+        else:
+            if not supplier_vehicle_numbers:
+                errors["vehicle_no"] = "Selected supplier has no registered vehicles."
+            else:
+                match = next(
+                    (
+                        registered
+                        for registered in supplier_vehicle_numbers
+                        if registered.lower() == vehicle_no.lower()
+                    ),
+                    None,
+                )
+                if not match:
+                    errors["vehicle_no"] = "Select a vehicle registered to the supplier."
+                else:
+                    vehicle_no = match
+    elif "sourcing_type" not in errors:
+        errors["vehicle_no"] = "Select a sourcing type."
 
     mrn_date = _parse_date(payload.get("date"), "date", errors)
     weigh_in_time = _parse_datetime(payload.get("weigh_in_time"), "weigh_in_time", errors)
@@ -568,6 +625,7 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         mrn_no=mrn_no,
         date=mrn_date,
         supplier=supplier,
+        sourcing_type=sourcing_type,
         vehicle_no=vehicle_no,
         qty_ton=total_qty,
         amount=total_amount,

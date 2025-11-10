@@ -67,6 +67,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
             "mrn_no": "MRN-001",
             "date": "2024-08-10",
             "supplier_id": str(supplier.id),
+            "sourcing_type": "Outside",
             "items": [
                 {
                     "item_id": str(item.id),
@@ -107,6 +108,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(data["qty_ton"], "12.345")
         self.assertEqual(data["amount"], "1296.84")
         self.assertEqual(data["supplier_id"], payload["supplier_id"])
+        self.assertEqual(data["sourcing_type"], payload["sourcing_type"])
         self.assertEqual(data["vehicle_no"], payload["vehicle_no"])
 
         self.assertIn("items", data)
@@ -124,6 +126,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertIsNotNone(mrn)
         self.assertAlmostEqual(float(mrn.amount), 1296.84)
         self.assertAlmostEqual(float(mrn.qty_ton), 12.345)
+        self.assertEqual(mrn.sourcing_type, payload["sourcing_type"])
         self.assertEqual(mrn.vehicle_no, payload["vehicle_no"])
 
         self.assertEqual(len(mrn.items), 1)
@@ -145,6 +148,7 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertIn("errors", data)
         self.assertIn("supplier_id", data["errors"])
+        self.assertIn("vehicle_no", data["errors"])
         self.assertIn("items.0.second_weight_kg", data["errors"])
         self.assertNotIn("weigh_out_time", data["errors"])
 
@@ -238,4 +242,64 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         search_data = search_response.get_json()
         self.assertEqual(len(search_data), 1)
         self.assertEqual(search_data[0]["mrn_no"], "MRN-002")
+
+    def test_create_mrn_with_internal_vehicle(self):
+        payload = self._default_payload()
+        payload["sourcing_type"] = "Ownsourcing"
+        payload["vehicle_no"] = "LI-1795"
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        data = response.get_json()
+        self.assertEqual(data["vehicle_no"], "LI-1795")
+        self.assertEqual(data["sourcing_type"], "Ownsourcing")
+
+    def test_invalid_internal_vehicle_rejected(self):
+        payload = self._default_payload()
+        payload["sourcing_type"] = "Ownsourcing"
+        payload["vehicle_no"] = "INVALID-123"
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("vehicle_no", data.get("errors", {}))
+
+    def test_supplier_vehicle_mismatch_rejected(self):
+        supplier = self.create_supplier_service(
+            {
+                "name": "Global Timber",
+                "primary_phone": "011-777-8888",
+                "category": "Raw Material",
+                "vehicle_no_1": "GT-9000",
+                "supplier_id_no": "SID-GLOBAL",
+                "credit_period": "Cash",
+            }
+        )
+        payload = self._default_payload()
+        payload["supplier_id"] = str(supplier.id)
+        payload["vehicle_no"] = "TRK-001"
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("vehicle_no", data.get("errors", {}))
+
+    def test_supplier_without_registered_vehicle_rejected(self):
+        supplier = self.create_supplier_service(
+            {
+                "name": "No Vehicle Supplier",
+                "primary_phone": "011-123-4567",
+                "category": "Packing Material",
+                "supplier_id_no": "SID-NOVEH",
+                "credit_period": "Cash",
+            }
+        )
+        payload = self._default_payload()
+        payload["supplier_id"] = str(supplier.id)
+        payload["vehicle_no"] = "NV-0001"
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("vehicle_no", data.get("errors", {}))
 

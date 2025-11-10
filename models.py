@@ -328,6 +328,7 @@ class MRNHeader(db.Model):
     mrn_no = db.Column(db.String(60), nullable=False, unique=True)
     date = db.Column(db.Date, nullable=False)
     supplier_id = db.Column(GUID(), db.ForeignKey("suppliers.id"))
+    sourcing_type = db.Column(db.String(40), nullable=False, default="Ownsourcing")
     vehicle_no = db.Column("supplier_name_free", db.String(255))
     qty_ton = db.Column(db.Numeric(12, 3), nullable=False)
     amount = db.Column(db.Numeric(14, 2), nullable=False)

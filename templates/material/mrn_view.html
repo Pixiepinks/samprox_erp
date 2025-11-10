@@ -255,6 +255,10 @@
                         <span class="meta-label">Supplier</span>
                         <span class="meta-value">{{ mrn.supplier.name if mrn.supplier else "—" }}</span>
                     </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Sourcing Type</span>
+                        <span class="meta-value">{{ mrn.sourcing_type or "—" }}</span>
+                    </div>
                 </div>
                 <div class="meta-block">
                     <div class="meta-row">

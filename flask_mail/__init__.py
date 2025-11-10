@@ -183,6 +183,7 @@ class Mail:
         timeout = config.get("MAIL_TIMEOUT", 10.0)
         fallback_to_tls = bool(config.get("MAIL_FALLBACK_TO_TLS", False))
         fallback_port_value = config.get("MAIL_FALLBACK_PORT", 587)
+        fallback_server = config.get("MAIL_FALLBACK_SERVER") or host
         try:
             timeout_value = float(timeout)
         except (TypeError, ValueError):
@@ -197,14 +198,24 @@ class Mail:
             fallback_port = 587
 
         tls_context = ssl.create_default_context()
+        fallback_use_ssl = bool(
+            config.get("MAIL_FALLBACK_USE_SSL", False) or fallback_port == 465
+        )
 
-        def _send_once(target_port: int, ssl_enabled: bool, tls_enabled: bool) -> None:
+        def _send_once(
+            target_host: str,
+            target_port: int,
+            ssl_enabled: bool,
+            tls_enabled: bool,
+        ) -> None:
             if ssl_enabled:
                 smtp_class = smtplib.SMTP_SSL
-                smtp = smtp_class(host, target_port, timeout=timeout_value, context=tls_context)
+                smtp = smtp_class(
+                    target_host, target_port, timeout=timeout_value, context=tls_context
+                )
             else:
                 smtp_class = smtplib.SMTP
-                smtp = smtp_class(host, target_port, timeout=timeout_value)
+                smtp = smtp_class(target_host, target_port, timeout=timeout_value)
 
             with smtp as server:
                 server.ehlo()
@@ -215,22 +226,69 @@ class Mail:
                     server.login(username, password or "")
                 server.send_message(email_message, from_addr=sender, to_addrs=recipients)
 
-        try:
-            _send_once(port, use_ssl, use_tls)
-            return
-        except (OSError, smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, ssl.SSLError) as exc:
-            if not fallback_to_tls:
-                raise
-            if not use_ssl and use_tls and port == fallback_port:
-                raise
-            try:
-                fallback_use_ssl = bool(
-                    config.get("MAIL_FALLBACK_USE_SSL", False) or fallback_port == 465
-                )
-                _send_once(fallback_port, fallback_use_ssl, not fallback_use_ssl)
+        def _should_retry(exc: Exception) -> bool:
+            if isinstance(
+                exc,
+                (
+                    smtplib.SMTPAuthenticationError,
+                    smtplib.SMTPRecipientsRefused,
+                    smtplib.SMTPSenderRefused,
+                ),
+            ):
+                return False
+
+            recoverable = (
+                OSError,
+                TimeoutError,
+                smtplib.SMTPConnectError,
+                smtplib.SMTPServerDisconnected,
+                ssl.SSLError,
+                smtplib.SMTPNotSupportedError,
+            )
+            if isinstance(exc, recoverable):
+                return True
+            if isinstance(exc, smtplib.SMTPException):
+                return True
+            return False
+
+        attempts: list[tuple[str, int, bool, bool]] = []
+        seen: set[tuple[str, int, bool, bool]] = set()
+
+        def _schedule(target_host: str, target_port: int, ssl_enabled: bool, tls_enabled: bool) -> None:
+            if target_port <= 0:
                 return
-            except Exception as fallback_exc:  # pragma: no cover - re-raised for callers
-                raise fallback_exc from exc
+            key = (target_host, target_port, ssl_enabled, tls_enabled)
+            if key in seen:
+                return
+            seen.add(key)
+            attempts.append(key)
+
+        _schedule(host, port, use_ssl, use_tls)
+
+        if fallback_to_tls:
+            _schedule(fallback_server, fallback_port, fallback_use_ssl, not fallback_use_ssl)
+            if not use_ssl:
+                common_ssl_port = 465
+                _schedule(
+                    fallback_server,
+                    common_ssl_port,
+                    True,
+                    False,
+                )
+
+        last_exception: Exception | None = None
+        for target_host, target_port, ssl_enabled, tls_enabled in attempts:
+            try:
+                _send_once(target_host, target_port, ssl_enabled, tls_enabled)
+                return
+            except Exception as exc:
+                if not _should_retry(exc):
+                    raise
+                last_exception = exc
+                continue
+
+        if last_exception is not None:
+            raise last_exception
 
     # -- public API -----------------------------------------------------
     def send(self, message: Message) -> None:

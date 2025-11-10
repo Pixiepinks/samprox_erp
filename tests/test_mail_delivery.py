@@ -70,6 +70,35 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         self.assertEqual(args, ("smtp.example.com", 2525))
         self.assertEqual(kwargs.get("timeout"), 10.0)
 
+    @patch("flask_mail.smtplib.SMTP")
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    def test_multiple_recipients_from_single_string(self, smtp_ssl_mock, smtp_mock):
+        self.app.config.update(MAIL_USE_TLS=False, MAIL_USE_SSL=False)
+
+        message = Message(
+            subject="Hello",
+            recipients=["alpha@example.com, beta@example.com"],
+            body="Test",
+        )
+        message.cc = "gamma@example.com"
+
+        self.mail.send(message)
+
+        smtp_ssl_mock.assert_not_called()
+        smtp_mock.assert_called_once()
+        smtp_instance = smtp_mock.return_value.__enter__.return_value
+        send_message = smtp_instance.send_message
+        send_message.assert_called_once()
+        kwargs = send_message.call_args.kwargs
+        self.assertEqual(
+            kwargs.get("to_addrs"),
+            ["alpha@example.com", "beta@example.com", "gamma@example.com"],
+        )
+
+        email_message = send_message.call_args.args[0]
+        self.assertEqual(email_message["To"], "alpha@example.com, beta@example.com")
+        self.assertEqual(email_message["Cc"], "gamma@example.com")
+
 
 if __name__ == "__main__":
     unittest.main()

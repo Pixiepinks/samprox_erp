@@ -13,8 +13,8 @@ import smtplib
 import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
-from email.utils import formataddr, parseaddr
-from typing import Iterable, List, Optional
+from email.utils import formataddr, getaddresses, parseaddr
+from typing import Iterable, List, Optional, Sequence
 
 
 @dataclass
@@ -74,24 +74,61 @@ class Mail:
             raise ValueError("No sender configured for outgoing email")
         return self._coerce_address(sender)
 
-    def _collect_recipients(self, message: Message) -> List[str]:
-        recipients: List[str] = list(message.recipients or [])
-        cc = getattr(message, "cc", None)
-        if cc:
-            recipients.extend(cc)
-        bcc = getattr(message, "bcc", None)
-        if bcc:
-            recipients.extend(bcc)
-        if not recipients:
-            raise ValueError("At least one recipient must be specified")
-        parsed: List[str] = []
-        for addr in recipients:
-            formatted = self._coerce_address(addr)
-            email = parseaddr(formatted)[1]
-            if not email:
-                raise ValueError(f"Invalid email address: {addr}")
-            parsed.append(email)
+    @staticmethod
+    def _address_sources(addresses) -> List[str]:
+        """Convert various address container types into a list of strings."""
+
+        if not addresses:
+            return []
+
+        if isinstance(addresses, str):
+            return [addresses]
+
+        if isinstance(addresses, Iterable):
+            sources: List[str] = []
+            for item in addresses:
+                if not item:
+                    continue
+                if isinstance(item, str):
+                    sources.append(item)
+                elif isinstance(item, Sequence):
+                    if len(item) != 2:
+                        raise ValueError(
+                            "Email address tuples must contain name and address"
+                        )
+                    sources.append(formataddr((item[0], item[1])))
+                else:
+                    sources.append(str(item))
+            return sources
+
+        return [str(addresses)]
+
+    def _parse_addresses(self, addresses) -> List[tuple[str, str]]:
+        """Parse addresses into ``(name, email)`` tuples."""
+
+        sources = self._address_sources(addresses)
+        if not sources:
+            return []
+
+        parsed_pairs = getaddresses(sources)
+        parsed: List[tuple[str, str]] = []
+        for name, email in parsed_pairs:
+            clean_email = (email or "").strip()
+            if not clean_email:
+                raise ValueError(f"Invalid email address: {name or email}")
+            parsed.append((name.strip(), clean_email))
         return parsed
+
+    def _collect_recipients(self, message: Message) -> List[str]:
+        recipients = self._parse_addresses(getattr(message, "recipients", None))
+        cc = self._parse_addresses(getattr(message, "cc", None))
+        bcc = self._parse_addresses(getattr(message, "bcc", None))
+
+        if not (recipients or cc or bcc):
+            raise ValueError("At least one recipient must be specified")
+
+        all_recipients = [*recipients, *cc, *bcc]
+        return [email for _, email in all_recipients]
 
     def _build_email(self, message: Message) -> tuple[EmailMessage, List[str], str]:
         email_message = EmailMessage()
@@ -100,14 +137,18 @@ class Mail:
         sender_header = self._resolve_sender(message)
         email_message["From"] = sender_header
 
-        recipients = [self._coerce_address(addr) for addr in (message.recipients or [])]
+        recipients = self._parse_addresses(getattr(message, "recipients", None))
         if not recipients:
             raise ValueError("No recipients specified for outgoing email")
-        email_message["To"] = ", ".join(recipients)
+        email_message["To"] = ", ".join(
+            formataddr((name, email)) if name else email for name, email in recipients
+        )
 
-        cc = getattr(message, "cc", None)
+        cc = self._parse_addresses(getattr(message, "cc", None))
         if cc:
-            email_message["Cc"] = ", ".join(self._coerce_address(addr) for addr in cc)
+            email_message["Cc"] = ", ".join(
+                formataddr((name, email)) if name else email for name, email in cc
+            )
 
         reply_to = getattr(message, "reply_to", None)
         if reply_to:

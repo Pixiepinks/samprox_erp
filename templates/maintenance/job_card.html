@@ -62,47 +62,70 @@
         .sheet-header {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            gap: 24px;
+            align-items: center;
+            gap: 28px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #0f172a;
         }
 
-        .company-block {
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .brand-logo {
+            width: 72px;
+            height: 72px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand-logo img {
+            display: block;
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .brand-text {
             display: grid;
-            gap: 2px;
-            font-size: 13px;
-            line-height: 1.35;
+            gap: 4px;
             color: #1f2937;
         }
 
-        .company-name {
+        .brand-name {
             font-size: 18px;
             font-weight: 700;
-            text-transform: uppercase;
             letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
-        .logo-block {
-            width: 140px;
-            flex-shrink: 0;
+        .brand-tagline {
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #047857;
+            font-weight: 600;
         }
 
-        .logo-block img {
-            display: block;
-            width: 100%;
+        .brand-address,
+        .brand-contact {
+            font-size: 12px;
+            line-height: 1.4;
         }
 
-        .title-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            gap: 24px;
-            border-top: 2px solid #0f172a;
-            padding-top: 14px;
+        .header-info {
+            display: grid;
+            justify-items: end;
+            gap: 6px;
         }
 
         .document-title {
             margin: 0;
-            font-size: 24px;
+            font-size: 22px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             font-weight: 700;
@@ -111,7 +134,7 @@
         .job-code {
             text-align: right;
             display: grid;
-            gap: 4px;
+            gap: 2px;
         }
 
         .job-code-label {
@@ -122,7 +145,7 @@
         }
 
         .job-code-value {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 700;
             letter-spacing: 0.1em;
             color: #0f172a;
@@ -219,23 +242,35 @@
     <main>
         <article class="print-sheet">
             <header class="sheet-header">
-                <div class="company-block">
-                    <span class="company-name">Samprox International (Pvt) Ltd</span>
-                    <span>16/2, Sasanawardenarama Mawatha,</span>
-                    <span>Galawilawatta, Homagama</span>
+                <div class="brand">
+                    <div class="brand-logo">
+                        {% if company.logo %}
+                            <img src="{{ company.logo }}" alt="{{ company.name or 'Company logo' }}" />
+                        {% else %}
+                            <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="{{ company.name or 'Company logo' }}" />
+                        {% endif %}
+                    </div>
+                    <div class="brand-text">
+                        <span class="brand-name">{{ company.name or 'Samprox International (Pvt) Ltd' }}</span>
+                        {% if company.tagline %}
+                            <span class="brand-tagline">{{ company.tagline }}</span>
+                        {% endif %}
+                        {% if company.address %}
+                            <span class="brand-address">{{ company.address }}</span>
+                        {% endif %}
+                        {% if company.contact %}
+                            <span class="brand-contact">{{ company.contact }}</span>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="logo-block">
-                    <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Samprox International" />
+                <div class="header-info">
+                    <h1 class="document-title">Maintenance Job Card</h1>
+                    <div class="job-code">
+                        <span class="job-code-label">Job Code</span>
+                        <span class="job-code-value">{{ job.job_code }}</span>
+                    </div>
                 </div>
             </header>
-
-            <div class="title-row">
-                <h1 class="document-title">Maintenance Job Card</h1>
-                <div class="job-code">
-                    <span class="job-code-label">Job Code</span>
-                    <span class="job-code-value">{{ job.job_code }}</span>
-                </div>
-            </div>
 
             <h2 class="section-title">Job Summary</h2>
             <table class="summary-table">

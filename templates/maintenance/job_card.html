@@ -17,7 +17,7 @@
 
         h1 {
             font-size: 20px;
-            margin: 0 0 12px;
+            margin: 0 0 6px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
         }
@@ -25,7 +25,7 @@
         .header-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 8px;
+            margin-bottom: 24px;
         }
 
         .header-table td {
@@ -34,32 +34,13 @@
         }
 
         .logo-cell {
-            width: 18%;
+            width: 55%;
+            padding-right: 16px;
         }
 
         .logo-image {
-            max-height: 60px;
-        }
-
-        .logo-fallback {
-            display: inline-block;
-            padding: 14px;
-            border: 2px solid #2563eb;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 18px;
-            text-align: center;
-            color: #2563eb;
-        }
-
-        .company-name {
-            font-size: 16px;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .company-meta {
-            margin: 2px 0 0;
+            max-width: 280px;
+            display: block;
         }
 
         .job-code-box {
@@ -67,17 +48,18 @@
         }
 
         .job-code-label {
-            font-size: 10px;
+            font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.1em;
             color: #6b7280;
-            margin: 0;
+            margin: 6px 0 0;
         }
 
         .job-code-value {
-            font-size: 18px;
+            font-size: 22px;
             font-weight: 700;
-            margin: 4px 0 0;
+            margin: 6px 0 0;
+            letter-spacing: 0.08em;
         }
 
         .section-title {
@@ -149,20 +131,7 @@
     <table class="header-table">
         <tr>
             <td class="logo-cell">
-                {% if company.logo %}
-                    <img src="{{ company.logo }}" alt="{{ company.name }} logo" class="logo-image" />
-                {% else %}
-                    <div class="logo-fallback">{{ company.name[:1] if company.name else 'S' }}</div>
-                {% endif %}
-            </td>
-            <td>
-                <p class="company-name">{{ company.name }}</p>
-                {% if company.address %}
-                    <p class="company-meta">{{ company.address }}</p>
-                {% endif %}
-                {% if company.contact %}
-                    <p class="company-meta">{{ company.contact }}</p>
-                {% endif %}
+                <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Samprox International" class="logo-image" />
             </td>
             <td class="job-code-box">
                 <h1>Maintenance Job Card</h1>

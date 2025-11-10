@@ -71,7 +71,6 @@
         .brand {
             display: flex;
             align-items: center;
-            gap: 16px;
         }
 
         .brand-logo {
@@ -90,37 +89,11 @@
             object-fit: contain;
         }
 
-        .brand-text {
-            display: grid;
-            gap: 4px;
-            color: #1f2937;
-        }
-
-        .brand-name {
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        .brand-tagline {
-            font-size: 12px;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #047857;
-            font-weight: 600;
-        }
-
-        .brand-address,
-        .brand-contact {
-            font-size: 12px;
-            line-height: 1.4;
-        }
-
         .header-info {
-            display: grid;
-            justify-items: end;
-            gap: 6px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            justify-content: flex-end;
         }
 
         .document-title {
@@ -248,18 +221,6 @@
                             <img src="{{ company.logo }}" alt="{{ company.name or 'Company logo' }}" />
                         {% else %}
                             <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="{{ company.name or 'Company logo' }}" />
-                        {% endif %}
-                    </div>
-                    <div class="brand-text">
-                        <span class="brand-name">{{ company.name or 'Samprox International (Pvt) Ltd' }}</span>
-                        {% if company.tagline %}
-                            <span class="brand-tagline">{{ company.tagline }}</span>
-                        {% endif %}
-                        {% if company.address %}
-                            <span class="brand-address">{{ company.address }}</span>
-                        {% endif %}
-                        {% if company.contact %}
-                            <span class="brand-contact">{{ company.contact }}</span>
                         {% endif %}
                     </div>
                 </div>

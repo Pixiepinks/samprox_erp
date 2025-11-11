@@ -2874,6 +2874,86 @@ body.modal-open {
     color: #991b1b;
 }
 
+.sales-admin {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.sales-admin__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.sales-admin__subtitle {
+    margin: 0.25rem 0 0;
+    color: #475569;
+    font-size: 0.95rem;
+}
+
+.sales-admin__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sales-admin__message {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #1e293b;
+}
+
+.sales-admin__message--error {
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+.sales-admin__message--success {
+    color: #047857;
+    font-weight: 600;
+}
+
+.sales-admin__table-container {
+    overflow-x: auto;
+}
+
+.sales-admin__table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 520px;
+}
+
+.sales-admin__table th,
+.sales-admin__table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+    font-size: 0.95rem;
+}
+
+.sales-admin__table th {
+    font-weight: 600;
+    background: rgba(15, 23, 42, 0.04);
+    color: #0f172a;
+}
+
+.sales-admin__empty {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    color: #475569;
+}
+
+.sales-admin__actions-header {
+    width: 150px;
+}
+
+.sales-admin__actions-cell {
+    text-align: right;
+}
+
 @media (max-width: 720px) {
     .sales-entry__summary {
         align-items: stretch;
@@ -2891,6 +2971,19 @@ body.modal-open {
 
     .sales-input__add-customer {
         width: 100%;
+    }
+
+    .sales-admin__header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .sales-admin__actions {
+        justify-content: flex-start;
+    }
+
+    .sales-admin__actions-cell {
+        text-align: left;
     }
 
     .sales-report__overview-grid {

@@ -188,6 +188,7 @@
                                 <th scope="col">Material</th>
                                 <th scope="col">Qty (Ton)</th>
                                 <th scope="col">Amount</th>
+                                <th scope="col" class="mrn-table__actions-heading">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="mrn-table-body"></tbody>
@@ -1530,6 +1531,16 @@
                 const amountCell = document.createElement("td");
                 amountCell.textContent = formatNumber(item.amount, 2);
                 row.appendChild(amountCell);
+
+                const actionsCell = document.createElement("td");
+                actionsCell.className = "mrn-table__actions";
+                const editButton = document.createElement("a");
+                editButton.className = "button button--secondary button--small mrn-table__edit-button";
+                editButton.href = `/material/mrn/${item.id}`;
+                editButton.textContent = "Edit";
+                editButton.setAttribute("aria-label", `Edit material receipt ${item.mrn_no}`);
+                actionsCell.appendChild(editButton);
+                row.appendChild(actionsCell);
 
                 mrnTableBody.appendChild(row);
             });

@@ -88,12 +88,41 @@ def create_item_entry():
 @bp.get("/mrn")
 def list_mrn_entries():
     search = request.args.get("q")
+    start_date_raw = request.args.get("start_date")
+    end_date_raw = request.args.get("end_date")
     try:
         limit = int(request.args.get("limit", 20))
     except (TypeError, ValueError):
         limit = 20
     limit = max(1, min(limit, 100))
-    mrns = list_recent_mrns(search=search, limit=limit)
+    date_errors: dict[str, str] = {}
+    start_date = None
+    end_date = None
+
+    if start_date_raw:
+        try:
+            start_date = date.fromisoformat(start_date_raw)
+        except ValueError:
+            date_errors["start_date"] = "Invalid start date. Use YYYY-MM-DD."
+
+    if end_date_raw:
+        try:
+            end_date = date.fromisoformat(end_date_raw)
+        except ValueError:
+            date_errors["end_date"] = "Invalid end date. Use YYYY-MM-DD."
+
+    if not date_errors and start_date and end_date and start_date > end_date:
+        date_errors["date_range"] = "Start date must be on or before end date."
+
+    if date_errors:
+        return jsonify({"errors": date_errors}), 400
+
+    mrns = list_recent_mrns(
+        search=search,
+        limit=limit,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return jsonify(mrn_list_schema.dump(mrns))
 
 

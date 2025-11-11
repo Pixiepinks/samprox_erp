@@ -333,6 +333,19 @@ def _serialize_customer(customer: Customer):
 @bp.get("/customers")
 @jwt_required()
 def list_customers():
+    customer_id_param = request.args.get("customer_id")
+    if customer_id_param is not None:
+        try:
+            customer_id = int(customer_id_param)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "customer_id must be an integer"}), 400
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({"msg": "Customer not found"}), 404
+
+        return jsonify({"customer": _serialize_customer(customer)})
+
     customers = Customer.query.order_by(Customer.name.asc()).all()
     return jsonify({"customers": [_serialize_customer(customer) for customer in customers]})
 

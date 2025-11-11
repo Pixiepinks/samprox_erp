@@ -141,6 +141,56 @@ class MarketApiTestCase(unittest.TestCase):
         self.assertIsNotNone(created)
         self.assertEqual(created.credit_term, CustomerCreditTerm.days14)
 
+    def test_list_customers_supports_filtering_by_customer_id(self):
+        first_customer = self.client.post(
+            "/api/market/customers",
+            json=self._create_customer_payload(name="Alpha", transport_mode="Samprox lorry"),
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(first_customer.status_code, 201)
+        first_id = first_customer.get_json()["customer"]["id"]
+
+        second_customer = self.client.post(
+            "/api/market/customers",
+            json=self._create_customer_payload(name="Beta", transport_mode="Customer lorry"),
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(second_customer.status_code, 201)
+
+        response = self.client.get(
+            "/api/market/customers",
+            query_string={"customer_id": str(first_id)},
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        data = response.get_json()
+        self.assertIn("customer", data)
+        self.assertEqual(data["customer"]["id"], first_id)
+        self.assertEqual(data["customer"]["transport_mode"], "samprox_lorry")
+
+    def test_list_customers_with_invalid_customer_id_returns_error(self):
+        response = self.client.get(
+            "/api/market/customers",
+            query_string={"customer_id": "abc"},
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("customer_id must be an integer", data.get("msg", ""))
+
+    def test_list_customers_returns_404_for_unknown_customer(self):
+        response = self.client.get(
+            "/api/market/customers",
+            query_string={"customer_id": "999"},
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        data = response.get_json()
+        self.assertIn("Customer not found", data.get("msg", ""))
+
     def test_record_actual_sale_requires_transport_fields_for_samprox_customer(self):
         customer_payload = self._create_customer_payload(
             name="Samprox Logistics",

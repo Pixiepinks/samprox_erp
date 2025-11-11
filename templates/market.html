@@ -1610,6 +1610,47 @@
             return customer.code ? `${customer.code} — ${customer.name}` : customer.name;
         }
 
+        function normalizeTransportMode(value) {
+            if (value == null) {
+                return null;
+            }
+
+            const trimmed = String(value).trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            const slug = trimmed
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "");
+
+            if (slug === "samprox_lorry") {
+                return "samprox_lorry";
+            }
+            if (slug === "customer_lorry") {
+                return "customer_lorry";
+            }
+
+            return trimmed;
+        }
+
+        function getTransportModeLabel(value) {
+            const normalized = normalizeTransportMode(value);
+            if (!normalized) {
+                return "";
+            }
+
+            if (normalized === "samprox_lorry") {
+                return "Samprox lorry";
+            }
+            if (normalized === "customer_lorry") {
+                return "Customer lorry";
+            }
+
+            return normalized;
+        }
+
         function normalizeCustomer(customer) {
             if (!customer) {
                 return null;
@@ -1626,6 +1667,7 @@
                 id: String(id),
                 name,
                 code: customer.code ?? customer.customer_code ?? null,
+                transport_mode: normalizeTransportMode(customer.transport_mode),
             };
         }
 
@@ -1722,7 +1764,8 @@
         function shouldRequireTransportDetails() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
-            const isSamproxCustomer = customer?.transport_mode === "samprox_lorry";
+            const transportMode = normalizeTransportMode(customer?.transport_mode);
+            const isSamproxCustomer = transportMode === "samprox_lorry";
             if (!isActualSale || !isSamproxCustomer) {
                 return false;
             }
@@ -1933,8 +1976,9 @@
         function updateTransportFieldState() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
+            const transportMode = normalizeTransportMode(customer?.transport_mode);
             const requiresDetails = shouldRequireTransportDetails();
-            const isSamproxCustomer = customer?.transport_mode === "samprox_lorry";
+            const isSamproxCustomer = transportMode === "samprox_lorry";
             const isExistingEntry = isEditingExistingEntry();
             const shouldShowGroup = Boolean(transportGroup && isActualSale && customer);
 
@@ -1959,14 +2003,12 @@
                 if (!customer) {
                     transportStatusEl.textContent = "";
                 } else {
-                    const normalized = customer.transport_mode || "";
-                    const modeLabel =
-                        normalized === "samprox_lorry"
-                            ? "Samprox lorry"
-                            : normalized === "customer_lorry"
-                            ? "Customer lorry"
-                            : normalized;
-                    transportStatusEl.textContent = `Transport mode: ${modeLabel}`;
+                    const label = getTransportModeLabel(
+                        transportMode ?? customer.transport_mode ?? "",
+                    );
+                    transportStatusEl.textContent = label
+                        ? `Transport mode: ${label}`
+                        : "";
                 }
             }
 

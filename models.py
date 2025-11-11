@@ -337,12 +337,18 @@ class MRNHeader(db.Model):
     weigh_out_time = db.Column(db.DateTime(timezone=True), nullable=False)
     security_officer_name = db.Column(db.String(120), nullable=False)
     authorized_person_name = db.Column(db.String(120), nullable=False)
+    driver_id = db.Column(db.Integer, db.ForeignKey("team_member.id", ondelete="SET NULL"))
+    helper1_id = db.Column(db.Integer, db.ForeignKey("team_member.id", ondelete="SET NULL"))
+    helper2_id = db.Column(db.Integer, db.ForeignKey("team_member.id", ondelete="SET NULL"))
     created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     supplier = db.relationship("Supplier", back_populates="mrns")
     creator = db.relationship("User")
+    driver = db.relationship("TeamMember", foreign_keys=[driver_id])
+    helper1 = db.relationship("TeamMember", foreign_keys=[helper1_id])
+    helper2 = db.relationship("TeamMember", foreign_keys=[helper2_id])
     items = db.relationship(
         "MRNLine",
         back_populates="mrn",

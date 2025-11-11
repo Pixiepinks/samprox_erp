@@ -288,6 +288,62 @@
                         <span class="meta-value">{{ mrn.authorized_person_name or "—" }}</span>
                     </div>
                 </div>
+                <div class="meta-block">
+                    <div class="meta-row">
+                        <span class="meta-label">Driver</span>
+                        <span class="meta-value">
+                            {% if mrn.driver %}
+                                {% if mrn.driver.reg_number and mrn.driver.name %}
+                                    {{ mrn.driver.reg_number }} – {{ mrn.driver.name }}
+                                {% elif mrn.driver.name %}
+                                    {{ mrn.driver.name }}
+                                {% elif mrn.driver.reg_number %}
+                                    {{ mrn.driver.reg_number }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Helper 1</span>
+                        <span class="meta-value">
+                            {% if mrn.helper1 %}
+                                {% if mrn.helper1.reg_number and mrn.helper1.name %}
+                                    {{ mrn.helper1.reg_number }} – {{ mrn.helper1.name }}
+                                {% elif mrn.helper1.name %}
+                                    {{ mrn.helper1.name }}
+                                {% elif mrn.helper1.reg_number %}
+                                    {{ mrn.helper1.reg_number }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Helper 2</span>
+                        <span class="meta-value">
+                            {% if mrn.helper2 %}
+                                {% if mrn.helper2.reg_number and mrn.helper2.name %}
+                                    {{ mrn.helper2.reg_number }} – {{ mrn.helper2.name }}
+                                {% elif mrn.helper2.name %}
+                                    {{ mrn.helper2.name }}
+                                {% elif mrn.helper2.reg_number %}
+                                    {{ mrn.helper2.reg_number }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
             </section>
 
             <section aria-label="Item details">

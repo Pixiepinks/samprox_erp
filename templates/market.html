@@ -482,6 +482,53 @@
                     </div>
                 </form>
             </dialog>
+            <article
+                id="sales-incomplete-transport"
+                class="production-card sales-admin"
+                aria-labelledby="sales-incomplete-transport-title"
+                hidden
+            >
+                <header class="production-card__header sales-admin__header">
+                    <div>
+                        <h2 id="sales-incomplete-transport-title">Incomplete transport details</h2>
+                        <p class="sales-admin__subtitle">
+                            Locate historical Samprox lorry entries that are missing vehicle or crew information and
+                            update them while reviewing transport records.
+                        </p>
+                    </div>
+                    <div class="sales-admin__actions">
+                        <button
+                            type="button"
+                            class="button button--ghost button--small"
+                            id="sales-incomplete-transport-refresh"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                </header>
+                <p
+                    id="sales-incomplete-transport-message"
+                    class="sales-admin__message"
+                    role="status"
+                    aria-live="polite"
+                ></p>
+                <div class="table-container sales-admin__table-container">
+                    <table class="sales-admin__table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Customer</th>
+                                <th scope="col">Missing fields</th>
+                                <th scope="col" class="sales-admin__actions-header">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sales-incomplete-transport-body"></tbody>
+                    </table>
+                    <p id="sales-incomplete-transport-empty" class="sales-admin__empty" hidden>
+                        All Samprox lorry entries currently include transport details.
+                    </p>
+                </div>
+            </article>
             <article class="production-card sales-report" aria-labelledby="sales-report-title">
                 <div class="production-card__header">
                     <div>
@@ -533,6 +580,7 @@
             window.location.replace("/machines");
         }
 
+        const isAdminUser = user?.role === "admin";
         const roleLabels = {
             admin: "Admin",
             production_manager: "Production Manager",
@@ -589,8 +637,27 @@
         const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
         const transportTeamSelects = [entryDriverSelect, entryHelper1Select, entryHelper2Select];
         const teamMemberSelects = [...loaderSelects, ...transportTeamSelects];
+        const transportMissingFieldLabels = {
+            vehicle_number: "Vehicle No",
+            driver_id: "Driver Name",
+            helper1_id: "Helper 1 Name",
+            mileage_km: "Mileage (Km)",
+        };
+        const incompleteTransportCard = document.getElementById("sales-incomplete-transport");
+        const incompleteTransportBody = document.getElementById("sales-incomplete-transport-body");
+        const incompleteTransportMessage = document.getElementById("sales-incomplete-transport-message");
+        const incompleteTransportEmptyState = document.getElementById("sales-incomplete-transport-empty");
+        const incompleteTransportRefreshButton = document.getElementById(
+            "sales-incomplete-transport-refresh",
+        );
         let currentEditingEntry = null;
         let shouldLoadExistingEntry = false;
+        const TRANSPORT_REQUIREMENT = {
+            STRICT: "strict",
+            RELAXED: "relaxed",
+        };
+        let transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
+        let incompleteTransportLoading = false;
         const dialogSupported =
             typeof HTMLDialogElement === "function" &&
             typeof HTMLDialogElement.prototype.showModal === "function";
@@ -1229,7 +1296,9 @@
         function setEditingState(entry, saleType) {
             if (!entry) {
                 currentEditingEntry = null;
+                transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
                 renderEditingState();
+                updateTransportFieldState();
                 return;
             }
 
@@ -1244,6 +1313,7 @@
         }
 
         function clearSalesEntryValues() {
+            transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
             if (entryUnitPriceInput) {
                 entryUnitPriceInput.value = "";
             }
@@ -1294,8 +1364,6 @@
             if (entryTypeSelect) {
                 entryTypeSelect.value = normalizedSaleType;
             }
-
-            updateLoaderFieldState();
 
             if (entryUnitPriceInput) {
                 entryUnitPriceInput.value =
@@ -1363,6 +1431,23 @@
                 }
             }
 
+            if (normalizedSaleType === "actual") {
+                const hasVehicleNumber = Boolean(entry.vehicle_number);
+                const hasDriver = entry.driver_id != null;
+                const hasHelper1 = entry.helper1_id != null;
+                const hasMileage =
+                    entry.mileage_km !== undefined &&
+                    entry.mileage_km !== null &&
+                    String(entry.mileage_km).trim() !== "";
+                transportRequirementMode =
+                    hasVehicleNumber && hasDriver && hasHelper1 && hasMileage
+                        ? TRANSPORT_REQUIREMENT.STRICT
+                        : TRANSPORT_REQUIREMENT.RELAXED;
+            } else {
+                transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
+            }
+
+            updateLoaderFieldState();
             updateEntryTotal();
         }
 
@@ -1630,18 +1715,227 @@
             return knownCustomers.get(customerId) || null;
         }
 
+        function isEditingExistingEntry() {
+            return Boolean(currentEditingEntry?.id);
+        }
+
         function shouldRequireTransportDetails() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
-            return Boolean(
-                isActualSale && customer?.transport_mode === "samprox_lorry"
-            );
+            const isSamproxCustomer = customer?.transport_mode === "samprox_lorry";
+            if (!isActualSale || !isSamproxCustomer) {
+                return false;
+            }
+
+            if (!isEditingExistingEntry()) {
+                return true;
+            }
+
+            return transportRequirementMode === TRANSPORT_REQUIREMENT.STRICT;
+        }
+
+        function ensureStrictTransportRequirement() {
+            if (transportRequirementMode !== TRANSPORT_REQUIREMENT.STRICT) {
+                transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
+                return true;
+            }
+            return false;
+        }
+
+        function handleTransportFieldInteraction() {
+            if (transportRequirementMode !== TRANSPORT_REQUIREMENT.RELAXED) {
+                return;
+            }
+
+            const mileageValue = entryMileageInput?.value?.trim() || "";
+            const hasAnyValue = [
+                entryVehicleSelect?.value,
+                entryDriverSelect?.value,
+                entryHelper1Select?.value,
+            ].some((value) => Boolean(value && value !== ""));
+
+            if (hasAnyValue || mileageValue) {
+                if (ensureStrictTransportRequirement()) {
+                    updateTransportFieldState();
+                }
+            }
+        }
+
+        function setIncompleteTransportMessage(message, variant = "info") {
+            if (!incompleteTransportMessage) {
+                return;
+            }
+
+            const variants = [
+                "sales-admin__message--error",
+                "sales-admin__message--success",
+            ];
+            incompleteTransportMessage.classList.remove(...variants);
+
+            if (!message) {
+                incompleteTransportMessage.textContent = "";
+                incompleteTransportMessage.hidden = true;
+                return;
+            }
+
+            incompleteTransportMessage.textContent = message;
+            if (variant === "error") {
+                incompleteTransportMessage.classList.add("sales-admin__message--error");
+            } else if (variant === "success") {
+                incompleteTransportMessage.classList.add("sales-admin__message--success");
+            }
+            incompleteTransportMessage.hidden = false;
+        }
+
+        function renderIncompleteTransportEntries(entries) {
+            if (!incompleteTransportBody) {
+                return;
+            }
+
+            incompleteTransportBody.innerHTML = "";
+            if (!Array.isArray(entries) || entries.length === 0) {
+                if (incompleteTransportEmptyState) {
+                    incompleteTransportEmptyState.hidden = false;
+                }
+                return;
+            }
+
+            if (incompleteTransportEmptyState) {
+                incompleteTransportEmptyState.hidden = true;
+            }
+
+            entries.forEach((entry) => {
+                const row = document.createElement("tr");
+
+                const dateCell = document.createElement("td");
+                const formattedDate = entry?.date ? formatFriendlyDate(entry.date) || entry.date : "—";
+                dateCell.textContent = formattedDate;
+                row.appendChild(dateCell);
+
+                const customerCell = document.createElement("td");
+                customerCell.textContent = entry?.customer_name || "Unknown customer";
+                row.appendChild(customerCell);
+
+                const missingCell = document.createElement("td");
+                const missingFields = Array.isArray(entry?.missing_fields) ? entry.missing_fields : [];
+                if (missingFields.length > 0) {
+                    const labels = missingFields
+                        .map((field) => transportMissingFieldLabels[field] || field)
+                        .join(", ");
+                    missingCell.textContent = labels;
+                } else {
+                    missingCell.textContent = "—";
+                }
+                row.appendChild(missingCell);
+
+                const actionCell = document.createElement("td");
+                actionCell.className = "sales-admin__actions-cell";
+                const actionButton = document.createElement("button");
+                actionButton.type = "button";
+                actionButton.className = "button button--ghost button--small";
+                actionButton.textContent = "Edit entry";
+                actionButton.addEventListener("click", () => {
+                    beginEditingEntry(entry?.customer_id, entry?.date, "actual", {
+                        loadExistingEntry: true,
+                        entryId: entry?.id != null ? String(entry.id) : null,
+                    });
+                });
+                actionCell.appendChild(actionButton);
+                row.appendChild(actionCell);
+
+                incompleteTransportBody.appendChild(row);
+            });
+        }
+
+        async function loadIncompleteTransportEntries(options = {}) {
+            if (!token || !isAdminUser || !incompleteTransportCard) {
+                return;
+            }
+
+            if (incompleteTransportLoading) {
+                return;
+            }
+
+            const { showStatus = true } = options;
+
+            incompleteTransportLoading = true;
+            incompleteTransportCard.hidden = false;
+
+            if (showStatus) {
+                setIncompleteTransportMessage("Loading incomplete transport entries…", "info");
+            }
+
+            if (incompleteTransportEmptyState) {
+                incompleteTransportEmptyState.hidden = true;
+            }
+            if (incompleteTransportBody) {
+                incompleteTransportBody.innerHTML = "";
+            }
+
+            try {
+                const response = await fetch("/api/market/sales/incomplete-transport", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (response.status === 403) {
+                    setIncompleteTransportMessage(
+                        "You do not have permission to view incomplete transport entries.",
+                        "error",
+                    );
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(
+                        errorData?.msg || "Unable to load incomplete transport entries.",
+                    );
+                }
+
+                const data = await response.json().catch(() => ({}));
+                const entries = Array.isArray(data?.entries) ? data.entries : [];
+                renderIncompleteTransportEntries(entries);
+
+                if (showStatus) {
+                    if (entries.length === 0) {
+                        setIncompleteTransportMessage(
+                            "Great! No Samprox lorry entries are missing transport details.",
+                            "success",
+                        );
+                    } else {
+                        setIncompleteTransportMessage(
+                            `Found ${entries.length} ${entries.length === 1 ? "entry" : "entries"} requiring transport details.`,
+                            "info",
+                        );
+                    }
+                } else if (entries.length === 0 && incompleteTransportEmptyState) {
+                    incompleteTransportEmptyState.hidden = false;
+                }
+            } catch (error) {
+                console.error(error);
+                setIncompleteTransportMessage(
+                    error?.message || "Unable to load incomplete transport entries.",
+                    "error",
+                );
+            } finally {
+                incompleteTransportLoading = false;
+            }
         }
 
         function updateTransportFieldState() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
             const requiresDetails = shouldRequireTransportDetails();
+            const isSamproxCustomer = customer?.transport_mode === "samprox_lorry";
+            const isExistingEntry = isEditingExistingEntry();
             const shouldShowGroup = Boolean(transportGroup && isActualSale && customer);
 
             if (transportGroup) {
@@ -1651,10 +1945,13 @@
                     transportGroup.setAttribute("hidden", "");
                 }
 
-                transportGroup.classList.toggle("sales-transport--active", requiresDetails);
+                transportGroup.classList.toggle(
+                    "sales-transport--active",
+                    shouldShowGroup && isSamproxCustomer && (requiresDetails || isExistingEntry),
+                );
                 transportGroup.classList.toggle(
                     "sales-transport--disabled",
-                    shouldShowGroup && !requiresDetails
+                    shouldShowGroup && !isSamproxCustomer
                 );
             }
 
@@ -1688,6 +1985,10 @@
                     transportNoteEl.textContent =
                         "Transport details are required for Samprox lorry deliveries.";
                     transportNoteEl.classList.add("sales-transport__note--highlight");
+                } else if (isSamproxCustomer && isExistingEntry) {
+                    transportNoteEl.textContent =
+                        "This legacy entry is missing transport details. Update the vehicle and crew when you are ready.";
+                    transportNoteEl.classList.add("sales-transport__note--highlight");
                 } else {
                     transportNoteEl.textContent =
                         "Transport is handled by the customer. These fields are read-only.";
@@ -1703,7 +2004,8 @@
                 entryMileageInput,
             ];
 
-            const shouldEnableFields = shouldShowGroup && requiresDetails;
+            const shouldEnableFields =
+                shouldShowGroup && isSamproxCustomer && (requiresDetails || isExistingEntry);
 
             fields.forEach((field) => {
                 if (!field) {
@@ -2313,6 +2615,13 @@
                     updateTransportFieldState();
                     return;
                 }
+                if (isEditingExistingEntry()) {
+                    const selectedCustomer = entryCustomerSelect.value || "";
+                    const originalCustomer = currentEditingEntry?.customer_id || "";
+                    if (!selectedCustomer || selectedCustomer !== originalCustomer) {
+                        ensureStrictTransportRequirement();
+                    }
+                }
                 updateTransportFieldState();
                 handleEntrySelectionChange(event);
             });
@@ -2333,6 +2642,25 @@
         if (entryQuantityInput) {
             entryQuantityInput.addEventListener("input", () => {
                 updateEntryTotal();
+            });
+        }
+
+        if (entryVehicleSelect) {
+            entryVehicleSelect.addEventListener("change", handleTransportFieldInteraction);
+        }
+        if (entryDriverSelect) {
+            entryDriverSelect.addEventListener("change", handleTransportFieldInteraction);
+        }
+        if (entryHelper1Select) {
+            entryHelper1Select.addEventListener("change", handleTransportFieldInteraction);
+        }
+        if (entryMileageInput) {
+            entryMileageInput.addEventListener("input", handleTransportFieldInteraction);
+        }
+
+        if (incompleteTransportRefreshButton) {
+            incompleteTransportRefreshButton.addEventListener("click", () => {
+                loadIncompleteTransportEntries();
             });
         }
 
@@ -2502,6 +2830,9 @@
                     if (typeof loadSalesSummary === "function") {
                         loadSalesSummary();
                     }
+                    if (isAdminUser) {
+                        loadIncompleteTransportEntries({ showStatus: false });
+                    }
                 } catch (error) {
                     console.error(error);
                     setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
@@ -2615,6 +2946,9 @@
         loadCustomers();
         loadLoaderOptions();
         loadSalesSummary();
+        if (isAdminUser) {
+            loadIncompleteTransportEntries();
+        }
 
         function beginEditingEntry(customerId, dateValue, saleType, options = {}) {
             if (!entryForm) {

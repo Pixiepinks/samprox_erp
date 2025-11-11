@@ -1,8 +1,8 @@
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from sqlalchemy import func
+from flask_jwt_extended import get_jwt, jwt_required
+from sqlalchemy import func, or_
 
 from extensions import db
 from models import (
@@ -11,6 +11,7 @@ from models import (
     CustomerCreditTerm,
     CustomerTransportMode,
     CustomerType,
+    RoleEnum,
     SalesActualEntry,
     SalesForecastEntry,
     TeamMember,
@@ -20,6 +21,26 @@ from models import (
 INTERNAL_VEHICLE_NUMBERS = {"LI-1795", "LB-3237"}
 
 bp = Blueprint("market", __name__, url_prefix="/api/market")
+
+
+def _current_role() -> RoleEnum | None:
+    try:
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive guard
+        return None
+
+    if not isinstance(claims, dict):
+        return None
+
+    try:
+        return RoleEnum(claims.get("role"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _require_role(*roles: RoleEnum) -> bool:
+    current_role = _current_role()
+    return bool(current_role and current_role in roles)
 
 
 def _serialize_sale_entry(entry, sale_type: str):
@@ -53,7 +74,46 @@ def _serialize_sale_entry(entry, sale_type: str):
     return payload
 
 
-def _parse_sale_payload(payload):
+def _has_transport_value(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
+def _should_enforce_transport_for_update(
+    entry: SalesActualEntry | None, payload: dict | None
+) -> bool | None:
+    if entry is None:
+        return None
+
+    has_existing_details = any(
+        _has_transport_value(getattr(entry, field))
+        for field in ("vehicle_number", "driver_id", "helper1_id")
+    ) or entry.mileage_km is not None
+
+    if has_existing_details:
+        return None
+
+    payload = payload or {}
+    required_payload_fields = ("vehicle_number", "driver_id", "helper1_id", "mileage_km")
+    if any(_has_transport_value(payload.get(field)) for field in required_payload_fields):
+        return True
+
+    raw_customer_id = payload.get("customer_id")
+    try:
+        new_customer_id = int(raw_customer_id)
+    except (TypeError, ValueError):
+        new_customer_id = None
+
+    if new_customer_id and new_customer_id != entry.customer_id:
+        return None
+
+    return False
+
+
+def _parse_sale_payload(payload, *, enforce_transport_details: bool | None = None):
     try:
         customer_id = int(payload.get("customer_id"))
     except (TypeError, ValueError):
@@ -108,6 +168,11 @@ def _parse_sale_payload(payload):
         requires_transport_details = (
             customer.transport_mode == CustomerTransportMode.samprox_lorry
         )
+        if enforce_transport_details is not None:
+            requires_transport_details = (
+                customer.transport_mode == CustomerTransportMode.samprox_lorry
+                and enforce_transport_details
+            )
 
         def _extract_text(field_name: str, label: str, required: bool = False) -> str | None:
             raw_value = payload.get(field_name)
@@ -468,17 +533,39 @@ def record_sale_entry():
 def update_sale_entry(entry_id: int):
     payload = request.get_json(silent=True) or {}
 
-    sale_type, _, entry_kwargs, error = _parse_sale_payload(payload)
+    existing_actual_entry = SalesActualEntry.query.get(entry_id)
+    existing_forecast_entry = None
+    resolved_sale_type = None
+
+    if existing_actual_entry is not None:
+        resolved_sale_type = "actual"
+    else:
+        existing_forecast_entry = SalesForecastEntry.query.get(entry_id)
+        if existing_forecast_entry is not None:
+            resolved_sale_type = "forecast"
+
+    if resolved_sale_type is None:
+        return jsonify({"msg": "Sales entry not found"}), 404
+
+    enforce_transport_override = None
+    if resolved_sale_type == "actual":
+        enforce_transport_override = _should_enforce_transport_for_update(
+            existing_actual_entry, payload
+        )
+
+    sale_type, _, entry_kwargs, error = _parse_sale_payload(
+        payload, enforce_transport_details=enforce_transport_override
+    )
     if error:
         return error
 
-    if sale_type == "forecast":
-        entry = SalesForecastEntry.query.get(entry_id)
-    else:
-        entry = SalesActualEntry.query.get(entry_id)
+    if sale_type != resolved_sale_type:
+        return (
+            jsonify({"msg": "Sale type mismatch for the requested entry."}),
+            400,
+        )
 
-    if not entry:
-        return jsonify({"msg": "Sales entry not found"}), 404
+    entry = existing_actual_entry if sale_type == "actual" else existing_forecast_entry
 
     for field, value in entry_kwargs.items():
         setattr(entry, field, value)
@@ -486,3 +573,54 @@ def update_sale_entry(entry_id: int):
     db.session.commit()
 
     return jsonify({"entry": _serialize_sale_entry(entry, sale_type)})
+
+
+@bp.get("/sales/incomplete-transport")
+@jwt_required()
+def list_incomplete_transport_entries():
+    if not _require_role(RoleEnum.admin):
+        return jsonify({"msg": "You do not have permission to view this report."}), 403
+
+    entries = (
+        SalesActualEntry.query.join(Customer)
+        .filter(Customer.transport_mode == CustomerTransportMode.samprox_lorry)
+        .filter(
+            or_(
+                SalesActualEntry.vehicle_number.is_(None),
+                func.trim(func.coalesce(SalesActualEntry.vehicle_number, "")) == "",
+                SalesActualEntry.driver_id.is_(None),
+                SalesActualEntry.helper1_id.is_(None),
+                SalesActualEntry.mileage_km.is_(None),
+            )
+        )
+        .order_by(SalesActualEntry.date.asc(), SalesActualEntry.id.asc())
+        .all()
+    )
+
+    def _missing_fields(entry: SalesActualEntry) -> list[str]:
+        missing: list[str] = []
+        if not _has_transport_value(entry.vehicle_number):
+            missing.append("vehicle_number")
+        if entry.driver_id is None:
+            missing.append("driver_id")
+        if entry.helper1_id is None:
+            missing.append("helper1_id")
+        if entry.mileage_km is None:
+            missing.append("mileage_km")
+        return missing
+
+    rows = []
+    for entry in entries:
+        customer = entry.customer
+        rows.append(
+            {
+                "id": entry.id,
+                "date": entry.date.isoformat() if entry.date else None,
+                "customer_id": entry.customer_id,
+                "customer_name": customer.name if customer else None,
+                "transport_mode": customer.transport_mode.value if customer else None,
+                "missing_fields": _missing_fields(entry),
+            }
+        )
+
+    return jsonify({"entries": rows})

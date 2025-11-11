@@ -1,8 +1,12 @@
 from flask import Blueprint, abort, redirect, render_template, request, url_for
 from flask_jwt_extended import get_jwt, verify_jwt_in_request
 
-from material import MaterialValidationError, get_mrn_detail, list_material_items
-from schemas import MaterialItemSchema
+from material import (
+    MaterialValidationError,
+    get_mrn_detail,
+    list_material_items,
+)
+from schemas import MaterialItemSchema, MRNSchema
 
 from models import RoleEnum
 
@@ -95,7 +99,11 @@ def material_mrn_new_page():
     items = list_material_items()
     item_schema = MaterialItemSchema(many=True)
     item_options = item_schema.dump(items)
-    return render_template("material/mrn_new.html", items=item_options)
+    return render_template(
+        "material/mrn_new.html",
+        items=item_options,
+        is_edit_mode=False,
+    )
 
 
 @bp.get("/material/mrn/<mrn_id>")
@@ -106,6 +114,27 @@ def material_mrn_view_page(mrn_id: str):
     except MaterialValidationError:
         abort(404)
     return render_template("material/mrn_view.html", mrn=mrn)
+
+
+@bp.get("/material/mrn/<mrn_id>/edit")
+def material_mrn_edit_page(mrn_id: str):
+    """Render the Material Receipt Note form with existing data for editing."""
+    try:
+        mrn = get_mrn_detail(mrn_id)
+    except MaterialValidationError:
+        abort(404)
+
+    items = list_material_items()
+    item_schema = MaterialItemSchema(many=True)
+    item_options = item_schema.dump(items)
+    mrn_payload = MRNSchema().dump(mrn)
+
+    return render_template(
+        "material/mrn_new.html",
+        items=item_options,
+        mrn=mrn_payload,
+        is_edit_mode=True,
+    )
 
 
 @bp.get("/market")

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Material Receipt Note | SAMPROX ERP</title>
+    <title>{{ 'Edit Material Receipt Note' if is_edit_mode else 'Material Receipt Note' }} | SAMPROX ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -298,11 +298,18 @@
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Material Receipt Note (MRN)</h1>
-                <p class="section__description">Capture an incoming load and automatically compute approved rates.</p>
+                <h1>{{ 'Edit Material Receipt Note (MRN)' if is_edit_mode else 'Material Receipt Note (MRN)' }}</h1>
+                <p class="section__description">
+                    {{ 'Review and update an existing material receipt before saving the latest values.' if is_edit_mode else 'Capture an incoming load and automatically compute approved rates.' }}
+                </p>
             </header>
             <div class="content-card">
-                <form id="mrn-form" novalidate>
+                <form
+                    id="mrn-form"
+                    novalidate
+                    data-mode="{{ 'edit' if is_edit_mode else 'create' }}"
+                    {% if mrn is defined and mrn %}data-mrn-id="{{ mrn.id }}"{% endif %}
+                >
                     <div id="form-alert" class="alert" style="display: none;"></div>
                     <div class="form-grid">
                         <div class="field">
@@ -430,7 +437,7 @@
                     </div>
                     <div class="actions">
                         <button type="button" class="button-secondary" id="reset-form">Reset</button>
-                        <button type="submit" class="button-primary" id="submit-btn">Save MRN</button>
+                        <button type="submit" class="button-primary" id="submit-btn">{{ 'Update MRN' if is_edit_mode else 'Save MRN' }}</button>
                     </div>
                 </form>
             </div>
@@ -593,6 +600,7 @@
             window.location.href = "/";
         }
 
+        const mrnDateInput = document.getElementById("mrn-date");
         const mrnNoInput = document.getElementById("mrn-no");
         const supplierInput = document.getElementById("supplier-search");
         const supplierIdInput = document.getElementById("supplier-id");
@@ -610,7 +618,15 @@
         const addItemButton = document.getElementById("add-item-row");
         const totalAmountValueEl = document.getElementById("total-amount-value");
         const totalQtyValueEl = document.getElementById("total-qty-value");
+        const weighingSlipInput = document.getElementById("weighing-slip");
+        const weighInInput = document.getElementById("weigh-in");
+        const weighOutInput = document.getElementById("weigh-out");
+        const securityOfficerSelect = document.getElementById("security-officer");
+        const authorizedPersonInput = document.getElementById("authorized-person");
         const availableItems = {{ items | tojson }};
+        const isEditMode = {{ (is_edit_mode | default(false)) | tojson }};
+        const initialMrn = {{ (mrn | default(None)) | tojson }};
+        const editingMrnId = isEditMode && initialMrn && initialMrn.id ? initialMrn.id : null;
         const INTERNAL_VEHICLES = ["LI-1795", "LB-3237"];
         const VALID_SOURCING_TYPES = new Set(["Ownsourcing", "Outside"]);
         const supplierCache = new Map();
@@ -681,10 +697,20 @@
                     });
                 }
 
+                const initialValue = select.dataset.initialValue || "";
                 if (previousValue && select.querySelector(`option[value="${previousValue}"]`)) {
                     select.value = previousValue;
+                } else if (initialValue && select.querySelector(`option[value="${initialValue}"]`)) {
+                    select.value = initialValue;
                 } else {
                     select.value = "";
+                    if (!preserveSelection) {
+                        select.dataset.initialValue = "";
+                    }
+                }
+
+                if (select.value) {
+                    select.dataset.initialValue = select.value;
                 }
             });
         }
@@ -770,7 +796,9 @@
             }
         }
 
-        populateMrnNumber();
+        if (!isEditMode) {
+            populateMrnNumber();
+        }
         refreshVehicleOptions({ preserveSelection: false });
         refreshEmployeeSelectors({ preserveSelection: false });
         updateStaffFieldState();
@@ -1301,6 +1329,123 @@
             return row;
         }
 
+        function applyInitialMrnState() {
+            if (!isEditMode || !initialMrn) {
+                return;
+            }
+
+            if (mrnForm) {
+                mrnForm.dataset.mode = "edit";
+                if (editingMrnId) {
+                    mrnForm.dataset.mrnId = editingMrnId;
+                }
+            }
+
+            if (submitBtn) {
+                submitBtn.textContent = "Update MRN";
+            }
+
+            if (mrnDateInput) {
+                const dateValue = formatDateForInput(initialMrn.date);
+                mrnDateInput.value = dateValue || "";
+            }
+
+            if (mrnNoInput) {
+                mrnNoInput.value = initialMrn.mrn_no || "";
+            }
+
+            if (weighingSlipInput) {
+                weighingSlipInput.value = initialMrn.weighing_slip_no || "";
+            }
+
+            if (weighInInput) {
+                const value = formatDateTimeLocal(initialMrn.weigh_in_time);
+                weighInInput.value = value || "";
+            }
+
+            if (weighOutInput) {
+                const value = formatDateTimeLocal(initialMrn.weigh_out_time);
+                weighOutInput.value = value || "";
+            }
+
+            if (securityOfficerSelect) {
+                securityOfficerSelect.value = initialMrn.security_officer_name || "";
+            }
+
+            if (authorizedPersonInput) {
+                authorizedPersonInput.value = initialMrn.authorized_person_name || "";
+            }
+
+            if (sourcingTypeSelect && initialMrn.sourcing_type) {
+                sourcingTypeSelect.value = initialMrn.sourcing_type;
+            }
+
+            const supplierRecord = initialMrn.supplier && typeof initialMrn.supplier === "object"
+                ? initialMrn.supplier
+                : null;
+
+            if (supplierRecord) {
+                rememberSupplier(supplierRecord);
+                const supplierName =
+                    supplierRecord.name ||
+                    supplierRecord.supplier_name ||
+                    supplierRecord.supplier_reg_no ||
+                    "";
+                supplierInput.value = typeof supplierName === "string" ? supplierName.trim() : "";
+                const supplierIdValue = supplierRecord.id || initialMrn.supplier_id || "";
+                supplierIdInput.value = supplierIdValue ? String(supplierIdValue) : "";
+            } else if (initialMrn.supplier_id) {
+                supplierIdInput.value = String(initialMrn.supplier_id);
+                supplierInput.value = supplierInput.value || "";
+            } else {
+                supplierIdInput.value = "";
+                supplierInput.value = "";
+            }
+
+            if (supplierMenu) {
+                supplierMenu.innerHTML = "";
+                supplierMenu.style.display = "none";
+            }
+
+            if (vehicleNoSelect) {
+                vehicleNoSelect.dataset.initialValue = initialMrn.vehicle_no || "";
+            }
+
+            if (driverSelect) {
+                driverSelect.dataset.initialValue =
+                    initialMrn.driver_id != null ? String(initialMrn.driver_id) : "";
+            }
+            if (helper1Select) {
+                helper1Select.dataset.initialValue =
+                    initialMrn.helper1_id != null ? String(initialMrn.helper1_id) : "";
+            }
+            if (helper2Select) {
+                helper2Select.dataset.initialValue =
+                    initialMrn.helper2_id != null ? String(initialMrn.helper2_id) : "";
+            }
+
+            if (Array.isArray(initialMrn.items) && initialMrn.items.length > 0 && itemTableBody) {
+                itemTableBody.innerHTML = "";
+                initialMrn.items.forEach((line) => {
+                    if (!line) {
+                        return;
+                    }
+                    const itemId = line.item_id || (line.item && line.item.id) || "";
+                    addItemRow({
+                        item_id: itemId,
+                        first_weight_kg: line.first_weight_kg,
+                        second_weight_kg: line.second_weight_kg,
+                        unit_price: line.unit_price,
+                        wet_factor: line.wet_factor,
+                        approved_unit_price: line.approved_unit_price,
+                        amount: line.amount,
+                    });
+                });
+            }
+
+            updateTotals();
+        }
+
         function collectItemRows() {
             if (!itemTableBody) {
                 return [];
@@ -1331,6 +1476,7 @@
 
         addItemRow();
         updateTotals();
+        applyInitialMrnState();
 
         function coerceNumericValue(rawValue, { defaultValue } = {}) {
             if (rawValue === undefined || rawValue === null) {
@@ -1366,6 +1512,56 @@
             }
 
             return stringValue;
+        }
+
+        function formatDateForInput(value) {
+            if (!value) {
+                return "";
+            }
+
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+                    return trimmed;
+                }
+            }
+
+            const parsed = Date.parse(value);
+            if (Number.isNaN(parsed)) {
+                return "";
+            }
+
+            const date = new Date(parsed);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        }
+
+        function formatDateTimeLocal(value) {
+            if (!value) {
+                return "";
+            }
+
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+                    return trimmed;
+                }
+            }
+
+            const parsed = Date.parse(value);
+            if (Number.isNaN(parsed)) {
+                return "";
+            }
+
+            const date = new Date(parsed);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            const hours = String(date.getHours()).padStart(2, "0");
+            const minutes = String(date.getMinutes()).padStart(2, "0");
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
         }
 
         function normalizeDateValue(rawValue) {
@@ -1466,6 +1662,8 @@
             const sourcingType = sourcingTypeSelect?.value || "";
             const supplierIdValue = supplierIdInput.value || "";
             const previousValue = preserveSelection ? vehicleNoSelect.value : "";
+            const initialTarget = vehicleNoSelect.dataset.initialValue || "";
+            const targetValue = previousValue || initialTarget;
 
             let allowedVehicles = [];
             let disabled = false;
@@ -1513,12 +1711,16 @@
             }
 
             vehicleNoSelect.disabled = false;
-            const normalizedPrevious = normalizeVehicleValue(previousValue);
-            const match = allowedVehicles.find((value) => normalizeVehicleValue(value) === normalizedPrevious);
+            const normalizedTarget = normalizeVehicleValue(targetValue);
+            const match = allowedVehicles.find((value) => normalizeVehicleValue(value) === normalizedTarget);
             if (match) {
                 vehicleNoSelect.value = match;
+                vehicleNoSelect.dataset.initialValue = match;
             } else {
                 vehicleNoSelect.value = "";
+                if (!preserveSelection) {
+                    vehicleNoSelect.dataset.initialValue = "";
+                }
             }
         }
 
@@ -1866,6 +2068,16 @@
         });
 
         resetBtn.addEventListener("click", () => {
+            clearErrors();
+            if (isEditMode) {
+                applyInitialMrnState();
+                refreshVehicleOptions({ preserveSelection: false });
+                refreshEmployeeSelectors({ preserveSelection: false });
+                updateStaffFieldState();
+                updateTotals();
+                return;
+            }
+
             mrnForm.reset();
             if (mrnNoInput) {
                 mrnNoInput.value = "";
@@ -1877,8 +2089,8 @@
             }
             if (vehicleNoSelect) {
                 vehicleNoSelect.value = "";
+                vehicleNoSelect.dataset.initialValue = "";
             }
-            clearErrors();
             resetItemRows();
             populateMrnNumber(true);
             refreshVehicleOptions({ preserveSelection: false });
@@ -2099,8 +2311,10 @@
             });
 
             try {
-                const response = await fetch("/api/material/mrn", {
-                    method: "POST",
+                const endpoint = isEditMode && editingMrnId ? `/api/material/mrn/${editingMrnId}` : "/api/material/mrn";
+                const method = isEditMode && editingMrnId ? "PUT" : "POST";
+                const response = await fetch(endpoint, {
+                    method,
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });

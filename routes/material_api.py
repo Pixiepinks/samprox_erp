@@ -21,6 +21,7 @@ from material import (
     list_material_items,
     list_recent_mrns,
     search_suppliers,
+    update_mrn,
     update_briquette_mix,
 )
 from schemas import MRNSchema, MaterialItemSchema, SupplierSchema
@@ -116,6 +117,17 @@ def mrn_next_number():
 def get_mrn(mrn_id: str):
     try:
         mrn = get_mrn_detail(mrn_id)
+    except MaterialValidationError as exc:
+        status = 404 if exc.errors.get("id") == "MRN not found." else 400
+        return jsonify({"errors": exc.errors}), status
+    return jsonify(mrn_schema.dump(mrn))
+
+
+@bp.put("/mrn/<mrn_id>")
+def update_mrn_entry(mrn_id: str):
+    payload = request.get_json(silent=True) or {}
+    try:
+        mrn = update_mrn(mrn_id, payload)
     except MaterialValidationError as exc:
         status = 404 if exc.errors.get("id") == "MRN not found." else 400
         return jsonify({"errors": exc.errors}), status

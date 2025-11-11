@@ -1536,7 +1536,7 @@
                 actionsCell.className = "mrn-table__actions";
                 const editButton = document.createElement("a");
                 editButton.className = "button button--secondary button--small mrn-table__edit-button";
-                editButton.href = `/material/mrn/${item.id}`;
+                editButton.href = `/material/mrn/${item.id}/edit`;
                 editButton.textContent = "Edit";
                 editButton.setAttribute("aria-label", `Edit material receipt ${item.mrn_no}`);
                 actionsCell.appendChild(editButton);

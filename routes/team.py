@@ -1,4 +1,5 @@
 import calendar
+from collections import defaultdict
 from datetime import date, datetime
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -17,6 +18,9 @@ from models import (
     PayCategory,
     RoleEnum,
     SalesActualEntry,
+    MaterialItem,
+    MRNHeader,
+    MRNLine,
     TeamAttendanceRecord,
     TeamLeaveBalance,
     TeamMember,
@@ -51,6 +55,10 @@ COLOMBO_ZONE = ZoneInfo("Asia/Colombo")
 LOADING_PAY_RATE = Decimal("0.20")
 KG_PER_TON = Decimal("1000")
 SARATH_REG_NUMBER = "E011"
+TRANSPORT_VEHICLE_NUMBERS = {"LI-1795", "LB-3237"}
+DRIVER_FIRST_TRIP_RATE = Decimal("2500")
+DRIVER_ADDITIONAL_TRIP_RATE = Decimal("2000")
+HELPER_EXTRA_RATE = Decimal("250")
 SARATH_LOADING_PAY_SLABS: tuple[tuple[Decimal, Decimal | None, Decimal], ...] = (
     (Decimal("25000"), Decimal("50000"), Decimal("7500")),
     (Decimal("50000"), Decimal("75000"), Decimal("15000")),
@@ -1756,6 +1764,341 @@ def loading_pay_sheet():
             "records": records,
         }
     )
+
+
+@bp.get("/transport-pay")
+@jwt_required()
+def transport_pay_sheet():
+    today = date.today()
+    month_param = request.args.get("month")
+    year_param = request.args.get("year")
+
+    try:
+        month = int(month_param) if month_param else today.month
+        year = int(year_param) if year_param else today.year
+    except (TypeError, ValueError):
+        return jsonify({"msg": "Month and year must be integers."}), 400
+
+    if month < 1 or month > 12:
+        return jsonify({"msg": "Month must be between 1 and 12."}), 400
+
+    if year < 1:
+        return jsonify({"msg": "Year must be a positive integer."}), 400
+
+    if month == 12:
+        period_end = date(year + 1, 1, 1)
+    else:
+        period_end = date(year, month + 1, 1)
+    period_start = date(year, month, 1)
+
+    allowed_vehicles = {value.strip().upper() for value in TRANSPORT_VEHICLE_NUMBERS}
+
+    def _normalize_vehicle(value: str | None) -> str:
+        return (value or "").strip().upper()
+
+    def _decimal_from(value) -> Decimal:
+        if isinstance(value, Decimal):
+            return value
+        if value is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return Decimal("0")
+
+    def _unique_members(*values) -> list[int]:
+        seen: set[int] = set()
+        result: list[int] = []
+        for value in values:
+            if isinstance(value, int) and value not in seen:
+                result.append(value)
+                seen.add(value)
+        return result
+
+    def _ensure_member(member_id: int):
+        if not isinstance(member_id, int):
+            return None
+        totals = member_totals.get(member_id)
+        if totals is None:
+            totals = {
+                "wood_qty": Decimal("0"),
+                "briquette_qty": Decimal("0"),
+                "driver_pay": Decimal("0"),
+                "helper_pay": Decimal("0"),
+                "extra_pay": Decimal("0"),
+            }
+            member_totals[member_id] = totals
+        return totals
+
+    def _wood_extra_threshold(vehicle: str) -> Decimal | None:
+        if vehicle == "LI-1795":
+            return Decimal("3")
+        if vehicle == "LB-3237":
+            return Decimal("2")
+        return None
+
+    member_totals: dict[int, dict[str, Decimal]] = {}
+    trips_by_vehicle_date: dict[tuple[date, str], list[dict[str, object]]] = defaultdict(list)
+
+    sales_entries = (
+        SalesActualEntry.query.filter(
+            SalesActualEntry.date >= period_start,
+            SalesActualEntry.date < period_end,
+            SalesActualEntry.vehicle_number.isnot(None),
+            func.upper(SalesActualEntry.vehicle_number).in_(tuple(allowed_vehicles)),
+        )
+        .order_by(SalesActualEntry.date.asc(), SalesActualEntry.id.asc())
+        .all()
+    )
+
+    mrn_rows = (
+        db.session.query(
+            MRNHeader.id.label("mrn_id"),
+            MRNHeader.date.label("mrn_date"),
+            MRNHeader.vehicle_no,
+            MRNHeader.driver_id,
+            MRNHeader.helper1_id,
+            MRNHeader.helper2_id,
+            MRNHeader.created_at.label("header_created_at"),
+            MRNLine.id.label("line_id"),
+            MRNLine.qty_ton,
+            MRNLine.created_at.label("line_created_at"),
+            MaterialItem.name.label("item_name"),
+        )
+        .join(MRNLine, MRNLine.mrn_id == MRNHeader.id)
+        .join(MaterialItem, MRNLine.item_id == MaterialItem.id)
+        .filter(
+            MRNHeader.date >= period_start,
+            MRNHeader.date < period_end,
+            MRNHeader.vehicle_no.isnot(None),
+            func.upper(MRNHeader.vehicle_no).in_(tuple(allowed_vehicles)),
+        )
+        .order_by(
+            MRNHeader.date.asc(),
+            MRNHeader.created_at.asc(),
+            MRNLine.created_at.asc(),
+            MRNLine.id.asc(),
+        )
+        .all()
+    )
+
+    mrn_headers: dict[object, dict[str, object]] = {}
+
+    for row in mrn_rows:
+        vehicle = _normalize_vehicle(getattr(row, "vehicle_no", None))
+        if not vehicle or vehicle not in allowed_vehicles:
+            continue
+
+        helpers = _unique_members(
+            getattr(row, "helper1_id", None),
+            getattr(row, "helper2_id", None),
+            getattr(row, "helper3_id", None),
+        )
+
+        mrn_id = getattr(row, "mrn_id", None)
+        header_info = mrn_headers.get(mrn_id)
+
+        if header_info is None:
+            header_created = getattr(row, "header_created_at", None)
+            if header_created is None:
+                header_created = datetime.combine(
+                    getattr(row, "mrn_date"),
+                    datetime.min.time(),
+                )
+            line_created = getattr(row, "line_created_at", None) or header_created
+
+            header_info = {
+                "date": getattr(row, "mrn_date"),
+                "vehicle": vehicle,
+                "driver_id": getattr(row, "driver_id", None),
+                "helpers": list(helpers),
+                "order_key": (header_created, line_created, str(getattr(row, "line_id", ""))),
+                "extra_applied": False,
+            }
+            mrn_headers[mrn_id] = header_info
+        else:
+            for helper_id in helpers:
+                if helper_id not in header_info["helpers"]:
+                    header_info["helpers"].append(helper_id)
+
+        wood_quantity = Decimal("0")
+        item_name = (getattr(row, "item_name", "") or "").strip().casefold()
+        if item_name == "wood shaving":
+            wood_quantity = _decimal_from(getattr(row, "qty_ton", None))
+
+        if wood_quantity > 0:
+            participants = _unique_members(
+                getattr(row, "driver_id", None),
+                getattr(row, "helper1_id", None),
+                getattr(row, "helper2_id", None),
+                getattr(row, "helper3_id", None),
+            )
+            for participant_id in participants:
+                totals = _ensure_member(participant_id)
+                if totals is not None:
+                    totals["wood_qty"] += wood_quantity
+
+            threshold = _wood_extra_threshold(vehicle)
+            if threshold is not None and wood_quantity > threshold and not header_info["extra_applied"]:
+                for helper_id in header_info["helpers"]:
+                    totals = _ensure_member(helper_id)
+                    if totals is not None:
+                        totals["extra_pay"] += HELPER_EXTRA_RATE
+                header_info["extra_applied"] = True
+
+    for header in mrn_headers.values():
+        driver_id = header.get("driver_id")
+        if isinstance(driver_id, int):
+            _ensure_member(driver_id)
+        header_date = header.get("date")
+        vehicle = header.get("vehicle")
+        if not isinstance(header_date, date) or not vehicle:
+            continue
+        key = (header_date, vehicle)
+        trips_by_vehicle_date[key].append(
+            {
+                "order_key": header.get("order_key"),
+                "driver_id": driver_id if isinstance(driver_id, int) else None,
+            }
+        )
+
+        helper_ids = list(header.get("helpers", []))
+        helper_count = len(helper_ids)
+        if not helper_count:
+            continue
+
+        helper_rate = Decimal("0")
+        if vehicle == "LI-1795":
+            if helper_count >= 2:
+                helper_rate = Decimal("1500")
+            elif helper_count == 1:
+                helper_rate = Decimal("3000")
+        elif vehicle == "LB-3237":
+            if helper_count >= 2:
+                helper_rate = Decimal("1500")
+            elif helper_count == 1:
+                helper_rate = Decimal("3000")
+
+        if helper_rate <= 0:
+            continue
+
+        for helper_id in helper_ids:
+            totals = _ensure_member(helper_id)
+            if totals is not None:
+                totals["helper_pay"] += helper_rate
+
+    for entry in sales_entries:
+        vehicle = _normalize_vehicle(entry.vehicle_number)
+        if vehicle not in allowed_vehicles:
+            continue
+
+        driver_id = entry.driver_id if isinstance(entry.driver_id, int) else None
+        helper_ids = _unique_members(
+            getattr(entry, "helper1_id", None),
+            getattr(entry, "helper2_id", None),
+            getattr(entry, "helper3_id", None),
+        )
+        participants = _unique_members(driver_id, *helper_ids)
+
+        quantity = _decimal_from(entry.quantity_tons)
+        if quantity > 0:
+            for participant_id in participants:
+                totals = _ensure_member(participant_id)
+                if totals is not None:
+                    totals["briquette_qty"] += quantity
+
+        helper_count = len(helper_ids)
+        helper_rate = Decimal("0")
+        if vehicle == "LI-1795":
+            if helper_count >= 3:
+                helper_rate = Decimal("1500")
+            elif helper_count == 2:
+                helper_rate = Decimal("2000")
+            elif helper_count == 1:
+                helper_rate = Decimal("3000")
+        elif vehicle == "LB-3237":
+            if helper_count >= 2:
+                helper_rate = Decimal("1500")
+            elif helper_count == 1:
+                helper_rate = Decimal("3000")
+
+        if helper_rate > 0:
+            for helper_id in helper_ids:
+                totals = _ensure_member(helper_id)
+                if totals is not None:
+                    totals["helper_pay"] += helper_rate
+
+        if driver_id is not None:
+            _ensure_member(driver_id)
+        trip_order = (
+            datetime.combine(entry.date, datetime.min.time()),
+            entry.id or 0,
+        )
+        trips_by_vehicle_date[(entry.date, vehicle)].append(
+            {"order_key": trip_order, "driver_id": driver_id}
+        )
+
+    for trips in trips_by_vehicle_date.values():
+        trips.sort(key=lambda trip: trip.get("order_key"))
+        for index, trip in enumerate(trips):
+            driver_id = trip.get("driver_id")
+            if not isinstance(driver_id, int):
+                continue
+            totals = _ensure_member(driver_id)
+            if totals is None:
+                continue
+            if index == 0:
+                totals["driver_pay"] += DRIVER_FIRST_TRIP_RATE
+            else:
+                totals["driver_pay"] += DRIVER_ADDITIONAL_TRIP_RATE
+
+    if not member_totals:
+        return jsonify({"month": month, "year": year, "records": []})
+
+    members = (
+        TeamMember.query.filter(TeamMember.id.in_(member_totals.keys()))
+        .order_by(TeamMember.name.asc())
+        .all()
+    )
+    member_lookup = {member.id: member for member in members}
+
+    def _sort_key(member_id: int) -> tuple[str, str, int]:
+        member = member_lookup.get(member_id)
+        if not member:
+            return ("", "", member_id)
+        name = (member.name or "").casefold()
+        reg = (member.reg_number or "").strip()
+        return (name, reg, member_id)
+
+    records = []
+    for member_id in sorted(member_totals.keys(), key=_sort_key):
+        member = member_lookup.get(member_id)
+        if not member:
+            continue
+
+        totals = member_totals[member_id]
+        total_payment = totals["driver_pay"] + totals["helper_pay"] + totals["extra_pay"]
+        if total_payment <= 0:
+            continue
+
+        def _quantize(value: Decimal) -> Decimal:
+            return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        records.append(
+            {
+                "teamMemberId": member_id,
+                "regNumber": member.reg_number,
+                "name": member.name,
+                "woodShavingQuantity": float(_quantize(totals["wood_qty"])),
+                "briquetteQuantity": float(_quantize(totals["briquette_qty"])),
+                "driverPayment": float(_quantize(totals["driver_pay"])),
+                "helperPayment": float(_quantize(totals["helper_pay"])),
+                "extraPayment": float(_quantize(totals["extra_pay"])),
+                "totalPayment": float(_quantize(total_payment)),
+            }
+        )
+
+    return jsonify({"month": month, "year": year, "records": records})
 
 
 @bp.get("/members")

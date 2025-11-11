@@ -455,6 +455,37 @@
                     </p>
                     <p class="loading-pay__message" id="loading-pay-message" hidden></p>
                 </section>
+                <section class="loading-pay transport-pay" aria-labelledby="transport-pay-heading">
+                    <div class="loading-pay__header">
+                        <div>
+                            <h3 class="loading-pay__title" id="transport-pay-heading">Transport Pay Sheet</h3>
+                            <p class="loading-pay__description">
+                                Review transport quantities and payments for drivers and helpers using the selected month and year.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="table-container loading-pay__table-container transport-pay__table-container">
+                        <table class="team-table loading-pay__table transport-pay__table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Reg No</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Wood shaving Qty (Ton)</th>
+                                    <th scope="col">Briquette Qty (Ton)</th>
+                                    <th scope="col">Driver Payment (Rs.)</th>
+                                    <th scope="col">Helper Payment (Rs.)</th>
+                                    <th scope="col">Extra Payment (Rs.)</th>
+                                    <th scope="col">Total Payment (Rs.)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transport-pay-table-body"></tbody>
+                        </table>
+                    </div>
+                    <p class="loading-pay__empty transport-pay__empty" id="transport-pay-empty" hidden>
+                        No transport activity for the selected period.
+                    </p>
+                    <p class="loading-pay__message transport-pay__message" id="transport-pay-message" hidden></p>
+                </section>
             </section>
         </section>
     </div>
@@ -1108,6 +1139,9 @@
         const loadingPayEmptyState = document.getElementById("loading-pay-empty");
         const loadingPayMessage = document.getElementById("loading-pay-message");
         const loadingPayRateValue = document.getElementById("loading-pay-rate");
+        const transportPayTableBody = document.getElementById("transport-pay-table-body");
+        const transportPayEmptyState = document.getElementById("transport-pay-empty");
+        const transportPayMessage = document.getElementById("transport-pay-message");
         const attendanceModal = document.getElementById("attendance-modal");
         const attendanceModalClose = document.getElementById("attendance-modal-close");
         const attendanceModalCancel = document.getElementById("attendance-modal-cancel");
@@ -1262,6 +1296,7 @@
         let workdayModalContext = null;
         let workCalendarState = { year: null, month: null, loading: false };
         let loadingPayState = { month: null, year: null, loading: false };
+        let transportPayState = { month: null, year: null, loading: false };
 
         const WORK_CALENDAR_WEEKDAY_INDEX = {
             Mon: 0,
@@ -1395,6 +1430,20 @@
             }
         }
 
+        function setTransportPayMessage(message, variant = "info") {
+            if (!transportPayMessage) {
+                return;
+            }
+
+            transportPayMessage.textContent = message || "";
+            transportPayMessage.hidden = !message;
+            if (variant === "error") {
+                transportPayMessage.classList.add("loading-pay__message--error");
+            } else {
+                transportPayMessage.classList.remove("loading-pay__message--error");
+            }
+        }
+
         function renderLoadingPayTable(records) {
             if (!loadingPayTableBody) {
                 return;
@@ -1441,6 +1490,76 @@
             });
         }
 
+        function renderTransportPayTable(records) {
+            if (!transportPayTableBody) {
+                return;
+            }
+
+            transportPayTableBody.innerHTML = "";
+            const safeRecords = Array.isArray(records) ? records : [];
+
+            if (!safeRecords.length) {
+                if (transportPayEmptyState) {
+                    transportPayEmptyState.hidden = false;
+                }
+                return;
+            }
+
+            if (transportPayEmptyState) {
+                transportPayEmptyState.hidden = true;
+            }
+
+            safeRecords.forEach((record) => {
+                const row = document.createElement("tr");
+
+                const regCell = document.createElement("td");
+                regCell.textContent = record?.regNumber || "—";
+                row.appendChild(regCell);
+
+                const nameCell = document.createElement("td");
+                nameCell.textContent = record?.name || "—";
+                row.appendChild(nameCell);
+
+                const woodCell = document.createElement("td");
+                woodCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const woodValue = Number(record?.woodShavingQuantity ?? 0);
+                woodCell.textContent = numberFormatter.format(woodValue);
+                row.appendChild(woodCell);
+
+                const briquetteCell = document.createElement("td");
+                briquetteCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const briquetteValue = Number(record?.briquetteQuantity ?? 0);
+                briquetteCell.textContent = numberFormatter.format(briquetteValue);
+                row.appendChild(briquetteCell);
+
+                const driverCell = document.createElement("td");
+                driverCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const driverValue = Number(record?.driverPayment ?? 0);
+                driverCell.textContent = numberFormatter.format(driverValue);
+                row.appendChild(driverCell);
+
+                const helperCell = document.createElement("td");
+                helperCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const helperValue = Number(record?.helperPayment ?? 0);
+                helperCell.textContent = numberFormatter.format(helperValue);
+                row.appendChild(helperCell);
+
+                const extraCell = document.createElement("td");
+                extraCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const extraValue = Number(record?.extraPayment ?? 0);
+                extraCell.textContent = numberFormatter.format(extraValue);
+                row.appendChild(extraCell);
+
+                const totalCell = document.createElement("td");
+                totalCell.classList.add("loading-pay__cell", "loading-pay__cell--number");
+                const totalValue = Number(record?.totalPayment ?? 0);
+                totalCell.textContent = numberFormatter.format(totalValue);
+                row.appendChild(totalCell);
+
+                transportPayTableBody.appendChild(row);
+            });
+        }
+
         function populateLoadingPayFilters() {
             if (!loadingPayMonthSelect || !loadingPayYearSelect) {
                 return;
@@ -1478,6 +1597,7 @@
             loadingPayMonthSelect.value = String(currentMonth);
             loadingPayYearSelect.value = String(currentYear);
             loadingPayState = { month: currentMonth, year: currentYear, loading: false };
+            transportPayState = { month: currentMonth, year: currentYear, loading: false };
         }
 
         async function loadLoadingPayData() {
@@ -1540,6 +1660,59 @@
                 setLoadingPayMessage("Unable to load loading pay details right now.", "error");
             } finally {
                 loadingPayState = { month: monthValue, year: yearValue, loading: false };
+            }
+        }
+
+        async function loadTransportPayData() {
+            if (!loadingPayMonthSelect || !loadingPayYearSelect) {
+                return;
+            }
+
+            const monthValue = Number.parseInt(loadingPayMonthSelect.value, 10);
+            const yearValue = Number.parseInt(loadingPayYearSelect.value, 10);
+
+            if (!Number.isFinite(monthValue) || !Number.isFinite(yearValue)) {
+                return;
+            }
+
+            transportPayState = { month: monthValue, year: yearValue, loading: true };
+
+            if (transportPayTableBody) {
+                transportPayTableBody.innerHTML = "";
+            }
+            if (transportPayEmptyState) {
+                transportPayEmptyState.hidden = true;
+            }
+            setTransportPayMessage("Loading transport pay details…");
+
+            try {
+                const params = new URLSearchParams({
+                    month: String(monthValue),
+                    year: String(yearValue),
+                });
+                const response = await fetch(`/api/team/transport-pay?${params.toString()}`, {
+                    headers: authHeaders,
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+
+                const body = await response.json().catch(() => ({}));
+                const records = Array.isArray(body?.records) ? body.records : [];
+
+                renderTransportPayTable(records);
+                setTransportPayMessage("");
+            } catch (error) {
+                console.error("Failed to load transport pay data", error);
+                setTransportPayMessage("Unable to load transport pay details right now.", "error");
+            } finally {
+                transportPayState = { month: monthValue, year: yearValue, loading: false };
             }
         }
 
@@ -3499,14 +3672,20 @@
         if (loadingPayMonthSelect) {
             loadingPayMonthSelect.addEventListener("change", () => {
                 loadLoadingPayData();
+                loadTransportPayData();
             });
         }
 
         if (loadingPayYearSelect) {
             loadingPayYearSelect.addEventListener("change", () => {
                 loadLoadingPayData();
+                loadTransportPayData();
             });
         }
+
+        populateLoadingPayFilters();
+        loadLoadingPayData();
+        loadTransportPayData();
 
         const todayIso = getTodayIso();
         const todayParts = parseIsoDate(todayIso);

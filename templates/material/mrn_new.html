@@ -333,6 +333,27 @@
                             <p class="error-text" data-error-for="sourcing_type"></p>
                         </div>
                         <div class="field">
+                            <label for="driver-name">Driver Name<span class="text-red"> *</span></label>
+                            <select id="driver-name" name="driver_id">
+                                <option value="" disabled selected hidden>Select driver</option>
+                            </select>
+                            <p class="error-text" data-error-for="driver_id"></p>
+                        </div>
+                        <div class="field">
+                            <label for="helper1-name">Helper 1 Name<span class="text-red"> *</span></label>
+                            <select id="helper1-name" name="helper1_id">
+                                <option value="" disabled selected hidden>Select Helper 1</option>
+                            </select>
+                            <p class="error-text" data-error-for="helper1_id"></p>
+                        </div>
+                        <div class="field">
+                            <label for="helper2-name">Helper 2 Name</label>
+                            <select id="helper2-name" name="helper2_id">
+                                <option value="" disabled selected hidden>Select Helper 2</option>
+                            </select>
+                            <p class="error-text" data-error-for="helper2_id"></p>
+                        </div>
+                        <div class="field">
                             <label for="vehicle-no">Vehicle No<span class="text-red"> *</span></label>
                             <select id="vehicle-no" name="vehicle_no" required>
                                 <option value="" disabled selected hidden>Select vehicle number</option>
@@ -566,12 +587,21 @@
             window.location.href = "/";
         });
 
+        function handleUnauthorized() {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        }
+
         const mrnNoInput = document.getElementById("mrn-no");
         const supplierInput = document.getElementById("supplier-search");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierMenu = document.getElementById("supplier-menu");
         const sourcingTypeSelect = document.getElementById("sourcing-type");
         const vehicleNoSelect = document.getElementById("vehicle-no");
+        const driverSelect = document.getElementById("driver-name");
+        const helper1Select = document.getElementById("helper1-name");
+        const helper2Select = document.getElementById("helper2-name");
         const mrnForm = document.getElementById("mrn-form");
         const submitBtn = document.getElementById("submit-btn");
         const formAlert = document.getElementById("form-alert");
@@ -585,6 +615,139 @@
         const VALID_SOURCING_TYPES = new Set(["Ownsourcing", "Outside"]);
         const supplierCache = new Map();
         let activeItemSelect = null;
+        let employeeOptions = [];
+        const staffFieldConfigs = [
+            { select: driverSelect, placeholder: "Select driver", field: "driver_id", required: true },
+            { select: helper1Select, placeholder: "Select Helper 1", field: "helper1_id", required: true },
+            { select: helper2Select, placeholder: "Select Helper 2", field: "helper2_id", required: false },
+        ];
+
+        function normalizeEmployee(member) {
+            if (!member || typeof member !== "object") {
+                return null;
+            }
+
+            const rawId =
+                member.id ?? member.teamMemberId ?? member.team_member_id ?? member.memberId ?? member.employee_id;
+            const parsedId = Number.parseInt(rawId, 10);
+            if (!Number.isFinite(parsedId)) {
+                return null;
+            }
+
+            const regNumber = String(member.regNumber ?? member.reg_number ?? "").trim();
+            const name = String(member.name ?? member.full_name ?? member.fullName ?? "").trim();
+            let statusRaw = member.status;
+            if (statusRaw && typeof statusRaw === "object" && "value" in statusRaw) {
+                statusRaw = statusRaw.value;
+            }
+            const statusText = String(statusRaw ?? "").trim().toLowerCase();
+            const label = regNumber && name ? `${regNumber} – ${name}` : name || regNumber || String(parsedId);
+
+            return {
+                id: String(parsedId),
+                regNumber,
+                name,
+                status: statusText,
+                label,
+            };
+        }
+
+        function refreshEmployeeSelectors({ preserveSelection = true } = {}) {
+            const hasEmployees = Array.isArray(employeeOptions) && employeeOptions.length > 0;
+            staffFieldConfigs.forEach(({ select, placeholder }) => {
+                if (!select) {
+                    return;
+                }
+
+                const previousValue = preserveSelection ? select.value : "";
+                select.innerHTML = "";
+
+                const placeholderOption = document.createElement("option");
+                placeholderOption.value = "";
+                placeholderOption.disabled = true;
+                placeholderOption.hidden = true;
+                placeholderOption.textContent = hasEmployees ? placeholder : "No active employees available";
+                if (!previousValue) {
+                    placeholderOption.selected = true;
+                }
+                select.appendChild(placeholderOption);
+
+                if (hasEmployees) {
+                    employeeOptions.forEach((employee) => {
+                        const option = document.createElement("option");
+                        option.value = employee.id;
+                        option.textContent = employee.label;
+                        select.appendChild(option);
+                    });
+                }
+
+                if (previousValue && select.querySelector(`option[value="${previousValue}"]`)) {
+                    select.value = previousValue;
+                } else {
+                    select.value = "";
+                }
+            });
+        }
+
+        function updateStaffFieldState() {
+            const sourcingType = sourcingTypeSelect?.value || "";
+            const isOwnsourcing = sourcingType === "Ownsourcing";
+
+            staffFieldConfigs.forEach(({ select, required }) => {
+                if (!select) {
+                    return;
+                }
+                if (isOwnsourcing) {
+                    select.disabled = false;
+                    if (required) {
+                        select.required = true;
+                    } else {
+                        select.required = false;
+                    }
+                    select.removeAttribute("aria-disabled");
+                } else {
+                    select.disabled = true;
+                    select.required = false;
+                    select.value = "";
+                    select.setAttribute("aria-disabled", "true");
+                }
+            });
+        }
+
+        async function loadEmployeeOptions() {
+            try {
+                const response = await fetch("/api/team/members", {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/json",
+                    },
+                });
+
+                if (response.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Unable to load employees: ${response.status}`);
+                }
+
+                const data = await response.json().catch(() => []);
+                const normalized = Array.isArray(data)
+                    ? data
+                          .map((member) => normalizeEmployee(member))
+                          .filter((member) => member && (!member.status || member.status === "active"))
+                          .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }))
+                    : [];
+                employeeOptions = normalized;
+            } catch (error) {
+                console.error("Failed to load employees", error);
+                employeeOptions = [];
+            }
+
+            refreshEmployeeSelectors();
+            updateStaffFieldState();
+        }
 
         async function populateMrnNumber(force = false) {
             if (!mrnNoInput) {
@@ -609,6 +772,9 @@
 
         populateMrnNumber();
         refreshVehicleOptions({ preserveSelection: false });
+        refreshEmployeeSelectors({ preserveSelection: false });
+        updateStaffFieldState();
+        loadEmployeeOptions();
 
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalAlert = document.getElementById("supplier-modal-alert");
@@ -1452,6 +1618,7 @@
             sourcingTypeSelect.addEventListener("change", () => {
                 const preserve = sourcingTypeSelect.value === "Ownsourcing";
                 refreshVehicleOptions({ preserveSelection: preserve });
+                updateStaffFieldState();
             });
         }
 
@@ -1715,6 +1882,8 @@
             resetItemRows();
             populateMrnNumber(true);
             refreshVehicleOptions({ preserveSelection: false });
+            refreshEmployeeSelectors({ preserveSelection: false });
+            updateStaffFieldState();
         });
 
         function validateForm() {
@@ -1766,6 +1935,31 @@
                     )
                 ) {
                     errors["vehicle_no"] = "Select a vehicle registered to the supplier.";
+                }
+            }
+
+            const driverValue = driverSelect?.value || "";
+            const helper1Value = helper1Select?.value || "";
+            const helper2Value = helper2Select?.value || "";
+            const hasEmployees = Array.isArray(employeeOptions) && employeeOptions.length > 0;
+
+            if (sourcingTypeValue === "Ownsourcing") {
+                if (!hasEmployees) {
+                    errors["driver_id"] = "No active employees available.";
+                    errors["helper1_id"] = "No active employees available.";
+                } else {
+                    if (!driverValue) {
+                        errors["driver_id"] = "Select a driver.";
+                    }
+                    if (!helper1Value) {
+                        errors["helper1_id"] = "Select Helper 1.";
+                    }
+                    if (
+                        helper2Value &&
+                        !employeeOptions.some((employee) => String(employee.id) === String(helper2Value))
+                    ) {
+                        errors["helper2_id"] = "Select Helper 2.";
+                    }
                 }
             }
 
@@ -1887,6 +2081,9 @@
             payload.supplier_id = supplierIdInput.value || undefined;
             payload.sourcing_type = sourcingTypeSelect?.value || undefined;
             payload.vehicle_no = vehicleNoSelect?.value || undefined;
+            payload.driver_id = driverSelect?.value || undefined;
+            payload.helper1_id = helper1Select?.value || undefined;
+            payload.helper2_id = helper2Select?.value || undefined;
             payload.items = sanitizedItems.map((item) => ({
                 item_id: item.item_id,
                 first_weight_kg: coerceNumericValue(item.first_weight_kg),

@@ -90,11 +90,16 @@ def list_mrn_entries():
     search = request.args.get("q")
     start_date_raw = request.args.get("start_date")
     end_date_raw = request.args.get("end_date")
-    try:
-        limit = int(request.args.get("limit", 20))
-    except (TypeError, ValueError):
-        limit = 20
-    limit = max(1, min(limit, 100))
+    raw_limit = request.args.get("limit")
+
+    if raw_limit is None and (start_date_raw or end_date_raw):
+        limit = None
+    else:
+        try:
+            limit = int(raw_limit or 20)
+        except (TypeError, ValueError):
+            limit = 20
+        limit = max(1, min(limit, 100))
     date_errors: dict[str, str] = {}
     start_date = None
     end_date = None

@@ -1746,7 +1746,7 @@ body.modal-open {
     flex: 1 1 160px;
     border: 1px solid rgba(148, 163, 184, 0.6);
     border-radius: 12px;
-    padding: 0.55rem 0.9rem;
+    padding: 0.35rem 0.9rem;
     font-size: 0.95rem;
     background: #ffffff;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;

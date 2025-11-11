@@ -874,6 +874,19 @@ body {
     color: #dc2626;
 }
 
+.transport-pay__table-container {
+    max-height: 22rem;
+}
+
+.transport-pay__table {
+    min-width: 920px;
+}
+
+.transport-pay__empty,
+.transport-pay__message {
+    text-align: left;
+}
+
 .salary-table {
     min-width: 980px;
     --salary-first-column-width: 6.75rem;

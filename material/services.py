@@ -452,14 +452,24 @@ def _resolve_team_member(
     return member
 
 
-def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> MRNHeader:
+def _prepare_mrn_components(
+    payload: Dict[str, Any],
+    *,
+    created_by: Optional[int] = None,
+    existing: Optional[MRNHeader] = None,
+) -> tuple[Dict[str, Any], list[Dict[str, Any]], bool]:
+    """Validate the MRN payload and return normalized values."""
+
     errors: Dict[str, str] = {}
 
     mrn_no = (payload.get("mrn_no") or "").strip()
     auto_generated_mrn = False
     if not mrn_no:
-        mrn_no = get_next_mrn_number()
-        auto_generated_mrn = True
+        if existing and existing.mrn_no:
+            mrn_no = existing.mrn_no
+        else:
+            mrn_no = get_next_mrn_number()
+            auto_generated_mrn = True
 
     weighing_slip_no = (payload.get("weighing_slip_no") or "").strip()
     if not weighing_slip_no:
@@ -700,6 +710,10 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
     if errors:
         raise MaterialValidationError(errors)
 
+    normalized_created_by = created_by
+    if normalized_created_by is None and existing is not None:
+        normalized_created_by = existing.created_by
+
     mrn_kwargs: Dict[str, Any] = dict(
         mrn_no=mrn_no,
         date=mrn_date,
@@ -713,9 +727,20 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         weigh_out_time=weigh_out_time,
         security_officer_name=security_officer_name,
         authorized_person_name=authorized_person_name,
-        driver=driver,
-        helper1=helper1,
-        helper2=helper2,
+        driver=driver if sourcing_type == "Ownsourcing" else None,
+        helper1=helper1 if sourcing_type == "Ownsourcing" else None,
+        helper2=helper2 if sourcing_type == "Ownsourcing" else None,
+    )
+
+    if normalized_created_by is not None:
+        mrn_kwargs["created_by"] = normalized_created_by
+
+    return mrn_kwargs, validated_lines, auto_generated_mrn
+
+
+def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> MRNHeader:
+    mrn_kwargs, validated_lines, auto_generated_mrn = _prepare_mrn_components(
+        payload,
         created_by=created_by,
     )
 
@@ -740,8 +765,61 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
                         raise MaterialValidationError(
                             {"mrn_no": "Unable to generate a unique MRN number. Please try again."}
                         ) from exc
-                    mrn_no = get_next_mrn_number()
-                    mrn.mrn_no = mrn_no
+                    mrn.mrn_no = get_next_mrn_number()
+                    db.session.add(mrn)
+                    continue
+                raise MaterialValidationError({"mrn_no": "MRN number already exists."}) from exc
+            raise
+
+    return mrn
+
+
+def update_mrn(mrn_id: Any, payload: Dict[str, Any]) -> MRNHeader:
+    """Update an existing MRN with the provided payload."""
+
+    try:
+        mrn_uuid = mrn_id if isinstance(mrn_id, uuid.UUID) else uuid.UUID(str(mrn_id))
+    except (ValueError, TypeError):
+        raise MaterialValidationError({"id": "Invalid MRN identifier."})
+
+    mrn = (
+        MRNHeader.query.options(joinedload(MRNHeader.items))
+        .filter(MRNHeader.id == mrn_uuid)
+        .first()
+    )
+    if not mrn:
+        raise MaterialValidationError({"id": "MRN not found."})
+
+    mrn_kwargs, validated_lines, auto_generated_mrn = _prepare_mrn_components(
+        payload,
+        created_by=mrn.created_by,
+        existing=mrn,
+    )
+
+    for key, value in mrn_kwargs.items():
+        setattr(mrn, key, value)
+
+    mrn.items.clear()
+    for line_kwargs in validated_lines:
+        mrn.items.append(MRNLine(**line_kwargs))
+
+    db.session.add(mrn)
+
+    attempts = 0
+    while True:
+        try:
+            db.session.commit()
+            break
+        except IntegrityError as exc:  # pragma: no cover - depends on database backend
+            db.session.rollback()
+            if _is_unique_violation(exc, "mrn", "mrn_no"):
+                if auto_generated_mrn:
+                    attempts += 1
+                    if attempts >= 5:
+                        raise MaterialValidationError(
+                            {"mrn_no": "Unable to generate a unique MRN number. Please try again."}
+                        ) from exc
+                    mrn.mrn_no = get_next_mrn_number()
                     db.session.add(mrn)
                     continue
                 raise MaterialValidationError({"mrn_no": "MRN number already exists."}) from exc

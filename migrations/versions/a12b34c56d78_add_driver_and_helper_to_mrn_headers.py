@@ -1,5 +1,4 @@
 """add driver and helper to mrn headers"""
-"""add driver and helper to mrn headers"""
 
 from alembic import op
 import sqlalchemy as sa
@@ -7,7 +6,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a12b34c56d78"
-down_revision = "f9a2d1c4e5b6_merge_briquette_mix_and_finance_heads"
+down_revision = "f9a2d1c4e5b6"
 branch_labels = None
 depends_on = None
 

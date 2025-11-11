@@ -330,30 +330,8 @@ def _serialize_customer(customer: Customer):
     }
 
 
-@bp.get("/customers")
-@jwt_required()
-def list_customers():
-    customer_id_param = request.args.get("customer_id")
-    if customer_id_param is not None:
-        try:
-            customer_id = int(customer_id_param)
-        except (TypeError, ValueError):
-            return jsonify({"msg": "customer_id must be an integer"}), 400
-
-        customer = Customer.query.get(customer_id)
-        if not customer:
-            return jsonify({"msg": "Customer not found"}), 404
-
-        return jsonify({"customer": _serialize_customer(customer)})
-
-    customers = Customer.query.order_by(Customer.name.asc()).all()
-    return jsonify({"customers": [_serialize_customer(customer) for customer in customers]})
-
-
-@bp.post("/customers")
-@jwt_required()
-def create_customer():
-    payload = request.get_json(silent=True) or {}
+def _parse_customer_payload(payload):
+    payload = payload or {}
 
     def _required_text(field_name, label):
         value = (payload.get(field_name) or "").strip()
@@ -382,33 +360,74 @@ def create_customer():
         valid_values = ", ".join(sorted(member.value for member in enum_cls))
         raise ValueError(f"{label} must be one of: {valid_values}")
 
+    name = _required_text("name", "Customer name")
+    category = _parse_enum("category", CustomerCategory, "Category")
+    credit_term = _parse_enum("credit_term", CustomerCreditTerm, "Credit term")
+    transport_mode = _parse_enum("transport_mode", CustomerTransportMode, "Transport mode")
+    customer_type = _parse_enum("customer_type", CustomerType, "Customer type")
+    sales_coordinator_name = _required_text("sales_coordinator_name", "Sales coordinator name")
+    sales_coordinator_phone = _required_text(
+        "sales_coordinator_phone", "Sales coordinator telephone"
+    )
+    store_keeper_name = _required_text("store_keeper_name", "Store keeper name")
+    store_keeper_phone = _required_text("store_keeper_phone", "Store keeper telephone")
+    payment_coordinator_name = _required_text(
+        "payment_coordinator_name", "Payment coordinator name"
+    )
+    payment_coordinator_phone = _required_text(
+        "payment_coordinator_phone", "Payment coordinator telephone"
+    )
+    special_note = (payload.get("special_note") or "").strip()
+
+    return {
+        "name": name,
+        "category": category,
+        "credit_term": credit_term,
+        "transport_mode": transport_mode,
+        "customer_type": customer_type,
+        "sales_coordinator_name": sales_coordinator_name,
+        "sales_coordinator_phone": sales_coordinator_phone,
+        "store_keeper_name": store_keeper_name,
+        "store_keeper_phone": store_keeper_phone,
+        "payment_coordinator_name": payment_coordinator_name,
+        "payment_coordinator_phone": payment_coordinator_phone,
+        "special_note": special_note,
+    }
+
+
+@bp.get("/customers")
+@jwt_required()
+def list_customers():
+    customer_id_param = request.args.get("customer_id")
+    if customer_id_param is not None:
+        try:
+            customer_id = int(customer_id_param)
+        except (TypeError, ValueError):
+            return jsonify({"msg": "customer_id must be an integer"}), 400
+
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            return jsonify({"msg": "Customer not found"}), 404
+
+        return jsonify({"customer": _serialize_customer(customer)})
+
+    customers = Customer.query.order_by(Customer.name.asc()).all()
+    return jsonify({"customers": [_serialize_customer(customer) for customer in customers]})
+
+
+@bp.post("/customers")
+@jwt_required()
+def create_customer():
+    payload = request.get_json(silent=True) or {}
+
     try:
-        name = _required_text("name", "Customer name")
-        category = _parse_enum("category", CustomerCategory, "Category")
-        credit_term = _parse_enum("credit_term", CustomerCreditTerm, "Credit term")
-        transport_mode = _parse_enum("transport_mode", CustomerTransportMode, "Transport mode")
-        customer_type = _parse_enum("customer_type", CustomerType, "Customer type")
-        sales_coordinator_name = _required_text(
-            "sales_coordinator_name", "Sales coordinator name"
-        )
-        sales_coordinator_phone = _required_text(
-            "sales_coordinator_phone", "Sales coordinator telephone"
-        )
-        store_keeper_name = _required_text("store_keeper_name", "Store keeper name")
-        store_keeper_phone = _required_text(
-            "store_keeper_phone", "Store keeper telephone"
-        )
-        payment_coordinator_name = _required_text(
-            "payment_coordinator_name", "Payment coordinator name"
-        )
-        payment_coordinator_phone = _required_text(
-            "payment_coordinator_phone", "Payment coordinator telephone"
-        )
-        special_note = (payload.get("special_note") or "").strip()
+        customer_data = _parse_customer_payload(payload)
     except ValueError as error:
         return jsonify({"msg": str(error)}), 400
 
-    existing = Customer.query.filter(func.lower(Customer.name) == name.lower()).first()
+    existing = Customer.query.filter(
+        func.lower(Customer.name) == customer_data["name"].lower()
+    ).first()
     if existing:
         return (
             jsonify(
@@ -420,24 +439,48 @@ def create_customer():
             409,
         )
 
-    customer = Customer(
-        name=name,
-        category=category,
-        credit_term=credit_term,
-        transport_mode=transport_mode,
-        customer_type=customer_type,
-        sales_coordinator_name=sales_coordinator_name,
-        sales_coordinator_phone=sales_coordinator_phone,
-        store_keeper_name=store_keeper_name,
-        store_keeper_phone=store_keeper_phone,
-        payment_coordinator_name=payment_coordinator_name,
-        payment_coordinator_phone=payment_coordinator_phone,
-        special_note=special_note,
-    )
+    customer = Customer(**customer_data)
     db.session.add(customer)
     db.session.commit()
 
     return jsonify({"customer": _serialize_customer(customer)}), 201
+
+
+@bp.put("/customers/<int:customer_id>")
+@jwt_required()
+def update_customer(customer_id: int):
+    payload = request.get_json(silent=True) or {}
+    customer = Customer.query.get(customer_id)
+    if not customer:
+        return jsonify({"msg": "Customer not found"}), 404
+
+    try:
+        customer_data = _parse_customer_payload(payload)
+    except ValueError as error:
+        return jsonify({"msg": str(error)}), 400
+
+    existing = (
+        Customer.query.filter(func.lower(Customer.name) == customer_data["name"].lower())
+        .filter(Customer.id != customer_id)
+        .first()
+    )
+    if existing:
+        return (
+            jsonify(
+                {
+                    "msg": "A customer with this name already exists.",
+                    "customer": _serialize_customer(existing),
+                }
+            ),
+            409,
+        )
+
+    for field, value in customer_data.items():
+        setattr(customer, field, value)
+
+    db.session.commit()
+
+    return jsonify({"customer": _serialize_customer(customer)})
 
 
 @bp.get("/sales")

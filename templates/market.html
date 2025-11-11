@@ -483,31 +483,30 @@
                 </form>
             </dialog>
             <article
-                id="sales-incomplete-transport"
+                id="customer-detail-report"
                 class="production-card sales-admin"
-                aria-labelledby="sales-incomplete-transport-title"
+                aria-labelledby="customer-detail-report-title"
                 hidden
             >
                 <header class="production-card__header sales-admin__header">
                     <div>
-                        <h2 id="sales-incomplete-transport-title">Incomplete transport details</h2>
+                        <h2 id="customer-detail-report-title">Customer detail report</h2>
                         <p class="sales-admin__subtitle">
-                            Locate historical Samprox lorry entries that are missing vehicle or crew information and
-                            update them while reviewing transport records.
+                            Review customer records and verify transport, credit, and contact details.
                         </p>
                     </div>
                     <div class="sales-admin__actions">
                         <button
                             type="button"
                             class="button button--ghost button--small"
-                            id="sales-incomplete-transport-refresh"
+                            id="customer-detail-report-refresh"
                         >
                             Refresh
                         </button>
                     </div>
                 </header>
                 <p
-                    id="sales-incomplete-transport-message"
+                    id="customer-detail-report-message"
                     class="sales-admin__message"
                     role="status"
                     aria-live="polite"
@@ -516,16 +515,26 @@
                     <table class="sales-admin__table">
                         <thead>
                             <tr>
-                                <th scope="col">Date</th>
-                                <th scope="col">Customer</th>
-                                <th scope="col">Missing fields</th>
+                                <th scope="col">Customer ID</th>
+                                <th scope="col">Name</th>
+                                <th scope="col">Category</th>
+                                <th scope="col">Credit term</th>
+                                <th scope="col">Transport mode</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Sales coordinator</th>
+                                <th scope="col">Sales coordinator telephone</th>
+                                <th scope="col">Store keeper</th>
+                                <th scope="col">Store keeper telephone</th>
+                                <th scope="col">Payment coordinator</th>
+                                <th scope="col">Payment coordinator telephone</th>
+                                <th scope="col">Special note</th>
                                 <th scope="col" class="sales-admin__actions-header">Action</th>
                             </tr>
                         </thead>
-                        <tbody id="sales-incomplete-transport-body"></tbody>
+                        <tbody id="customer-detail-report-body"></tbody>
                     </table>
-                    <p id="sales-incomplete-transport-empty" class="sales-admin__empty" hidden>
-                        All Samprox lorry entries currently include transport details.
+                    <p id="customer-detail-report-empty" class="sales-admin__empty" hidden>
+                        No customer records are currently available.
                     </p>
                 </div>
             </article>
@@ -637,27 +646,21 @@
         const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
         const transportTeamSelects = [entryDriverSelect, entryHelper1Select, entryHelper2Select];
         const teamMemberSelects = [...loaderSelects, ...transportTeamSelects];
-        const transportMissingFieldLabels = {
-            vehicle_number: "Vehicle No",
-            driver_id: "Driver Name",
-            helper1_id: "Helper 1 Name",
-            mileage_km: "Mileage (Km)",
-        };
-        const incompleteTransportCard = document.getElementById("sales-incomplete-transport");
-        const incompleteTransportBody = document.getElementById("sales-incomplete-transport-body");
-        const incompleteTransportMessage = document.getElementById("sales-incomplete-transport-message");
-        const incompleteTransportEmptyState = document.getElementById("sales-incomplete-transport-empty");
-        const incompleteTransportRefreshButton = document.getElementById(
-            "sales-incomplete-transport-refresh",
-        );
+        const customerDialogTitle = document.getElementById("customer-dialog-title");
+        const customerReportCard = document.getElementById("customer-detail-report");
+        const customerReportBody = document.getElementById("customer-detail-report-body");
+        const customerReportMessage = document.getElementById("customer-detail-report-message");
+        const customerReportEmptyState = document.getElementById("customer-detail-report-empty");
+        const customerReportRefreshButton = document.getElementById("customer-detail-report-refresh");
+        let customerReportLoading = false;
         let currentEditingEntry = null;
         let shouldLoadExistingEntry = false;
+        let editingCustomerId = null;
         const TRANSPORT_REQUIREMENT = {
             STRICT: "strict",
             RELAXED: "relaxed",
         };
         let transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
-        let incompleteTransportLoading = false;
         const dialogSupported =
             typeof HTMLDialogElement === "function" &&
             typeof HTMLDialogElement.prototype.showModal === "function";
@@ -1653,6 +1656,23 @@
             return normalized;
         }
 
+        function formatCustomerEnumLabel(value) {
+            if (value === null || value === undefined) {
+                return "";
+            }
+
+            return String(value)
+                .split("_")
+                .map((part) => {
+                    if (!part) {
+                        return "";
+                    }
+                    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+                })
+                .join(" ")
+                .trim();
+        }
+
         function normalizeCustomer(customer) {
             if (!customer) {
                 return null;
@@ -1685,6 +1705,8 @@
                 }
                 knownCustomers.set(normalized.id, normalized);
             });
+
+            refreshCustomerReport({ showStatus: false });
         }
 
         async function fetchCustomerDetails(customerId, options = {}) {
@@ -1872,8 +1894,8 @@
             }
         }
 
-        function setIncompleteTransportMessage(message, variant = "info") {
-            if (!incompleteTransportMessage) {
+        function setCustomerReportMessage(message, variant = "info") {
+            if (!customerReportMessage) {
                 return;
             }
 
@@ -1881,163 +1903,144 @@
                 "sales-admin__message--error",
                 "sales-admin__message--success",
             ];
-            incompleteTransportMessage.classList.remove(...variants);
+            customerReportMessage.classList.remove(...variants);
 
             if (!message) {
-                incompleteTransportMessage.textContent = "";
-                incompleteTransportMessage.hidden = true;
+                customerReportMessage.textContent = "";
+                customerReportMessage.hidden = true;
                 return;
             }
 
-            incompleteTransportMessage.textContent = message;
+            customerReportMessage.textContent = message;
             if (variant === "error") {
-                incompleteTransportMessage.classList.add("sales-admin__message--error");
+                customerReportMessage.classList.add("sales-admin__message--error");
             } else if (variant === "success") {
-                incompleteTransportMessage.classList.add("sales-admin__message--success");
+                customerReportMessage.classList.add("sales-admin__message--success");
             }
-            incompleteTransportMessage.hidden = false;
+            customerReportMessage.hidden = false;
         }
 
-        function renderIncompleteTransportEntries(entries) {
-            if (!incompleteTransportBody) {
+        function getCustomerCode(customer) {
+            if (!customer) {
+                return "";
+            }
+
+            if (customer.code) {
+                return customer.code;
+            }
+            if (customer.customer_code) {
+                return customer.customer_code;
+            }
+            if (customer.id != null) {
+                return String(customer.id);
+            }
+            if (customer.customer_id != null) {
+                return String(customer.customer_id);
+            }
+            return "";
+        }
+
+        function renderCustomerReportRows(customers) {
+            if (!customerReportBody) {
                 return;
             }
 
-            incompleteTransportBody.innerHTML = "";
-            if (!Array.isArray(entries) || entries.length === 0) {
-                if (incompleteTransportEmptyState) {
-                    incompleteTransportEmptyState.hidden = false;
+            customerReportBody.innerHTML = "";
+            if (!Array.isArray(customers) || customers.length === 0) {
+                if (customerReportEmptyState) {
+                    customerReportEmptyState.hidden = false;
                 }
                 return;
             }
 
-            if (incompleteTransportEmptyState) {
-                incompleteTransportEmptyState.hidden = true;
+            if (customerReportEmptyState) {
+                customerReportEmptyState.hidden = true;
             }
 
-            entries.forEach((entry) => {
+            customers.forEach((customer) => {
                 const row = document.createElement("tr");
 
-                const dateCell = document.createElement("td");
-                const formattedDate = entry?.date ? formatFriendlyDate(entry.date) || entry.date : "—";
-                dateCell.textContent = formattedDate;
-                row.appendChild(dateCell);
-
-                const customerCell = document.createElement("td");
-                customerCell.textContent = entry?.customer_name || "Unknown customer";
-                row.appendChild(customerCell);
-
-                const missingCell = document.createElement("td");
-                const missingFields = Array.isArray(entry?.missing_fields) ? entry.missing_fields : [];
-                if (missingFields.length > 0) {
-                    const labels = missingFields
-                        .map((field) => transportMissingFieldLabels[field] || field)
-                        .join(", ");
-                    missingCell.textContent = labels;
-                } else {
-                    missingCell.textContent = "—";
+                function appendCell(value) {
+                    const cell = document.createElement("td");
+                    if (typeof value === "string") {
+                        const trimmed = value.trim();
+                        cell.textContent = trimmed ? value : "—";
+                    } else if (value === null || value === undefined) {
+                        cell.textContent = "—";
+                    } else {
+                        cell.textContent = value;
+                    }
+                    row.appendChild(cell);
                 }
-                row.appendChild(missingCell);
+
+                const code = getCustomerCode(customer);
+                appendCell(code || "—");
+                appendCell(customer?.name || customer?.customer_name || "—");
+                appendCell(formatCustomerEnumLabel(customer?.category) || "—");
+                appendCell(formatCustomerEnumLabel(customer?.credit_term) || "—");
+                appendCell(getTransportModeLabel(customer?.transport_mode) || "—");
+                appendCell(formatCustomerEnumLabel(customer?.customer_type) || "—");
+                appendCell(customer?.sales_coordinator_name || "—");
+                appendCell(customer?.sales_coordinator_phone || "—");
+                appendCell(customer?.store_keeper_name || "—");
+                appendCell(customer?.store_keeper_phone || "—");
+                appendCell(customer?.payment_coordinator_name || "—");
+                appendCell(customer?.payment_coordinator_phone || "—");
+                appendCell(customer?.special_note && customer.special_note.trim() ? customer.special_note : "—");
 
                 const actionCell = document.createElement("td");
                 actionCell.className = "sales-admin__actions-cell";
-                const actionButton = document.createElement("button");
-                actionButton.type = "button";
-                actionButton.className = "button button--ghost button--small";
-                actionButton.textContent = "Edit entry";
-                actionButton.addEventListener("click", () => {
-                    beginEditingEntry(entry?.customer_id, entry?.date, "actual", {
-                        loadExistingEntry: true,
-                        entryId: entry?.id != null ? String(entry.id) : null,
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "button button--ghost button--small";
+                editButton.textContent = "Edit";
+                const identifier = customer?.id ?? customer?.customer_id;
+                if (identifier != null) {
+                    editButton.addEventListener("click", () => {
+                        const normalizedId = String(identifier);
+                        const normalizedCustomer =
+                            knownCustomers.get(normalizedId) || normalizeCustomer({ ...customer, id: normalizedId });
+                        openCustomerDialog(normalizedCustomer);
                     });
-                });
-                actionCell.appendChild(actionButton);
+                } else {
+                    editButton.disabled = true;
+                }
+                actionCell.appendChild(editButton);
                 row.appendChild(actionCell);
 
-                incompleteTransportBody.appendChild(row);
+                customerReportBody.appendChild(row);
             });
         }
 
-        async function loadIncompleteTransportEntries(options = {}) {
-            if (!token || !isAdminUser || !incompleteTransportCard) {
+        function refreshCustomerReport({ showStatus = false } = {}) {
+            if (!customerReportCard) {
                 return;
             }
 
-            if (incompleteTransportLoading) {
+            if (!isAdminUser) {
+                customerReportCard.hidden = true;
                 return;
             }
 
-            const { showStatus = true } = options;
+            customerReportCard.hidden = false;
 
-            incompleteTransportLoading = true;
-            incompleteTransportCard.hidden = false;
+            const customers = Array.from(knownCustomers.values()).sort((a, b) =>
+                (a.name || "").localeCompare(b.name || "")
+            );
+
+            renderCustomerReportRows(customers);
 
             if (showStatus) {
-                setIncompleteTransportMessage("Loading incomplete transport entries…", "info");
-            }
-
-            if (incompleteTransportEmptyState) {
-                incompleteTransportEmptyState.hidden = true;
-            }
-            if (incompleteTransportBody) {
-                incompleteTransportBody.innerHTML = "";
-            }
-
-            try {
-                const response = await fetch("/api/market/sales/incomplete-transport", {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        Accept: "application/json",
-                    },
-                });
-
-                if (response.status === 401) {
-                    handleUnauthorized();
-                    return;
-                }
-
-                if (response.status === 403) {
-                    setIncompleteTransportMessage(
-                        "You do not have permission to view incomplete transport entries.",
-                        "error",
-                    );
-                    return;
-                }
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(
-                        errorData?.msg || "Unable to load incomplete transport entries.",
+                if (customers.length === 0) {
+                    setCustomerReportMessage("No customers have been created yet.", "success");
+                } else {
+                    setCustomerReportMessage(
+                        `Showing ${customers.length} ${customers.length === 1 ? "customer" : "customers"}.`,
+                        "success",
                     );
                 }
-
-                const data = await response.json().catch(() => ({}));
-                const entries = Array.isArray(data?.entries) ? data.entries : [];
-                renderIncompleteTransportEntries(entries);
-
-                if (showStatus) {
-                    if (entries.length === 0) {
-                        setIncompleteTransportMessage(
-                            "Great! No Samprox lorry entries are missing transport details.",
-                            "success",
-                        );
-                    } else {
-                        setIncompleteTransportMessage(
-                            `Found ${entries.length} ${entries.length === 1 ? "entry" : "entries"} requiring transport details.`,
-                            "info",
-                        );
-                    }
-                } else if (entries.length === 0 && incompleteTransportEmptyState) {
-                    incompleteTransportEmptyState.hidden = false;
-                }
-            } catch (error) {
-                console.error(error);
-                setIncompleteTransportMessage(
-                    error?.message || "Unable to load incomplete transport entries.",
-                    "error",
-                );
-            } finally {
-                incompleteTransportLoading = false;
+            } else if (customers.length === 0 && customerReportEmptyState) {
+                customerReportEmptyState.hidden = false;
             }
         }
 
@@ -2433,11 +2436,62 @@
             return { customer: data.customer, alreadyExists: false };
         }
 
-        async function loadCustomers() {
+        async function updateCustomer(customerId, customerData) {
+            if (!token) {
+                return null;
+            }
+
+            const response = await fetch(`/api/market/customers/${customerId}`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify(customerData),
+            });
+
+            if (response.status === 401) {
+                handleUnauthorized();
+                return null;
+            }
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.msg || "Unable to update customer.");
+            }
+
+            return { customer: data.customer, alreadyExists: false, updated: true };
+        }
+
+        async function loadCustomers(options = {}) {
+            const { showStatus = false } = options;
             if (!token) {
                 refreshCustomerSelectors();
+                refreshCustomerReport({ showStatus });
                 return;
             }
+
+            if (isAdminUser) {
+                if (customerReportCard) {
+                    customerReportCard.hidden = false;
+                }
+                if (customerReportBody) {
+                    customerReportBody.innerHTML = "";
+                }
+                if (customerReportEmptyState) {
+                    customerReportEmptyState.hidden = true;
+                }
+                if (showStatus) {
+                    setCustomerReportMessage("Loading customer details…", "info");
+                }
+            }
+
+            if (isAdminUser) {
+                customerReportLoading = true;
+            }
+
+            let loaded = false;
 
             try {
                 const response = await fetch("/api/market/customers", {
@@ -2453,15 +2507,31 @@
                 }
 
                 if (!response.ok) {
-                    throw new Error("Unable to load customers");
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.msg || "Unable to load customer details.");
                 }
 
                 const data = await response.json();
                 registerCustomers(data.customers || []);
+                refreshCustomerSelectors();
+                refreshCustomerReport({ showStatus });
+                loaded = true;
             } catch (error) {
                 console.error(error);
+                if (isAdminUser) {
+                    setCustomerReportMessage(
+                        error?.message || "Unable to load customer details.",
+                        "error",
+                    );
+                }
             } finally {
-                refreshCustomerSelectors();
+                if (isAdminUser) {
+                    customerReportLoading = false;
+                }
+                if (!loaded) {
+                    refreshCustomerSelectors();
+                    refreshCustomerReport({ showStatus: false });
+                }
                 await synchronizeTransportState();
             }
         }
@@ -2670,7 +2740,11 @@
         function resetCustomerForm() {
             if (customerForm) {
                 customerForm.reset();
+                if (customerForm.dataset) {
+                    customerForm.dataset.mode = "create";
+                }
             }
+            setCustomerFormMode("create");
             setCustomerFormFeedback("");
         }
 
@@ -2697,9 +2771,87 @@
             customerFormFeedback.classList.add("modal__feedback--visible");
         }
 
-        function openCustomerDialog() {
-            resetCustomerForm();
+        function setCustomerFormMode(mode, customer = null) {
+            const hasCustomer =
+                customer && (customer.id !== undefined || customer.customer_id !== undefined);
+            const isEdit = mode === "edit" && hasCustomer;
+            editingCustomerId = isEdit
+                ? String(customer.id ?? customer.customer_id ?? "")
+                : null;
+
+            if (customerForm && customerForm.dataset) {
+                customerForm.dataset.mode = isEdit ? "edit" : "create";
+            }
+
+            if (customerDialogTitle) {
+                customerDialogTitle.textContent = isEdit ? "Edit customer" : "Add new customer";
+            }
+
+            if (customerFormSubmit) {
+                customerFormSubmit.textContent = isEdit ? "Save changes" : "Save customer";
+            }
+        }
+
+        function populateCustomerFormValues(customer) {
+            if (!customer) {
+                return;
+            }
+
+            const normalized = normalizeCustomer(customer) || customer;
+            if (customerNameInput) {
+                customerNameInput.value = normalized.name ?? normalized.customer_name ?? "";
+            }
+            if (customerCategorySelect) {
+                customerCategorySelect.value = normalized.category ?? normalized.customer_category ?? "";
+            }
+            if (customerCreditTermSelect) {
+                customerCreditTermSelect.value = normalized.credit_term ?? "";
+            }
+            if (customerTransportSelect) {
+                customerTransportSelect.value = normalizeTransportMode(normalized.transport_mode) ?? "";
+            }
+            if (customerTypeSelect) {
+                customerTypeSelect.value = normalized.customer_type ?? "";
+            }
+            if (customerSalesCoordinatorName) {
+                customerSalesCoordinatorName.value = normalized.sales_coordinator_name ?? "";
+            }
+            if (customerSalesCoordinatorPhone) {
+                customerSalesCoordinatorPhone.value = normalized.sales_coordinator_phone ?? "";
+            }
+            if (customerStoreKeeperName) {
+                customerStoreKeeperName.value = normalized.store_keeper_name ?? "";
+            }
+            if (customerStoreKeeperPhone) {
+                customerStoreKeeperPhone.value = normalized.store_keeper_phone ?? "";
+            }
+            if (customerPaymentCoordinatorName) {
+                customerPaymentCoordinatorName.value = normalized.payment_coordinator_name ?? "";
+            }
+            if (customerPaymentCoordinatorPhone) {
+                customerPaymentCoordinatorPhone.value = normalized.payment_coordinator_phone ?? "";
+            }
+            if (customerSpecialNote) {
+                customerSpecialNote.value = normalized.special_note ?? "";
+            }
+        }
+
+        function openCustomerDialog(customer = null) {
             populateCustomerFormOptions();
+
+            if (customerForm) {
+                customerForm.reset();
+            }
+            setCustomerFormFeedback("");
+
+            if (customer) {
+                const normalizedCustomer = normalizeCustomer(customer) || customer;
+                setCustomerFormMode("edit", normalizedCustomer);
+                populateCustomerFormValues(normalizedCustomer);
+            } else {
+                setCustomerFormMode("create");
+            }
+
             if (customerDialog) {
                 if (dialogSupported && typeof customerDialog.showModal === "function") {
                     customerDialog.showModal();
@@ -2802,9 +2954,9 @@
             entryMileageInput.addEventListener("input", handleTransportFieldInteraction);
         }
 
-        if (incompleteTransportRefreshButton) {
-            incompleteTransportRefreshButton.addEventListener("click", () => {
-                loadIncompleteTransportEntries();
+        if (customerReportRefreshButton) {
+            customerReportRefreshButton.addEventListener("click", () => {
+                loadCustomers({ showStatus: true });
             });
         }
 
@@ -2975,9 +3127,6 @@
                     if (typeof loadSalesSummary === "function") {
                         loadSalesSummary();
                     }
-                    if (isAdminUser) {
-                        loadIncompleteTransportEntries({ showStatus: false });
-                    }
                 } catch (error) {
                     console.error(error);
                     setEntryFeedback(error?.message || "Unable to save sales entry.", "error");
@@ -3050,9 +3199,14 @@
                 }
 
                 try {
-                    const result = await createCustomer(payload);
+                    const isEdit = Boolean(editingCustomerId);
+                    const targetId = editingCustomerId;
+                    const result = isEdit
+                        ? await updateCustomer(targetId, payload)
+                        : await createCustomer(payload);
+
                     if (!result || !result.customer) {
-                        throw new Error("Unable to create customer.");
+                        throw new Error(isEdit ? "Unable to update customer." : "Unable to create customer.");
                     }
 
                     const { customer, alreadyExists } = result;
@@ -3063,18 +3217,32 @@
 
                     const customerIdValue = customer.id ?? customer.customer_id;
                     if (entryCustomerSelect && customerIdValue) {
-                        entryCustomerSelect.value = String(customerIdValue);
-                        await synchronizeTransportState();
+                        const normalizedId = String(customerIdValue);
+                        if (isEdit) {
+                            if (entryCustomerSelect.value === normalizedId) {
+                                await synchronizeTransportState({ forceRefresh: true });
+                            }
+                        } else {
+                            entryCustomerSelect.value = normalizedId;
+                            await synchronizeTransportState();
+                        }
                     }
 
                     const code = customer.code ?? customer.customer_code ?? customerIdValue;
-                    const message = alreadyExists
-                        ? `Customer "${customer.name}" already exists and is ready to use.`
-                        : `Customer "${customer.name}" (ID ${code}) created successfully.`;
+                    let message;
+                    if (alreadyExists) {
+                        message = `Customer "${customer.name}" already exists and is ready to use.`;
+                    } else if (isEdit) {
+                        message = `Customer "${customer.name}" (ID ${code}) updated successfully.`;
+                    } else {
+                        message = `Customer "${customer.name}" (ID ${code}) created successfully.`;
+                    }
                     setEntryFeedback(message, "success");
                 } catch (error) {
                     console.error(error);
-                    setCustomerFormFeedback(error?.message || "Unable to create customer.");
+                    setCustomerFormFeedback(
+                        error?.message || (editingCustomerId ? "Unable to update customer." : "Unable to create customer."),
+                    );
                 } finally {
                     if (customerFormSubmit) {
                         customerFormSubmit.disabled = false;
@@ -3088,12 +3256,9 @@
         populateVehicleOptions();
         refreshCustomerSelectors();
         refreshLoaderSelectors();
-        loadCustomers();
+        loadCustomers({ showStatus: isAdminUser });
         loadLoaderOptions();
         loadSalesSummary();
-        if (isAdminUser) {
-            loadIncompleteTransportEntries();
-        }
 
         function beginEditingEntry(customerId, dateValue, saleType, options = {}) {
             if (!entryForm) {

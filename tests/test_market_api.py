@@ -495,65 +495,80 @@ class MarketApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Vehicle", response.get_json().get("msg", ""))
 
-    def test_incomplete_transport_report_lists_missing_entries(self):
-        customer_payload = self._create_customer_payload(
-            name="Report Customer",
-            transport_mode="Samprox lorry",
-        )
-        response = self.client.post(
+    def test_update_customer_updates_all_fields(self):
+        create_response = self.client.post(
             "/api/market/customers",
-            json=customer_payload,
+            json=self._create_customer_payload(),
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
-        customer_id = response.get_json()["customer"]["id"]
+        self.assertEqual(create_response.status_code, 201, create_response.get_data(as_text=True))
+        customer_id = create_response.get_json()["customer"]["id"]
 
-        loader = self._create_team_member("LD-704", "Loader Report")
-        driver = self._create_team_member("DRV-704", "Driver Report")
-        helper1 = self._create_team_member("HLP-704", "Helper Report")
-
-        legacy_entry = self.SalesActualEntry(
-            customer_id=customer_id,
-            date=date(2024, 10, 25),
-            amount=0,
-            unit_price=0,
-            quantity_tons=0,
-            delivery_note_number="DN-REP-OLD",
-            loader1_id=loader.id,
+        update_payload = self._create_customer_payload(
+            name="ACME Renewables",
+            category="Plantation",
+            credit_term="45 Days",
+            transport_mode="Samprox lorry",
+            customer_type="Seasonal",
+            sales_coordinator_name="Taylor Swift",
+            sales_coordinator_phone="0713333333",
+            store_keeper_name="Jamie Lee",
+            store_keeper_phone="0714444444",
+            payment_coordinator_name="Morgan Lee",
+            payment_coordinator_phone="0715555555",
+            special_note="Updated profile",
         )
-        self.db.session.add(legacy_entry)
-        self.db.session.commit()
 
-        complete_payload = {
-            "date": "2024-10-26",
-            "customer_id": str(customer_id),
-            "sale_type": "actual",
-            "unit_price": "2800",
-            "quantity_tons": "2",
-            "delivery_note_number": "DN-REP-NEW",
-            "loader1_id": str(loader.id),
-            "vehicle_number": "LI-1795",
-            "driver_id": str(driver.id),
-            "helper1_id": str(helper1.id),
-            "mileage_km": "80",
-        }
-
-        response = self.client.post(
-            "/api/market/sales",
-            json=complete_payload,
-            headers=self._auth_headers(),
-        )
-        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
-
-        response = self.client.get(
-            "/api/market/sales/incomplete-transport",
+        response = self.client.put(
+            f"/api/market/customers/{customer_id}",
+            json=update_payload,
             headers=self._auth_headers(),
         )
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        data = response.get_json()["customer"]
+        self.assertEqual(data["name"], "ACME Renewables")
+        self.assertEqual(data["category"], "plantation")
+        self.assertEqual(data["credit_term"], "45_days")
+        self.assertEqual(data["transport_mode"], "samprox_lorry")
+        self.assertEqual(data["customer_type"], "seasonal")
+        self.assertEqual(data["sales_coordinator_name"], "Taylor Swift")
+        self.assertEqual(data["sales_coordinator_phone"], "0713333333")
+        self.assertEqual(data["store_keeper_name"], "Jamie Lee")
+        self.assertEqual(data["store_keeper_phone"], "0714444444")
+        self.assertEqual(data["payment_coordinator_name"], "Morgan Lee")
+        self.assertEqual(data["payment_coordinator_phone"], "0715555555")
+        self.assertEqual(data["special_note"], "Updated profile")
+
+        Customer = self.app_module.Customer
+        updated = Customer.query.get(customer_id)
+        self.assertIsNotNone(updated)
+        self.assertEqual(updated.payment_coordinator_name, "Morgan Lee")
+
+    def test_update_customer_rejects_duplicate_name(self):
+        first = self.client.post(
+            "/api/market/customers",
+            json=self._create_customer_payload(name="Alpha Industries"),
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(first.status_code, 201)
+
+        second = self.client.post(
+            "/api/market/customers",
+            json=self._create_customer_payload(name="Beta Industries"),
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(second.status_code, 201)
+        second_id = second.get_json()["customer"]["id"]
+
+        response = self.client.put(
+            f"/api/market/customers/{second_id}",
+            json=self._create_customer_payload(name="Alpha Industries"),
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(response.status_code, 409, response.get_data(as_text=True))
         data = response.get_json()
-        entries = data.get("entries", [])
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["id"], legacy_entry.id)
+        self.assertIn("already exists", data.get("msg", ""))
+
 
 
 if __name__ == "__main__":

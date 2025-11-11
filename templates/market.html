@@ -191,6 +191,98 @@
                                 <option value="forecast">Forecast sale</option>
                             </select>
                         </div>
+                        <div
+                            id="sales-entry-transport"
+                            class="sales-transport"
+                            hidden
+                            aria-live="polite"
+                        >
+                            <div class="sales-transport__header">
+                                <h3 class="sales-transport__title">Transport details</h3>
+                                <p
+                                    id="sales-entry-transport-status"
+                                    class="sales-transport__status"
+                                ></p>
+                            </div>
+                            <p id="sales-entry-transport-note" class="sales-transport__note"></p>
+                            <div class="sales-transport__grid">
+                                <div class="sales-input">
+                                    <label for="sales-entry-vehicle">
+                                        Vehicle No <span class="required">*</span>
+                                    </label>
+                                    <select
+                                        id="sales-entry-vehicle"
+                                        name="vehicle_number"
+                                        class="sales-input__control"
+                                        data-placeholder="Select vehicle number"
+                                        disabled
+                                        aria-disabled="true"
+                                    >
+                                        <option value="">Select vehicle number</option>
+                                    </select>
+                                </div>
+                                <div class="sales-input">
+                                    <label for="sales-entry-driver">
+                                        Driver Name <span class="required">*</span>
+                                    </label>
+                                    <select
+                                        id="sales-entry-driver"
+                                        name="driver_id"
+                                        class="sales-input__control"
+                                        data-placeholder="Select driver"
+                                        disabled
+                                        aria-disabled="true"
+                                    >
+                                        <option value="">Select driver</option>
+                                    </select>
+                                </div>
+                                <div class="sales-input">
+                                    <label for="sales-entry-helper-1">
+                                        Helper 1 Name <span class="required">*</span>
+                                    </label>
+                                    <select
+                                        id="sales-entry-helper-1"
+                                        name="helper1_id"
+                                        class="sales-input__control"
+                                        data-placeholder="Select helper"
+                                        disabled
+                                        aria-disabled="true"
+                                    >
+                                        <option value="">Select helper</option>
+                                    </select>
+                                </div>
+                                <div class="sales-input">
+                                    <label for="sales-entry-helper-2">Helper 2 Name</label>
+                                    <select
+                                        id="sales-entry-helper-2"
+                                        name="helper2_id"
+                                        class="sales-input__control"
+                                        data-placeholder="Select helper"
+                                        disabled
+                                        aria-disabled="true"
+                                    >
+                                        <option value="">Select helper</option>
+                                    </select>
+                                </div>
+                                <div class="sales-input">
+                                    <label for="sales-entry-mileage">
+                                        Mileage (Km) <span class="required">*</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="sales-entry-mileage"
+                                        name="mileage_km"
+                                        class="sales-input__control"
+                                        inputmode="decimal"
+                                        step="0.1"
+                                        min="0"
+                                        placeholder="0.0"
+                                        disabled
+                                        aria-disabled="true"
+                                    />
+                                </div>
+                            </div>
+                        </div>
                         <div class="sales-input">
                             <label for="sales-entry-unit-price">Unit price (Rs/Ton) <span class="required">*</span></label>
                             <input
@@ -245,6 +337,7 @@
                                 id="sales-entry-loader-1"
                                 name="loader1_id"
                                 class="sales-input__control"
+                                data-placeholder="Select loader"
                                 required
                             >
                                 <option value="">Select loader</option>
@@ -256,6 +349,7 @@
                                 id="sales-entry-loader-2"
                                 name="loader2_id"
                                 class="sales-input__control"
+                                data-placeholder="Select loader"
                             >
                                 <option value="">Select loader</option>
                             </select>
@@ -266,6 +360,7 @@
                                 id="sales-entry-loader-3"
                                 name="loader3_id"
                                 class="sales-input__control"
+                                data-placeholder="Select loader"
                             >
                                 <option value="">Select loader</option>
                             </select>
@@ -461,6 +556,14 @@
         const entryLoader1Select = document.getElementById("sales-entry-loader-1");
         const entryLoader2Select = document.getElementById("sales-entry-loader-2");
         const entryLoader3Select = document.getElementById("sales-entry-loader-3");
+        const transportGroup = document.getElementById("sales-entry-transport");
+        const transportStatusEl = document.getElementById("sales-entry-transport-status");
+        const transportNoteEl = document.getElementById("sales-entry-transport-note");
+        const entryVehicleSelect = document.getElementById("sales-entry-vehicle");
+        const entryDriverSelect = document.getElementById("sales-entry-driver");
+        const entryHelper1Select = document.getElementById("sales-entry-helper-1");
+        const entryHelper2Select = document.getElementById("sales-entry-helper-2");
+        const entryMileageInput = document.getElementById("sales-entry-mileage");
         const entryTotalOutput = document.getElementById("sales-entry-total");
         const entryFeedbackEl = document.getElementById("sales-entry-feedback");
         const entryModeMessageEl = document.getElementById("sales-entry-mode");
@@ -484,6 +587,8 @@
         const customerSpecialNote = document.getElementById("customer-special-note");
         const addCustomerOptionValue = "__create__";
         const loaderSelects = [entryLoader1Select, entryLoader2Select, entryLoader3Select];
+        const transportTeamSelects = [entryDriverSelect, entryHelper1Select, entryHelper2Select];
+        const teamMemberSelects = [...loaderSelects, ...transportTeamSelects];
         let currentEditingEntry = null;
         let shouldLoadExistingEntry = false;
         const dialogSupported =
@@ -586,6 +691,7 @@
             { value: "regular", label: "Regular" },
             { value: "seasonal", label: "Seasonal" },
         ];
+        const internalVehicleOptions = ["LI-1795", "LB-3237"];
 
         const knownCustomers = new Map();
         let loaderOptions = [];
@@ -616,6 +722,35 @@
             populateSelectOptions(customerCreditTermSelect, customerCreditTermOptions);
             populateSelectOptions(customerTransportSelect, customerTransportOptions);
             populateSelectOptions(customerTypeSelect, customerTypeOptions);
+        }
+
+        function populateVehicleOptions() {
+            if (!entryVehicleSelect) {
+                return;
+            }
+
+            const previousValue = entryVehicleSelect.value;
+            entryVehicleSelect.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            const placeholderText =
+                entryVehicleSelect.dataset?.placeholder || "Select vehicle number";
+            placeholder.textContent = placeholderText;
+            entryVehicleSelect.appendChild(placeholder);
+
+            internalVehicleOptions.forEach((value) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = value;
+                entryVehicleSelect.appendChild(option);
+            });
+
+            if (previousValue && internalVehicleOptions.includes(previousValue)) {
+                entryVehicleSelect.value = previousValue;
+            } else {
+                entryVehicleSelect.value = "";
+            }
         }
 
         function formatNumber(value) {
@@ -1121,12 +1256,24 @@
             if (entryWeighSlipInput) {
                 entryWeighSlipInput.value = "";
             }
+            if (entryVehicleSelect) {
+                entryVehicleSelect.value = "";
+            }
             loaderSelects.forEach((select) => {
                 if (select) {
                     select.value = "";
                 }
             });
+            transportTeamSelects.forEach((select) => {
+                if (select) {
+                    select.value = "";
+                }
+            });
+            if (entryMileageInput) {
+                entryMileageInput.value = "";
+            }
             updateEntryTotal();
+            updateTransportFieldState();
         }
 
         function populateSalesEntryForm(entry, saleType) {
@@ -1175,6 +1322,22 @@
                 if (entryLoader3Select) {
                     entryLoader3Select.value = entry.loader3_id != null ? String(entry.loader3_id) : "";
                 }
+                if (entryVehicleSelect) {
+                    entryVehicleSelect.value = entry.vehicle_number || "";
+                }
+                if (entryDriverSelect) {
+                    entryDriverSelect.value = entry.driver_id != null ? String(entry.driver_id) : "";
+                }
+                if (entryHelper1Select) {
+                    entryHelper1Select.value = entry.helper1_id != null ? String(entry.helper1_id) : "";
+                }
+                if (entryHelper2Select) {
+                    entryHelper2Select.value = entry.helper2_id != null ? String(entry.helper2_id) : "";
+                }
+                if (entryMileageInput) {
+                    entryMileageInput.value =
+                        entry.mileage_km != null ? String(entry.mileage_km) : "";
+                }
             } else {
                 if (entryDeliveryNoteInput) {
                     entryDeliveryNoteInput.value = "";
@@ -1187,6 +1350,17 @@
                         select.value = "";
                     }
                 });
+                if (entryVehicleSelect) {
+                    entryVehicleSelect.value = "";
+                }
+                transportTeamSelects.forEach((select) => {
+                    if (select) {
+                        select.value = "";
+                    }
+                });
+                if (entryMileageInput) {
+                    entryMileageInput.value = "";
+                }
             }
 
             updateEntryTotal();
@@ -1439,11 +1613,123 @@
                     entryCustomerSelect.value = "";
                 }
             }
+
+            updateTransportFieldState();
         }
 
         function updateCustomerOptions(customers) {
             registerCustomers(customers);
             refreshCustomerSelectors();
+        }
+
+        function getSelectedCustomer() {
+            const customerId = entryCustomerSelect?.value || "";
+            if (!customerId || customerId === addCustomerOptionValue) {
+                return null;
+            }
+            return knownCustomers.get(customerId) || null;
+        }
+
+        function shouldRequireTransportDetails() {
+            const customer = getSelectedCustomer();
+            const isActualSale = (entryTypeSelect?.value || "") === "actual";
+            return Boolean(
+                isActualSale && customer?.transport_mode === "samprox_lorry"
+            );
+        }
+
+        function updateTransportFieldState() {
+            const customer = getSelectedCustomer();
+            const isActualSale = (entryTypeSelect?.value || "") === "actual";
+            const requiresDetails = shouldRequireTransportDetails();
+            const shouldShowGroup = Boolean(transportGroup && isActualSale && customer);
+
+            if (transportGroup) {
+                if (shouldShowGroup) {
+                    transportGroup.removeAttribute("hidden");
+                } else {
+                    transportGroup.setAttribute("hidden", "");
+                }
+
+                transportGroup.classList.toggle("sales-transport--active", requiresDetails);
+                transportGroup.classList.toggle(
+                    "sales-transport--disabled",
+                    shouldShowGroup && !requiresDetails
+                );
+            }
+
+            if (transportStatusEl) {
+                if (!customer) {
+                    transportStatusEl.textContent = "";
+                } else {
+                    const normalized = customer.transport_mode || "";
+                    const modeLabel =
+                        normalized === "samprox_lorry"
+                            ? "Samprox lorry"
+                            : normalized === "customer_lorry"
+                            ? "Customer lorry"
+                            : normalized;
+                    transportStatusEl.textContent = `Transport mode: ${modeLabel}`;
+                }
+            }
+
+            if (transportNoteEl) {
+                transportNoteEl.textContent = "";
+                transportNoteEl.classList.remove("sales-transport__note--highlight");
+                transportNoteEl.classList.remove("sales-transport__note--muted");
+
+                if (!transportGroup) {
+                    // Nothing to show if the group is missing.
+                } else if (!shouldShowGroup) {
+                    transportNoteEl.textContent =
+                        "Select an actual sale entry and choose a customer to manage transport details.";
+                    transportNoteEl.classList.add("sales-transport__note--muted");
+                } else if (requiresDetails) {
+                    transportNoteEl.textContent =
+                        "Transport details are required for Samprox lorry deliveries.";
+                    transportNoteEl.classList.add("sales-transport__note--highlight");
+                } else {
+                    transportNoteEl.textContent =
+                        "Transport is handled by the customer. These fields are read-only.";
+                    transportNoteEl.classList.add("sales-transport__note--muted");
+                }
+            }
+
+            const fields = [
+                entryVehicleSelect,
+                entryDriverSelect,
+                entryHelper1Select,
+                entryHelper2Select,
+                entryMileageInput,
+            ];
+
+            const shouldEnableFields = shouldShowGroup && requiresDetails;
+
+            fields.forEach((field) => {
+                if (!field) {
+                    return;
+                }
+
+                const isOptional = field === entryHelper2Select;
+
+                field.disabled = !shouldEnableFields;
+                if (field.disabled) {
+                    field.setAttribute("aria-disabled", "true");
+                    if (field.tagName === "SELECT") {
+                        field.value = "";
+                    } else if (typeof field.value === "string") {
+                        field.value = "";
+                    }
+                } else {
+                    field.removeAttribute("aria-disabled");
+                }
+
+                if (!shouldEnableFields) {
+                    field.required = false;
+                } else {
+                    field.required = !isOptional;
+                }
+            });
         }
 
         function updateEntryTotal() {
@@ -1489,6 +1775,8 @@
             if (entryLoader1Select) {
                 entryLoader1Select.required = isActualSale;
             }
+
+            updateTransportFieldState();
         }
 
         function normalizeLoaderMember(member) {
@@ -1518,7 +1806,7 @@
         }
 
         function refreshLoaderSelectors() {
-            loaderSelects.forEach((select) => {
+            teamMemberSelects.forEach((select) => {
                 if (!select) {
                     return;
                 }
@@ -1528,7 +1816,9 @@
 
                 const placeholder = document.createElement("option");
                 placeholder.value = "";
-                placeholder.textContent = "Select loader";
+                const placeholderText =
+                    select.dataset?.placeholder || "Select team member";
+                placeholder.textContent = placeholderText;
                 select.appendChild(placeholder);
 
                 loaderOptions.forEach((option) => {
@@ -1606,6 +1896,14 @@
                 return value ? value : null;
             };
 
+            const readVehicleValue = (select) => {
+                if (!select) {
+                    return null;
+                }
+                const value = select.value;
+                return value ? value : null;
+            };
+
             const payload = {
                 date: entryDateInput?.value || "",
                 customer_id: entryCustomerSelect?.value || "",
@@ -1617,6 +1915,16 @@
                 loader1_id: isActualSale ? readLoaderValue(entryLoader1Select) : null,
                 loader2_id: isActualSale ? readLoaderValue(entryLoader2Select) : null,
                 loader3_id: isActualSale ? readLoaderValue(entryLoader3Select) : null,
+                vehicle_number: isActualSale ? readVehicleValue(entryVehicleSelect) : null,
+                driver_id: isActualSale ? readLoaderValue(entryDriverSelect) : null,
+                helper1_id: isActualSale ? readLoaderValue(entryHelper1Select) : null,
+                helper2_id: isActualSale ? readLoaderValue(entryHelper2Select) : null,
+                mileage_km: isActualSale
+                    ? (() => {
+                          const value = readTextValue(entryMileageInput);
+                          return value ? value : null;
+                      })()
+                    : null,
             };
 
             if (currentEditingEntry?.sale_type) {
@@ -1984,6 +2292,7 @@
                 if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
                     entryCustomerSelect.value = "";
                 }
+                updateTransportFieldState();
             });
             if (!dialogSupported) {
                 document.addEventListener("keydown", (event) => {
@@ -2001,8 +2310,10 @@
                 if (event.target.value === addCustomerOptionValue) {
                     event.target.value = "";
                     openCustomerDialog();
+                    updateTransportFieldState();
                     return;
                 }
+                updateTransportFieldState();
                 handleEntrySelectionChange(event);
             });
         }
@@ -2041,13 +2352,85 @@
                     return;
                 }
 
+                const requiresTransportDetails = shouldRequireTransportDetails();
+                setEntryFeedback("");
+
+                const formatList = (items) => {
+                    if (!items || items.length === 0) {
+                        return "";
+                    }
+                    try {
+                        return new Intl.ListFormat(undefined, {
+                            style: "long",
+                            type: "conjunction",
+                        }).format(items);
+                    } catch (_) {
+                        if (items.length === 1) {
+                            return items[0];
+                        }
+                        if (items.length === 2) {
+                            return `${items[0]} and ${items[1]}`;
+                        }
+                        const head = items.slice(0, -1).join(", ");
+                        const tail = items[items.length - 1];
+                        return `${head}, and ${tail}`;
+                    }
+                };
+
                 if (!entryForm.checkValidity()) {
+                    if (requiresTransportDetails) {
+                        const missingFields = [];
+                        if (!entryVehicleSelect?.value) {
+                            missingFields.push("Vehicle No");
+                        }
+                        if (!entryDriverSelect?.value) {
+                            missingFields.push("Driver Name");
+                        }
+                        if (!entryHelper1Select?.value) {
+                            missingFields.push("Helper 1 Name");
+                        }
+                        const mileageValue = entryMileageInput?.value?.trim() || "";
+                        if (!mileageValue) {
+                            missingFields.push("Mileage (Km)");
+                        }
+                        if (missingFields.length) {
+                            const missingList = formatList(missingFields);
+                            setEntryFeedback(
+                                `Transport details are required for Samprox lorry deliveries. Please provide ${missingList}.`,
+                                "error",
+                            );
+                        }
+                    }
                     entryForm.reportValidity();
                     return;
                 }
 
                 const payload = collectSalesEntryData();
                 const isEditing = Boolean(currentEditingEntry?.id);
+
+                if (requiresTransportDetails) {
+                    const missingFields = [];
+                    if (!payload.vehicle_number) {
+                        missingFields.push("Vehicle No");
+                    }
+                    if (!payload.driver_id) {
+                        missingFields.push("Driver Name");
+                    }
+                    if (!payload.helper1_id) {
+                        missingFields.push("Helper 1 Name");
+                    }
+                    if (!payload.mileage_km) {
+                        missingFields.push("Mileage (Km)");
+                    }
+                    if (missingFields.length) {
+                        const missingList = formatList(missingFields);
+                        setEntryFeedback(
+                            `Transport details are required for Samprox lorry deliveries. Please provide ${missingList}.`,
+                            "error",
+                        );
+                        return;
+                    }
+                }
 
                 if (!payload.customer_id || payload.customer_id === addCustomerOptionValue) {
                     setEntryFeedback("Please select a customer before saving the entry.", "error");
@@ -2147,6 +2530,7 @@
                 if (entryCustomerSelect && entryCustomerSelect.value === addCustomerOptionValue) {
                     entryCustomerSelect.value = "";
                 }
+                updateTransportFieldState();
             });
         }
 
@@ -2204,6 +2588,7 @@
                     const customerIdValue = customer.id ?? customer.customer_id;
                     if (entryCustomerSelect && customerIdValue) {
                         entryCustomerSelect.value = String(customerIdValue);
+                        updateTransportFieldState();
                     }
 
                     const code = customer.code ?? customer.customer_code ?? customerIdValue;
@@ -2224,6 +2609,7 @@
 
         updateLoaderFieldState();
         populateCustomerFormOptions();
+        populateVehicleOptions();
         refreshCustomerSelectors();
         refreshLoaderSelectors();
         loadCustomers();

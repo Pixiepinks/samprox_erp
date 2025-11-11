@@ -1811,6 +1811,20 @@ body.modal-open {
     text-decoration: underline;
 }
 
+#mrn-table th.mrn-table__actions-heading,
+#mrn-table td.mrn-table__actions {
+    text-align: right;
+}
+
+.mrn-table__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mrn-table__edit-button {
+    text-decoration: none;
+}
+
 .empty-state {
     margin: 0;
     font-size: 0.95rem;

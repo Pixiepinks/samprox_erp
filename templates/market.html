@@ -761,6 +761,7 @@
         const internalVehicleOptions = ["LI-1795", "LB-3237"];
 
         const knownCustomers = new Map();
+        const pendingCustomerRequests = new Map();
         let loaderOptions = [];
         const quantityFormatter = new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 2,
@@ -1449,6 +1450,7 @@
 
             updateLoaderFieldState();
             updateEntryTotal();
+            void synchronizeTransportState({ forceRefresh: true });
         }
 
         async function loadEntryById(entryId, saleType) {
@@ -1683,6 +1685,72 @@
                 }
                 knownCustomers.set(normalized.id, normalized);
             });
+        }
+
+        async function fetchCustomerDetails(customerId, options = {}) {
+            const { forceRefresh = false } = options;
+            const normalizedId = customerId != null ? String(customerId) : "";
+            if (!normalizedId) {
+                return null;
+            }
+
+            const cachedCustomer = knownCustomers.get(normalizedId);
+            if (cachedCustomer && cachedCustomer.transport_mode && !forceRefresh) {
+                return cachedCustomer;
+            }
+
+            if (!token) {
+                return cachedCustomer || null;
+            }
+
+            if (pendingCustomerRequests.has(normalizedId)) {
+                return pendingCustomerRequests.get(normalizedId);
+            }
+
+            const request = (async () => {
+                try {
+                    const params = new URLSearchParams({ customer_id: normalizedId });
+                    const response = await fetch(`/api/market/customers?${params.toString()}`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            Accept: "application/json",
+                        },
+                    });
+
+                    if (response.status === 401) {
+                        handleUnauthorized();
+                        return cachedCustomer || null;
+                    }
+
+                    const data = await response.json().catch(() => ({}));
+
+                    if (response.status === 404) {
+                        knownCustomers.delete(normalizedId);
+                        refreshCustomerSelectors();
+                        return null;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(data?.msg || "Unable to load customer details.");
+                    }
+
+                    if (!data?.customer) {
+                        return cachedCustomer || null;
+                    }
+
+                    registerCustomers([data.customer]);
+                    refreshCustomerSelectors();
+                    return knownCustomers.get(normalizedId) || normalizeCustomer(data.customer);
+                } catch (error) {
+                    console.error("Failed to load customer details", error);
+                    return cachedCustomer || null;
+                } finally {
+                    pendingCustomerRequests.delete(normalizedId);
+                }
+            })();
+
+            pendingCustomerRequests.set(normalizedId, request);
+            return request;
         }
 
         function refreshCustomerSelectors() {
@@ -2076,6 +2144,31 @@
             });
         }
 
+        async function synchronizeTransportState(options = {}) {
+            const { forceRefresh = false } = options;
+            const customerIdValue = entryCustomerSelect?.value || "";
+            const hasSelection = Boolean(
+                customerIdValue && customerIdValue !== addCustomerOptionValue,
+            );
+
+            if (!hasSelection) {
+                updateTransportFieldState();
+                return null;
+            }
+
+            const normalizedId = String(customerIdValue);
+
+            try {
+                await fetchCustomerDetails(normalizedId, { forceRefresh });
+            } catch (error) {
+                console.error("Unable to refresh customer details", error);
+            } finally {
+                updateTransportFieldState();
+            }
+
+            return knownCustomers.get(normalizedId) || null;
+        }
+
         function updateEntryTotal() {
             if (!entryTotalOutput) {
                 return;
@@ -2369,6 +2462,7 @@
                 console.error(error);
             } finally {
                 refreshCustomerSelectors();
+                await synchronizeTransportState();
             }
         }
 
@@ -2650,13 +2744,14 @@
         }
 
         if (entryCustomerSelect) {
-            entryCustomerSelect.addEventListener("change", (event) => {
+            entryCustomerSelect.addEventListener("change", async (event) => {
                 if (event.target.value === addCustomerOptionValue) {
                     event.target.value = "";
                     openCustomerDialog();
                     updateTransportFieldState();
                     return;
                 }
+
                 if (isEditingExistingEntry()) {
                     const selectedCustomer = entryCustomerSelect.value || "";
                     const originalCustomer = currentEditingEntry?.customer_id || "";
@@ -2664,7 +2759,14 @@
                         ensureStrictTransportRequirement();
                     }
                 }
-                updateTransportFieldState();
+
+                try {
+                    await synchronizeTransportState({ forceRefresh: true });
+                } catch (error) {
+                    console.error(error);
+                    updateTransportFieldState();
+                }
+
                 handleEntrySelectionChange(event);
             });
         }
@@ -2709,6 +2811,7 @@
         if (entryTypeSelect) {
             entryTypeSelect.addEventListener("change", (event) => {
                 updateLoaderFieldState();
+                void synchronizeTransportState();
                 handleEntrySelectionChange(event);
             });
         }
@@ -2961,7 +3064,7 @@
                     const customerIdValue = customer.id ?? customer.customer_id;
                     if (entryCustomerSelect && customerIdValue) {
                         entryCustomerSelect.value = String(customerIdValue);
-                        updateTransportFieldState();
+                        await synchronizeTransportState();
                     }
 
                     const code = customer.code ?? customer.customer_code ?? customerIdValue;
@@ -3018,6 +3121,7 @@
             }
 
             updateLoaderFieldState();
+            void synchronizeTransportState({ forceRefresh: true });
 
             if (loadExistingEntry) {
                 shouldLoadExistingEntry = true;

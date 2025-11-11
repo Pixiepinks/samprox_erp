@@ -499,11 +499,17 @@ class MRNSchema(Schema):
     weigh_out_time = fields.DateTime()
     security_officer_name = fields.Str()
     authorized_person_name = fields.Str()
+    driver_id = fields.Int(allow_none=True)
+    helper1_id = fields.Int(allow_none=True)
+    helper2_id = fields.Int(allow_none=True)
     created_by = fields.Int(allow_none=True)
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 
     supplier = fields.Nested(SupplierSchema, allow_none=True)
+    driver = fields.Nested(TeamMemberSchema, allow_none=True)
+    helper1 = fields.Nested(TeamMemberSchema, allow_none=True)
+    helper2 = fields.Nested(TeamMemberSchema, allow_none=True)
     items = fields.Nested(MRNLineSchema, many=True)
 
 

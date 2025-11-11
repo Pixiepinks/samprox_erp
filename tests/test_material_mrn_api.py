@@ -2,7 +2,9 @@ import importlib
 import os
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+
+from models import TeamMember, TeamMemberStatus
 
 
 class MaterialMRNApiTestCase(unittest.TestCase):
@@ -31,6 +33,9 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.MRNHeader = self.app_module.MRNHeader
         self.MRNLine = self.app_module.MRNLine
         self.create_supplier_service = create_supplier_service
+        self.TeamMember = TeamMember
+        self.TeamMemberStatus = TeamMemberStatus
+        self.db = self.app_module.db
 
     def tearDown(self):
         self.app_module.db.session.remove()
@@ -55,6 +60,31 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         }
         supplier = self.create_supplier_service(payload)
         return supplier
+
+    def _create_employee(self, reg_number="E001", name="Employee One"):
+        existing = self.TeamMember.query.filter_by(reg_number=reg_number).first()
+        if existing:
+            return existing
+
+        member = self.TeamMember(
+            reg_number=reg_number,
+            name=name,
+            join_date=date(2020, 1, 1),
+            status=self.TeamMemberStatus.ACTIVE,
+        )
+        self.db.session.add(member)
+        self.db.session.commit()
+        return member
+
+    def _apply_ownsourcing_staff(self, payload, *, include_helper2=False):
+        driver = self._create_employee("E201", "Driver Example")
+        helper1 = self._create_employee("E202", "Helper Example")
+        payload["driver_id"] = driver.id
+        payload["helper1_id"] = helper1.id
+        if include_helper2:
+            helper2 = self._create_employee("E203", "Helper Two")
+            payload["helper2_id"] = helper2.id
+        return payload
 
     def _default_payload(self):
         item = self.MaterialItem.query.filter_by(name="Wood Shaving").first()
@@ -110,6 +140,9 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(data["supplier_id"], payload["supplier_id"])
         self.assertEqual(data["sourcing_type"], payload["sourcing_type"])
         self.assertEqual(data["vehicle_no"], payload["vehicle_no"])
+        self.assertIsNone(data.get("driver_id"))
+        self.assertIsNone(data.get("helper1_id"))
+        self.assertIsNone(data.get("helper2_id"))
 
         self.assertIn("items", data)
         self.assertEqual(len(data["items"]), 1)
@@ -128,6 +161,9 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertAlmostEqual(float(mrn.qty_ton), 12.345)
         self.assertEqual(mrn.sourcing_type, payload["sourcing_type"])
         self.assertEqual(mrn.vehicle_no, payload["vehicle_no"])
+        self.assertIsNone(mrn.driver)
+        self.assertIsNone(mrn.helper1)
+        self.assertIsNone(mrn.helper2)
 
         self.assertEqual(len(mrn.items), 1)
         line = mrn.items[0]
@@ -247,22 +283,50 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         payload = self._default_payload()
         payload["sourcing_type"] = "Ownsourcing"
         payload["vehicle_no"] = "LI-1795"
+        self._apply_ownsourcing_staff(payload)
 
         response = self.client.post("/api/material/mrn", json=payload)
         self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
         data = response.get_json()
         self.assertEqual(data["vehicle_no"], "LI-1795")
         self.assertEqual(data["sourcing_type"], "Ownsourcing")
+        self.assertEqual(data.get("driver_id"), payload["driver_id"])
+        self.assertEqual(data.get("helper1_id"), payload["helper1_id"])
 
     def test_invalid_internal_vehicle_rejected(self):
         payload = self._default_payload()
         payload["sourcing_type"] = "Ownsourcing"
         payload["vehicle_no"] = "INVALID-123"
+        self._apply_ownsourcing_staff(payload)
 
         response = self.client.post("/api/material/mrn", json=payload)
         self.assertEqual(response.status_code, 400)
         data = response.get_json()
         self.assertIn("vehicle_no", data.get("errors", {}))
+
+    def test_driver_required_for_ownsourcing(self):
+        payload = self._default_payload()
+        payload["sourcing_type"] = "Ownsourcing"
+        payload["vehicle_no"] = "LI-1795"
+        helper1 = self._create_employee("E302", "Helper Alpha")
+        payload["helper1_id"] = helper1.id
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("driver_id", data.get("errors", {}))
+
+    def test_helper1_required_for_ownsourcing(self):
+        payload = self._default_payload()
+        payload["sourcing_type"] = "Ownsourcing"
+        payload["vehicle_no"] = "LI-1795"
+        driver = self._create_employee("E303", "Driver Alpha")
+        payload["driver_id"] = driver.id
+
+        response = self.client.post("/api/material/mrn", json=payload)
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("helper1_id", data.get("errors", {}))
 
     def test_supplier_vehicle_mismatch_rejected(self):
         supplier = self.create_supplier_service(

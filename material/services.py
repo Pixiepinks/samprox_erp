@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import MaterialItem, MRNHeader, MRNLine, Supplier
+from models import MaterialItem, MRNHeader, MRNLine, Supplier, TeamMember, TeamMemberStatus
 
 SUPPLIER_CATEGORIES = {
     "Raw Material",
@@ -283,6 +283,9 @@ def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[M
     stmt = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
+            joinedload(MRNHeader.driver),
+            joinedload(MRNHeader.helper1),
+            joinedload(MRNHeader.helper2),
             joinedload(MRNHeader.items).joinedload(MRNLine.item),
         )
         .order_by(MRNHeader.date.desc(), MRNHeader.created_at.desc())
@@ -408,6 +411,47 @@ def _decimal_field(
     return numeric
 
 
+def _resolve_team_member(
+    value: Any,
+    field: str,
+    errors: Dict[str, str],
+    *,
+    required: bool,
+    required_message: str,
+    not_found_message: str,
+    inactive_message: str,
+) -> Optional[TeamMember]:
+    text_value = "" if value is None else str(value).strip()
+    if not text_value:
+        if required:
+            errors[field] = required_message
+        return None
+
+    try:
+        member_id = int(text_value)
+    except (TypeError, ValueError):
+        errors[field] = required_message
+        return None
+
+    member = TeamMember.query.get(member_id)
+    if not member:
+        errors[field] = not_found_message
+        return None
+
+    status = getattr(member, "status", None)
+    if status is not None:
+        status_text = (
+            status.value
+            if isinstance(status, TeamMemberStatus)
+            else str(status).strip()
+        )
+        if status_text and status_text.lower() != TeamMemberStatus.ACTIVE.value.lower():
+            errors[field] = inactive_message
+            return None
+
+    return member
+
+
 def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> MRNHeader:
     errors: Dict[str, str] = {}
 
@@ -456,6 +500,41 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
             )
             if isinstance(value, str) and value.strip()
         }
+
+    driver = None
+    helper1 = None
+    helper2 = None
+    if sourcing_type == "Ownsourcing":
+        driver = _resolve_team_member(
+            payload.get("driver_id"),
+            "driver_id",
+            errors,
+            required=True,
+            required_message="Select a driver.",
+            not_found_message="Selected driver not found.",
+            inactive_message="Selected driver is not active.",
+        )
+        helper1 = _resolve_team_member(
+            payload.get("helper1_id"),
+            "helper1_id",
+            errors,
+            required=True,
+            required_message="Select Helper 1.",
+            not_found_message="Selected helper not found.",
+            inactive_message="Selected helper is not active.",
+        )
+        helper2_raw = payload.get("helper2_id")
+        helper2_text = "" if helper2_raw is None else str(helper2_raw).strip()
+        if helper2_text:
+            helper2 = _resolve_team_member(
+                helper2_raw,
+                "helper2_id",
+                errors,
+                required=False,
+                required_message="Select Helper 2.",
+                not_found_message="Selected helper not found.",
+                inactive_message="Selected helper is not active.",
+            )
 
     vehicle_no_raw = (payload.get("vehicle_no") or "").strip()
     vehicle_no = vehicle_no_raw or None
@@ -634,6 +713,9 @@ def create_mrn(payload: Dict[str, Any], *, created_by: Optional[int] = None) -> 
         weigh_out_time=weigh_out_time,
         security_officer_name=security_officer_name,
         authorized_person_name=authorized_person_name,
+        driver=driver,
+        helper1=helper1,
+        helper2=helper2,
         created_by=created_by,
     )
 
@@ -677,6 +759,9 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
     mrn = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
+            joinedload(MRNHeader.driver),
+            joinedload(MRNHeader.helper1),
+            joinedload(MRNHeader.helper2),
             joinedload(MRNHeader.items).joinedload(MRNLine.item),
         )
         .filter(MRNHeader.id == mrn_uuid)

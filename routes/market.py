@@ -16,6 +16,9 @@ from models import (
     TeamMember,
 )
 
+
+INTERNAL_VEHICLE_NUMBERS = {"LI-1795", "LB-3237"}
+
 bp = Blueprint("market", __name__, url_prefix="/api/market")
 
 
@@ -31,6 +34,7 @@ def _serialize_sale_entry(entry, sale_type: str):
     }
 
     if sale_type == "actual":
+        mileage = getattr(entry, "mileage_km", None)
         payload.update(
             {
                 "delivery_note_number": getattr(entry, "delivery_note_number", None),
@@ -38,6 +42,11 @@ def _serialize_sale_entry(entry, sale_type: str):
                 "loader1_id": getattr(entry, "loader1_id", None),
                 "loader2_id": getattr(entry, "loader2_id", None),
                 "loader3_id": getattr(entry, "loader3_id", None),
+                "vehicle_number": getattr(entry, "vehicle_number", None),
+                "driver_id": getattr(entry, "driver_id", None),
+                "helper1_id": getattr(entry, "helper1_id", None),
+                "helper2_id": getattr(entry, "helper2_id", None),
+                "mileage_km": float(mileage) if mileage is not None else None,
             }
         )
 
@@ -96,6 +105,9 @@ def _parse_sale_payload(payload):
     )
 
     if sale_type == "actual":
+        requires_transport_details = (
+            customer.transport_mode == CustomerTransportMode.samprox_lorry
+        )
 
         def _extract_text(field_name: str, label: str, required: bool = False) -> str | None:
             raw_value = payload.get(field_name)
@@ -104,11 +116,18 @@ def _parse_sale_payload(payload):
                 raise ValueError(f"{label} is required for actual sale entries.")
             return value or None
 
-        def _parse_loader(field_name: str, label: str, required: bool = False) -> int | None:
+        def _parse_team_member(
+            field_name: str,
+            label: str,
+            required: bool = False,
+            missing_message: str | None = None,
+        ) -> int | None:
             raw_value = payload.get(field_name)
             if raw_value in (None, ""):
                 if required:
-                    raise ValueError(f"{label} is required for actual sale entries.")
+                    raise ValueError(
+                        missing_message or f"{label} is required for actual sale entries."
+                    )
                 return None
 
             try:
@@ -121,12 +140,93 @@ def _parse_sale_payload(payload):
                 raise ValueError(f"{label} must reference an existing team member.")
             return loader.id
 
+        def _parse_vehicle_number(
+            field_name: str,
+            label: str,
+            required: bool = False,
+            missing_message: str | None = None,
+        ) -> str | None:
+            raw_value = payload.get(field_name)
+            value = (raw_value or "").strip()
+            if not value:
+                if required:
+                    raise ValueError(
+                        missing_message or f"{label} is required for actual sale entries."
+                    )
+                return None
+
+            normalized = value.upper()
+            if normalized not in INTERNAL_VEHICLE_NUMBERS:
+                allowed = ", ".join(sorted(INTERNAL_VEHICLE_NUMBERS))
+                raise ValueError(f"{label} must be one of: {allowed}.")
+            return normalized
+
+        def _parse_mileage(
+            field_name: str,
+            label: str,
+            required: bool = False,
+            missing_message: str | None = None,
+        ) -> float | None:
+            raw_value = payload.get(field_name)
+            if raw_value is None:
+                if required:
+                    raise ValueError(
+                        missing_message or f"{label} is required for actual sale entries."
+                    )
+                return None
+
+            if isinstance(raw_value, str):
+                stripped = raw_value.strip()
+                if not stripped:
+                    if required:
+                        raise ValueError(
+                            missing_message
+                            or f"{label} is required for actual sale entries."
+                        )
+                    return None
+                raw_value = stripped
+
+            try:
+                mileage = float(raw_value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{label} must be a non-negative number.") from None
+
+            if mileage < 0:
+                raise ValueError(f"{label} must be a non-negative number.")
+
+            return mileage
+
         try:
             delivery_note_number = _extract_text("delivery_note_number", "Delivery Note No", required=True)
             weigh_slip_number = _extract_text("weigh_slip_number", "Weigh Slip No")
-            loader1_id = _parse_loader("loader1_id", "Loader 1 Name", required=True)
-            loader2_id = _parse_loader("loader2_id", "Loader 2 Name")
-            loader3_id = _parse_loader("loader3_id", "Loader 3 Name")
+            loader1_id = _parse_team_member("loader1_id", "Loader 1 Name", required=True)
+            loader2_id = _parse_team_member("loader2_id", "Loader 2 Name")
+            loader3_id = _parse_team_member("loader3_id", "Loader 3 Name")
+            vehicle_number = _parse_vehicle_number(
+                "vehicle_number",
+                "Vehicle No",
+                required=requires_transport_details,
+                missing_message="Vehicle No is required when the customer's transport mode is Samprox lorry.",
+            )
+            driver_id = _parse_team_member(
+                "driver_id",
+                "Driver Name",
+                required=requires_transport_details,
+                missing_message="Driver Name is required when the customer's transport mode is Samprox lorry.",
+            )
+            helper1_transport_id = _parse_team_member(
+                "helper1_id",
+                "Helper 1 Name",
+                required=requires_transport_details,
+                missing_message="Helper 1 Name is required when the customer's transport mode is Samprox lorry.",
+            )
+            helper2_transport_id = _parse_team_member("helper2_id", "Helper 2 Name")
+            mileage_km = _parse_mileage(
+                "mileage_km",
+                "Mileage (Km)",
+                required=requires_transport_details,
+                missing_message="Mileage (Km) is required when the customer's transport mode is Samprox lorry.",
+            )
         except ValueError as error:
             return None, None, None, (jsonify({"msg": str(error)}), 400)
 
@@ -136,6 +236,11 @@ def _parse_sale_payload(payload):
             loader1_id=loader1_id,
             loader2_id=loader2_id,
             loader3_id=loader3_id,
+            vehicle_number=vehicle_number,
+            driver_id=driver_id,
+            helper1_id=helper1_transport_id,
+            helper2_id=helper2_transport_id,
+            mileage_km=mileage_km,
         )
 
     return sale_type, amount, entry_kwargs, None

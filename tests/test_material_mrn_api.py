@@ -279,6 +279,53 @@ class MaterialMRNApiTestCase(unittest.TestCase):
         self.assertEqual(len(search_data), 1)
         self.assertEqual(search_data[0]["mrn_no"], "MRN-002")
 
+    def test_list_mrn_filters_by_date_range(self):
+        self._create_mrn()
+        in_range = self._create_mrn(
+            {
+                "mrn_no": "MRN-010",
+                "date": "2024-08-12",
+                "weighing_slip_no": "WS-9010",
+            }
+        )
+        out_of_range = self._create_mrn(
+            {
+                "mrn_no": "MRN-020",
+                "date": "2024-07-30",
+                "weighing_slip_no": "WS-9020",
+            }
+        )
+
+        response = self.client.get(
+            "/api/material/mrn",
+            query_string={"start_date": "2024-08-11", "end_date": "2024-08-15"},
+        )
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        data = response.get_json()
+        self.assertGreaterEqual(len(data), 1)
+        self.assertTrue(all("2024-08-11" <= entry["date"] <= "2024-08-15" for entry in data))
+        self.assertIn(in_range["mrn_no"], {entry["mrn_no"] for entry in data})
+        self.assertNotIn(out_of_range["mrn_no"], {entry["mrn_no"] for entry in data})
+
+    def test_list_mrn_rejects_invalid_date_filters(self):
+        response = self.client.get(
+            "/api/material/mrn",
+            query_string={"start_date": "2024-13-01"},
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIn("errors", data)
+        self.assertIn("start_date", data["errors"])
+
+        range_response = self.client.get(
+            "/api/material/mrn",
+            query_string={"start_date": "2024-08-20", "end_date": "2024-08-10"},
+        )
+        self.assertEqual(range_response.status_code, 400)
+        range_data = range_response.get_json()
+        self.assertIn("errors", range_data)
+        self.assertIn("date_range", range_data["errors"])
+
     def test_create_mrn_with_internal_vehicle(self):
         payload = self._default_payload()
         payload["sourcing_type"] = "Ownsourcing"

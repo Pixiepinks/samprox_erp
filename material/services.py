@@ -279,7 +279,13 @@ def create_item(payload: Dict[str, Any]) -> MaterialItem:
     return item
 
 
-def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[MRNHeader]:
+def list_recent_mrns(
+    *,
+    search: Optional[str] = None,
+    limit: int = 20,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> list[MRNHeader]:
     stmt = (
         MRNHeader.query.options(
             joinedload(MRNHeader.supplier),
@@ -290,6 +296,12 @@ def list_recent_mrns(*, search: Optional[str] = None, limit: int = 20) -> list[M
         )
         .order_by(MRNHeader.date.desc(), MRNHeader.created_at.desc())
     )
+
+    if start_date:
+        stmt = stmt.filter(MRNHeader.date >= start_date)
+
+    if end_date:
+        stmt = stmt.filter(MRNHeader.date <= end_date)
 
     if search:
         term = search.strip()

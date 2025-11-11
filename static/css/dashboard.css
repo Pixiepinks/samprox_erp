@@ -1723,6 +1723,41 @@ body.modal-open {
     align-items: center;
 }
 
+.material-receipts-card__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+}
+
+.material-receipts-card__filter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+    color: #475569;
+}
+
+.material-receipts-card__filter-label {
+    font-weight: 500;
+}
+
+.material-receipts-card__filter input[type="date"] {
+    flex: 1 1 160px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 12px;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.95rem;
+    background: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.material-receipts-card__filter input[type="date"]:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
 .material-receipts-card__actions {
     display: flex;
     gap: 0.5rem;

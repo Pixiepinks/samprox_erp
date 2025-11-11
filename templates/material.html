@@ -163,6 +163,16 @@
                     <a class="button" href="{{ url_for('ui.material_mrn_new_page') }}">Record material receipt</a>
                 </div>
                 <form class="material-receipts-card__search" id="mrn-search-form">
+                    <div class="material-receipts-card__filters">
+                        <label class="material-receipts-card__filter">
+                            <span class="material-receipts-card__filter-label">Start date</span>
+                            <input id="mrn-start-date" name="start-date" type="date" />
+                        </label>
+                        <label class="material-receipts-card__filter">
+                            <span class="material-receipts-card__filter-label">End date</span>
+                            <input id="mrn-end-date" name="end-date" type="date" />
+                        </label>
+                    </div>
                     <label class="sr-only" for="mrn-search-input">Search material receipts</label>
                     <input
                         id="mrn-search-input"
@@ -436,6 +446,8 @@
         const mrnSearchForm = document.getElementById("mrn-search-form");
         const mrnSearchInput = document.getElementById("mrn-search-input");
         const mrnClearButton = document.getElementById("mrn-clear-button");
+        const mrnStartDateInput = document.getElementById("mrn-start-date");
+        const mrnEndDateInput = document.getElementById("mrn-end-date");
         const briquetteTableBody = document.getElementById("briquette-production-table-body");
         const briquetteTableWrapper = document.getElementById("briquette-production-table-wrapper");
         const briquetteEmptyState = document.getElementById("briquette-production-empty");
@@ -1549,7 +1561,7 @@
             mrnTableWrapper.hidden = false;
         }
 
-        async function loadMrns(query = "") {
+        async function loadMrns(queryOverride) {
             if (!mrnTableBody || !mrnEmptyState) {
                 return;
             }
@@ -1562,8 +1574,24 @@
 
             try {
                 const url = new URL("/api/material/mrn", window.location.origin);
-                if (query && query.trim()) {
-                    url.searchParams.set("q", query.trim());
+                const queryValue =
+                    typeof queryOverride === "string"
+                        ? queryOverride
+                        : mrnSearchInput
+                          ? mrnSearchInput.value
+                          : "";
+                const trimmedQuery = queryValue ? queryValue.trim() : "";
+                const startDateValue = mrnStartDateInput ? mrnStartDateInput.value : "";
+                const endDateValue = mrnEndDateInput ? mrnEndDateInput.value : "";
+
+                if (trimmedQuery) {
+                    url.searchParams.set("q", trimmedQuery);
+                }
+                if (startDateValue) {
+                    url.searchParams.set("start_date", startDateValue);
+                }
+                if (endDateValue) {
+                    url.searchParams.set("end_date", endDateValue);
                 }
                 const response = await fetch(url);
                 if (!response.ok) {
@@ -1605,6 +1633,20 @@
                 if (mrnSearchInput.value.trim() === "") {
                     loadMrns("");
                 }
+            });
+        }
+
+        if (mrnStartDateInput) {
+            mrnStartDateInput.addEventListener("change", () => {
+                const currentQuery = mrnSearchInput ? mrnSearchInput.value : "";
+                loadMrns(currentQuery);
+            });
+        }
+
+        if (mrnEndDateInput) {
+            mrnEndDateInput.addEventListener("change", () => {
+                const currentQuery = mrnSearchInput ? mrnSearchInput.value : "";
+                loadMrns(currentQuery);
             });
         }
 

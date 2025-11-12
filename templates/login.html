@@ -24,6 +24,23 @@
                     <p class="panel__subtitle">Welcome back! Sign in to continue.</p>
                 </div>
             </header>
+            <div class="voice-greeting" id="voiceGreeting" hidden>
+                <div class="voice-greeting__card" role="status" aria-live="polite">
+                    <div class="voice-greeting__equalizer" id="voiceEqualizer" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <p class="voice-greeting__text" id="voiceGreetingText">
+                        Hi, this is Maximus Samprox AICEO. Please login to the company.
+                    </p>
+                    <button type="button" class="voice-greeting__button" id="voiceEnableButton" hidden>
+                        Enable Greeting
+                    </button>
+                </div>
+            </div>
             <form class="form" id="login-form" method="post" action="/api/auth/login" novalidate>
                 <div class="alert" id="form-error" role="alert" hidden></div>
                 <div class="input-group">
@@ -112,6 +129,141 @@
                     delete submitButton.dataset.loading;
                 }
             });
+
+            const greetingSessionKey = "samprox_voice_greeting_played";
+            const greetingContainer = document.getElementById("voiceGreeting");
+            const equalizer = document.getElementById("voiceEqualizer");
+            const enableButton = document.getElementById("voiceEnableButton");
+            const greetingText = "Hi, this is Maximus Samprox AICEO. Please login to the company.";
+            const synthSupported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+            const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+            if (greetingContainer && synthSupported && !sessionStorage.getItem(greetingSessionKey)) {
+                greetingContainer.hidden = false;
+
+                const synth = window.speechSynthesis;
+
+                const startEqualizer = () => {
+                    greetingContainer.classList.remove("voice-greeting--played");
+                    greetingContainer.classList.add("voice-greeting--active");
+                    if (equalizer && !prefersReducedMotion) {
+                        equalizer.classList.add("is-active");
+                    }
+                };
+
+                const stopEqualizer = (completed) => {
+                    if (equalizer) {
+                        equalizer.classList.remove("is-active");
+                    }
+                    greetingContainer.classList.remove("voice-greeting--active");
+                    if (completed) {
+                        greetingContainer.classList.add("voice-greeting--played");
+                    }
+                };
+
+                const showEnableButton = () => {
+                    if (enableButton) {
+                        enableButton.hidden = false;
+                        enableButton.disabled = false;
+                    }
+                };
+
+                const hideEnableButton = () => {
+                    if (enableButton) {
+                        enableButton.hidden = true;
+                    }
+                };
+
+                const playGreeting = (userInitiated = false) => {
+                    if (!synthSupported) {
+                        return;
+                    }
+
+                    if (enableButton) {
+                        enableButton.disabled = true;
+                    }
+
+                    const utterance = new SpeechSynthesisUtterance(greetingText);
+                    const availableVoices = synth.getVoices();
+                    const preferredVoice =
+                        availableVoices.find((voice) => voice.lang && voice.lang.toLowerCase().startsWith("en")) ||
+                        availableVoices[0];
+
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                    }
+
+                    let started = false;
+                    let fallbackTimer;
+
+                    const clearTimers = () => {
+                        if (fallbackTimer) {
+                            window.clearTimeout(fallbackTimer);
+                            fallbackTimer = undefined;
+                        }
+                    };
+
+                    utterance.onstart = () => {
+                        started = true;
+                        clearTimers();
+                        sessionStorage.setItem(greetingSessionKey, "true");
+                        hideEnableButton();
+                        startEqualizer();
+                    };
+
+                    utterance.onend = () => {
+                        clearTimers();
+                        stopEqualizer(true);
+                        hideEnableButton();
+                    };
+
+                    utterance.onerror = () => {
+                        clearTimers();
+                        stopEqualizer(false);
+                        showEnableButton();
+                    };
+
+                    try {
+                        if (synth.speaking || synth.pending) {
+                            synth.cancel();
+                        }
+                        synth.speak(utterance);
+                    } catch (error) {
+                        stopEqualizer(false);
+                        showEnableButton();
+                        return;
+                    }
+
+                    fallbackTimer = window.setTimeout(() => {
+                        if (!started) {
+                            synth.cancel();
+                            stopEqualizer(false);
+                            showEnableButton();
+                        }
+                    }, 1600);
+                };
+
+                if (enableButton) {
+                    enableButton.addEventListener("click", () => {
+                        playGreeting(true);
+                    });
+                }
+
+                const attemptAutoPlay = () => playGreeting(false);
+
+                if (synth.getVoices().length) {
+                    attemptAutoPlay();
+                } else {
+                    const handleVoices = () => {
+                        attemptAutoPlay();
+                    };
+
+                    synth.addEventListener("voiceschanged", handleVoices, { once: true });
+                    window.setTimeout(attemptAutoPlay, 1200);
+                }
+            } else if (greetingContainer) {
+                greetingContainer.hidden = true;
+            }
         });
     </script>
 </body>

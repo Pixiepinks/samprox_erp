@@ -38,9 +38,6 @@
                         <span></span>
                         <span></span>
                     </div>
-                    <button type="button" class="voice-greeting__button" id="voiceEnableButton" hidden>
-                        Enable Greeting
-                    </button>
                 </div>
             </div>
             <form class="form" id="login-form" method="post" action="/api/auth/login" novalidate>
@@ -134,7 +131,6 @@
 
             const greetingContainer = document.getElementById("voiceGreeting");
             const equalizer = document.getElementById("voiceEqualizer");
-            const enableButton = document.getElementById("voiceEnableButton");
             const greetingText = "Hi, this is Maximus Samprox Your A I C E O. Please Enter Email & Password login to the company.";
             const synthSupported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
             const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -162,26 +158,9 @@
                     }
                 };
 
-                const showEnableButton = () => {
-                    if (enableButton) {
-                        enableButton.hidden = false;
-                        enableButton.disabled = false;
-                    }
-                };
-
-                const hideEnableButton = () => {
-                    if (enableButton) {
-                        enableButton.hidden = true;
-                    }
-                };
-
-                const playGreeting = (userInitiated = false) => {
+                const playGreeting = () => {
                     if (!synthSupported) {
                         return;
-                    }
-
-                    if (enableButton) {
-                        enableButton.disabled = true;
                     }
 
                     const utterance = new SpeechSynthesisUtterance(greetingText);
@@ -207,20 +186,17 @@
                     utterance.onstart = () => {
                         started = true;
                         clearTimers();
-                        hideEnableButton();
                         startEqualizer();
                     };
 
                     utterance.onend = () => {
                         clearTimers();
                         stopEqualizer(true);
-                        hideEnableButton();
                     };
 
                     utterance.onerror = () => {
                         clearTimers();
                         stopEqualizer(false);
-                        showEnableButton();
                     };
 
                     try {
@@ -230,7 +206,6 @@
                         synth.speak(utterance);
                     } catch (error) {
                         stopEqualizer(false);
-                        showEnableButton();
                         return;
                     }
 
@@ -238,18 +213,11 @@
                         if (!started) {
                             synth.cancel();
                             stopEqualizer(false);
-                            showEnableButton();
                         }
                     }, 1600);
                 };
 
-                if (enableButton) {
-                    enableButton.addEventListener("click", () => {
-                        playGreeting(true);
-                    });
-                }
-
-                const attemptAutoPlay = () => playGreeting(false);
+                const attemptAutoPlay = () => playGreeting();
 
                 if (synth.getVoices().length) {
                     attemptAutoPlay();

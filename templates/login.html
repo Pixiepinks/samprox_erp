@@ -25,7 +25,12 @@
                 </div>
             </header>
             <div class="voice-greeting" id="voiceGreeting" hidden>
-                <div class="voice-greeting__card" role="status" aria-live="polite">
+                <div
+                    class="voice-greeting__card"
+                    role="status"
+                    aria-live="polite"
+                    aria-label="Voice greeting from Maximus Samprox AICEO"
+                >
                     <div class="voice-greeting__equalizer" id="voiceEqualizer" aria-hidden="true">
                         <span></span>
                         <span></span>
@@ -33,9 +38,6 @@
                         <span></span>
                         <span></span>
                     </div>
-                    <p class="voice-greeting__text" id="voiceGreetingText">
-                        Hi, this is Maximus Samprox AICEO. Please login to the company.
-                    </p>
                     <button type="button" class="voice-greeting__button" id="voiceEnableButton" hidden>
                         Enable Greeting
                     </button>
@@ -130,7 +132,6 @@
                 }
             });
 
-            const greetingSessionKey = "samprox_voice_greeting_played";
             const greetingContainer = document.getElementById("voiceGreeting");
             const equalizer = document.getElementById("voiceEqualizer");
             const enableButton = document.getElementById("voiceEnableButton");
@@ -138,7 +139,7 @@
             const synthSupported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
             const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-            if (greetingContainer && synthSupported && !sessionStorage.getItem(greetingSessionKey)) {
+            if (greetingContainer && synthSupported) {
                 greetingContainer.hidden = false;
 
                 const synth = window.speechSynthesis;
@@ -206,7 +207,6 @@
                     utterance.onstart = () => {
                         started = true;
                         clearTimers();
-                        sessionStorage.setItem(greetingSessionKey, "true");
                         hideEnableButton();
                         startEqualizer();
                     };

@@ -234,18 +234,27 @@ class ResponsibilityTask(db.Model):
     detail = db.Column(db.Text)
     scheduled_for = db.Column(db.Date, nullable=False)
     recurrence = db.Column(
-        db.Enum(ResponsibilityRecurrence),
+        db.Enum(
+            ResponsibilityRecurrence,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
         nullable=False,
         default=ResponsibilityRecurrence.DOES_NOT_REPEAT,
     )
     custom_weekdays = db.Column(db.String(120))
     status = db.Column(
-        db.Enum(ResponsibilityTaskStatus),
+        db.Enum(
+            ResponsibilityTaskStatus,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
         nullable=False,
         default=ResponsibilityTaskStatus.PLANNED,
     )
     action = db.Column(
-        db.Enum(ResponsibilityAction),
+        db.Enum(
+            ResponsibilityAction,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
         nullable=False,
         default=ResponsibilityAction.DONE,
     )

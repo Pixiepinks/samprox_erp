@@ -105,6 +105,72 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIn("5D Action: Delegated", self.mail_extension.sent_messages[0].body)
         self.assertIn("Responsibility No: 0001", self.mail_extension.sent_messages[0].body)
 
+    def test_update_responsibility_updates_existing_task(self):
+        scheduled_for = date.today().isoformat()
+        create_payload = {
+            "title": "Production sync",
+            "description": "Review production metrics.",
+            "detail": "Discuss line throughput and downtime logs.",
+            "scheduledFor": scheduled_for,
+            "recurrence": "custom",
+            "customWeekdays": [0, 2],
+            "recipientEmail": "owner@example.com",
+            "action": "delegated",
+            "delegatedToId": self.secondary_manager.id,
+        }
+
+        create_response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=create_payload,
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        created_data = create_response.get_json()
+        task_id = created_data["id"]
+
+        update_payload = {
+            "title": "Production sync updated",
+            "description": "Review metrics and staffing needs.",
+            "detail": "Ensure corrective actions are documented.",
+            "scheduledFor": scheduled_for,
+            "recurrence": "does_not_repeat",
+            "customWeekdays": [],
+            "recipientEmail": "team@example.com",
+            "action": "done",
+            "actionNotes": "Follow up next month.",
+            "assigneeId": self.secondary_manager.id,
+            "status": created_data.get("status", "planned"),
+        }
+
+        update_response = self.client.put(
+            f"/api/responsibilities/{task_id}",
+            headers=self.auth_headers,
+            json=update_payload,
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        updated = update_response.get_json()
+        self.assertEqual(updated["title"], "Production sync updated")
+        self.assertEqual(updated["recurrence"], "does_not_repeat")
+        self.assertEqual(updated["recipientEmail"], "team@example.com")
+        self.assertEqual(updated["actionNotes"], "Follow up next month.")
+        self.assertIsNotNone(updated["assignee"])
+        self.assertIsNone(updated.get("delegatedTo"))
+
+        task = self.app_module.ResponsibilityTask.query.get(task_id)
+        self.assertEqual(task.title, "Production sync updated")
+        self.assertEqual(task.detail, "Ensure corrective actions are documented.")
+        self.assertEqual(task.recurrence.value, "does_not_repeat")
+        self.assertIsNone(task.delegated_to_id)
+        self.assertIsNone(task.custom_weekdays)
+        self.assertEqual(task.action.value, "done")
+        self.assertEqual(task.action_notes, "Follow up next month.")
+        self.assertEqual(task.assignee_id, self.secondary_manager.id)
+
+        # Updating should not send another email
+        self.assertEqual(len(self.mail_extension.sent_messages), 1)
+
     def test_weekly_plan_email_summarizes_occurrences(self):
         monday = date.today()
         monday -= timedelta(days=monday.weekday())

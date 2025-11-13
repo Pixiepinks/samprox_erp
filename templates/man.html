@@ -137,6 +137,7 @@
                                 <th scope="col">5D Action</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Created</th>
+                                <th scope="col">Update</th>
                             </tr>
                         </thead>
                         <tbody id="responsibility-table-body"></tbody>
@@ -1259,6 +1260,7 @@
         const responsibilityWeeklySendButton = document.getElementById("responsibility-weekly-send");
         const responsibilityCreateButton = document.getElementById("responsibility-create-button");
         const responsibilityModal = document.getElementById("responsibility-modal");
+        const responsibilityModalTitle = document.getElementById("responsibility-modal-title");
         const responsibilityModalClose = document.getElementById("responsibility-modal-close");
         const responsibilityCancelButton = document.getElementById("responsibility-cancel");
         const responsibilityForm = document.getElementById("responsibility-form");
@@ -1285,6 +1287,12 @@
         const responsibilityActionNotesSave = document.getElementById("responsibility-action-notes-save");
         const responsibilityActionNotesCancel = document.getElementById("responsibility-action-notes-cancel");
         const responsibilityActionNotesOverlay = responsibilityActionNotesModal?.querySelector("[data-modal-dismiss]");
+        const responsibilityModalDefaultTitle =
+            responsibilityModalTitle?.textContent?.trim() || "New responsibility";
+        const responsibilitySubmitDefaultText =
+            responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
+        let responsibilityEditingTaskId = null;
+        let responsibilityEditingTask = null;
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
             "Monday",
@@ -1570,6 +1578,43 @@
             });
         };
 
+        const resetResponsibilityFormState = () => {
+            if (responsibilityForm) {
+                responsibilityForm.reset();
+            }
+            responsibilityEditingTaskId = null;
+            responsibilityEditingTask = null;
+            if (responsibilityModalTitle) {
+                responsibilityModalTitle.textContent = responsibilityModalDefaultTitle;
+            }
+            if (responsibilitySubmitButton) {
+                responsibilitySubmitButton.textContent = responsibilitySubmitDefaultText;
+                responsibilitySubmitButton.disabled = false;
+            }
+            if (responsibilityCustomWeekdays) {
+                responsibilityCustomWeekdays
+                    .querySelectorAll("input[type='checkbox']")
+                    .forEach((input) => {
+                        input.checked = false;
+                    });
+            }
+            if (responsibilityActionSelect) {
+                responsibilityActionSelect.value = "done";
+            }
+            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+            updateDelegatedVisibility(responsibilityActionPreviousValue);
+            if (responsibilityActionNotesInput) {
+                responsibilityActionNotesInput.value = "";
+            }
+            if (responsibilityActionNotesTextarea) {
+                responsibilityActionNotesTextarea.value = "";
+            }
+            toggleCustomWeekdayFieldset();
+            updateRecurrenceOptionLabels();
+            clearResponsibilityFormError();
+            closeResponsibilityActionNotesModal();
+        };
+
         const closeResponsibilityModal = () => {
             if (!responsibilityModal) {
                 return;
@@ -1578,46 +1623,105 @@
             responsibilityModal.setAttribute("hidden", "");
             responsibilityModal.setAttribute("aria-hidden", "true");
             document.body.classList.remove("modal-open");
-            if (responsibilityForm) {
-                responsibilityForm.reset();
-            }
-            if (responsibilityActionSelect) {
-                responsibilityActionSelect.value = "done";
-            }
-            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
-            updateDelegatedVisibility(responsibilityActionPreviousValue);
-            if (responsibilityActionNotesInput) {
-                responsibilityActionNotesInput.value = "";
-            }
-            if (responsibilityDetailInput) {
-                responsibilityDetailInput.value = "";
-            }
-            closeResponsibilityActionNotesModal();
-            toggleCustomWeekdayFieldset();
-            clearResponsibilityFormError();
+            resetResponsibilityFormState();
         };
 
-        const openResponsibilityModal = () => {
+        const openResponsibilityModal = (task = null) => {
             if (!responsibilityModal) {
                 return;
             }
-            if (responsibilityForm) {
-                responsibilityForm.reset();
+            resetResponsibilityFormState();
+
+            const isEditing = task && typeof task === "object";
+
+            if (isEditing) {
+                const parsedId = Number.parseInt(task.id, 10);
+                responsibilityEditingTaskId = Number.isNaN(parsedId) ? null : parsedId;
+                responsibilityEditingTask = task;
+                if (responsibilityModalTitle) {
+                    responsibilityModalTitle.textContent = "Update responsibility";
+                }
+                if (responsibilitySubmitButton) {
+                    responsibilitySubmitButton.textContent = "Update responsibility";
+                }
+                if (responsibilityTitleInput) {
+                    responsibilityTitleInput.value = task.title ?? "";
+                }
+                if (responsibilityDescriptionInput) {
+                    responsibilityDescriptionInput.value = task.description ?? "";
+                }
+                if (responsibilityDetailInput) {
+                    responsibilityDetailInput.value = task.detail ?? "";
+                }
+                if (responsibilityDateInput) {
+                    responsibilityDateInput.value = task.scheduledFor ?? "";
+                }
+                if (responsibilityRecurrenceSelect) {
+                    const recurrenceValue = task.recurrence || "does_not_repeat";
+                    responsibilityRecurrenceSelect.value = recurrenceValue;
+                }
+                toggleCustomWeekdayFieldset();
+
+                if (responsibilityCustomWeekdays) {
+                    const selectedWeekdays = new Set(
+                        Array.isArray(task.customWeekdays)
+                            ? task.customWeekdays.map((value) => Number.parseInt(value, 10))
+                            : [],
+                    );
+                    responsibilityCustomWeekdays
+                        .querySelectorAll("input[type='checkbox']")
+                        .forEach((input) => {
+                            const inputValue = Number.parseInt(input.value, 10);
+                            input.checked = selectedWeekdays.has(inputValue);
+                        });
+                }
+
+                const assignerNameFallback = (user) => user?.name || user?.email || "";
+
+                const ensureSelectOption = (select, user) => {
+                    if (!select || !user || !user.id) {
+                        return;
+                    }
+                    const value = String(user.id);
+                    let option = select.querySelector(`option[value="${value}"]`);
+                    if (!option) {
+                        option = document.createElement("option");
+                        option.value = value;
+                        option.textContent = assignerNameFallback(user) || value;
+                        select.appendChild(option);
+                    }
+                    select.value = value;
+                };
+
+                ensureSelectOption(responsibilityAssigneeSelect, task.assignee);
+                ensureSelectOption(responsibilityDelegatedSelect, task.delegatedTo);
+
+                const actionValue = task.action || "done";
+                if (responsibilityActionSelect) {
+                    responsibilityActionSelect.value = actionValue;
+                }
+                responsibilityActionPreviousValue = actionValue;
+                updateDelegatedVisibility(actionValue);
+
+                if (responsibilityActionNotesInput) {
+                    responsibilityActionNotesInput.value = task.actionNotes || "";
+                }
+                if (responsibilityActionNotesTextarea) {
+                    responsibilityActionNotesTextarea.value = task.actionNotes || "";
+                }
+
+                if (responsibilityRecipientInput) {
+                    responsibilityRecipientInput.value = task.recipientEmail || "";
+                }
+            } else {
+                if (responsibilityDateInput) {
+                    const today = new Date();
+                    responsibilityDateInput.value = toIsoDateString(today);
+                }
+                responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+                updateDelegatedVisibility(responsibilityActionPreviousValue);
             }
-            if (responsibilityActionSelect) {
-                responsibilityActionSelect.value = "done";
-            }
-            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
-            updateDelegatedVisibility(responsibilityActionPreviousValue);
-            if (responsibilityActionNotesInput) {
-                responsibilityActionNotesInput.value = "";
-            }
-            clearResponsibilityFormError();
-            toggleCustomWeekdayFieldset();
-            if (responsibilityDateInput) {
-                const today = new Date();
-                responsibilityDateInput.value = toIsoDateString(today);
-            }
+
             updateRecurrenceOptionLabels();
             responsibilityModal.removeAttribute("hidden");
             responsibilityModal.setAttribute("aria-hidden", "false");
@@ -1674,6 +1778,22 @@
                     }
                     row.appendChild(cell);
                 });
+
+                const actionsCell = document.createElement("td");
+                actionsCell.classList.add("responsibility-table__actions");
+
+                const updateButton = document.createElement("button");
+                updateButton.type = "button";
+                updateButton.className = "button button--secondary button--small responsibility-table__update-button";
+                updateButton.textContent = "Update";
+                if (task?.id) {
+                    updateButton.dataset.responsibilityId = String(task.id);
+                } else {
+                    updateButton.disabled = true;
+                }
+
+                actionsCell.appendChild(updateButton);
+                row.appendChild(actionsCell);
 
                 fragment.appendChild(row);
             });
@@ -1812,6 +1932,7 @@
                 return;
             }
 
+            const isEditingResponsibility = responsibilityEditingTaskId !== null;
             const formData = new FormData(responsibilityForm);
             const payload = {
                 title: formData.get("title")?.toString().trim(),
@@ -1859,21 +1980,33 @@
 
             if (actionNotesValue) {
                 payload.actionNotes = actionNotesValue;
+            } else if (isEditingResponsibility) {
+                payload.actionNotes = "";
             }
 
-            if (payload.recurrence === "custom") {
-                payload.customWeekdays = gatherCustomWeekdays();
+            payload.customWeekdays =
+                payload.recurrence === "custom" ? gatherCustomWeekdays() : [];
+
+            if (isEditingResponsibility && responsibilityEditingTask?.status) {
+                payload.status = responsibilityEditingTask.status;
             }
+
+            const requestUrl = isEditingResponsibility
+                ? `/api/responsibilities/${responsibilityEditingTaskId}`
+                : "/api/responsibilities";
+            const requestMethod = isEditingResponsibility ? "PUT" : "POST";
 
             clearResponsibilityFormError();
             if (responsibilitySubmitButton) {
                 responsibilitySubmitButton.disabled = true;
-                responsibilitySubmitButton.textContent = "Saving…";
+                responsibilitySubmitButton.textContent = isEditingResponsibility
+                    ? "Updating…"
+                    : "Saving…";
             }
 
             try {
-                const response = await fetch("/api/responsibilities", {
-                    method: "POST",
+                const response = await fetch(requestUrl, {
+                    method: requestMethod,
                     headers: { ...authHeaders, "Content-Type": "application/json" },
                     body: JSON.stringify(payload),
                 });
@@ -1887,22 +2020,31 @@
                     const messageFromResponse =
                         (typeof data?.msg === "string" && data.msg.trim()) ||
                         extractFirstErrorMessage(data?.errors);
-                    throw new Error(messageFromResponse || "Unable to save responsibility.");
+                    throw new Error(
+                        messageFromResponse ||
+                            (isEditingResponsibility
+                                ? "Unable to update responsibility."
+                                : "Unable to save responsibility."),
+                    );
                 }
                 closeResponsibilityModal();
-                setPlanMessage(
-                    responsibilityMessage,
-                    "Responsibility saved and notification sent.",
-                    "success",
-                );
+                const successMessage = isEditingResponsibility
+                    ? "Responsibility updated."
+                    : "Responsibility saved and notification sent.";
+                setPlanMessage(responsibilityMessage, successMessage, "success");
                 await fetchResponsibilities();
             } catch (error) {
                 console.error("Failed to save responsibility", error);
-                showResponsibilityFormError(error?.message || "Unable to save responsibility.");
+                const fallbackError = isEditingResponsibility
+                    ? "Unable to update responsibility."
+                    : "Unable to save responsibility.";
+                showResponsibilityFormError(error?.message || fallbackError);
             } finally {
                 if (responsibilitySubmitButton) {
                     responsibilitySubmitButton.disabled = false;
-                    responsibilitySubmitButton.textContent = "Save responsibility";
+                    responsibilitySubmitButton.textContent = isEditingResponsibility
+                        ? "Update responsibility"
+                        : "Save responsibility";
                 }
             }
         };
@@ -1936,7 +2078,41 @@
             responsibilityForm.addEventListener("submit", submitResponsibilityForm);
         }
 
-        responsibilityCreateButton?.addEventListener("click", openResponsibilityModal);
+        responsibilityCreateButton?.addEventListener("click", () => {
+            openResponsibilityModal();
+        });
+
+        responsibilityTableBody?.addEventListener("click", (event) => {
+            const { target } = event;
+            if (!(target instanceof Element)) {
+                return;
+            }
+            const updateButton = target.closest(".responsibility-table__update-button");
+            if (!updateButton) {
+                return;
+            }
+            const responsibilityId = Number.parseInt(
+                updateButton.dataset.responsibilityId || "",
+                10,
+            );
+            if (Number.isNaN(responsibilityId)) {
+                return;
+            }
+            const taskToEdit = responsibilityTasks.find((task) => {
+                const taskId = Number.parseInt(task?.id, 10);
+                return !Number.isNaN(taskId) && taskId === responsibilityId;
+            });
+            if (!taskToEdit) {
+                setPlanMessage(
+                    responsibilityMessage,
+                    "Unable to load the selected responsibility for editing.",
+                    "error",
+                );
+                return;
+            }
+            openResponsibilityModal(taskToEdit);
+        });
+
         responsibilityModalClose?.addEventListener("click", closeResponsibilityModal);
         responsibilityCancelButton?.addEventListener("click", closeResponsibilityModal);
         responsibilityModalOverlay?.addEventListener("click", closeResponsibilityModal);

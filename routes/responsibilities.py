@@ -281,6 +281,78 @@ def create_task():
     return jsonify(response), 201
 
 
+@bp.put("/<int:task_id>")
+@jwt_required()
+def update_task(task_id: int):
+    """Update an existing responsibility task."""
+
+    role = _current_role()
+    if role not in _ALLOWED_CREATOR_ROLES:
+        return jsonify({"msg": "Only managers can update responsibility tasks."}), 403
+
+    task = ResponsibilityTask.query.get(task_id)
+    if not task:
+        return jsonify({"msg": "Responsibility task was not found."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        data = task_create_schema.load(payload)
+    except ValidationError as error:
+        return jsonify({"errors": error.normalized_messages()}), 422
+
+    assignee = None
+    assignee_id = data.get("assignee_id")
+    if assignee_id is not None:
+        assignee = User.query.get(assignee_id)
+        if not assignee:
+            return jsonify({"msg": "Assigned manager was not found."}), 404
+
+    delegated_to = None
+    delegated_to_id = data.get("delegated_to_id")
+    if delegated_to_id is not None:
+        delegated_to = User.query.get(delegated_to_id)
+        if not delegated_to:
+            return jsonify({"msg": "Delegated manager was not found."}), 404
+
+    recurrence = ResponsibilityRecurrence(data["recurrence"])
+    if "status" in payload:
+        status_value = data.get("status", ResponsibilityTaskStatus.PLANNED.value)
+    else:
+        current_status = getattr(task, "status", ResponsibilityTaskStatus.PLANNED)
+        status_value = (
+            current_status.value
+            if isinstance(current_status, ResponsibilityTaskStatus)
+            else ResponsibilityTaskStatus.PLANNED.value
+        )
+    status = ResponsibilityTaskStatus(status_value)
+    action = ResponsibilityAction(data["action"])
+    action_notes = data.get("action_notes")
+
+    task.title = data["title"]
+    task.description = data.get("description")
+    task.detail = data.get("detail")
+    task.scheduled_for = data["scheduled_for"]
+    task.recurrence = recurrence
+    task.status = status
+    task.action = action
+    task.action_notes = action_notes
+    task.recipient_email = data["recipient_email"]
+    task.assignee_id = assignee.id if assignee else None
+    task.delegated_to_id = delegated_to.id if delegated_to else None
+    task.update_custom_weekdays(data.get("custom_weekdays"))
+
+    error_message = "Unable to update responsibility. Please try again."
+    try:
+        db.session.commit()
+    except SQLAlchemyError as error:
+        db.session.rollback()
+        current_app.logger.exception("Failed to update responsibility task.", exc_info=error)
+        return jsonify({"msg": error_message}), 500
+
+    response = task_schema.dump(task)
+    return jsonify(response), 200
+
+
 @bp.get("")
 @jwt_required()
 def list_tasks():

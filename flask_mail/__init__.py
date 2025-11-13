@@ -346,9 +346,9 @@ class Mail:
                     server.login(username, password or "")
                 server.send_message(email_message, from_addr=sender, to_addrs=recipients)
 
-        def _should_retry(exc: Exception) -> bool:
+        def _should_retry(exc: Exception, has_alternates: bool) -> bool:
             if isinstance(exc, TimeoutError):
-                return False
+                return has_alternates
 
             if isinstance(exc, OSError):
                 fatal_errnos = {
@@ -448,7 +448,9 @@ class Mail:
 
         last_exception: Exception | None = None
         start_time = time.monotonic()
-        for target_host, target_port, ssl_enabled, tls_enabled in attempts:
+        for index, (target_host, target_port, ssl_enabled, tls_enabled) in enumerate(
+            attempts
+        ):
             if max_delivery_seconds is not None:
                 elapsed = time.monotonic() - start_time
                 if elapsed >= max_delivery_seconds:
@@ -457,7 +459,8 @@ class Mail:
                 _send_once(target_host, target_port, ssl_enabled, tls_enabled)
                 return
             except Exception as exc:
-                if not _should_retry(exc):
+                remaining_attempts = len(attempts) - index - 1
+                if not _should_retry(exc, remaining_attempts > 0):
                     raise
                 last_exception = exc
                 continue

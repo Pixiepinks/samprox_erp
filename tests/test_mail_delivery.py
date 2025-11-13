@@ -252,6 +252,46 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         self.assertEqual(smtp_mock.call_count, 1)
         smtp_ssl_mock.assert_not_called()
 
+    @patch("flask_mail.smtplib.SMTP")
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    def test_timeout_retries_remaining_hosts(self, smtp_ssl_mock, smtp_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.primary.example",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=False,
+            MAIL_ADDITIONAL_SERVERS=["smtp.backup.example"],
+        )
+
+        def _smtp_side_effect(host, port, timeout=10.0, **kwargs):
+            if host == "smtp.primary.example":
+                raise TimeoutError("Primary host timed out")
+            server = MagicMock()
+            connection = MagicMock()
+            connection.ehlo.return_value = None
+            connection.starttls.return_value = None
+            connection.login.return_value = None
+            connection.send_message.return_value = None
+            server.__enter__.return_value = connection
+            server.__exit__.return_value = False
+            return server
+
+        smtp_mock.side_effect = _smtp_side_effect
+        smtp_ssl_mock.side_effect = AssertionError("SSL fallback should not be used")
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        attempted_hosts = [call.args[0] for call in smtp_mock.call_args_list]
+        self.assertEqual(
+            attempted_hosts,
+            ["smtp.primary.example", "smtp.backup.example"],
+        )
+
+        smtp_ssl_mock.assert_not_called()
+
     @patch("flask_mail.socket.getaddrinfo")
     @patch("flask_mail.smtplib.SMTP")
     def test_ipv6_resolution_error_retries_with_ipv4(self, smtp_mock, getaddrinfo_mock):

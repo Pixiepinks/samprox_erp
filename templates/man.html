@@ -132,8 +132,6 @@
                                 <th scope="col">Assigned to</th>
                                 <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
-                                <th scope="col">Recurrence</th>
-                                <th scope="col">Recipient</th>
                                 <th scope="col">5D Action</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Created</th>
@@ -1757,8 +1755,6 @@
                     task?.assignee?.name ?? task?.assignee?.email ?? "—",
                     task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—",
                     formatResponsibilityDate(task?.scheduledFor),
-                    task?.recurrenceLabel ?? task?.recurrence ?? "—",
-                    task?.recipientEmail ?? "—",
                     formatResponsibilityAction(task?.action),
                     formatResponsibilityStatus(task?.status),
                     formatResponsibilityDateTime(task?.createdAt),
@@ -1773,7 +1769,7 @@
                     if (index === 2 && task?.detail) {
                         cell.title = task.detail;
                     }
-                    if (index === 9 && task?.actionNotes) {
+                    if (index === 7 && task?.actionNotes) {
                         cell.title = task.actionNotes;
                     }
                     row.appendChild(cell);

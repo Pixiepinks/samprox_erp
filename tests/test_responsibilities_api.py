@@ -65,10 +65,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         payload = {
             "title": "Safety walkdown",
             "description": "Complete safety walk before shift begins.",
+            "detail": "Verify emergency exits and PPE logs.",
             "scheduledFor": scheduled_for,
             "recurrence": "weekly",
             "assigneeId": self.secondary_manager.id,
             "recipientEmail": "lead@example.com",
+            "action": "delegated",
+            "delegatedToId": self.secondary_manager.id,
         }
 
         response = self.client.post(
@@ -87,10 +90,17 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
         self.assertEqual(task.recurrence.value, "weekly")
         self.assertEqual(task.recipient_email, "lead@example.com")
+        self.assertEqual(task.detail, "Verify emergency exits and PPE logs.")
+        self.assertEqual(task.action.value, "delegated")
+        self.assertEqual(task.delegated_to_id, self.secondary_manager.id)
+        self.assertIsNone(task.action_notes)
+        self.assertEqual(task.number, "0001")
 
         self.assertEqual(len(self.mail_extension.sent_messages), 1)
         self.assertIn("Safety walkdown", self.mail_extension.sent_messages[0].subject)
         self.assertIn("Weekly", self.mail_extension.sent_messages[0].body)
+        self.assertIn("5D Action: Delegated", self.mail_extension.sent_messages[0].body)
+        self.assertIn("Responsibility No: 0001", self.mail_extension.sent_messages[0].body)
 
     def test_weekly_plan_email_summarizes_occurrences(self):
         monday = date.today()
@@ -103,12 +113,14 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "scheduledFor": monday.isoformat(),
                 "recurrence": "daily",
                 "recipientEmail": "daily@example.com",
+                "action": "done",
             },
             {
                 "title": "Quality audit",
                 "scheduledFor": wednesday.isoformat(),
                 "recurrence": "does_not_repeat",
                 "recipientEmail": "audit@example.com",
+                "action": "done",
             },
         ]
 
@@ -145,6 +157,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "scheduledFor": date.today().isoformat(),
             "recurrence": "custom",
             "recipientEmail": "sync@example.com",
+            "action": "done",
         }
 
         response = self.client.post(
@@ -156,6 +169,46 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         data = response.get_json()
         self.assertIn("customWeekdays", data.get("errors", {}))
+        self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
+
+    def test_delegated_action_requires_manager(self):
+        payload = {
+            "title": "Vendor coordination",
+            "scheduledFor": date.today().isoformat(),
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "coord@example.com",
+            "action": "delegated",
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        errors = response.get_json().get("errors", {})
+        self.assertIn("delegatedToId", errors)
+        self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
+
+    def test_discussed_action_requires_notes(self):
+        payload = {
+            "title": "Budget review",
+            "scheduledFor": date.today().isoformat(),
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "budget@example.com",
+            "action": "discussed",
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        errors = response.get_json().get("errors", {})
+        self.assertIn("actionNotes", errors)
         self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
 
 

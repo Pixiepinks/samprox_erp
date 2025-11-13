@@ -12,6 +12,7 @@ from sqlalchemy import asc
 from extensions import db, mail
 from flask_mail import Message
 from models import (
+    ResponsibilityAction,
     ResponsibilityRecurrence,
     ResponsibilityTask,
     ResponsibilityTaskStatus,
@@ -93,12 +94,20 @@ def _render_recurrence(task: ResponsibilityTask) -> str:
 def _send_task_email(task: ResponsibilityTask) -> None:
     assigner_name = getattr(task.assigner, "name", "A manager")
     assignee_name = getattr(task.assignee, "name", None)
+    delegated_name = getattr(task.delegated_to, "name", None)
     first_date = task.scheduled_for.strftime("%B %d, %Y") if task.scheduled_for else "N/A"
+    action = getattr(task, "action", ResponsibilityAction.DONE)
+    try:
+        action_label = ResponsibilityAction(action).value.replace("_", " ").title()
+    except Exception:
+        action_label = "—"
 
     lines = [
+        f"Responsibility No: {task.number}",
         f"Title: {task.title}",
         f"Scheduled for: {first_date}",
         f"Recurrence: {_render_recurrence(task)}",
+        f"5D Action: {action_label}",
     ]
 
     if assignee_name:
@@ -106,11 +115,22 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     else:
         lines.append("Assigned to: (not specified)")
 
+    if delegated_name:
+        lines.append(f"Delegated to: {delegated_name}")
+
     lines.append(f"Assigned by: {assigner_name}")
 
     if task.description:
         lines.append("")
         lines.append(task.description.strip())
+
+    if task.detail:
+        lines.append("")
+        lines.append(f"Detail: {task.detail.strip()}")
+
+    if task.action_notes:
+        lines.append("")
+        lines.append(f"Notes: {task.action_notes.strip()}")
 
     message = Message(
         subject=f"New responsibility: {task.title}",
@@ -174,19 +194,32 @@ def create_task():
         if not assignee:
             return jsonify({"msg": "Assigned manager was not found."}), 404
 
+    delegated_to = None
+    delegated_to_id = data.get("delegated_to_id")
+    if delegated_to_id is not None:
+        delegated_to = User.query.get(delegated_to_id)
+        if not delegated_to:
+            return jsonify({"msg": "Delegated manager was not found."}), 404
+
     recurrence = ResponsibilityRecurrence(data["recurrence"])
     status_value = data.get("status", ResponsibilityTaskStatus.PLANNED.value)
     status = ResponsibilityTaskStatus(status_value)
+    action = ResponsibilityAction(data["action"])
+    action_notes = data.get("action_notes")
 
     task = ResponsibilityTask(
         title=data["title"],
         description=data.get("description"),
+        detail=data.get("detail"),
         scheduled_for=data["scheduled_for"],
         recurrence=recurrence,
         status=status,
+        action=action,
+        action_notes=action_notes,
         recipient_email=data["recipient_email"],
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
+        delegated_to_id=delegated_to.id if delegated_to else None,
     )
 
     task.update_custom_weekdays(data.get("custom_weekdays"))

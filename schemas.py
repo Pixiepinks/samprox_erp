@@ -6,6 +6,7 @@ from models import (
     PayCategory,
     TeamMemberStatus,
     MaintenanceJobStatus,
+    ResponsibilityAction,
     ResponsibilityTask,
     ResponsibilityRecurrence,
     ResponsibilityTaskStatus,
@@ -714,16 +715,21 @@ def describe_responsibility_recurrence(task: ResponsibilityTask) -> str | None:
 
 class ResponsibilityTaskSchema(Schema):
     id = fields.Int(dump_only=True)
+    number = fields.Str()
     title = fields.Str(required=True)
     description = fields.Str(allow_none=True)
+    detail = fields.Str(allow_none=True)
     scheduled_for = fields.Date(data_key="scheduledFor")
     recurrence = fields.Method("get_recurrence")
     recurrence_label = fields.Method("get_recurrence_label", data_key="recurrenceLabel")
     custom_weekdays = fields.Method("get_custom_weekdays", data_key="customWeekdays")
     status = fields.Method("get_status")
+    action = fields.Method("get_action")
+    action_notes = fields.Str(allow_none=True, data_key="actionNotes")
     recipient_email = fields.Str(data_key="recipientEmail")
     assigner = fields.Nested(UserSchema, dump_only=True)
     assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
+    delegated_to = fields.Nested(UserSchema, dump_only=True, allow_none=True, data_key="delegatedTo")
     created_at = fields.Method("get_created_at", data_key="createdAt")
     updated_at = fields.Method("get_updated_at", data_key="updatedAt")
 
@@ -754,6 +760,14 @@ class ResponsibilityTaskSchema(Schema):
             return value
         return None
 
+    def get_action(self, obj):
+        value = getattr(obj, "action", None)
+        if isinstance(value, ResponsibilityAction):
+            return value.value
+        if isinstance(value, str):
+            return value
+        return None
+
     def get_created_at(self, obj):
         return format_datetime_as_colombo_iso(getattr(obj, "created_at", None), assume_local=True)
 
@@ -764,12 +778,16 @@ class ResponsibilityTaskSchema(Schema):
 class ResponsibilityTaskCreateSchema(Schema):
     title = fields.Str(required=True)
     description = fields.Str(allow_none=True)
+    detail = fields.Str(allow_none=True)
     scheduled_for = fields.Date(required=True, data_key="scheduledFor")
     recurrence = fields.Str(required=True, data_key="recurrence")
     custom_weekdays = fields.List(fields.Int(), allow_none=True, data_key="customWeekdays")
     assignee_id = fields.Int(allow_none=True, data_key="assigneeId")
+    delegated_to_id = fields.Int(allow_none=True, data_key="delegatedToId")
     recipient_email = fields.Email(required=True, data_key="recipientEmail")
     status = fields.Str(load_default=ResponsibilityTaskStatus.PLANNED.value)
+    action = fields.Str(required=True)
+    action_notes = fields.Str(allow_none=True, data_key="actionNotes")
 
     class Meta:
         ordered = True
@@ -799,6 +817,10 @@ class ResponsibilityTaskCreateSchema(Schema):
         if isinstance(status, str):
             normalized["status"] = status.strip().lower()
 
+        action = normalized.get("action")
+        if isinstance(action, str):
+            normalized["action"] = action.strip().lower()
+
         return normalized
 
     @validates("recurrence")
@@ -816,6 +838,13 @@ class ResponsibilityTaskCreateSchema(Schema):
             ResponsibilityTaskStatus(value)
         except ValueError:
             raise ValidationError("Invalid task status.")
+
+    @validates("action")
+    def validate_action(self, value):
+        try:
+            ResponsibilityAction(value)
+        except ValueError as error:
+            raise ValidationError("Invalid 5D action option.") from error
 
     @validates("custom_weekdays")
     def validate_custom_weekdays(self, value):
@@ -842,4 +871,19 @@ class ResponsibilityTaskCreateSchema(Schema):
             raise ValidationError(
                 "Custom weekdays can only be provided when recurrence is set to custom.",
                 field_name="customWeekdays",
+            )
+
+        action = data.get("action")
+        delegated_to = data.get("delegated_to_id")
+        if action == ResponsibilityAction.DELEGATED.value and not delegated_to:
+            raise ValidationError("Select a delegated manager.", "delegatedToId")
+
+        if action in {
+            ResponsibilityAction.DISCUSSED.value,
+            ResponsibilityAction.DEFERRED.value,
+            ResponsibilityAction.DELETED.value,
+        } and not data.get("action_notes"):
+            raise ValidationError(
+                "Provide discussion points or reasons for this action.",
+                "actionNotes",
             )

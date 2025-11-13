@@ -125,12 +125,16 @@
                     <table class="team-table responsibility-table">
                         <thead>
                             <tr>
+                                <th scope="col">Responsibility No</th>
                                 <th scope="col">Title</th>
+                                <th scope="col">Detail</th>
                                 <th scope="col">Assigned by</th>
                                 <th scope="col">Assigned to</th>
+                                <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
                                 <th scope="col">Recurrence</th>
                                 <th scope="col">Recipient</th>
+                                <th scope="col">5D Action</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Created</th>
                             </tr>
@@ -578,6 +582,10 @@
                             <label class="edit-form__label" for="responsibility-description">Description</label>
                             <textarea class="edit-form__input" id="responsibility-description" name="description" rows="3"></textarea>
                         </div>
+                        <div class="edit-form__field edit-form__field--full">
+                            <label class="edit-form__label" for="responsibility-detail">Detail</label>
+                            <textarea class="edit-form__input" id="responsibility-detail" name="detail" rows="3"></textarea>
+                        </div>
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-date">First scheduled date <span class="required">*</span></label>
                             <input class="edit-form__input" id="responsibility-date" name="scheduledFor" type="date" required />
@@ -634,15 +642,55 @@
                             </select>
                         </div>
                         <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-action">5D Action <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-action" name="action" required>
+                                <option value="done">Done</option>
+                                <option value="delegated">Delegated</option>
+                                <option value="deferred">Deferred</option>
+                                <option value="discussed">Discussed</option>
+                                <option value="deleted">Deleted</option>
+                            </select>
+                        </div>
+                        <div class="edit-form__field" id="responsibility-delegated-field" hidden>
+                            <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
+                                <option value="">Select a manager</option>
+                            </select>
+                        </div>
+                        <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-recipient">Notification email <span class="required">*</span></label>
                             <input class="edit-form__input" id="responsibility-recipient" name="recipientEmail" type="email" required />
                         </div>
                     </div>
+                    <input type="hidden" id="responsibility-action-notes" name="actionNotes" />
                     <div class="modal__actions">
                         <button type="button" class="button button--ghost" id="responsibility-cancel">Cancel</button>
                         <button type="submit" class="button button--primary" id="responsibility-submit">Save responsibility</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="responsibility-action-notes-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="responsibility-action-notes-title">
+            <header class="modal__header">
+                <h2 class="modal__title" id="responsibility-action-notes-title">Discussion details</h2>
+                <button type="button" class="modal__close" id="responsibility-action-notes-close" aria-label="Close notes editor">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </header>
+            <div class="modal__body">
+                <p class="modal__hint">Record discussion points or reasons for the selected 5D action.</p>
+                <p class="alert alert--error" id="responsibility-action-notes-error" hidden></p>
+                <div class="edit-form__field edit-form__field--full">
+                    <label class="edit-form__label" for="responsibility-action-notes-text">Notes <span class="required">*</span></label>
+                    <textarea class="edit-form__input" id="responsibility-action-notes-text" rows="4"></textarea>
+                </div>
+                <div class="modal__actions">
+                    <button type="button" class="button button--ghost" id="responsibility-action-notes-cancel">Cancel</button>
+                    <button type="button" class="button button--primary" id="responsibility-action-notes-save">Save notes</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1222,9 +1270,21 @@
         const responsibilityCustomDays = document.getElementById("responsibility-custom-days");
         const responsibilityCustomWeekdays = document.getElementById("responsibility-custom-weekdays");
         const responsibilityAssigneeSelect = document.getElementById("responsibility-assignee");
+        const responsibilityDetailInput = document.getElementById("responsibility-detail");
+        const responsibilityActionSelect = document.getElementById("responsibility-action");
+        const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
+        const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
         const responsibilityRecipientInput = document.getElementById("responsibility-recipient");
+        const responsibilityActionNotesInput = document.getElementById("responsibility-action-notes");
         const responsibilitySubmitButton = document.getElementById("responsibility-submit");
         const responsibilityModalOverlay = responsibilityModal?.querySelector("[data-modal-dismiss]");
+        const responsibilityActionNotesModal = document.getElementById("responsibility-action-notes-modal");
+        const responsibilityActionNotesClose = document.getElementById("responsibility-action-notes-close");
+        const responsibilityActionNotesTextarea = document.getElementById("responsibility-action-notes-text");
+        const responsibilityActionNotesError = document.getElementById("responsibility-action-notes-error");
+        const responsibilityActionNotesSave = document.getElementById("responsibility-action-notes-save");
+        const responsibilityActionNotesCancel = document.getElementById("responsibility-action-notes-cancel");
+        const responsibilityActionNotesOverlay = responsibilityActionNotesModal?.querySelector("[data-modal-dismiss]");
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
             "Monday",
@@ -1235,6 +1295,9 @@
             "Saturday",
             "Sunday",
         ];
+        const ACTIONS_REQUIRING_NOTES = new Set(["discussed", "deferred", "deleted"]);
+        let responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+        let responsibilityActionModalPreviousValue = null;
 
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
@@ -1309,6 +1372,97 @@
             const normalized = String(status).replace(/_/g, " ").toLowerCase();
             return normalized.replace(/(^|\s)([a-z])/g, (_, space, letter) => `${space}${letter.toUpperCase()}`);
         };
+
+        const formatResponsibilityAction = (action) => {
+            if (!action) {
+                return "—";
+            }
+            const normalized = String(action).replace(/_/g, " ").toLowerCase();
+            return normalized.replace(/(^|\s)([a-z])/g, (_, space, letter) => `${space}${letter.toUpperCase()}`);
+        };
+
+        const setResponsibilityActionNotesError = (message = "") => {
+            if (!responsibilityActionNotesError) {
+                return;
+            }
+            if (!message) {
+                responsibilityActionNotesError.hidden = true;
+                responsibilityActionNotesError.textContent = "";
+                return;
+            }
+            responsibilityActionNotesError.hidden = false;
+            responsibilityActionNotesError.textContent = message;
+        };
+
+        const updateDelegatedVisibility = (actionValue) => {
+            if (!responsibilityDelegatedField || !responsibilityDelegatedSelect) {
+                return;
+            }
+            const requiresDelegated = actionValue === "delegated";
+            responsibilityDelegatedField.hidden = !requiresDelegated;
+            if (requiresDelegated) {
+                responsibilityDelegatedSelect.setAttribute("required", "required");
+            } else {
+                responsibilityDelegatedSelect.removeAttribute("required");
+                responsibilityDelegatedSelect.value = "";
+            }
+        };
+
+        const openResponsibilityActionNotesModal = (previousValue) => {
+            if (!responsibilityActionNotesModal) {
+                return;
+            }
+            responsibilityActionModalPreviousValue = previousValue ?? responsibilityActionPreviousValue;
+            setResponsibilityActionNotesError();
+            if (responsibilityActionNotesTextarea && responsibilityActionNotesInput) {
+                responsibilityActionNotesTextarea.value = responsibilityActionNotesInput.value || "";
+            }
+            responsibilityActionNotesModal.removeAttribute("hidden");
+            responsibilityActionNotesModal.setAttribute("aria-hidden", "false");
+            responsibilityActionNotesModal.classList.add("modal--open");
+            responsibilityActionNotesTextarea?.focus();
+        };
+
+        const closeResponsibilityActionNotesModal = (revertSelection = false) => {
+            if (!responsibilityActionNotesModal) {
+                return;
+            }
+            responsibilityActionNotesModal.classList.remove("modal--open");
+            responsibilityActionNotesModal.setAttribute("hidden", "");
+            responsibilityActionNotesModal.setAttribute("aria-hidden", "true");
+            setResponsibilityActionNotesError();
+            if (revertSelection && responsibilityActionSelect) {
+                const fallback = responsibilityActionModalPreviousValue ?? "done";
+                responsibilityActionSelect.value = fallback;
+                responsibilityActionPreviousValue = fallback;
+                updateDelegatedVisibility(fallback);
+                if (!ACTIONS_REQUIRING_NOTES.has(fallback) && responsibilityActionNotesInput) {
+                    responsibilityActionNotesInput.value = "";
+                }
+            }
+            responsibilityActionModalPreviousValue = null;
+        };
+
+        const handleResponsibilityActionChange = () => {
+            if (!responsibilityActionSelect) {
+                return;
+            }
+            const newValue = responsibilityActionSelect.value;
+            const previousValue = responsibilityActionPreviousValue;
+            responsibilityActionPreviousValue = newValue;
+            updateDelegatedVisibility(newValue);
+
+            if (!ACTIONS_REQUIRING_NOTES.has(newValue)) {
+                if (responsibilityActionNotesInput) {
+                    responsibilityActionNotesInput.value = "";
+                }
+                return;
+            }
+
+            openResponsibilityActionNotesModal(previousValue);
+        };
+
+        updateDelegatedVisibility(responsibilityActionPreviousValue);
 
         const setPlanMessage = (element, message = "", tone = "info") => {
             if (!element) {
@@ -1400,6 +1554,18 @@
             if (responsibilityForm) {
                 responsibilityForm.reset();
             }
+            if (responsibilityActionSelect) {
+                responsibilityActionSelect.value = "done";
+            }
+            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+            updateDelegatedVisibility(responsibilityActionPreviousValue);
+            if (responsibilityActionNotesInput) {
+                responsibilityActionNotesInput.value = "";
+            }
+            if (responsibilityDetailInput) {
+                responsibilityDetailInput.value = "";
+            }
+            closeResponsibilityActionNotesModal();
             toggleCustomWeekdayFieldset();
             clearResponsibilityFormError();
         };
@@ -1410,6 +1576,14 @@
             }
             if (responsibilityForm) {
                 responsibilityForm.reset();
+            }
+            if (responsibilityActionSelect) {
+                responsibilityActionSelect.value = "done";
+            }
+            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+            updateDelegatedVisibility(responsibilityActionPreviousValue);
+            if (responsibilityActionNotesInput) {
+                responsibilityActionNotesInput.value = "";
             }
             clearResponsibilityFormError();
             toggleCustomWeekdayFieldset();
@@ -1445,12 +1619,16 @@
             responsibilityTasks.forEach((task) => {
                 const row = document.createElement("tr");
                 const cells = [
+                    task?.number ?? "—",
                     task?.title ?? "—",
+                    task?.detail ?? "—",
                     task?.assigner?.name ?? task?.assigner?.email ?? "—",
                     task?.assignee?.name ?? task?.assignee?.email ?? "—",
+                    task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—",
                     formatResponsibilityDate(task?.scheduledFor),
                     task?.recurrenceLabel ?? task?.recurrence ?? "—",
                     task?.recipientEmail ?? "—",
+                    formatResponsibilityAction(task?.action),
                     formatResponsibilityStatus(task?.status),
                     formatResponsibilityDateTime(task?.createdAt),
                 ];
@@ -1458,8 +1636,14 @@
                 cells.forEach((value, index) => {
                     const cell = document.createElement("td");
                     cell.textContent = value ?? "—";
-                    if (index === 0 && task?.description) {
+                    if (index === 1 && task?.description) {
                         cell.title = task.description;
+                    }
+                    if (index === 2 && task?.detail) {
+                        cell.title = task.detail;
+                    }
+                    if (index === 9 && task?.actionNotes) {
+                        cell.title = task.actionNotes;
                     }
                     row.appendChild(cell);
                 });
@@ -1471,30 +1655,51 @@
         };
 
         const populateResponsibilityAssignees = () => {
-            if (!responsibilityAssigneeSelect) {
+            if (!responsibilityAssigneeSelect && !responsibilityDelegatedSelect) {
                 return;
             }
 
-            const currentValue = responsibilityAssigneeSelect.value;
-            responsibilityAssigneeSelect.innerHTML = "";
-            const placeholder = document.createElement("option");
-            placeholder.value = "";
-            placeholder.textContent = "Select a manager (optional)";
-            responsibilityAssigneeSelect.appendChild(placeholder);
+            if (responsibilityAssigneeSelect) {
+                const currentValue = responsibilityAssigneeSelect.value;
+                responsibilityAssigneeSelect.innerHTML = "";
+                const placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = "Select a manager (optional)";
+                responsibilityAssigneeSelect.appendChild(placeholder);
 
-            responsibilityAssignees.forEach((assignee) => {
-                const option = document.createElement("option");
-                option.value = String(assignee.id);
-                option.textContent = assignee.name || assignee.email;
-                if (currentValue && currentValue === option.value) {
-                    option.selected = true;
-                }
-                responsibilityAssigneeSelect.appendChild(option);
-            });
+                responsibilityAssignees.forEach((assignee) => {
+                    const option = document.createElement("option");
+                    option.value = String(assignee.id);
+                    option.textContent = assignee.name || assignee.email;
+                    if (currentValue && currentValue === option.value) {
+                        option.selected = true;
+                    }
+                    responsibilityAssigneeSelect.appendChild(option);
+                });
+            }
+
+            if (responsibilityDelegatedSelect) {
+                const currentDelegated = responsibilityDelegatedSelect.value;
+                responsibilityDelegatedSelect.innerHTML = "";
+                const delegatedPlaceholder = document.createElement("option");
+                delegatedPlaceholder.value = "";
+                delegatedPlaceholder.textContent = "Select a manager";
+                responsibilityDelegatedSelect.appendChild(delegatedPlaceholder);
+
+                responsibilityAssignees.forEach((assignee) => {
+                    const option = document.createElement("option");
+                    option.value = String(assignee.id);
+                    option.textContent = assignee.name || assignee.email;
+                    if (currentDelegated && currentDelegated === option.value) {
+                        option.selected = true;
+                    }
+                    responsibilityDelegatedSelect.appendChild(option);
+                });
+            }
         };
 
         const fetchResponsibilityAssignees = async () => {
-            if (!responsibilityAssigneeSelect) {
+            if (!responsibilityAssigneeSelect && !responsibilityDelegatedSelect) {
                 return;
             }
             try {
@@ -1584,6 +1789,7 @@
             const payload = {
                 title: formData.get("title")?.toString().trim(),
                 description: formData.get("description")?.toString().trim() || undefined,
+                detail: formData.get("detail")?.toString().trim() || undefined,
                 scheduledFor: formData.get("scheduledFor")?.toString(),
                 recurrence: formData.get("recurrence")?.toString(),
                 recipientEmail: formData.get("recipientEmail")?.toString().trim(),
@@ -1595,6 +1801,37 @@
                 if (!Number.isNaN(parsedAssignee)) {
                     payload.assigneeId = parsedAssignee;
                 }
+            }
+
+            const actionValue = formData.get("action")?.toString();
+            if (actionValue) {
+                payload.action = actionValue;
+            }
+
+            const delegatedValueRaw = formData.get("delegatedToId")?.toString();
+            if (actionValue === "delegated" && !delegatedValueRaw) {
+                showResponsibilityFormError("Select a delegated manager when the action is Delegated.");
+                responsibilityDelegatedSelect?.focus();
+                return;
+            }
+
+            if (delegatedValueRaw) {
+                const parsedDelegated = Number.parseInt(delegatedValueRaw, 10);
+                if (!Number.isNaN(parsedDelegated)) {
+                    payload.delegatedToId = parsedDelegated;
+                }
+            }
+
+            const actionNotesValue = formData.get("actionNotes")?.toString().trim();
+            if (actionValue && ACTIONS_REQUIRING_NOTES.has(actionValue) && !actionNotesValue) {
+                showResponsibilityFormError("Enter discussion points or reasons for the selected action.");
+                openResponsibilityActionNotesModal(actionValue);
+                setResponsibilityActionNotesError("Notes are required for this action.");
+                return;
+            }
+
+            if (actionNotesValue) {
+                payload.actionNotes = actionNotesValue;
             }
 
             if (payload.recurrence === "custom") {
@@ -1642,6 +1879,31 @@
                 }
             }
         };
+
+        responsibilityActionSelect?.addEventListener("change", handleResponsibilityActionChange);
+
+        responsibilityActionNotesSave?.addEventListener("click", () => {
+            const value = responsibilityActionNotesTextarea?.value?.trim();
+            if (!value) {
+                setResponsibilityActionNotesError("Notes are required for this action.");
+                responsibilityActionNotesTextarea?.focus();
+                return;
+            }
+            if (responsibilityActionNotesInput) {
+                responsibilityActionNotesInput.value = value;
+            }
+            clearResponsibilityFormError();
+            closeResponsibilityActionNotesModal();
+        });
+
+        const dismissNotesModal = () => {
+            setResponsibilityActionNotesError();
+            closeResponsibilityActionNotesModal(true);
+        };
+
+        responsibilityActionNotesCancel?.addEventListener("click", dismissNotesModal);
+        responsibilityActionNotesClose?.addEventListener("click", dismissNotesModal);
+        responsibilityActionNotesOverlay?.addEventListener("click", dismissNotesModal);
 
         if (responsibilityForm) {
             responsibilityForm.addEventListener("submit", submitResponsibilityForm);

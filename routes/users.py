@@ -44,6 +44,7 @@ def _serialise_user(user: User) -> Dict[str, Any]:
     }
 
 
+@bp.get("")
 @bp.get("/")
 @jwt_required()
 def list_users():
@@ -57,6 +58,7 @@ def list_users():
     return jsonify([_serialise_user(user) for user in users])
 
 
+@bp.post("")
 @bp.post("/")
 @jwt_required()
 def create_user():

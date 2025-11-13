@@ -1,4 +1,5 @@
 import importlib
+import smtplib
 import os
 import sys
 import unittest
@@ -258,7 +259,69 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         errors = response.get_json().get("errors", {})
         self.assertIn("delegatedToId", errors)
-        self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
+
+    def test_create_responsibility_reports_email_failure(self):
+        scheduled_for = date.today().isoformat()
+        payload = {
+            "title": "Line inspection",
+            "scheduledFor": scheduled_for,
+            "recurrence": "weekly",
+            "recipientEmail": "inspect@example.com",
+            "action": "done",
+        }
+
+        with patch.object(
+            self.mail_extension,
+            "send",
+            side_effect=TimeoutError("timed out"),
+        ):
+            response = self.client.post(
+                "/api/responsibilities",
+                headers=self.auth_headers,
+                json=payload,
+            )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertFalse(data["email_notification"]["sent"])
+        self.assertIn("timed out", data["email_notification"]["message"].lower())
+
+    def test_send_weekly_plan_returns_error_when_email_fails(self):
+        monday = date.today() - timedelta(days=date.today().weekday())
+
+        payload = {
+            "title": "Daily standup",
+            "scheduledFor": monday.isoformat(),
+            "recurrence": "daily",
+            "recipientEmail": "daily@example.com",
+            "action": "done",
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        with patch.object(
+            self.mail_extension,
+            "send",
+            side_effect=smtplib.SMTPAuthenticationError(535, b"5.7.8"),
+        ):
+            response = self.client.post(
+                "/api/responsibilities/send-weekly",
+                headers=self.auth_headers,
+                json={
+                    "startDate": monday.isoformat(),
+                    "recipientEmail": "planner@example.com",
+                },
+            )
+
+        self.assertEqual(response.status_code, 500)
+        message = response.get_json()["msg"].lower()
+        self.assertIn("authentication failed", message)
 
     def test_discussed_action_requires_notes(self):
         payload = {

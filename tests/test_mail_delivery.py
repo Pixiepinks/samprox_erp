@@ -1,6 +1,7 @@
 import smtplib
+import socket
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from flask import Flask
 
@@ -124,6 +125,121 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
         self.assertEqual(args, ("smtp.example.com", 465))
         self.assertEqual(kwargs.get("timeout"), 10.0)
         self.assertIsNotNone(kwargs.get("context"))
+
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    @patch("flask_mail.smtplib.SMTP")
+    def test_additional_server_is_attempted(self, smtp_mock, smtp_ssl_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.primary.example",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=True,
+            MAIL_ADDITIONAL_SERVERS=["smtp.backup.example"],
+        )
+
+        def _smtp_side_effect(host, port, timeout=10.0, **kwargs):
+            if host == "smtp.primary.example":
+                raise OSError("primary unreachable")
+            server = MagicMock()
+            connection = MagicMock()
+            connection.ehlo.return_value = None
+            connection.starttls.return_value = None
+            connection.login.return_value = None
+            connection.send_message.return_value = None
+            server.__enter__.return_value = connection
+            server.__exit__.return_value = False
+            return server
+
+        def _smtp_ssl_side_effect(host, port, timeout=10.0, context=None, **kwargs):
+            raise OSError("ssl unreachable")
+
+        smtp_mock.side_effect = _smtp_side_effect
+        smtp_ssl_mock.side_effect = _smtp_ssl_side_effect
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        hosts = [call.args[0] for call in smtp_mock.call_args_list]
+        self.assertIn("smtp.backup.example", hosts)
+
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    @patch("flask_mail.smtplib.SMTP")
+    def test_additional_port_is_attempted(self, smtp_mock, smtp_ssl_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=True,
+            MAIL_ADDITIONAL_PORTS=[2525],
+        )
+
+        def _smtp_side_effect(host, port, timeout=10.0, **kwargs):
+            if port == 587:
+                raise OSError("tls port unreachable")
+            server = MagicMock()
+            connection = MagicMock()
+            connection.ehlo.return_value = None
+            connection.starttls.return_value = None
+            connection.login.return_value = None
+            connection.send_message.return_value = None
+            server.__enter__.return_value = connection
+            server.__exit__.return_value = False
+            return server
+
+        smtp_mock.side_effect = _smtp_side_effect
+        smtp_ssl_mock.side_effect = OSError("ssl unreachable")
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        attempted_ports = [call.args[1] for call in smtp_mock.call_args_list]
+        self.assertIn(2525, attempted_ports)
+
+    @patch("flask_mail.socket.getaddrinfo")
+    @patch("flask_mail.smtplib.SMTP")
+    def test_force_ipv4_restricts_address_resolution(self, smtp_mock, getaddrinfo_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=False,
+            MAIL_FORCE_IPV4=True,
+        )
+
+        getaddrinfo_mock.return_value = [
+            (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("::1", 587, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 587)),
+        ]
+
+        def _smtp_side_effect(host, port, timeout=10.0, **kwargs):
+            # Trigger address resolution to exercise the IPv4 filter.
+            socket.getaddrinfo(host, port)
+            server = MagicMock()
+            connection = MagicMock()
+            connection.ehlo.return_value = None
+            connection.starttls.return_value = None
+            connection.login.return_value = None
+            connection.send_message.return_value = None
+            server.__enter__.return_value = connection
+            server.__exit__.return_value = False
+            return server
+
+        smtp_mock.side_effect = _smtp_side_effect
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        assert getaddrinfo_mock.called
+        for recorded_call in getaddrinfo_mock.call_args_list:
+            args = recorded_call.args
+            assert len(args) >= 3
+            assert args[2] == socket.AF_INET
 
 
 if __name__ == "__main__":

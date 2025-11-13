@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import smtplib
+import socket
+import ssl
 from datetime import date, timedelta
 from typing import Iterable
 
@@ -102,6 +105,69 @@ def _render_recurrence(task: ResponsibilityTask) -> str:
     return label or "No recurrence"
 
 
+class ResponsibilityEmailError(RuntimeError):
+    """Raised when responsibility-related email delivery fails."""
+
+    def __init__(self, user_message: str, original: Exception | None = None) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
+        self.original = original
+
+
+def _deliver_responsibility_email(
+    *,
+    subject: str,
+    recipient: str,
+    body: str,
+    context: str,
+) -> None:
+    """Send an email and raise :class:`ResponsibilityEmailError` on failure."""
+
+    if not recipient:
+        raise ResponsibilityEmailError("No recipient email address was provided.")
+
+    message = Message(subject=subject, recipients=[recipient], body=body)
+
+    try:
+        mail.send(message)
+    except Exception as exc:  # pragma: no cover - logging only
+        current_app.logger.warning(
+            "Failed to send %s email: %s", context, exc, exc_info=exc
+        )
+
+        failure_message = f"Failed to send the {context} email."
+        if isinstance(exc, (socket.timeout, TimeoutError)):
+            failure_message = (
+                f"Failed to send the {context} email: the mail server timed out."
+            )
+        elif isinstance(exc, smtplib.SMTPAuthenticationError):
+            failure_message = (
+                f"Failed to send the {context} email: authentication failed."
+            )
+        elif isinstance(exc, smtplib.SMTPConnectError):
+            failure_message = (
+                f"Failed to send the {context} email: could not connect to the mail server."
+            )
+        elif isinstance(exc, smtplib.SMTPRecipientsRefused):
+            failure_message = (
+                f"Failed to send the {context} email: the recipient address was rejected."
+            )
+        elif isinstance(exc, ssl.SSLCertVerificationError):
+            failure_message = (
+                f"Failed to send the {context} email: the mail server's SSL certificate could not be verified."
+            )
+        elif isinstance(exc, ssl.SSLError):
+            failure_message = (
+                f"Failed to send the {context} email: a secure connection to the mail server could not be established."
+            )
+        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
+            failure_message = (
+                f"Failed to send the {context} email: the mail server could not be reached."
+            )
+
+        raise ResponsibilityEmailError(failure_message, exc) from exc
+
+
 def _send_task_email(task: ResponsibilityTask) -> None:
     assigner_name = getattr(task.assigner, "name", "A manager")
     assignee_name = getattr(task.assignee, "name", None)
@@ -143,13 +209,12 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         lines.append("")
         lines.append(f"Notes: {task.action_notes.strip()}")
 
-    message = Message(
+    _deliver_responsibility_email(
         subject=f"New responsibility: {task.title}",
-        recipients=[task.recipient_email],
+        recipient=task.recipient_email,
         body="\n".join(lines),
+        context="responsibility notification",
     )
-
-    mail.send(message)
 
 
 def _occurrences_for_week(tasks: Iterable[ResponsibilityTask], start: date) -> dict[date, list[ResponsibilityTask]]:
@@ -408,9 +473,15 @@ def send_weekly_plan():
     summary = _format_weekly_summary(schedule)
 
     subject = f"Responsibility plan for week starting {start_date.strftime('%B %d, %Y')}"
-    message = Message(subject=subject, recipients=[recipient], body=summary)
-
-    mail.send(message)
+    try:
+        _deliver_responsibility_email(
+            subject=subject,
+            recipient=recipient,
+            body=summary,
+            context="weekly plan",
+        )
+    except ResponsibilityEmailError as error:
+        return jsonify({"msg": error.user_message}), 500
 
     total_occurrences = sum(len(items) for items in schedule.values())
     response = {

@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
+from typing import Iterable
 
 from sqlalchemy import CheckConstraint, UniqueConstraint
 from sqlalchemy.types import CHAR, TypeDecorator
@@ -191,6 +192,138 @@ class MaintenanceJob(db.Model):
                     cost = Decimal("0")
             total += cost
         self.total_cost = total
+
+
+class ResponsibilityRecurrence(str, Enum):
+    """Frequency options for responsibility tasks."""
+
+    DOES_NOT_REPEAT = "does_not_repeat"
+    MONDAY_TO_FRIDAY = "monday_to_friday"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    ANNUALLY = "annually"
+    CUSTOM = "custom"
+
+
+class ResponsibilityTaskStatus(str, Enum):
+    """Lifecycle state for a responsibility task."""
+
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class ResponsibilityTask(db.Model):
+    """Represents a scheduled responsibility item for a manager."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    scheduled_for = db.Column(db.Date, nullable=False)
+    recurrence = db.Column(
+        db.Enum(ResponsibilityRecurrence),
+        nullable=False,
+        default=ResponsibilityRecurrence.DOES_NOT_REPEAT,
+    )
+    custom_weekdays = db.Column(db.String(120))
+    status = db.Column(
+        db.Enum(ResponsibilityTaskStatus),
+        nullable=False,
+        default=ResponsibilityTaskStatus.PLANNED,
+    )
+    recipient_email = db.Column(db.String(255), nullable=False)
+
+    assigner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    assigner = db.relationship("User", foreign_keys=[assigner_id], backref="tasks_created")
+
+    assignee_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    assignee = db.relationship("User", foreign_keys=[assignee_id], backref="tasks_assigned")
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def _custom_weekday_values(self) -> list[int]:
+        if not self.custom_weekdays:
+            return []
+        values: list[int] = []
+        for part in str(self.custom_weekdays).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                number = int(part)
+            except ValueError:
+                continue
+            if 0 <= number <= 6 and number not in values:
+                values.append(number)
+        values.sort()
+        return values
+
+    @property
+    def custom_weekday_list(self) -> list[int]:
+        """Return the stored custom weekdays as integers (0 = Monday)."""
+
+        return self._custom_weekday_values()
+
+    def occurs_on(self, target_date: date) -> bool:
+        """Return ``True`` if the task is scheduled for ``target_date``."""
+
+        if not isinstance(target_date, date):
+            return False
+
+        if target_date < self.scheduled_for:
+            return False
+
+        weekday = target_date.weekday()
+        base_weekday = self.scheduled_for.weekday()
+
+        recurrence = self.recurrence or ResponsibilityRecurrence.DOES_NOT_REPEAT
+
+        if recurrence == ResponsibilityRecurrence.DOES_NOT_REPEAT:
+            return target_date == self.scheduled_for
+
+        if recurrence == ResponsibilityRecurrence.MONDAY_TO_FRIDAY:
+            return weekday <= 4
+
+        if recurrence == ResponsibilityRecurrence.DAILY:
+            return True
+
+        if recurrence == ResponsibilityRecurrence.WEEKLY:
+            return weekday == base_weekday
+
+        if recurrence == ResponsibilityRecurrence.MONTHLY:
+            return target_date.day == self.scheduled_for.day
+
+        if recurrence == ResponsibilityRecurrence.ANNUALLY:
+            return (
+                target_date.month == self.scheduled_for.month
+                and target_date.day == self.scheduled_for.day
+            )
+
+        if recurrence == ResponsibilityRecurrence.CUSTOM:
+            return weekday in self.custom_weekday_list
+
+        return False
+
+    def update_custom_weekdays(self, weekdays: Iterable[int] | None) -> None:
+        """Persist the provided weekday collection."""
+
+        if not weekdays:
+            self.custom_weekdays = None
+            return
+
+        normalized: list[int] = []
+        for value in weekdays:
+            try:
+                number = int(value)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= number <= 6 and number not in normalized:
+                normalized.append(number)
+
+        normalized.sort()
+        self.custom_weekdays = ",".join(str(v) for v in normalized) if normalized else None
 
 
 class MaintenanceMaterial(db.Model):

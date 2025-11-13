@@ -737,6 +737,15 @@ body {
     border-radius: 10px;
 }
 
+.responsibility-table__actions {
+    display: flex;
+    align-items: center;
+}
+
+.responsibility-table__update-button {
+    white-space: nowrap;
+}
+
 .table-container {
     width: 100%;
     overflow-x: auto;

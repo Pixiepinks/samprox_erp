@@ -127,13 +127,13 @@
                             <tr>
                                 <th scope="col">Responsibility No</th>
                                 <th scope="col">Title</th>
+                                <th scope="col">Progress</th>
                                 <th scope="col">Detail</th>
                                 <th scope="col">Assigned by</th>
                                 <th scope="col">Assigned to</th>
                                 <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
                                 <th scope="col">5D Action</th>
-                                <th scope="col">Progress</th>
                                 <th scope="col">Created</th>
                                 <th scope="col">Update</th>
                             </tr>
@@ -1902,31 +1902,19 @@
             const fragment = document.createDocumentFragment();
             responsibilityTasks.forEach((task) => {
                 const row = document.createElement("tr");
-                const cells = [
-                    task?.number ?? "—",
-                    task?.title ?? "—",
-                    task?.detail ?? "—",
-                    task?.assigner?.name ?? task?.assigner?.email ?? "—",
-                    task?.assignee?.name ?? task?.assignee?.email ?? "—",
-                    task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—",
-                    formatResponsibilityDate(task?.scheduledFor),
-                    formatResponsibilityAction(task?.action),
-                ];
 
-                cells.forEach((value, index) => {
+                const appendCell = (value, { title } = {}) => {
                     const cell = document.createElement("td");
                     cell.textContent = value ?? "—";
-                    if (index === 1 && task?.description) {
-                        cell.title = task.description;
-                    }
-                    if (index === 2 && task?.detail) {
-                        cell.title = task.detail;
-                    }
-                    if (index === 7 && task?.actionNotes) {
-                        cell.title = task.actionNotes;
+                    if (title) {
+                        cell.title = title;
                     }
                     row.appendChild(cell);
-                });
+                    return cell;
+                };
+
+                appendCell(task?.number ?? "—");
+                appendCell(task?.title ?? "—", { title: task?.description });
 
                 const progressCell = document.createElement("td");
                 progressCell.classList.add("responsibility-table__progress");
@@ -1937,6 +1925,13 @@
                     progressCell.textContent = "—";
                 }
                 row.appendChild(progressCell);
+
+                appendCell(task?.detail ?? "—", { title: task?.detail });
+                appendCell(task?.assigner?.name ?? task?.assigner?.email ?? "—");
+                appendCell(task?.assignee?.name ?? task?.assignee?.email ?? "—");
+                appendCell(task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—");
+                appendCell(formatResponsibilityDate(task?.scheduledFor));
+                appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes });
 
                 const createdCell = document.createElement("td");
                 createdCell.textContent = formatResponsibilityDateTime(task?.createdAt) ?? "—";

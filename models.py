@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Iterable
 
-from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint, event, func, select
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from extensions import db
@@ -214,12 +214,24 @@ class ResponsibilityTaskStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class ResponsibilityAction(str, Enum):
+    """5D action states for a responsibility task."""
+
+    DONE = "done"
+    DELEGATED = "delegated"
+    DEFERRED = "deferred"
+    DISCUSSED = "discussed"
+    DELETED = "deleted"
+
+
 class ResponsibilityTask(db.Model):
     """Represents a scheduled responsibility item for a manager."""
 
     id = db.Column(db.Integer, primary_key=True)
+    number = db.Column(db.String(20), unique=True, nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
+    detail = db.Column(db.Text)
     scheduled_for = db.Column(db.Date, nullable=False)
     recurrence = db.Column(
         db.Enum(ResponsibilityRecurrence),
@@ -232,6 +244,12 @@ class ResponsibilityTask(db.Model):
         nullable=False,
         default=ResponsibilityTaskStatus.PLANNED,
     )
+    action = db.Column(
+        db.Enum(ResponsibilityAction),
+        nullable=False,
+        default=ResponsibilityAction.DONE,
+    )
+    action_notes = db.Column(db.Text)
     recipient_email = db.Column(db.String(255), nullable=False)
 
     assigner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -239,6 +257,9 @@ class ResponsibilityTask(db.Model):
 
     assignee_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     assignee = db.relationship("User", foreign_keys=[assignee_id], backref="tasks_assigned")
+
+    delegated_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    delegated_to = db.relationship("User", foreign_keys=[delegated_to_id], backref="tasks_delegated")
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -324,6 +345,30 @@ class ResponsibilityTask(db.Model):
 
         normalized.sort()
         self.custom_weekdays = ",".join(str(v) for v in normalized) if normalized else None
+
+
+@event.listens_for(ResponsibilityTask, "before_insert")
+def _assign_responsibility_number(_mapper, connection, target):
+    """Automatically assign the next responsibility number."""
+
+    if getattr(target, "number", None):
+        return
+
+    result = connection.execute(
+        select(func.max(ResponsibilityTask.number))
+    ).scalar_one_or_none()
+
+    next_number = 1
+    if result:
+        try:
+            next_number = int(result) + 1
+        except (TypeError, ValueError):
+            fallback = connection.execute(
+                select(func.count(ResponsibilityTask.id))
+            ).scalar_one_or_none()
+            next_number = (fallback or 0) + 1
+
+    target.number = f"{next_number:04d}"
 
 
 class MaintenanceMaterial(db.Model):

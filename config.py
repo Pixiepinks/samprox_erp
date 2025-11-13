@@ -42,6 +42,26 @@ def _env_str(name: str, default: str | None = None) -> str | None:
     return text
 
 
+def _env_list(name: str) -> list[str]:
+    value = os.getenv(name)
+    if value is None:
+        return []
+    items = [item.strip() for item in value.split(",")]
+    return [item for item in items if item]
+
+
+def _env_int_list(name: str) -> list[int]:
+    result: list[int] = []
+    for item in _env_list(name):
+        try:
+            number = int(item)
+        except ValueError:
+            continue
+        if number > 0:
+            result.append(number)
+    return result
+
+
 def _env_password(name: str, default: str | None = None) -> str | None:
     """Return a password-like value with whitespace removed."""
 
@@ -120,6 +140,8 @@ class Config:
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
     MAIL_FALLBACK_USE_SSL = _env_bool("MAIL_FALLBACK_USE_SSL", False)
     MAIL_FALLBACK_SERVER = os.getenv("MAIL_FALLBACK_SERVER")
+    MAIL_ADDITIONAL_SERVERS = _env_list("MAIL_ADDITIONAL_SERVERS")
+    MAIL_ADDITIONAL_PORTS = _env_int_list("MAIL_ADDITIONAL_PORTS")
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
     COMPANY_ADDRESS = _env_str(
         "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"

@@ -42,6 +42,40 @@ def _env_str(name: str, default: str | None = None) -> str | None:
     return text
 
 
+def _env_list(name: str) -> list[str]:
+    value = os.getenv(name)
+    if value is None:
+        return []
+    items = [item.strip() for item in value.split(",")]
+    return [item for item in items if item]
+
+
+def _env_int_list(name: str) -> list[int]:
+    result: list[int] = []
+    for item in _env_list(name):
+        try:
+            number = int(item)
+        except ValueError:
+            continue
+        if number > 0:
+            result.append(number)
+    return result
+
+
+def _env_password(name: str, default: str | None = None) -> str | None:
+    """Return a password-like value with whitespace removed."""
+
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip()
+    if not text:
+        return default
+    # Gmail app passwords are presented with spaces for readability; remove them.
+    cleaned = "".join(text.split())
+    return cleaned or default
+
+
 def _normalize_db_url(url: str) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
@@ -98,7 +132,7 @@ class Config:
     MAIL_USE_TLS = _env_bool("MAIL_USE_TLS", True)
     MAIL_USE_SSL = _env_bool("MAIL_USE_SSL", False)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreplysamprox@gmail.com")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "zzohpxmeoiahipp")
+    MAIL_PASSWORD = _env_password("MAIL_PASSWORD", "zzohpxmeoiahipp")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreplysamprox@gmail.com")
     MAIL_SUPPRESS_SEND = _env_bool("MAIL_SUPPRESS_SEND", False)
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)
@@ -106,6 +140,10 @@ class Config:
     MAIL_FALLBACK_PORT = int(os.getenv("MAIL_FALLBACK_PORT", "587"))
     MAIL_FALLBACK_USE_SSL = _env_bool("MAIL_FALLBACK_USE_SSL", False)
     MAIL_FALLBACK_SERVER = os.getenv("MAIL_FALLBACK_SERVER")
+    MAIL_ADDITIONAL_SERVERS = _env_list("MAIL_ADDITIONAL_SERVERS")
+    MAIL_ADDITIONAL_PORTS = _env_int_list("MAIL_ADDITIONAL_PORTS")
+    MAIL_FORCE_IPV4 = _env_bool("MAIL_FORCE_IPV4", False)
+    MAIL_MAX_DELIVERY_SECONDS = _env_float("MAIL_MAX_DELIVERY_SECONDS", 20.0)
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
     COMPANY_ADDRESS = _env_str(
         "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"

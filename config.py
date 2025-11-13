@@ -142,6 +142,7 @@ class Config:
     MAIL_FALLBACK_SERVER = os.getenv("MAIL_FALLBACK_SERVER")
     MAIL_ADDITIONAL_SERVERS = _env_list("MAIL_ADDITIONAL_SERVERS")
     MAIL_ADDITIONAL_PORTS = _env_int_list("MAIL_ADDITIONAL_PORTS")
+    MAIL_FORCE_IPV4 = _env_bool("MAIL_FORCE_IPV4", False)
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
     COMPANY_ADDRESS = _env_str(
         "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"

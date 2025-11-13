@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import smtplib
 import ssl
+import socket
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr, getaddresses, parseaddr
@@ -186,6 +187,7 @@ class Mail:
         fallback_server = config.get("MAIL_FALLBACK_SERVER") or host
         additional_servers = config.get("MAIL_ADDITIONAL_SERVERS") or []
         additional_ports_value = config.get("MAIL_ADDITIONAL_PORTS") or []
+        force_ipv4 = bool(config.get("MAIL_FORCE_IPV4", False))
         try:
             timeout_value = float(timeout)
         except (TypeError, ValueError):
@@ -248,6 +250,27 @@ class Mail:
                     result.append(number)
             return result
 
+        def _connect_with_optional_ipv4(factory):
+            if not force_ipv4:
+                return factory()
+
+            original_getaddrinfo = socket.getaddrinfo
+
+            def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+                if family in (0, socket.AF_UNSPEC, socket.AF_INET6):
+                    family = socket.AF_INET
+                result = original_getaddrinfo(host, port, family, type, proto, flags)
+                if not isinstance(result, list):
+                    return result
+                ipv4_results = [item for item in result if item and item[0] == socket.AF_INET]
+                return ipv4_results or result
+
+            socket.getaddrinfo = ipv4_only
+            try:
+                return factory()
+            finally:
+                socket.getaddrinfo = original_getaddrinfo
+
         def _send_once(
             target_host: str,
             target_port: int,
@@ -256,12 +279,23 @@ class Mail:
         ) -> None:
             if ssl_enabled:
                 smtp_class = smtplib.SMTP_SSL
-                smtp = smtp_class(
-                    target_host, target_port, timeout=timeout_value, context=tls_context
+                smtp = _connect_with_optional_ipv4(
+                    lambda: smtp_class(
+                        target_host,
+                        target_port,
+                        timeout=timeout_value,
+                        context=tls_context,
+                    )
                 )
             else:
                 smtp_class = smtplib.SMTP
-                smtp = smtp_class(target_host, target_port, timeout=timeout_value)
+                smtp = _connect_with_optional_ipv4(
+                    lambda: smtp_class(
+                        target_host,
+                        target_port,
+                        timeout=timeout_value,
+                    )
+                )
 
             with smtp as server:
                 server.ehlo()

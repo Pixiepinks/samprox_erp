@@ -52,3 +52,13 @@ def test_mail_password_collapses_whitespace(monkeypatch):
     finally:
         monkeypatch.delenv("MAIL_PASSWORD", raising=False)
         importlib.reload(config_module)
+
+
+def test_mail_force_ipv4_flag(monkeypatch):
+    monkeypatch.setenv("MAIL_FORCE_IPV4", "true")
+    importlib.reload(config_module)
+    try:
+        assert config_module.Config.MAIL_FORCE_IPV4 is True
+    finally:
+        monkeypatch.delenv("MAIL_FORCE_IPV4", raising=False)
+        importlib.reload(config_module)

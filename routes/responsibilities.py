@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import asc
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db, mail
 from flask_mail import Message
@@ -32,6 +33,16 @@ task_schema = ResponsibilityTaskSchema()
 tasks_schema = ResponsibilityTaskSchema(many=True)
 task_create_schema = ResponsibilityTaskCreateSchema()
 users_schema = UserSchema(many=True)
+
+
+def _is_responsibility_number_conflict(error: IntegrityError) -> bool:
+    """Return ``True`` when ``error`` refers to the responsibility number constraint."""
+
+    message = str(getattr(error, "orig", "") or "")
+    if not message:
+        message = str(error)
+    message = message.lower()
+    return "responsibility" in message and "number" in message
 
 _ALLOWED_CREATOR_ROLES = {
     RoleEnum.production_manager,
@@ -225,7 +236,35 @@ def create_task():
     task.update_custom_weekdays(data.get("custom_weekdays"))
 
     db.session.add(task)
-    db.session.commit()
+
+    error_message = "Unable to save responsibility. Please try again."
+    try:
+        db.session.commit()
+    except IntegrityError as error:
+        db.session.rollback()
+        if _is_responsibility_number_conflict(error):
+            current_app.logger.warning(
+                "Responsibility number conflict detected; retrying assignment.",
+                exc_info=error,
+            )
+            task.number = None
+            db.session.add(task)
+            try:
+                db.session.flush()
+                db.session.commit()
+            except (IntegrityError, SQLAlchemyError) as retry_error:
+                db.session.rollback()
+                current_app.logger.exception(
+                    "Failed to allocate a unique responsibility number after retry.",
+                    exc_info=retry_error,
+                )
+                return jsonify({"msg": error_message}), 500
+        else:
+            current_app.logger.exception(
+                "Failed to save responsibility task.",
+                exc_info=error,
+            )
+            return jsonify({"msg": error_message}), 500
 
     notification = {"sent": True}
     try:

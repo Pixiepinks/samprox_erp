@@ -3,6 +3,9 @@ import os
 import sys
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
+
+from sqlalchemy.exc import IntegrityError
 
 
 class ResponsibilityApiTestCase(unittest.TestCase):
@@ -210,6 +213,54 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         errors = response.get_json().get("errors", {})
         self.assertIn("actionNotes", errors)
         self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
+
+    def test_create_responsibility_retries_when_number_conflict_occurs(self):
+        scheduled_for = date.today().isoformat()
+        payload = {
+            "title": "Factory inspection",
+            "scheduledFor": scheduled_for,
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "inspect@example.com",
+            "action": "done",
+        }
+
+        original_commit = self.app_module.db.session.commit
+        conflict_error = IntegrityError(
+            "INSERT INTO responsibility_task",
+            {},
+            Exception('duplicate key value violates unique constraint "responsibility_task_number_key"'),
+        )
+        call_state = {"count": 0}
+
+        def commit_with_conflict():
+            if call_state["count"] == 0:
+                call_state["count"] += 1
+                raise conflict_error
+            call_state["count"] += 1
+            return original_commit()
+
+        with patch.object(
+            self.app_module.db.session,
+            "commit",
+            side_effect=commit_with_conflict,
+        ) as mock_commit, patch.object(
+            self.app_module.db.session,
+            "flush",
+            wraps=self.app_module.db.session.flush,
+        ) as mock_flush:
+            response = self.client.post(
+                "/api/responsibilities",
+                headers=self.auth_headers,
+                json=payload,
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertGreaterEqual(mock_commit.call_count, 2)
+        self.assertTrue(mock_flush.called)
+
+        task = self.app_module.ResponsibilityTask.query.one()
+        self.assertEqual(task.title, "Factory inspection")
+        self.assertEqual(task.number, "0001")
 
 
 if __name__ == "__main__":

@@ -73,6 +73,28 @@ _ALLOWED_CREATOR_ROLES = {
 }
 
 
+def _normalize_progress(value, action: ResponsibilityAction) -> int:
+    """Return a clamped progress value honoring the selected action."""
+
+    try:
+        action_value = ResponsibilityAction(action)
+    except (TypeError, ValueError):
+        action_value = None
+
+    if action_value in {ResponsibilityAction.DONE, ResponsibilityAction.DELETED}:
+        return 100
+
+    if value is None:
+        return 0
+
+    try:
+        progress_value = int(value)
+    except (TypeError, ValueError):
+        return 0
+
+    return max(0, min(100, progress_value))
+
+
 def _current_role() -> RoleEnum | None:
     try:
         claims = get_jwt()
@@ -377,6 +399,7 @@ def create_task():
     status = ResponsibilityTaskStatus(status_value)
     action = ResponsibilityAction(data["action"])
     action_notes = data.get("action_notes")
+    progress = _normalize_progress(data.get("progress"), action)
 
     task = ResponsibilityTask(
         title=data["title"],
@@ -388,6 +411,7 @@ def create_task():
         action=action,
         action_notes=action_notes,
         recipient_email=data["recipient_email"],
+        progress=progress,
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
         delegated_to_id=delegated_to.id if delegated_to else None,
@@ -488,6 +512,12 @@ def update_task(task_id: int):
     action = ResponsibilityAction(data["action"])
     action_notes = data.get("action_notes")
 
+    if "progress" in payload:
+        progress_input = data.get("progress")
+    else:
+        progress_input = getattr(task, "progress", None)
+    progress = _normalize_progress(progress_input, action)
+
     task.title = data["title"]
     task.description = data.get("description")
     task.detail = data.get("detail")
@@ -497,6 +527,7 @@ def update_task(task_id: int):
     task.action = action
     task.action_notes = action_notes
     task.recipient_email = data["recipient_email"]
+    task.progress = progress
     task.assignee_id = assignee.id if assignee else None
     task.delegated_to_id = delegated_to.id if delegated_to else None
     task.update_custom_weekdays(data.get("custom_weekdays"))

@@ -127,6 +127,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["title"], "Safety walkdown")
         self.assertEqual(data["recurrence"], "weekly")
+        self.assertEqual(data["progress"], 0)
         self.assertTrue(data["email_notification"]["sent"])
 
         task = self.app_module.ResponsibilityTask.query.one()
@@ -138,6 +139,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.delegated_to_id, self.secondary_manager.id)
         self.assertIsNone(task.action_notes)
         self.assertEqual(task.number, "0001")
+        self.assertEqual(task.progress, 0)
 
         self.assertEqual(len(self.sent_emails), 1)
         message = self.sent_emails[0]
@@ -166,7 +168,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             json=create_payload,
         )
 
-        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.status_code, 201, create_response.get_json())
         created_data = create_response.get_json()
         task_id = created_data["id"]
 
@@ -198,6 +200,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(updated["actionNotes"], "Follow up next month.")
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
+        self.assertEqual(updated["progress"], 100)
         notification = updated.get("email_notification")
         self.assertIsNotNone(notification)
         self.assertTrue(notification.get("sent"))
@@ -211,9 +214,57 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.action.value, "done")
         self.assertEqual(task.action_notes, "Follow up next month.")
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
+        self.assertEqual(task.progress, 100)
 
         # Updating should send a fresh email notification
         self.assertEqual(len(self.sent_emails), 2)
+
+    def test_update_responsibility_deleted_action_sets_progress_to_100(self):
+        scheduled_for = date.today().isoformat()
+        create_payload = {
+            "title": "Waste audit",
+            "description": "Review scrap handling.",
+            "detail": "Check bins and documentation.",
+            "scheduledFor": scheduled_for,
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "auditor@example.com",
+            "action": "discussed",
+            "progress": 25,
+            "actionNotes": "Discussed cleanup approach.",
+        }
+
+        create_response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=create_payload,
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        task_id = create_response.get_json()["id"]
+
+        update_response = self.client.put(
+            f"/api/responsibilities/{task_id}",
+            headers=self.auth_headers,
+            json={
+                "title": "Waste audit",
+                "description": "Review scrap handling.",
+                "detail": "Check bins and documentation.",
+                "scheduledFor": scheduled_for,
+                "recurrence": "does_not_repeat",
+                "recipientEmail": "auditor@example.com",
+                "action": "deleted",
+                "progress": 5,
+                "actionNotes": "Task no longer required.",
+            },
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        payload = update_response.get_json()
+        self.assertEqual(payload["progress"], 100)
+
+        task = self.app_module.ResponsibilityTask.query.get(task_id)
+        self.assertEqual(task.progress, 100)
+        self.assertEqual(task.action.value, "deleted")
 
     def test_weekly_plan_email_summarizes_occurrences(self):
         monday = date.today()

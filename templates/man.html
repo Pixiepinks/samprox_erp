@@ -133,7 +133,7 @@
                                 <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
                                 <th scope="col">5D Action</th>
-                                <th scope="col">Status</th>
+                                <th scope="col">Progress</th>
                                 <th scope="col">Created</th>
                                 <th scope="col">Update</th>
                             </tr>
@@ -656,6 +656,20 @@
                             <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
                                 <option value="">Select a manager</option>
                             </select>
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-progress">Progress (%)</label>
+                            <input
+                                class="edit-form__input"
+                                id="responsibility-progress"
+                                name="progress"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                inputmode="numeric"
+                                value="0"
+                            />
                         </div>
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-recipient">Notification email <span class="required">*</span></label>
@@ -1275,6 +1289,7 @@
         const responsibilityActionSelect = document.getElementById("responsibility-action");
         const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
         const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
+        const responsibilityProgressInput = document.getElementById("responsibility-progress");
         const responsibilityRecipientInput = document.getElementById("responsibility-recipient");
         const responsibilityActionNotesInput = document.getElementById("responsibility-action-notes");
         const responsibilitySubmitButton = document.getElementById("responsibility-submit");
@@ -1388,6 +1403,100 @@
             return normalized.replace(/(^|\s)([a-z])/g, (_, space, letter) => `${space}${letter.toUpperCase()}`);
         };
 
+        const PROGRESS_COLOR_RED = [217, 45, 32];
+        const PROGRESS_COLOR_YELLOW = [254, 200, 75];
+        const PROGRESS_COLOR_GREEN = [18, 183, 106];
+        const PROGRESS_COLOR_GRAY = [152, 162, 179];
+
+        const clampProgressValue = (value) => {
+            if (value === null || value === undefined || value === "") {
+                return 0;
+            }
+            const parsed = Number.parseFloat(value);
+            if (Number.isNaN(parsed)) {
+                return 0;
+            }
+            const rounded = Math.round(parsed);
+            return Math.min(100, Math.max(0, rounded));
+        };
+
+        const interpolateProgressColor = (start, end, ratio) => {
+            return start.map((component, index) => component + (end[index] - component) * ratio);
+        };
+
+        const toRgbString = (components) => {
+            const [r, g, b] = components.map((component) => Math.round(component));
+            return `rgb(${r}, ${g}, ${b})`;
+        };
+
+        const resolveProgressColor = (value, action) => {
+            if (action === "deleted") {
+                return toRgbString(PROGRESS_COLOR_GRAY);
+            }
+            if (value <= 0) {
+                return toRgbString(PROGRESS_COLOR_RED);
+            }
+            if (value >= 100) {
+                return toRgbString(PROGRESS_COLOR_GREEN);
+            }
+            if (value <= 50) {
+                const ratio = value / 50;
+                const color = interpolateProgressColor(PROGRESS_COLOR_RED, PROGRESS_COLOR_YELLOW, ratio);
+                return toRgbString(color);
+            }
+            const ratio = (value - 50) / 50;
+            const color = interpolateProgressColor(PROGRESS_COLOR_YELLOW, PROGRESS_COLOR_GREEN, ratio);
+            return toRgbString(color);
+        };
+
+        const resolveProgressTextColor = (value, action) => {
+            if (action === "deleted") {
+                return "#1D2939";
+            }
+            return value >= 45 ? "#FFFFFF" : "#1D2939";
+        };
+
+        const renderResponsibilityProgress = (task) => {
+            const action = task?.action || "";
+            const progressValue = clampProgressValue(task?.progress);
+            const statusText = formatResponsibilityStatus(task?.status);
+            const displayText = `${progressValue}%`;
+            const color = resolveProgressColor(progressValue, action);
+            const textColor = resolveProgressTextColor(progressValue, action);
+            const ariaText = statusText ? `${displayText} complete – ${statusText}` : `${displayText} complete`;
+            const tooltipText = statusText ? `${displayText} complete • ${statusText}` : `${displayText} complete`;
+
+            const container = document.createElement("div");
+            container.className = "responsibility-progress";
+
+            const track = document.createElement("div");
+            track.className = "responsibility-progress__track";
+            track.setAttribute("role", "progressbar");
+            track.setAttribute("aria-valuemin", "0");
+            track.setAttribute("aria-valuemax", "100");
+            track.setAttribute("aria-valuenow", String(progressValue));
+            track.setAttribute("aria-valuetext", ariaText);
+            track.title = tooltipText;
+
+            const fill = document.createElement("div");
+            fill.className = "responsibility-progress__fill";
+            fill.style.width = `${progressValue}%`;
+            fill.style.backgroundColor = color;
+            if (progressValue > 0) {
+                fill.style.minWidth = "4px";
+            }
+
+            const text = document.createElement("span");
+            text.className = "responsibility-progress__text";
+            text.textContent = displayText;
+            text.style.color = textColor;
+
+            track.append(fill, text);
+            container.append(track);
+
+            return container;
+        };
+
         const setResponsibilityActionNotesError = (message = "") => {
             if (!responsibilityActionNotesError) {
                 return;
@@ -1458,6 +1567,29 @@
             const previousValue = responsibilityActionPreviousValue;
             responsibilityActionPreviousValue = newValue;
             updateDelegatedVisibility(newValue);
+
+            if (responsibilityProgressInput) {
+                if (newValue === "done" || newValue === "deleted") {
+                    if (!responsibilityProgressInput.readOnly) {
+                        responsibilityProgressInput.dataset.progressPrevious =
+                            responsibilityProgressInput.value &&
+                            responsibilityProgressInput.value !== "100"
+                                ? responsibilityProgressInput.value
+                                : responsibilityProgressInput.dataset.progressPrevious || "0";
+                    }
+                    responsibilityProgressInput.value = "100";
+                    responsibilityProgressInput.readOnly = true;
+                } else {
+                    if (responsibilityProgressInput.readOnly) {
+                        const previousProgress = responsibilityProgressInput.dataset.progressPrevious;
+                        if (previousProgress !== undefined) {
+                            responsibilityProgressInput.value = previousProgress || "0";
+                        }
+                    }
+                    responsibilityProgressInput.readOnly = false;
+                    delete responsibilityProgressInput.dataset.progressPrevious;
+                }
+            }
 
             if (!ACTIONS_REQUIRING_NOTES.has(newValue)) {
                 if (responsibilityActionNotesInput) {
@@ -1608,6 +1740,11 @@
             if (responsibilityActionNotesTextarea) {
                 responsibilityActionNotesTextarea.value = "";
             }
+            if (responsibilityProgressInput) {
+                responsibilityProgressInput.value = "0";
+                responsibilityProgressInput.readOnly = false;
+                delete responsibilityProgressInput.dataset.progressPrevious;
+            }
             toggleCustomWeekdayFieldset();
             updateRecurrenceOptionLabels();
             clearResponsibilityFormError();
@@ -1702,6 +1839,18 @@
                 responsibilityActionPreviousValue = actionValue;
                 updateDelegatedVisibility(actionValue);
 
+                if (responsibilityProgressInput) {
+                    const progressValue = clampProgressValue(task?.progress);
+                    responsibilityProgressInput.value = String(progressValue);
+                    if (actionValue === "done" || actionValue === "deleted") {
+                        responsibilityProgressInput.readOnly = true;
+                        delete responsibilityProgressInput.dataset.progressPrevious;
+                    } else {
+                        responsibilityProgressInput.readOnly = false;
+                        delete responsibilityProgressInput.dataset.progressPrevious;
+                    }
+                }
+
                 if (responsibilityActionNotesInput) {
                     responsibilityActionNotesInput.value = task.actionNotes || "";
                 }
@@ -1719,6 +1868,11 @@
                 }
                 responsibilityActionPreviousValue = responsibilityActionSelect?.value || "";
                 updateDelegatedVisibility(responsibilityActionPreviousValue);
+                if (responsibilityProgressInput) {
+                    responsibilityProgressInput.value = "0";
+                    responsibilityProgressInput.readOnly = false;
+                    delete responsibilityProgressInput.dataset.progressPrevious;
+                }
             }
 
             updateRecurrenceOptionLabels();
@@ -1757,8 +1911,6 @@
                     task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—",
                     formatResponsibilityDate(task?.scheduledFor),
                     formatResponsibilityAction(task?.action),
-                    formatResponsibilityStatus(task?.status),
-                    formatResponsibilityDateTime(task?.createdAt),
                 ];
 
                 cells.forEach((value, index) => {
@@ -1775,6 +1927,20 @@
                     }
                     row.appendChild(cell);
                 });
+
+                const progressCell = document.createElement("td");
+                progressCell.classList.add("responsibility-table__progress");
+                const progressIndicator = renderResponsibilityProgress(task);
+                if (progressIndicator) {
+                    progressCell.appendChild(progressIndicator);
+                } else {
+                    progressCell.textContent = "—";
+                }
+                row.appendChild(progressCell);
+
+                const createdCell = document.createElement("td");
+                createdCell.textContent = formatResponsibilityDateTime(task?.createdAt) ?? "—";
+                row.appendChild(createdCell);
 
                 const actionsCell = document.createElement("td");
                 actionsCell.classList.add("responsibility-table__actions");
@@ -1951,6 +2117,32 @@
             const actionValue = formData.get("action")?.toString();
             if (actionValue) {
                 payload.action = actionValue;
+            }
+
+            if (responsibilityProgressInput) {
+                const progressRaw = formData.get("progress");
+                const progressString = progressRaw?.toString().trim() ?? "";
+                let progressValue = 0;
+                if (progressString) {
+                    const parsedProgress = Number.parseFloat(progressString);
+                    if (Number.isNaN(parsedProgress)) {
+                        showResponsibilityFormError("Enter a progress value between 0 and 100.");
+                        responsibilityProgressInput.focus();
+                        return;
+                    }
+                    if (parsedProgress < 0 || parsedProgress > 100) {
+                        showResponsibilityFormError("Progress must be between 0 and 100.");
+                        responsibilityProgressInput.focus();
+                        return;
+                    }
+                    progressValue = Math.round(parsedProgress);
+                }
+
+                if (actionValue === "done" || actionValue === "deleted") {
+                    progressValue = 100;
+                }
+
+                payload.progress = progressValue;
             }
 
             const delegatedValueRaw = formData.get("delegatedToId")?.toString();

@@ -1,6 +1,7 @@
 import re
 
 from marshmallow import Schema, fields
+from marshmallow.validate import Range
 
 from models import (
     PayCategory,
@@ -726,6 +727,7 @@ class ResponsibilityTaskSchema(Schema):
     status = fields.Method("get_status")
     action = fields.Method("get_action")
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
+    progress = fields.Int(data_key="progress")
     recipient_email = fields.Str(data_key="recipientEmail")
     assigner = fields.Nested(UserSchema, dump_only=True)
     assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
@@ -788,6 +790,7 @@ class ResponsibilityTaskCreateSchema(Schema):
     status = fields.Str(load_default=ResponsibilityTaskStatus.PLANNED.value)
     action = fields.Str(required=True)
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
+    progress = fields.Int(allow_none=True, validate=Range(min=0, max=100))
 
     class Meta:
         ordered = True
@@ -820,6 +823,19 @@ class ResponsibilityTaskCreateSchema(Schema):
         action = normalized.get("action")
         if isinstance(action, str):
             normalized["action"] = action.strip().lower()
+
+        progress = normalized.get("progress")
+        if isinstance(progress, str):
+            stripped = progress.strip()
+            if not stripped:
+                normalized["progress"] = None
+            else:
+                try:
+                    normalized["progress"] = int(round(float(stripped)))
+                except ValueError:
+                    normalized["progress"] = stripped
+        elif isinstance(progress, float):
+            normalized["progress"] = int(round(progress))
 
         return normalized
 

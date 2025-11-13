@@ -6,6 +6,10 @@ from models import (
     PayCategory,
     TeamMemberStatus,
     MaintenanceJobStatus,
+    ResponsibilityTask,
+    ResponsibilityRecurrence,
+    ResponsibilityTaskStatus,
+    User,
 )
 
 class UserSchema(Schema):
@@ -19,7 +23,7 @@ class UserSchema(Schema):
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
-from marshmallow import Schema, fields, validates, ValidationError, pre_load
+from marshmallow import Schema, fields, validates, validates_schema, ValidationError, pre_load
 
 # --- helpers ---------------------------------------------------------------
 
@@ -654,3 +658,188 @@ class ProductionForecastEntrySchema(Schema):
 
     def get_updated_at(self, obj):
         return format_datetime_as_colombo_iso(getattr(obj, "updated_at", None))
+
+
+RESPONSIBILITY_WEEKDAY_NAMES = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
+
+
+def _ordinal_suffix(value: int) -> str:
+    if 10 <= value % 100 <= 20:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+
+
+def describe_responsibility_recurrence(task: ResponsibilityTask) -> str | None:
+    if task is None:
+        return None
+
+    recurrence = getattr(task, "recurrence", None)
+    if not isinstance(recurrence, ResponsibilityRecurrence):
+        try:
+            recurrence = ResponsibilityRecurrence(recurrence)
+        except Exception:
+            return None
+
+    scheduled_for = getattr(task, "scheduled_for", None)
+
+    if recurrence == ResponsibilityRecurrence.DOES_NOT_REPEAT:
+        return "Does not repeat"
+    if recurrence == ResponsibilityRecurrence.MONDAY_TO_FRIDAY:
+        return "Monday to Friday"
+    if recurrence == ResponsibilityRecurrence.DAILY:
+        return "Daily"
+    if recurrence == ResponsibilityRecurrence.WEEKLY and isinstance(scheduled_for, date):
+        return f"Weekly on {RESPONSIBILITY_WEEKDAY_NAMES[scheduled_for.weekday()]}"
+    if recurrence == ResponsibilityRecurrence.MONTHLY and isinstance(scheduled_for, date):
+        day = scheduled_for.day
+        return f"Monthly on the {day}{_ordinal_suffix(day)}"
+    if recurrence == ResponsibilityRecurrence.ANNUALLY and isinstance(scheduled_for, date):
+        return scheduled_for.strftime("Annually on %B %d")
+    if recurrence == ResponsibilityRecurrence.CUSTOM:
+        weekdays = task.custom_weekday_list
+        if weekdays:
+            names = [RESPONSIBILITY_WEEKDAY_NAMES[index] for index in weekdays]
+            return f"Custom ({', '.join(names)})"
+        return "Custom"
+    return None
+
+
+class ResponsibilityTaskSchema(Schema):
+    id = fields.Int(dump_only=True)
+    title = fields.Str(required=True)
+    description = fields.Str(allow_none=True)
+    scheduled_for = fields.Date(data_key="scheduledFor")
+    recurrence = fields.Method("get_recurrence")
+    recurrence_label = fields.Method("get_recurrence_label", data_key="recurrenceLabel")
+    custom_weekdays = fields.Method("get_custom_weekdays", data_key="customWeekdays")
+    status = fields.Method("get_status")
+    recipient_email = fields.Str(data_key="recipientEmail")
+    assigner = fields.Nested(UserSchema, dump_only=True)
+    assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
+    created_at = fields.Method("get_created_at", data_key="createdAt")
+    updated_at = fields.Method("get_updated_at", data_key="updatedAt")
+
+    class Meta:
+        ordered = True
+
+    def get_custom_weekdays(self, obj):
+        if not isinstance(obj, ResponsibilityTask):
+            return []
+        return obj.custom_weekday_list
+
+    def get_recurrence(self, obj):
+        value = getattr(obj, "recurrence", None)
+        if isinstance(value, ResponsibilityRecurrence):
+            return value.value
+        if isinstance(value, str):
+            return value
+        return None
+
+    def get_recurrence_label(self, obj):
+        return describe_responsibility_recurrence(obj)
+
+    def get_status(self, obj):
+        value = getattr(obj, "status", None)
+        if isinstance(value, ResponsibilityTaskStatus):
+            return value.value
+        if isinstance(value, str):
+            return value
+        return None
+
+    def get_created_at(self, obj):
+        return format_datetime_as_colombo_iso(getattr(obj, "created_at", None), assume_local=True)
+
+    def get_updated_at(self, obj):
+        return format_datetime_as_colombo_iso(getattr(obj, "updated_at", None), assume_local=True)
+
+
+class ResponsibilityTaskCreateSchema(Schema):
+    title = fields.Str(required=True)
+    description = fields.Str(allow_none=True)
+    scheduled_for = fields.Date(required=True, data_key="scheduledFor")
+    recurrence = fields.Str(required=True, data_key="recurrence")
+    custom_weekdays = fields.List(fields.Int(), allow_none=True, data_key="customWeekdays")
+    assignee_id = fields.Int(allow_none=True, data_key="assigneeId")
+    recipient_email = fields.Email(required=True, data_key="recipientEmail")
+    status = fields.Str(load_default=ResponsibilityTaskStatus.PLANNED.value)
+
+    class Meta:
+        ordered = True
+
+    @pre_load
+    def normalize_payload(self, data, **_kwargs):
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+
+        recurrence = normalized.get("recurrence")
+        if isinstance(recurrence, str):
+            normalized["recurrence"] = recurrence.strip().lower().replace(" ", "_")
+
+        custom_weekdays = normalized.get("customWeekdays")
+        if isinstance(custom_weekdays, str):
+            normalized["customWeekdays"] = [
+                int(part)
+                for part in custom_weekdays.split(",")
+                if part.strip().isdigit()
+            ]
+        elif isinstance(custom_weekdays, (set, tuple)):
+            normalized["customWeekdays"] = list(custom_weekdays)
+
+        status = normalized.get("status")
+        if isinstance(status, str):
+            normalized["status"] = status.strip().lower()
+
+        return normalized
+
+    @validates("recurrence")
+    def validate_recurrence(self, value):
+        try:
+            ResponsibilityRecurrence(value)
+        except ValueError:
+            raise ValidationError("Invalid recurrence option.")
+
+    @validates("status")
+    def validate_status(self, value):
+        if value is None:
+            return
+        try:
+            ResponsibilityTaskStatus(value)
+        except ValueError:
+            raise ValidationError("Invalid task status.")
+
+    @validates("custom_weekdays")
+    def validate_custom_weekdays(self, value):
+        if value is None:
+            return
+        for index in value:
+            try:
+                number = int(index)
+            except (TypeError, ValueError) as error:
+                raise ValidationError("Custom weekdays must be integers between 0 and 6.") from error
+            if number < 0 or number > 6:
+                raise ValidationError("Custom weekdays must be between 0 (Monday) and 6 (Sunday).")
+
+    @validates_schema
+    def validate_custom_combination(self, data, **_kwargs):
+        recurrence = data.get("recurrence")
+        custom_weekdays = data.get("custom_weekdays") or []
+        if recurrence == ResponsibilityRecurrence.CUSTOM.value and not custom_weekdays:
+            raise ValidationError(
+                "Select at least one weekday for custom recurrence.",
+                field_name="customWeekdays",
+            )
+        if recurrence != ResponsibilityRecurrence.CUSTOM.value and custom_weekdays:
+            raise ValidationError(
+                "Custom weekdays can only be provided when recurrence is set to custom.",
+                field_name="customWeekdays",
+            )

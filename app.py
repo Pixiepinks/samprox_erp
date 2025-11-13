@@ -30,6 +30,7 @@ from models import (
     SalesActualEntry,
     SalesForecastEntry,
     ProductionForecastEntry,
+    ResponsibilityTask,
     User,
     TeamLeaveBalance,
     TeamWorkCalendarDay,
@@ -46,6 +47,7 @@ from routes import (
     market,
     material_api,
     production,
+    responsibilities,
     reports,
     team,
     ui,
@@ -188,6 +190,7 @@ def create_app():
     app.register_blueprint(material_api.bp)
     app.register_blueprint(machines.bp)
     app.register_blueprint(production.bp)
+    app.register_blueprint(responsibilities.bp)
     app.register_blueprint(market.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(team.bp)

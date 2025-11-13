@@ -137,6 +137,7 @@
                                 <th scope="col">5D Action</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Created</th>
+                                <th scope="col">Update</th>
                             </tr>
                         </thead>
                         <tbody id="responsibility-table-body"></tbody>
@@ -1674,6 +1675,22 @@
                     }
                     row.appendChild(cell);
                 });
+
+                const actionsCell = document.createElement("td");
+                actionsCell.classList.add("responsibility-table__actions");
+
+                const updateButton = document.createElement("button");
+                updateButton.type = "button";
+                updateButton.className = "button button--secondary button--small responsibility-table__update-button";
+                updateButton.textContent = "Update";
+                if (task?.id) {
+                    updateButton.dataset.responsibilityId = String(task.id);
+                } else {
+                    updateButton.disabled = true;
+                }
+
+                actionsCell.appendChild(updateButton);
+                row.appendChild(actionsCell);
 
                 fragment.appendChild(row);
             });

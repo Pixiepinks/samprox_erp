@@ -9,6 +9,7 @@ mode and delivery has not been explicitly suppressed.
 """
 from __future__ import annotations
 
+import errno
 import smtplib
 import ssl
 import socket
@@ -250,10 +251,25 @@ class Mail:
                     result.append(number)
             return result
 
-        def _connect_with_optional_ipv4(factory):
-            if not force_ipv4:
-                return factory()
+        def _is_ipv6_resolution_error(exc: Exception) -> bool:
+            if isinstance(exc, socket.gaierror):
+                return True
+            if isinstance(exc, OSError):
+                retry_errnos = {
+                    errno.EHOSTUNREACH,
+                    errno.ENETUNREACH,
+                    errno.ECONNREFUSED,
+                    errno.ETIMEDOUT,
+                }
+                eai_again = getattr(socket, "EAI_AGAIN", None)
+                if eai_again is not None:
+                    retry_errnos.add(eai_again)
+                return exc.errno in retry_errnos
+            if isinstance(exc, (TimeoutError, smtplib.SMTPConnectError, ssl.SSLError)):
+                return True
+            return False
 
+        def _connect_with_optional_ipv4(factory):
             original_getaddrinfo = socket.getaddrinfo
 
             def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
@@ -265,11 +281,25 @@ class Mail:
                 ipv4_results = [item for item in result if item and item[0] == socket.AF_INET]
                 return ipv4_results or result
 
-            socket.getaddrinfo = ipv4_only
+            def connect_using_ipv4():
+                socket.getaddrinfo = ipv4_only
+                try:
+                    return factory()
+                finally:
+                    socket.getaddrinfo = original_getaddrinfo
+
+            if force_ipv4:
+                return connect_using_ipv4()
+
             try:
                 return factory()
-            finally:
-                socket.getaddrinfo = original_getaddrinfo
+            except Exception as exc:
+                if not _is_ipv6_resolution_error(exc):
+                    raise
+                try:
+                    return connect_using_ipv4()
+                except Exception as ipv4_exc:
+                    raise ipv4_exc from exc
 
         def _send_once(
             target_host: str,

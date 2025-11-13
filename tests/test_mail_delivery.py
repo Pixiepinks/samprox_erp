@@ -201,6 +201,50 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
 
     @patch("flask_mail.socket.getaddrinfo")
     @patch("flask_mail.smtplib.SMTP")
+    def test_ipv6_resolution_error_retries_with_ipv4(self, smtp_mock, getaddrinfo_mock):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=False,
+        )
+
+        server = MagicMock()
+        connection = MagicMock()
+        connection.ehlo.return_value = None
+        connection.starttls.return_value = None
+        connection.login.return_value = None
+        connection.send_message.return_value = None
+        server.__enter__.return_value = connection
+        server.__exit__.return_value = False
+
+        attempts = {"count": 0}
+
+        def _smtp_side_effect(host, port, timeout=10.0, **kwargs):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise socket.gaierror(getattr(socket, "EAI_AGAIN", -1), "temporary failure")
+            socket.getaddrinfo(host, port)
+            return server
+
+        smtp_mock.side_effect = _smtp_side_effect
+
+        getaddrinfo_mock.return_value = [
+            (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("::1", 587, 0, 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 587)),
+        ]
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        self.mail.send(message)
+
+        self.assertGreaterEqual(attempts["count"], 2)
+        self.assertGreaterEqual(getaddrinfo_mock.call_count, 1)
+        self.assertIs(socket.getaddrinfo, getaddrinfo_mock)
+
+    @patch("flask_mail.socket.getaddrinfo")
+    @patch("flask_mail.smtplib.SMTP")
     def test_force_ipv4_restricts_address_resolution(self, smtp_mock, getaddrinfo_mock):
         self.app.config.update(
             MAIL_SERVER="smtp.example.com",

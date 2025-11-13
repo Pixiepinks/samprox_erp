@@ -42,6 +42,20 @@ def _env_str(name: str, default: str | None = None) -> str | None:
     return text
 
 
+def _env_password(name: str, default: str | None = None) -> str | None:
+    """Return a password-like value with whitespace removed."""
+
+    value = os.getenv(name)
+    if value is None:
+        return default
+    text = value.strip()
+    if not text:
+        return default
+    # Gmail app passwords are presented with spaces for readability; remove them.
+    cleaned = "".join(text.split())
+    return cleaned or default
+
+
 def _normalize_db_url(url: str) -> str:
     if not url:
         return DEFAULT_DATABASE_URL
@@ -98,7 +112,7 @@ class Config:
     MAIL_USE_TLS = _env_bool("MAIL_USE_TLS", True)
     MAIL_USE_SSL = _env_bool("MAIL_USE_SSL", False)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreplysamprox@gmail.com")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "zzohpxmeoiahipp")
+    MAIL_PASSWORD = _env_password("MAIL_PASSWORD", "zzohpxmeoiahipp")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreplysamprox@gmail.com")
     MAIL_SUPPRESS_SEND = _env_bool("MAIL_SUPPRESS_SEND", False)
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)

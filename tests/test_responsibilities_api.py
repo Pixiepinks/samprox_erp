@@ -198,6 +198,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(updated["actionNotes"], "Follow up next month.")
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
+        notification = updated.get("email_notification")
+        self.assertIsNotNone(notification)
+        self.assertTrue(notification.get("sent"))
 
         task = self.app_module.ResponsibilityTask.query.get(task_id)
         self.assertEqual(task.title, "Production sync updated")
@@ -209,8 +212,8 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.action_notes, "Follow up next month.")
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
 
-        # Updating should not send another email
-        self.assertEqual(len(self.sent_emails), 1)
+        # Updating should send a fresh email notification
+        self.assertEqual(len(self.sent_emails), 2)
 
     def test_weekly_plan_email_summarizes_occurrences(self):
         monday = date.today()

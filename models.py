@@ -260,6 +260,7 @@ class ResponsibilityTask(db.Model):
     )
     action_notes = db.Column(db.Text)
     recipient_email = db.Column(db.String(255), nullable=False)
+    progress = db.Column(db.Integer, nullable=False, default=0)
 
     assigner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     assigner = db.relationship("User", foreign_keys=[assigner_id], backref="tasks_created")

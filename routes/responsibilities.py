@@ -509,7 +509,18 @@ def update_task(task_id: int):
         current_app.logger.exception("Failed to update responsibility task.", exc_info=error)
         return jsonify({"msg": error_message}), 500
 
+    notification = {"sent": True}
+    try:
+        _send_task_email(task)
+    except Exception as error:  # pragma: no cover - defensive logging
+        current_app.logger.exception("Failed to send responsibility email")
+        notification = {
+            "sent": False,
+            "message": str(error),
+        }
+
     response = task_schema.dump(task)
+    response["email_notification"] = notification
     return jsonify(response), 200
 
 

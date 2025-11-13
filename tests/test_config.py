@@ -62,3 +62,13 @@ def test_mail_force_ipv4_flag(monkeypatch):
     finally:
         monkeypatch.delenv("MAIL_FORCE_IPV4", raising=False)
         importlib.reload(config_module)
+
+
+def test_mail_max_delivery_seconds_from_env(monkeypatch):
+    monkeypatch.setenv("MAIL_MAX_DELIVERY_SECONDS", "15")
+    importlib.reload(config_module)
+    try:
+        assert config_module.Config.MAIL_MAX_DELIVERY_SECONDS == 15.0
+    finally:
+        monkeypatch.delenv("MAIL_MAX_DELIVERY_SECONDS", raising=False)
+        importlib.reload(config_module)

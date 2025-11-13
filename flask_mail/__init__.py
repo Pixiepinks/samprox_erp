@@ -13,6 +13,7 @@ import errno
 import smtplib
 import ssl
 import socket
+import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr, getaddresses, parseaddr
@@ -189,6 +190,7 @@ class Mail:
         additional_servers = config.get("MAIL_ADDITIONAL_SERVERS") or []
         additional_ports_value = config.get("MAIL_ADDITIONAL_PORTS") or []
         force_ipv4 = bool(config.get("MAIL_FORCE_IPV4", False))
+        max_delivery_setting = config.get("MAIL_MAX_DELIVERY_SECONDS", 20.0)
         try:
             timeout_value = float(timeout)
         except (TypeError, ValueError):
@@ -201,6 +203,14 @@ class Mail:
             fallback_port = int(fallback_port_value)
         except (TypeError, ValueError):
             fallback_port = 587
+
+        try:
+            max_delivery_seconds = float(max_delivery_setting)
+        except (TypeError, ValueError):
+            max_delivery_seconds = 20.0
+        else:
+            if max_delivery_seconds <= 0:
+                max_delivery_seconds = None
 
         tls_context = ssl.create_default_context()
         fallback_use_ssl = bool(
@@ -337,6 +347,21 @@ class Mail:
                 server.send_message(email_message, from_addr=sender, to_addrs=recipients)
 
         def _should_retry(exc: Exception) -> bool:
+            if isinstance(exc, TimeoutError):
+                return False
+
+            if isinstance(exc, OSError):
+                fatal_errnos = {
+                    value
+                    for value in (
+                        getattr(errno, "ENETUNREACH", None),
+                        getattr(errno, "EHOSTUNREACH", None),
+                    )
+                    if value is not None
+                }
+                if fatal_errnos and getattr(exc, "errno", None) in fatal_errnos:
+                    return False
+
             if isinstance(
                 exc,
                 (
@@ -422,7 +447,12 @@ class Mail:
                 _schedule(target_host, port_value, ssl_enabled, tls_enabled)
 
         last_exception: Exception | None = None
+        start_time = time.monotonic()
         for target_host, target_port, ssl_enabled, tls_enabled in attempts:
+            if max_delivery_seconds is not None:
+                elapsed = time.monotonic() - start_time
+                if elapsed >= max_delivery_seconds:
+                    raise TimeoutError("Mail delivery exceeded configured time limit")
             try:
                 _send_once(target_host, target_port, ssl_enabled, tls_enabled)
                 return

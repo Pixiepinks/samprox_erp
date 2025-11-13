@@ -143,6 +143,7 @@ class Config:
     MAIL_ADDITIONAL_SERVERS = _env_list("MAIL_ADDITIONAL_SERVERS")
     MAIL_ADDITIONAL_PORTS = _env_int_list("MAIL_ADDITIONAL_PORTS")
     MAIL_FORCE_IPV4 = _env_bool("MAIL_FORCE_IPV4", False)
+    MAIL_MAX_DELIVERY_SECONDS = _env_float("MAIL_MAX_DELIVERY_SECONDS", 20.0)
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
     COMPANY_ADDRESS = _env_str(
         "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"

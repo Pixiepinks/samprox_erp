@@ -1,3 +1,4 @@
+import errno
 import smtplib
 import socket
 import unittest
@@ -198,6 +199,58 @@ class MailDeliveryFallbackTestCase(unittest.TestCase):
 
         attempted_ports = [call.args[1] for call in smtp_mock.call_args_list]
         self.assertIn(2525, attempted_ports)
+
+    @patch("flask_mail.smtplib.SMTP")
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    def test_network_unreachable_does_not_retry_all_variants(
+        self, smtp_ssl_mock, smtp_mock
+    ):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=True,
+            MAIL_ADDITIONAL_SERVERS=["smtp.backup.example"],
+        )
+
+        smtp_mock.side_effect = OSError(errno.ENETUNREACH, "Network unreachable")
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        with self.assertRaises(OSError):
+            self.mail.send(message)
+
+        # One attempt is made for the primary connection and a second attempt is
+        # triggered when the transport retries with the IPv4-only resolver.
+        self.assertEqual(smtp_mock.call_count, 2)
+        smtp_ssl_mock.assert_not_called()
+
+    @patch("flask_mail.time.monotonic")
+    @patch("flask_mail.smtplib.SMTP_SSL")
+    @patch("flask_mail.smtplib.SMTP")
+    def test_total_delivery_timeout_limits_attempts(
+        self, smtp_mock, smtp_ssl_mock, monotonic_mock
+    ):
+        self.app.config.update(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT=587,
+            MAIL_USE_TLS=True,
+            MAIL_USE_SSL=False,
+            MAIL_FALLBACK_TO_TLS=True,
+            MAIL_MAX_DELIVERY_SECONDS=5,
+        )
+
+        monotonic_mock.side_effect = [0.0, 1.0, 6.0]
+        smtp_mock.side_effect = TimeoutError("Connection attempt timed out")
+
+        message = Message(subject="Hello", recipients=["recipient@example.com"], body="Test")
+
+        with self.assertRaises(TimeoutError):
+            self.mail.send(message)
+
+        self.assertEqual(smtp_mock.call_count, 1)
+        smtp_ssl_mock.assert_not_called()
 
     @patch("flask_mail.socket.getaddrinfo")
     @patch("flask_mail.smtplib.SMTP")

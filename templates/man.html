@@ -643,6 +643,7 @@
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-action">5D Action <span class="required">*</span></label>
                             <select class="edit-form__input" id="responsibility-action" name="action" required>
+                                <option value="">Select</option>
                                 <option value="done">Done</option>
                                 <option value="delegated">Delegated</option>
                                 <option value="deferred">Deferred</option>
@@ -1302,7 +1303,7 @@
             "Sunday",
         ];
         const ACTIONS_REQUIRING_NOTES = new Set(["discussed", "deferred", "deleted"]);
-        let responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+        let responsibilityActionPreviousValue = responsibilityActionSelect?.value || "";
         let responsibilityActionModalPreviousValue = null;
 
         let responsibilityTasks = [];
@@ -1438,7 +1439,7 @@
             responsibilityActionNotesModal.setAttribute("aria-hidden", "true");
             setResponsibilityActionNotesError();
             if (revertSelection && responsibilityActionSelect) {
-                const fallback = responsibilityActionModalPreviousValue ?? "done";
+                const fallback = responsibilityActionModalPreviousValue ?? "";
                 responsibilityActionSelect.value = fallback;
                 responsibilityActionPreviousValue = fallback;
                 updateDelegatedVisibility(fallback);
@@ -1597,9 +1598,9 @@
                     });
             }
             if (responsibilityActionSelect) {
-                responsibilityActionSelect.value = "done";
+                responsibilityActionSelect.value = "";
             }
-            responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+            responsibilityActionPreviousValue = responsibilityActionSelect?.value || "";
             updateDelegatedVisibility(responsibilityActionPreviousValue);
             if (responsibilityActionNotesInput) {
                 responsibilityActionNotesInput.value = "";
@@ -1716,7 +1717,7 @@
                     const today = new Date();
                     responsibilityDateInput.value = toIsoDateString(today);
                 }
-                responsibilityActionPreviousValue = responsibilityActionSelect?.value ?? "done";
+                responsibilityActionPreviousValue = responsibilityActionSelect?.value || "";
                 updateDelegatedVisibility(responsibilityActionPreviousValue);
             }
 

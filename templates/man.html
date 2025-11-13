@@ -1486,6 +1486,33 @@
             }
         };
 
+        const extractFirstErrorMessage = (errors) => {
+            if (!errors) {
+                return null;
+            }
+            if (typeof errors === "string") {
+                return errors.trim() || null;
+            }
+            if (Array.isArray(errors)) {
+                for (const entry of errors) {
+                    const message = extractFirstErrorMessage(entry);
+                    if (message) {
+                        return message;
+                    }
+                }
+                return null;
+            }
+            if (typeof errors === "object") {
+                for (const value of Object.values(errors)) {
+                    const message = extractFirstErrorMessage(value);
+                    if (message) {
+                        return message;
+                    }
+                }
+            }
+            return null;
+        };
+
         const clearResponsibilityFormError = () => {
             if (!responsibilityFormError) {
                 return;
@@ -1857,10 +1884,10 @@
                     data = null;
                 }
                 if (!response.ok) {
-                    const errorMessage = data?.msg || data?.errors || "Unable to save responsibility.";
-                    throw new Error(
-                        typeof errorMessage === "string" ? errorMessage : "Unable to save responsibility.",
-                    );
+                    const messageFromResponse =
+                        (typeof data?.msg === "string" && data.msg.trim()) ||
+                        extractFirstErrorMessage(data?.errors);
+                    throw new Error(messageFromResponse || "Unable to save responsibility.");
                 }
                 closeResponsibilityModal();
                 setPlanMessage(

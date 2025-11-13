@@ -9,8 +9,11 @@ mode and delivery has not been explicitly suppressed.
 """
 from __future__ import annotations
 
+import errno
 import smtplib
 import ssl
+import socket
+import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr, getaddresses, parseaddr
@@ -184,6 +187,10 @@ class Mail:
         fallback_to_tls = bool(config.get("MAIL_FALLBACK_TO_TLS", False))
         fallback_port_value = config.get("MAIL_FALLBACK_PORT", 587)
         fallback_server = config.get("MAIL_FALLBACK_SERVER") or host
+        additional_servers = config.get("MAIL_ADDITIONAL_SERVERS") or []
+        additional_ports_value = config.get("MAIL_ADDITIONAL_PORTS") or []
+        force_ipv4 = bool(config.get("MAIL_FORCE_IPV4", False))
+        max_delivery_setting = config.get("MAIL_MAX_DELIVERY_SECONDS", 20.0)
         try:
             timeout_value = float(timeout)
         except (TypeError, ValueError):
@@ -197,10 +204,112 @@ class Mail:
         except (TypeError, ValueError):
             fallback_port = 587
 
+        try:
+            max_delivery_seconds = float(max_delivery_setting)
+        except (TypeError, ValueError):
+            max_delivery_seconds = 20.0
+        else:
+            if max_delivery_seconds <= 0:
+                max_delivery_seconds = None
+
         tls_context = ssl.create_default_context()
         fallback_use_ssl = bool(
             config.get("MAIL_FALLBACK_USE_SSL", False) or fallback_port == 465
         )
+
+        def _normalized_hosts(value) -> list[str]:
+            if not value:
+                return []
+            if isinstance(value, str):
+                items = [item.strip() for item in value.split(",")]
+            else:
+                try:
+                    iterator = iter(value)
+                except TypeError:
+                    items = [str(value).strip()]
+                else:
+                    items = []
+                    for item in iterator:
+                        if not item:
+                            continue
+                        if isinstance(item, str):
+                            parts = [part.strip() for part in item.split(",")]
+                            items.extend(part for part in parts if part)
+                        else:
+                            items.append(str(item).strip())
+            return [item for item in items if item]
+
+        def _normalized_ports(value) -> list[int]:
+            if not value:
+                return []
+            if isinstance(value, str):
+                raw_items = value.split(",")
+            else:
+                try:
+                    iterator = iter(value)
+                except TypeError:
+                    raw_items = [value]
+                else:
+                    raw_items = list(iterator)
+            result: list[int] = []
+            for item in raw_items:
+                try:
+                    number = int(str(item).strip())
+                except (TypeError, ValueError):
+                    continue
+                if number > 0:
+                    result.append(number)
+            return result
+
+        def _is_ipv6_resolution_error(exc: Exception) -> bool:
+            if isinstance(exc, socket.gaierror):
+                return True
+            if isinstance(exc, OSError):
+                retry_errnos = {
+                    errno.EHOSTUNREACH,
+                    errno.ENETUNREACH,
+                    errno.ECONNREFUSED,
+                    errno.ETIMEDOUT,
+                }
+                eai_again = getattr(socket, "EAI_AGAIN", None)
+                if eai_again is not None:
+                    retry_errnos.add(eai_again)
+                return exc.errno in retry_errnos
+            if isinstance(exc, (TimeoutError, smtplib.SMTPConnectError, ssl.SSLError)):
+                return True
+            return False
+
+        def _connect_with_optional_ipv4(factory):
+            original_getaddrinfo = socket.getaddrinfo
+
+            def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+                if family in (0, socket.AF_UNSPEC, socket.AF_INET6):
+                    family = socket.AF_INET
+                result = original_getaddrinfo(host, port, family, type, proto, flags)
+                if not isinstance(result, list):
+                    return result
+                ipv4_results = [item for item in result if item and item[0] == socket.AF_INET]
+                return ipv4_results or result
+
+            def connect_using_ipv4():
+                socket.getaddrinfo = ipv4_only
+                try:
+                    return factory()
+                finally:
+                    socket.getaddrinfo = original_getaddrinfo
+
+            if force_ipv4:
+                return connect_using_ipv4()
+
+            try:
+                return factory()
+            except Exception as exc:
+                if not _is_ipv6_resolution_error(exc):
+                    raise
+                try:
+                    return connect_using_ipv4()
+                except Exception as ipv4_exc:
+                    raise ipv4_exc from exc
 
         def _send_once(
             target_host: str,
@@ -210,12 +319,23 @@ class Mail:
         ) -> None:
             if ssl_enabled:
                 smtp_class = smtplib.SMTP_SSL
-                smtp = smtp_class(
-                    target_host, target_port, timeout=timeout_value, context=tls_context
+                smtp = _connect_with_optional_ipv4(
+                    lambda: smtp_class(
+                        target_host,
+                        target_port,
+                        timeout=timeout_value,
+                        context=tls_context,
+                    )
                 )
             else:
                 smtp_class = smtplib.SMTP
-                smtp = smtp_class(target_host, target_port, timeout=timeout_value)
+                smtp = _connect_with_optional_ipv4(
+                    lambda: smtp_class(
+                        target_host,
+                        target_port,
+                        timeout=timeout_value,
+                    )
+                )
 
             with smtp as server:
                 server.ehlo()
@@ -226,7 +346,22 @@ class Mail:
                     server.login(username, password or "")
                 server.send_message(email_message, from_addr=sender, to_addrs=recipients)
 
-        def _should_retry(exc: Exception) -> bool:
+        def _should_retry(exc: Exception, has_alternates: bool) -> bool:
+            if isinstance(exc, TimeoutError):
+                return has_alternates
+
+            if isinstance(exc, OSError):
+                fatal_errnos = {
+                    value
+                    for value in (
+                        getattr(errno, "ENETUNREACH", None),
+                        getattr(errno, "EHOSTUNREACH", None),
+                    )
+                    if value is not None
+                }
+                if fatal_errnos and getattr(exc, "errno", None) in fatal_errnos:
+                    return False
+
             if isinstance(
                 exc,
                 (
@@ -263,26 +398,69 @@ class Mail:
             seen.add(key)
             attempts.append(key)
 
-        _schedule(host, port, use_ssl, use_tls)
+        host_variants: list[str] = []
+
+        def _add_host_variant(value) -> None:
+            for item in _normalized_hosts(value):
+                lower = item.lower()
+                if not item or item in host_variants:
+                    continue
+                host_variants.append(item)
+
+        _add_host_variant(host)
+        _add_host_variant(fallback_server)
+        _add_host_variant(additional_servers)
+
+        if any("gmail" in candidate.lower() or "googlemail" in candidate.lower() for candidate in host_variants):
+            _add_host_variant(["smtp.gmail.com", "smtp.googlemail.com", "smtp-relay.gmail.com"])
+
+        port_variants: list[tuple[int, bool, bool]] = []
+
+        def _add_port_variant(port_value: int, ssl_enabled: bool, tls_enabled: bool) -> None:
+            if port_value <= 0:
+                return
+            key = (port_value, ssl_enabled, tls_enabled)
+            if key in port_variants:
+                return
+            port_variants.append(key)
+
+        _add_port_variant(port, use_ssl, use_tls)
 
         if fallback_to_tls:
-            _schedule(fallback_server, fallback_port, fallback_use_ssl, not fallback_use_ssl)
+            _add_port_variant(fallback_port, fallback_use_ssl, not fallback_use_ssl)
             if not use_ssl:
-                common_ssl_port = 465
-                _schedule(
-                    fallback_server,
-                    common_ssl_port,
-                    True,
-                    False,
-                )
+                _add_port_variant(465, True, False)
+
+        for extra_port in _normalized_ports(additional_ports_value):
+            if extra_port == 465:
+                _add_port_variant(extra_port, True, False)
+            else:
+                _add_port_variant(extra_port, False, True)
+
+        if not host_variants:
+            host_variants.append(host)
+        if not port_variants:
+            port_variants.append((port, use_ssl, use_tls))
+
+        for target_host in host_variants:
+            for port_value, ssl_enabled, tls_enabled in port_variants:
+                _schedule(target_host, port_value, ssl_enabled, tls_enabled)
 
         last_exception: Exception | None = None
-        for target_host, target_port, ssl_enabled, tls_enabled in attempts:
+        start_time = time.monotonic()
+        for index, (target_host, target_port, ssl_enabled, tls_enabled) in enumerate(
+            attempts
+        ):
+            if max_delivery_seconds is not None:
+                elapsed = time.monotonic() - start_time
+                if elapsed >= max_delivery_seconds:
+                    raise TimeoutError("Mail delivery exceeded configured time limit")
             try:
                 _send_once(target_host, target_port, ssl_enabled, tls_enabled)
                 return
             except Exception as exc:
-                if not _should_retry(exc):
+                remaining_attempts = len(attempts) - index - 1
+                if not _should_retry(exc, remaining_attempts > 0):
                     raise
                 last_exception = exc
                 continue

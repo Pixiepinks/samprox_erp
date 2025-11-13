@@ -35,6 +35,12 @@
             <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
             <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+            <a
+                class="subnav__link"
+                href="{{ url_for('ui.mechanism_page') }}"
+                id="mechanism-link"
+                hidden
+            >Mechanism</a>
         </nav>
         <section class="section">
             <section class="production-chart" aria-labelledby="unit-economics-title">
@@ -325,9 +331,17 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
+        const mechanismLink = document.getElementById("mechanism-link");
 
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
+        if (mechanismLink) {
+            if (user?.role === "admin") {
+                mechanismLink.hidden = false;
+            } else {
+                mechanismLink.remove();
+            }
+        }
 
         logoutButton.addEventListener("click", () => {
             localStorage.removeItem("samprox_token");

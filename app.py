@@ -51,6 +51,7 @@ from routes import (
     reports,
     team,
     ui,
+    users,
 )
 
 
@@ -195,6 +196,7 @@ def create_app():
     app.register_blueprint(reports.bp)
     app.register_blueprint(team.bp)
     app.register_blueprint(ui.bp)
+    app.register_blueprint(users.bp)
 
     @app.get("/api/health")
     def health(): return jsonify({"ok": True})

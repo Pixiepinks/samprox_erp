@@ -153,3 +153,9 @@ def money_page():
 def manufacturing_page():
     """Render the manufacturing operations page."""
     return render_template("manufacturing.html")
+
+
+@bp.get("/mechanism")
+def mechanism_page():
+    """Render the user role management page."""
+    return render_template("mechanism.html")

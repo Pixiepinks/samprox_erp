@@ -14,6 +14,7 @@ from . import (
     reports,
     team,
     ui,
+    users,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "reports",
     "team",
     "ui",
+    "users",
 ]

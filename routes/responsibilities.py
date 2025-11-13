@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-import smtplib
-import socket
-import ssl
+import html
+import os
 from datetime import date, timedelta
 from typing import Iterable
 
@@ -13,8 +12,10 @@ from marshmallow import ValidationError
 from sqlalchemy import asc
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from extensions import db, mail
-from flask_mail import Message
+import requests
+from requests import exceptions as requests_exceptions
+
+from extensions import db
 from models import (
     ResponsibilityAction,
     ResponsibilityRecurrence,
@@ -36,6 +37,24 @@ task_schema = ResponsibilityTaskSchema()
 tasks_schema = ResponsibilityTaskSchema(many=True)
 task_create_schema = ResponsibilityTaskCreateSchema()
 users_schema = UserSchema(many=True)
+
+RESEND_ENDPOINT = "https://api.resend.com/emails"
+RESEND_SENDER = "Samprox ERP <no-reply@samprox.lk>"
+
+
+def _send_email_via_resend(data: dict) -> None:
+    api_key = os.environ["RESEND_API_KEY"]
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        RESEND_ENDPOINT,
+        headers=headers,
+        json=data,
+        timeout=15,
+    )
+    response.raise_for_status()
 
 
 def _is_responsibility_number_conflict(error: IntegrityError) -> bool:
@@ -126,46 +145,65 @@ def _deliver_responsibility_email(
     if not recipient:
         raise ResponsibilityEmailError("No recipient email address was provided.")
 
-    message = Message(subject=subject, recipients=[recipient], body=body)
+    html_body = html.escape(body).replace("\n", "<br>")
+    data = {
+        "from": RESEND_SENDER,
+        "to": [recipient],
+        "subject": subject,
+        "html": html_body,
+    }
 
     try:
-        mail.send(message)
-    except Exception as exc:  # pragma: no cover - logging only
+        _send_email_via_resend(data)
+    except KeyError as exc:  # pragma: no cover - configuration error
         current_app.logger.warning(
-            "Failed to send %s email: %s", context, exc, exc_info=exc
+            "RESEND_API_KEY is not configured for %s emails.", context
         )
-
-        failure_message = f"Failed to send the {context} email."
-        if isinstance(exc, (socket.timeout, TimeoutError)):
-            failure_message = (
-                f"Failed to send the {context} email: the mail server timed out."
-            )
-        elif isinstance(exc, smtplib.SMTPAuthenticationError):
+        raise ResponsibilityEmailError(
+            f"Failed to send the {context} email: email service is not configured.",
+            exc,
+        ) from exc
+    except requests_exceptions.Timeout as exc:
+        current_app.logger.warning(
+            "Failed to send %s email due to timeout: %s", context, exc, exc_info=exc
+        )
+        raise ResponsibilityEmailError(
+            f"Failed to send the {context} email: the email service timed out.",
+            exc,
+        ) from exc
+    except requests_exceptions.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in {401, 403}:
             failure_message = (
                 f"Failed to send the {context} email: authentication failed."
             )
-        elif isinstance(exc, smtplib.SMTPConnectError):
+        else:
             failure_message = (
-                f"Failed to send the {context} email: could not connect to the mail server."
+                f"Failed to send the {context} email: the email service returned an error."
             )
-        elif isinstance(exc, smtplib.SMTPRecipientsRefused):
-            failure_message = (
-                f"Failed to send the {context} email: the recipient address was rejected."
-            )
-        elif isinstance(exc, ssl.SSLCertVerificationError):
-            failure_message = (
-                f"Failed to send the {context} email: the mail server's SSL certificate could not be verified."
-            )
-        elif isinstance(exc, ssl.SSLError):
-            failure_message = (
-                f"Failed to send the {context} email: a secure connection to the mail server could not be established."
-            )
-        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
-            failure_message = (
-                f"Failed to send the {context} email: the mail server could not be reached."
-            )
-
+        current_app.logger.warning(
+            "Failed to send %s email: %s", context, exc, exc_info=exc
+        )
         raise ResponsibilityEmailError(failure_message, exc) from exc
+    except requests_exceptions.ConnectionError as exc:
+        current_app.logger.warning(
+            "Failed to send %s email due to connection error: %s",
+            context,
+            exc,
+            exc_info=exc,
+        )
+        raise ResponsibilityEmailError(
+            f"Failed to send the {context} email: the email service could not be reached.",
+            exc,
+        ) from exc
+    except requests_exceptions.RequestException as exc:  # pragma: no cover - logging only
+        current_app.logger.warning(
+            "Failed to send %s email: %s", context, exc, exc_info=exc
+        )
+        raise ResponsibilityEmailError(
+            f"Failed to send the {context} email.",
+            exc,
+        ) from exc
 
 
 def _send_task_email(task: ResponsibilityTask) -> None:
@@ -242,6 +280,63 @@ def _format_weekly_summary(schedule: dict[date, list[ResponsibilityTask]]) -> st
             parts.append(f"  • {task.title} ({assignee}) — {_render_recurrence(task)}")
         parts.append("")
     return "\n".join(parts).strip()
+
+
+def send_weekly_email(
+    recipient: str, start_date: date, subject: str | None, html: str
+) -> dict[str, str]:
+    subject_line = subject or f"Weekly Responsibility Plan ({start_date})"
+    data = {
+        "from": RESEND_SENDER,
+        "to": [recipient],
+        "subject": subject_line,
+        "html": html,
+    }
+
+    try:
+        response = requests.post(
+            RESEND_ENDPOINT,
+            headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+            json=data,
+            timeout=15,
+        )
+        response.raise_for_status()
+    except KeyError as error:
+        current_app.logger.error(
+            "Failed to send weekly plan email: RESEND_API_KEY is not set."
+        )
+        raise ResponsibilityEmailError(
+            "Failed to send the weekly plan email: email service is not configured.",
+            error,
+        ) from error
+    except requests_exceptions.Timeout as error:
+        current_app.logger.error("Failed to send weekly plan email: %s", error)
+        raise ResponsibilityEmailError(
+            "Failed to send the weekly plan email: the email service timed out.",
+            error,
+        ) from error
+    except requests_exceptions.HTTPError as error:
+        current_app.logger.error("Failed to send weekly plan email: %s", error)
+        status_code = getattr(getattr(error, "response", None), "status_code", None)
+        if status_code in {401, 403}:
+            message = "Failed to send the weekly plan email: authentication failed."
+        else:
+            message = "Failed to send the weekly plan email: the email service returned an error."
+        raise ResponsibilityEmailError(message, error) from error
+    except requests_exceptions.ConnectionError as error:
+        current_app.logger.error("Failed to send weekly plan email: %s", error)
+        raise ResponsibilityEmailError(
+            "Failed to send the weekly plan email: the email service could not be reached.",
+            error,
+        ) from error
+    except requests_exceptions.RequestException as error:
+        current_app.logger.error("Failed to send weekly plan email: %s", error)
+        raise ResponsibilityEmailError(
+            "Failed to send the weekly plan email.",
+            error,
+        ) from error
+
+    return {"status": "success", "message": "Weekly plan emailed successfully"}
 
 
 @bp.post("")
@@ -473,19 +568,15 @@ def send_weekly_plan():
     summary = _format_weekly_summary(schedule)
 
     subject = f"Responsibility plan for week starting {start_date.strftime('%B %d, %Y')}"
+    html_summary = html.escape(summary).replace("\n", "<br>")
     try:
-        _deliver_responsibility_email(
-            subject=subject,
-            recipient=recipient,
-            body=summary,
-            context="weekly plan",
-        )
+        result = send_weekly_email(recipient, start_date, subject, html_summary)
     except ResponsibilityEmailError as error:
         return jsonify({"msg": error.user_message}), 500
 
     total_occurrences = sum(len(items) for items in schedule.values())
     response = {
-        "sent": True,
+        **result,
         "startDate": start_date.isoformat(),
         "endDate": (start_date + timedelta(days=6)).isoformat(),
         "occurrenceCount": total_occurrences,

@@ -1,5 +1,4 @@
 import importlib
-import smtplib
 import os
 import sys
 import unittest
@@ -8,10 +7,13 @@ from unittest.mock import patch
 
 from sqlalchemy.exc import IntegrityError
 
+from requests import exceptions as requests_exceptions
+
 
 class ResponsibilityApiTestCase(unittest.TestCase):
     def setUp(self):
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+        os.environ.setdefault("RESEND_API_KEY", "test")
         if "app" in sys.modules:
             self.app_module = importlib.reload(sys.modules["app"])
         else:
@@ -45,16 +47,53 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.token = self._login("alice@example.com")
         self.auth_headers = {"Authorization": f"Bearer {self.token}"}
-        self.mail_extension = self.app.extensions["mail"]
-        self.mail_extension.sent_messages.clear()
+        self.sent_emails: list[dict] = []
+        self._next_status_code = 202
+        self._next_exception: Exception | None = None
+        patcher = patch(
+            "routes.responsibilities.requests.post",
+            side_effect=self._fake_post,
+        )
+        self._requests_post_patcher = patcher
+        self.mock_requests_post = patcher.start()
 
     def tearDown(self):
         self.app_module.db.session.remove()
         self.app_module.db.drop_all()
         self.ctx.pop()
         os.environ.pop("DATABASE_URL", None)
+        os.environ.pop("RESEND_API_KEY", None)
+        self._requests_post_patcher.stop()
         if "app" in sys.modules:
             del sys.modules["app"]
+
+    class _FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise requests_exceptions.HTTPError(
+                    f"{self.status_code} Error",
+                    response=self,
+                )
+
+    def _fake_post(self, url, *, headers=None, json=None, timeout=None):
+        if self._next_exception is not None:
+            error = self._next_exception
+            self._next_exception = None
+            raise error
+
+        self.sent_emails.append(json or {})
+        response = self._FakeResponse(self._next_status_code)
+        self._next_status_code = 202
+        return response
+
+    def _set_next_response_status(self, status_code: int) -> None:
+        self._next_status_code = status_code
+
+    def _raise_next_exception(self, exception: Exception) -> None:
+        self._next_exception = exception
 
     def _login(self, email: str) -> str:
         response = self.client.post(
@@ -100,11 +139,12 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIsNone(task.action_notes)
         self.assertEqual(task.number, "0001")
 
-        self.assertEqual(len(self.mail_extension.sent_messages), 1)
-        self.assertIn("Safety walkdown", self.mail_extension.sent_messages[0].subject)
-        self.assertIn("Weekly", self.mail_extension.sent_messages[0].body)
-        self.assertIn("5D Action: Delegated", self.mail_extension.sent_messages[0].body)
-        self.assertIn("Responsibility No: 0001", self.mail_extension.sent_messages[0].body)
+        self.assertEqual(len(self.sent_emails), 1)
+        message = self.sent_emails[0]
+        self.assertIn("Safety walkdown", message["subject"])
+        self.assertIn("Weekly", message["html"])
+        self.assertIn("5D Action: Delegated", message["html"])
+        self.assertIn("Responsibility No: 0001", message["html"])
 
     def test_update_responsibility_updates_existing_task(self):
         scheduled_for = date.today().isoformat()
@@ -170,7 +210,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
 
         # Updating should not send another email
-        self.assertEqual(len(self.mail_extension.sent_messages), 1)
+        self.assertEqual(len(self.sent_emails), 1)
 
     def test_weekly_plan_email_summarizes_occurrences(self):
         monday = date.today()
@@ -213,11 +253,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["message"], "Weekly plan emailed successfully")
         self.assertEqual(payload["startDate"], monday.isoformat())
         self.assertEqual(payload["occurrenceCount"], 8)
 
-        self.assertEqual(len(self.mail_extension.sent_messages), 3)
-        weekly_summary = self.mail_extension.sent_messages[-1].body
+        self.assertEqual(len(self.sent_emails), 3)
+        weekly_summary = self.sent_emails[-1]["html"]
         self.assertIn("Daily standup", weekly_summary)
         self.assertIn("Quality audit", weekly_summary)
 
@@ -270,16 +312,12 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "action": "done",
         }
 
-        with patch.object(
-            self.mail_extension,
-            "send",
-            side_effect=TimeoutError("timed out"),
-        ):
-            response = self.client.post(
-                "/api/responsibilities",
-                headers=self.auth_headers,
-                json=payload,
-            )
+        self._raise_next_exception(requests_exceptions.Timeout("timed out"))
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
 
         self.assertEqual(response.status_code, 201)
         data = response.get_json()
@@ -305,19 +343,15 @@ class ResponsibilityApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
 
-        with patch.object(
-            self.mail_extension,
-            "send",
-            side_effect=smtplib.SMTPAuthenticationError(535, b"5.7.8"),
-        ):
-            response = self.client.post(
-                "/api/responsibilities/send-weekly",
-                headers=self.auth_headers,
-                json={
-                    "startDate": monday.isoformat(),
-                    "recipientEmail": "planner@example.com",
-                },
-            )
+        self._set_next_response_status(401)
+        response = self.client.post(
+            "/api/responsibilities/send-weekly",
+            headers=self.auth_headers,
+            json={
+                "startDate": monday.isoformat(),
+                "recipientEmail": "planner@example.com",
+            },
+        )
 
         self.assertEqual(response.status_code, 500)
         message = response.get_json()["msg"].lower()

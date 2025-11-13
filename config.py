@@ -132,7 +132,7 @@ class Config:
     MAIL_USE_TLS = _env_bool("MAIL_USE_TLS", True)
     MAIL_USE_SSL = _env_bool("MAIL_USE_SSL", False)
     MAIL_USERNAME = os.getenv("MAIL_USERNAME", "donotreplysamprox@gmail.com")
-    MAIL_PASSWORD = _env_password("MAIL_PASSWORD", "zzohpxmeoiahipp")
+    MAIL_PASSWORD = _env_password("MAIL_PASSWORD", "zzohpxzmeoiahipp")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "donotreplysamprox@gmail.com")
     MAIL_SUPPRESS_SEND = _env_bool("MAIL_SUPPRESS_SEND", False)
     MAIL_TIMEOUT = _env_float("MAIL_TIMEOUT", 10.0)

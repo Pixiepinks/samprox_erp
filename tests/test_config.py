@@ -1,5 +1,8 @@
+import importlib
+
 import pytest
 
+import config as config_module
 from config import _normalize_db_url
 
 
@@ -39,3 +42,13 @@ def test_normalize_db_url_leaves_sqlite_untouched(monkeypatch):
 
     url = "sqlite:///samprox.db"
     assert _normalize_db_url(url) == url
+
+
+def test_mail_password_collapses_whitespace(monkeypatch):
+    monkeypatch.setenv("MAIL_PASSWORD", "  abcd efgh ijkl mnop  ")
+    importlib.reload(config_module)
+    try:
+        assert config_module.Config.MAIL_PASSWORD == "abcdefghijklmnop"
+    finally:
+        monkeypatch.delenv("MAIL_PASSWORD", raising=False)
+        importlib.reload(config_module)

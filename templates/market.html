@@ -36,6 +36,12 @@
             <a class="subnav__link subnav__link--active" href="{{ url_for('ui.market_page') }}">Market</a>
             <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
+            <a
+                class="subnav__link"
+                href="{{ url_for('ui.mechanism_page') }}"
+                id="mechanism-link"
+                hidden
+            >Mechanism</a>
         </nav>
         <section class="section">
             <header class="section__header">
@@ -601,6 +607,7 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
+        const mechanismLink = document.getElementById("mechanism-link");
         const entryForm = document.getElementById("sales-entry-form");
         const entryDateInput = document.getElementById("sales-entry-date");
         const entryCustomerSelect = document.getElementById("sales-entry-customer");
@@ -681,6 +688,13 @@
         }
         if (userRoleEl) {
             userRoleEl.textContent = roleLabels[user?.role] || "";
+        }
+        if (mechanismLink) {
+            if (user?.role === "admin") {
+                mechanismLink.hidden = false;
+            } else {
+                mechanismLink.remove();
+            }
         }
 
         if (logoutButton) {

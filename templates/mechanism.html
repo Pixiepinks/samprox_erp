@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mechanism | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Access controls</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link" href="{{ url_for('ui.mind_page') }}">Mind</a>
+            <a class="subnav__link" href="{{ url_for('ui.man_page') }}">Man</a>
+            <a class="subnav__link" href="{{ url_for('ui.machines_page') }}">Machine</a>
+            <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
+            <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
+            <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
+            <a
+                class="subnav__link"
+                href="{{ url_for('ui.money_page') }}"
+                id="money-link"
+            >Money</a>
+            <a
+                class="subnav__link subnav__link--active"
+                href="{{ url_for('ui.mechanism_page') }}"
+                id="mechanism-link"
+                hidden
+            >Mechanism</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <h1>Manage user access</h1>
+            </header>
+            <p class="section__description">
+                Review every account that can access SAMPROX ERP and adjust their permissions.
+                Only system administrators can view this page.
+            </p>
+            <div class="section__grid">
+                <article class="card" aria-labelledby="role-form-title">
+                    <div>
+                        <h2 class="card__title" id="role-form-title">Create or update a user</h2>
+                        <p class="card__description" id="role-form-description">
+                            Assign the correct role so each colleague sees the tools they need. Password
+                            changes are optional when editing an existing user.
+                        </p>
+                    </div>
+                    <form id="user-role-form" aria-describedby="role-form-description">
+                        <input type="hidden" id="user-id" name="user-id" />
+                        <div class="form-field">
+                            <label class="form-field__label" for="user-name-input">Name</label>
+                            <input class="form-field__input" type="text" id="user-name-input" name="name" required />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field__label" for="user-email-input">Email</label>
+                            <input class="form-field__input" type="email" id="user-email-input" name="email" required />
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field__label" for="user-role-select">Role</label>
+                            <select class="form-field__input" id="user-role-select" name="role" required>
+                                <option value="" disabled selected>Select a role</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-field__label" for="user-password">Password</label>
+                            <input
+                                class="form-field__input"
+                                type="password"
+                                id="user-password"
+                                name="password"
+                                autocomplete="new-password"
+                                placeholder="Leave blank to keep current password"
+                            />
+                        </div>
+                        <div class="form-field form-field--checkbox">
+                            <label class="form-field__checkbox">
+                                <input type="checkbox" id="user-active" name="active" checked />
+                                <span>Active user</span>
+                            </label>
+                        </div>
+                        <div class="card__actions">
+                            <button type="submit" class="button button--primary" id="submit-button">
+                                Save user
+                            </button>
+                            <button type="button" class="button button--ghost" id="reset-form">Clear</button>
+                        </div>
+                        <p class="form-feedback" id="form-feedback" role="status" aria-live="polite"></p>
+                    </form>
+                </article>
+                <article class="card" aria-labelledby="user-roles-title">
+                    <div>
+                        <h2 class="card__title" id="user-roles-title">Current users</h2>
+                        <p class="card__description">
+                            Keep this roster up-to-date to maintain traceability and security across the
+                            platform.
+                        </p>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" aria-describedby="user-roles-title">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Email</th>
+                                    <th scope="col">Role</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="user-roles-table"></tbody>
+                        </table>
+                        <p class="table-empty" id="user-table-empty" role="status" hidden>
+                            No users found.
+                        </p>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
+            window.location.replace("/machines");
+        }
+
+        if (user?.role !== "admin") {
+            window.location.replace("/mind");
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
+            technician: "Technician",
+        };
+
+        const availableRoles = [
+            { value: "admin", label: "Admin" },
+            { value: "production_manager", label: "Production Manager" },
+            { value: "maintenance_manager", label: "Maintenance Manager" },
+            { value: "finance_manager", label: "Finance Manager" },
+        ];
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+        const mechanismLink = document.getElementById("mechanism-link");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+        if (mechanismLink) {
+            mechanismLink.hidden = false;
+        }
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+
+        const userRoleSelect = document.getElementById("user-role-select");
+        const userTableBody = document.getElementById("user-roles-table");
+        const userTableEmpty = document.getElementById("user-table-empty");
+        const userForm = document.getElementById("user-role-form");
+        const userIdInput = document.getElementById("user-id");
+        const userNameInput = document.getElementById("user-name-input");
+        const userEmailInput = document.getElementById("user-email-input");
+        const userPasswordInput = document.getElementById("user-password");
+        const userActiveInput = document.getElementById("user-active");
+        const submitButton = document.getElementById("submit-button");
+        const resetButton = document.getElementById("reset-form");
+        const formFeedback = document.getElementById("form-feedback");
+
+        availableRoles.forEach((role) => {
+            const option = document.createElement("option");
+            option.value = role.value;
+            option.textContent = role.label;
+            userRoleSelect.appendChild(option);
+        });
+
+        const authHeaders = {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        };
+
+        function resetForm() {
+            userIdInput.value = "";
+            userNameInput.value = "";
+            userEmailInput.value = "";
+            userRoleSelect.value = "";
+            userPasswordInput.value = "";
+            userActiveInput.checked = true;
+            submitButton.textContent = "Save user";
+            formFeedback.textContent = "";
+        }
+
+        resetButton.addEventListener("click", () => {
+            resetForm();
+            userNameInput.focus();
+        });
+
+        function renderUsers(users) {
+            userTableBody.innerHTML = "";
+
+            if (!users.length) {
+                userTableEmpty.hidden = false;
+                return;
+            }
+
+            userTableEmpty.hidden = true;
+
+            users.forEach((record) => {
+                const row = document.createElement("tr");
+
+                const nameCell = document.createElement("td");
+                nameCell.textContent = record.name;
+                row.appendChild(nameCell);
+
+                const emailCell = document.createElement("td");
+                emailCell.textContent = record.email;
+                row.appendChild(emailCell);
+
+                const roleCell = document.createElement("td");
+                roleCell.textContent = roleLabels[record.role] || record.role;
+                row.appendChild(roleCell);
+
+                const statusCell = document.createElement("td");
+                statusCell.textContent = record.active ? "Active" : "Inactive";
+                row.appendChild(statusCell);
+
+                const actionsCell = document.createElement("td");
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "button button--ghost";
+                editButton.textContent = "Edit";
+                editButton.addEventListener("click", () => {
+                    userIdInput.value = record.id;
+                    userNameInput.value = record.name;
+                    userEmailInput.value = record.email;
+                    userRoleSelect.value = record.role;
+                    userPasswordInput.value = "";
+                    userActiveInput.checked = Boolean(record.active);
+                    submitButton.textContent = "Update user";
+                    formFeedback.textContent = "Editing existing user. Save to confirm changes.";
+                    userNameInput.focus();
+                });
+                actionsCell.appendChild(editButton);
+                row.appendChild(actionsCell);
+
+                userTableBody.appendChild(row);
+            });
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch("/api/users", {
+                    headers: authHeaders,
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error("Unable to load users");
+                }
+
+                const data = await response.json();
+                renderUsers(Array.isArray(data) ? data : []);
+            } catch (error) {
+                formFeedback.textContent = error.message || "Unable to load users.";
+            }
+        }
+
+        userForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const payload = {
+                name: userNameInput.value.trim(),
+                email: userEmailInput.value.trim(),
+                role: userRoleSelect.value,
+                active: userActiveInput.checked,
+            };
+
+            const password = userPasswordInput.value.trim();
+            if (!userIdInput.value && !password) {
+                formFeedback.textContent = "Password is required when creating a new user.";
+                return;
+            }
+
+            if (password) {
+                payload.password = password;
+            }
+
+            if (!payload.name || !payload.email || !payload.role) {
+                formFeedback.textContent = "Name, email, and role are required.";
+                return;
+            }
+
+            const isUpdate = Boolean(userIdInput.value);
+            const url = isUpdate ? `/api/users/${userIdInput.value}` : "/api/users";
+
+            try {
+                submitButton.disabled = true;
+                submitButton.textContent = isUpdate ? "Saving..." : "Creating...";
+                formFeedback.textContent = "";
+
+                const response = await fetch(url, {
+                    method: isUpdate ? "PUT" : "POST",
+                    headers: authHeaders,
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                const responseData = await response.json().catch(() => null);
+
+                if (!response.ok) {
+                    const message = responseData?.msg || "Unable to save user.";
+                    throw new Error(message);
+                }
+
+                formFeedback.textContent = isUpdate
+                    ? "User updated successfully."
+                    : "User created successfully.";
+                resetForm();
+                loadUsers();
+            } catch (error) {
+                formFeedback.textContent = error.message || "Unable to save user.";
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = userIdInput.value ? "Update user" : "Save user";
+            }
+        });
+
+        const moneyLink = document.getElementById("money-link");
+        if (moneyLink && user?.role !== "admin") {
+            moneyLink.classList.remove("subnav__link--active");
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>

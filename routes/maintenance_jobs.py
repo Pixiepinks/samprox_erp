@@ -231,6 +231,7 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
         return False, "No recipient email address was provided."
 
     primary_recipient, *cc_recipients = recipients
+    primary_recipient = primary_recipient.strip()
     recipient_set = {primary_recipient.lower()}
 
     filtered_cc: list[str] = []
@@ -253,8 +254,8 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
     html_body = html.escape(body).replace("\n", "<br>")
 
     data: dict[str, object] = {
-        "from": RESEND_SENDER,
-        "to": [cleaned_recipient],
+        "from": _resolve_sender(),
+        "to": [primary_recipient],
         "subject": subject,
         "text": body,
         "html": html_body,

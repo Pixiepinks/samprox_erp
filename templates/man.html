@@ -734,9 +734,34 @@
                                 tabindex="-1"
                             />
                         </div>
-                        <div class="edit-form__field">
-                            <label class="edit-form__label" for="responsibility-recipient">Notification email <span class="required">*</span></label>
-                            <input class="edit-form__input" id="responsibility-recipient" name="recipientEmail" type="email" required />
+                        <div class="edit-form__field edit-form__field--full">
+                            <span class="edit-form__label">Email notifications</span>
+                            <div class="edit-form__group edit-form__group--columns">
+                                <div class="edit-form__subfield">
+                                    <label class="edit-form__label--sub" for="responsibility-recipient">To <span class="required">*</span></label>
+                                    <input
+                                        class="edit-form__input"
+                                        id="responsibility-recipient"
+                                        name="recipientEmail"
+                                        type="email"
+                                        inputmode="email"
+                                        required
+                                        autocomplete="email"
+                                    />
+                                </div>
+                                <div class="edit-form__subfield">
+                                    <label class="edit-form__label--sub" for="responsibility-cc">CC</label>
+                                    <input
+                                        class="edit-form__input"
+                                        id="responsibility-cc"
+                                        name="ccEmail"
+                                        type="email"
+                                        inputmode="email"
+                                        autocomplete="email"
+                                        placeholder="name@example.com"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <input type="hidden" id="responsibility-action-notes" name="actionNotes" />
@@ -1376,6 +1401,7 @@
         );
         const responsibilityPerformanceMetricInput = document.getElementById("responsibility-performance-metric");
         const responsibilityRecipientInput = document.getElementById("responsibility-recipient");
+        const responsibilityCcInput = document.getElementById("responsibility-cc");
         const responsibilityActionNotesInput = document.getElementById("responsibility-action-notes");
         const responsibilitySubmitButton = document.getElementById("responsibility-submit");
         const responsibilityModalOverlay = responsibilityModal?.querySelector("[data-modal-dismiss]");
@@ -2663,6 +2689,9 @@
                 if (responsibilityRecipientInput) {
                     responsibilityRecipientInput.value = task.recipientEmail || "";
                 }
+                if (responsibilityCcInput) {
+                    responsibilityCcInput.value = task.ccEmail || "";
+                }
             } else {
                 if (responsibilityDateInput) {
                     const today = new Date();
@@ -2690,6 +2719,9 @@
                     responsibilityPerformanceMetricInput.value = "—";
                 }
                 updatePerformanceMetricDisplay();
+                if (responsibilityCcInput) {
+                    responsibilityCcInput.value = "";
+                }
             }
 
             updateRecurrenceOptionLabels();
@@ -2928,6 +2960,11 @@
                 recurrence: formData.get("recurrence")?.toString(),
                 recipientEmail: formData.get("recipientEmail")?.toString().trim(),
             };
+
+            if (responsibilityCcInput) {
+                const ccRaw = formData.get("ccEmail")?.toString().trim() ?? "";
+                payload.ccEmail = ccRaw || null;
+            }
 
             const performanceUnitValue = responsibilityPerformanceUnitSelect?.value?.toString().trim();
             if (!performanceUnitValue) {

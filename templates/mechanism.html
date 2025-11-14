@@ -153,6 +153,10 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "outside_manager" && window.location.pathname !== "/responsibility_portal") {
+            window.location.replace("/responsibility_portal");
+        }
+
         if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
@@ -167,6 +171,7 @@
             maintenance_manager: "Maintenance Manager",
             finance_manager: "Finance Manager",
             technician: "Technician",
+            outside_manager: "Outside Manager",
         };
 
         const availableRoles = [
@@ -174,6 +179,7 @@
             { value: "production_manager", label: "Production Manager" },
             { value: "maintenance_manager", label: "Maintenance Manager" },
             { value: "finance_manager", label: "Finance Manager" },
+            { value: "outside_manager", label: "Outside Manager" },
         ];
 
         const userNameEl = document.getElementById("user-name");

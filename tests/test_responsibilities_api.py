@@ -41,7 +41,27 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             role=RoleEnum.maintenance_manager,
         )
         self.secondary_manager.set_password("Password!1")
-        self.app_module.db.session.add_all([self.primary_manager, self.secondary_manager])
+        self.assistant_manager_one = User(
+            name="Sudara", email="sudara@example.com", role=RoleEnum.production_manager
+        )
+        self.assistant_manager_one.set_password("Password!1")
+        self.assistant_manager_two = User(
+            name="Prasad", email="prasad@example.com", role=RoleEnum.production_manager
+        )
+        self.assistant_manager_two.set_password("Password!1")
+        self.assistant_manager_three = User(
+            name="Sumudu", email="sumudu@example.com", role=RoleEnum.production_manager
+        )
+        self.assistant_manager_three.set_password("Password!1")
+        self.app_module.db.session.add_all(
+            [
+                self.primary_manager,
+                self.secondary_manager,
+                self.assistant_manager_one,
+                self.assistant_manager_two,
+                self.assistant_manager_three,
+            ]
+        )
         self.app_module.db.session.commit()
 
         self.client = self.app.test_client()
@@ -114,10 +134,14 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "assigneeId": self.secondary_manager.id,
             "recipientEmail": "lead@example.com",
             "action": "delegated",
-            "delegatedToId": self.secondary_manager.id,
-            "performanceUnit": "percentage_pct",
-            "performanceResponsible": "100",
-            "performanceActual": "80",
+            "performanceUnit": "amount_lkr",
+            "performanceResponsible": "3000000",
+            "performanceActual": "2500000",
+            "delegations": [
+                {"delegateId": self.assistant_manager_one.id, "allocatedValue": "1000000"},
+                {"delegateId": self.assistant_manager_two.id, "allocatedValue": "1000000"},
+                {"delegateId": self.assistant_manager_three.id, "allocatedValue": "1000000"},
+            ],
         }
 
         response = self.client.post(
@@ -132,6 +156,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(data["recurrence"], "weekly")
         self.assertEqual(data["progress"], 0)
         self.assertTrue(data["email_notification"]["sent"])
+        self.assertEqual(len(data.get("delegations", [])), 3)
 
         task = self.app_module.ResponsibilityTask.query.one()
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
@@ -139,21 +164,46 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.recipient_email, "lead@example.com")
         self.assertEqual(task.detail, "Verify emergency exits and PPE logs.")
         self.assertEqual(task.action.value, "delegated")
-        self.assertEqual(task.delegated_to_id, self.secondary_manager.id)
+        self.assertEqual(task.delegated_to_id, self.assistant_manager_one.id)
+        self.assertEqual(len(task.delegations), 3)
+        delegate_ids = {delegation.delegate_id for delegation in task.delegations}
+        self.assertSetEqual(
+            delegate_ids,
+            {
+                self.assistant_manager_one.id,
+                self.assistant_manager_two.id,
+                self.assistant_manager_three.id,
+            },
+        )
+        allocated_values = sorted(str(delegation.allocated_value) for delegation in task.delegations)
+        self.assertListEqual(allocated_values, ["1000000.0000", "1000000.0000", "1000000.0000"])
         self.assertIsNone(task.action_notes)
         self.assertEqual(task.number, "0001")
         self.assertEqual(task.progress, 0)
-        self.assertEqual(task.perf_uom.value, "percentage_pct")
-        self.assertEqual(float(task.perf_responsible_value), 100.0)
-        self.assertEqual(float(task.perf_actual_value), 80.0)
-        self.assertEqual(float(task.perf_metric_value), -20.0)
+        self.assertEqual(task.perf_uom.value, "amount_lkr")
+        self.assertEqual(float(task.perf_responsible_value), 3_000_000.0)
+        self.assertEqual(float(task.perf_actual_value), 2_500_000.0)
+        self.assertEqual(float(task.perf_metric_value), -500_000.0)
 
-        self.assertEqual(len(self.sent_emails), 1)
-        message = self.sent_emails[0]
-        self.assertIn("Safety walkdown", message["subject"])
-        self.assertIn("Weekly", message["html"])
-        self.assertIn("5D Action: Delegated", message["html"])
-        self.assertIn("Responsibility No: 0001", message["html"])
+        self.assertEqual(len(self.sent_emails), 4)
+        recipients = [message.get("to", [None])[0] for message in self.sent_emails]
+        self.assertIn("lead@example.com", recipients)
+        self.assertIn("sudara@example.com", recipients)
+        self.assertIn("prasad@example.com", recipients)
+        self.assertIn("sumudu@example.com", recipients)
+        general_email = next(
+            message
+            for message in self.sent_emails
+            if message.get("to", [None])[0] == "lead@example.com"
+        )
+        self.assertIn("Safety walkdown", general_email["subject"])
+        self.assertIn("Delegated allocations:", general_email["html"])
+        delegate_email = next(
+            message
+            for message in self.sent_emails
+            if message.get("to", [None])[0] == "sudara@example.com"
+        )
+        self.assertIn("Delegated allocation assigned to you", delegate_email["html"])
 
     def test_create_responsibility_without_actual_metric_is_allowed(self):
         scheduled_for = date.today().isoformat()
@@ -199,10 +249,12 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "customWeekdays": [0, 2],
             "recipientEmail": "owner@example.com",
             "action": "delegated",
-            "delegatedToId": self.secondary_manager.id,
             "performanceUnit": "percentage_pct",
             "performanceResponsible": "100",
             "performanceActual": "95",
+            "delegations": [
+                {"delegateId": self.assistant_manager_one.id, "allocatedValue": "50"},
+            ],
         }
 
         create_response = self.client.post(
@@ -249,6 +301,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(updated["performanceActual"], "110")
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
+        self.assertEqual(updated.get("delegations"), [])
         self.assertEqual(updated["progress"], 100)
         notification = updated.get("email_notification")
         self.assertIsNotNone(notification)
@@ -259,6 +312,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.detail, "Ensure corrective actions are documented.")
         self.assertEqual(task.recurrence.value, "does_not_repeat")
         self.assertIsNone(task.delegated_to_id)
+        self.assertEqual(len(task.delegations), 0)
         self.assertIsNone(task.custom_weekdays)
         self.assertEqual(task.action.value, "done")
         self.assertEqual(task.action_notes, "Follow up next month.")
@@ -266,7 +320,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.progress, 100)
 
         # Updating should send a fresh email notification
-        self.assertEqual(len(self.sent_emails), 2)
+        self.assertEqual(len(self.sent_emails), 3)
 
     def test_update_responsibility_deleted_action_sets_progress_to_100(self):
         scheduled_for = date.today().isoformat()
@@ -421,7 +475,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         errors = response.get_json().get("errors", {})
-        self.assertIn("delegatedToId", errors)
+        self.assertIn("delegations", errors)
 
     def test_create_responsibility_reports_email_failure(self):
         scheduled_for = date.today().isoformat()

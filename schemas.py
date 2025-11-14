@@ -8,6 +8,7 @@ from models import (
     TeamMemberStatus,
     MaintenanceJobStatus,
     ResponsibilityAction,
+    ResponsibilityDelegation,
     ResponsibilityTask,
     ResponsibilityRecurrence,
     ResponsibilityTaskStatus,
@@ -722,6 +723,17 @@ def describe_responsibility_recurrence(task: ResponsibilityTask) -> str | None:
     return None
 
 
+class ResponsibilityDelegationSchema(Schema):
+    id = fields.Int(dump_only=True)
+    delegate = fields.Nested(UserSchema, dump_only=True, allow_none=True)
+    delegate_id = fields.Int(attribute="delegate_id", data_key="delegateId")
+    allocated_value = fields.Decimal(
+        allow_none=True,
+        as_string=True,
+        data_key="allocatedValue",
+    )
+
+
 class ResponsibilityTaskSchema(Schema):
     id = fields.Int(dump_only=True)
     number = fields.Str()
@@ -757,6 +769,12 @@ class ResponsibilityTaskSchema(Schema):
     assigner = fields.Nested(UserSchema, dump_only=True)
     assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
     delegated_to = fields.Nested(UserSchema, dump_only=True, allow_none=True, data_key="delegatedTo")
+    delegations = fields.List(
+        fields.Nested(ResponsibilityDelegationSchema),
+        dump_only=True,
+        data_key="delegations",
+        dump_default=[],
+    )
     created_at = fields.Method("get_created_at", data_key="createdAt")
     updated_at = fields.Method("get_updated_at", data_key="updatedAt")
 
@@ -841,6 +859,16 @@ class ResponsibilityTaskSchema(Schema):
         return format_metric(unit, metric)
 
 
+class ResponsibilityDelegationCreateSchema(Schema):
+    delegate_id = fields.Int(required=True, data_key="delegateId")
+    allocated_value = fields.Decimal(
+        allow_none=True,
+        as_string=True,
+        data_key="allocatedValue",
+        places=4,
+    )
+
+
 class ResponsibilityTaskCreateSchema(Schema):
     title = fields.Str(required=True)
     description = fields.Str(allow_none=True)
@@ -850,6 +878,11 @@ class ResponsibilityTaskCreateSchema(Schema):
     custom_weekdays = fields.List(fields.Int(), allow_none=True, data_key="customWeekdays")
     assignee_id = fields.Int(allow_none=True, data_key="assigneeId")
     delegated_to_id = fields.Int(allow_none=True, data_key="delegatedToId")
+    delegations = fields.List(
+        fields.Nested(ResponsibilityDelegationCreateSchema),
+        allow_none=True,
+        data_key="delegations",
+    )
     recipient_email = fields.Email(required=True, data_key="recipientEmail")
     status = fields.Str(load_default=ResponsibilityTaskStatus.PLANNED.value)
     action = fields.Str(required=True)
@@ -1015,8 +1048,19 @@ class ResponsibilityTaskCreateSchema(Schema):
 
         action = data.get("action")
         delegated_to = data.get("delegated_to_id")
-        if action == ResponsibilityAction.DELEGATED.value and not delegated_to:
-            raise ValidationError("Select a delegated manager.", "delegatedToId")
+        delegations = data.get("delegations") or []
+        if action == ResponsibilityAction.DELEGATED.value:
+            if delegations:
+                missing = [
+                    index
+                    for index, entry in enumerate(delegations)
+                    if not isinstance(entry, dict)
+                    or entry.get("delegate_id") in {None, ""}
+                ]
+                if missing:
+                    raise ValidationError("Select a delegated manager.", "delegations")
+            elif not delegated_to:
+                raise ValidationError("Select a delegated manager.", "delegations")
 
         if action in {
             ResponsibilityAction.DISCUSSED.value,

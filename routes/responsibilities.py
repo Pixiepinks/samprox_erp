@@ -10,6 +10,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import asc
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 import requests
@@ -18,6 +19,7 @@ from requests import exceptions as requests_exceptions
 from extensions import db
 from models import (
     ResponsibilityAction,
+    ResponsibilityDelegation,
     ResponsibilityPerformanceUnit,
     ResponsibilityRecurrence,
     ResponsibilityTask,
@@ -25,7 +27,11 @@ from models import (
     RoleEnum,
     User,
 )
-from responsibility_performance import calculate_metric, unit_input_type
+from responsibility_performance import (
+    calculate_metric,
+    format_performance_value,
+    unit_input_type,
+)
 from schemas import (
     ResponsibilityTaskCreateSchema,
     ResponsibilityTaskSchema,
@@ -118,6 +124,47 @@ def _current_user_id() -> int | None:
         return int(claims.get("sub"))
     except (TypeError, ValueError):
         return None
+
+
+def _resolve_performance_unit(task: ResponsibilityTask) -> ResponsibilityPerformanceUnit:
+    unit = getattr(task, "perf_uom", ResponsibilityPerformanceUnit.PERCENTAGE_PCT)
+    if isinstance(unit, ResponsibilityPerformanceUnit):
+        return unit
+    try:
+        return ResponsibilityPerformanceUnit(unit)
+    except (TypeError, ValueError):
+        return ResponsibilityPerformanceUnit.PERCENTAGE_PCT
+
+
+def _format_delegation_allocation(
+    task: ResponsibilityTask, delegation: ResponsibilityDelegation
+) -> str | None:
+    try:
+        value = getattr(delegation, "allocated_value", None)
+    except AttributeError:
+        value = None
+    if value is None:
+        return None
+    unit = _resolve_performance_unit(task)
+    try:
+        return format_performance_value(unit, value)
+    except Exception:  # pragma: no cover - defensive formatting
+        return None
+
+
+def _delegation_summary_lines(task: ResponsibilityTask) -> list[str]:
+    lines: list[str] = []
+    for delegation in getattr(task, "delegations", []) or []:
+        delegate = getattr(delegation, "delegate", None)
+        delegate_name = getattr(delegate, "name", None) or getattr(delegate, "email", None)
+        if not delegate_name:
+            delegate_name = "Delegated manager"
+        allocation_display = _format_delegation_allocation(task, delegation)
+        if allocation_display:
+            lines.append(f"  • {delegate_name} — {allocation_display}")
+        else:
+            lines.append(f"  • {delegate_name}")
+    return lines
 
 
 @bp.get("/assignees")
@@ -242,7 +289,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     except Exception:
         action_label = "—"
 
-    lines = [
+    base_lines = [
         f"Responsibility No: {task.number}",
         f"Title: {task.title}",
         f"Scheduled for: {first_date}",
@@ -251,33 +298,64 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     ]
 
     if assignee_name:
-        lines.append(f"Assigned to: {assignee_name}")
+        base_lines.append(f"Assigned to: {assignee_name}")
     else:
-        lines.append("Assigned to: (not specified)")
+        base_lines.append("Assigned to: (not specified)")
 
-    if delegated_name:
-        lines.append(f"Delegated to: {delegated_name}")
-
-    lines.append(f"Assigned by: {assigner_name}")
+    base_lines.append(f"Assigned by: {assigner_name}")
 
     if task.description:
-        lines.append("")
-        lines.append(task.description.strip())
+        base_lines.append("")
+        base_lines.append(task.description.strip())
 
     if task.detail:
-        lines.append("")
-        lines.append(f"Detail: {task.detail.strip()}")
+        base_lines.append("")
+        base_lines.append(f"Detail: {task.detail.strip()}")
 
     if task.action_notes:
-        lines.append("")
-        lines.append(f"Notes: {task.action_notes.strip()}")
+        base_lines.append("")
+        base_lines.append(f"Notes: {task.action_notes.strip()}")
 
-    _deliver_responsibility_email(
-        subject=f"New responsibility: {task.title}",
-        recipient=task.recipient_email,
-        body="\n".join(lines),
-        context="responsibility notification",
-    )
+    delegation_summary = _delegation_summary_lines(task)
+
+    general_lines = list(base_lines)
+    if delegation_summary:
+        general_lines.append("")
+        general_lines.append("Delegated allocations:")
+        general_lines.extend(delegation_summary)
+    elif delegated_name:
+        general_lines.append(f"Delegated to: {delegated_name}")
+
+    recipients_sent: set[str] = set()
+
+    def _send(recipient: str, lines: list[str]) -> None:
+        if not recipient or recipient in recipients_sent:
+            return
+        _deliver_responsibility_email(
+            subject=f"New responsibility: {task.title}",
+            recipient=recipient,
+            body="\n".join(lines),
+            context="responsibility notification",
+        )
+        recipients_sent.add(recipient)
+
+    _send(task.recipient_email, general_lines)
+
+    for delegation in getattr(task, "delegations", []) or []:
+        delegate = getattr(delegation, "delegate", None)
+        delegate_email = getattr(delegate, "email", None)
+        if not delegate_email:
+            continue
+        delegate_lines = list(base_lines)
+        allocation_display = _format_delegation_allocation(task, delegation)
+        delegate_name = getattr(delegate, "name", None) or delegate_email
+        delegate_lines.append("")
+        delegate_lines.append("Delegated allocation assigned to you:")
+        if allocation_display:
+            delegate_lines.append(f"  • {delegate_name} — {allocation_display}")
+        else:
+            delegate_lines.append(f"  • {delegate_name}")
+        _send(delegate_email, delegate_lines)
 
 
 def _occurrences_for_week(tasks: Iterable[ResponsibilityTask], start: date) -> dict[date, list[ResponsibilityTask]]:
@@ -412,6 +490,27 @@ def create_task():
         if not delegated_to:
             return jsonify({"msg": "Delegated manager was not found."}), 404
 
+    delegations_payload = data.get("delegations") or []
+    delegation_models: list[ResponsibilityDelegation] = []
+    seen_delegates: set[int] = set()
+    for entry in delegations_payload:
+        delegate_id = entry.get("delegate_id")
+        if delegate_id is None or delegate_id in seen_delegates:
+            continue
+        delegate = User.query.get(delegate_id)
+        if not delegate:
+            return jsonify({"msg": "Delegated manager was not found."}), 404
+        seen_delegates.add(delegate_id)
+        delegation_models.append(
+            ResponsibilityDelegation(
+                delegate_id=delegate.id,
+                allocated_value=entry.get("allocated_value"),
+            )
+        )
+
+    if not delegation_models and delegated_to is not None:
+        delegation_models.append(ResponsibilityDelegation(delegate_id=delegated_to.id))
+
     recurrence = ResponsibilityRecurrence(data["recurrence"])
     status_value = data.get("status", ResponsibilityTaskStatus.PLANNED.value)
     status = ResponsibilityTaskStatus(status_value)
@@ -432,13 +531,14 @@ def create_task():
         progress=progress,
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
-        delegated_to_id=delegated_to.id if delegated_to else None,
         perf_uom=performance_unit,
         perf_responsible_value=performance_responsible_value,
         perf_actual_value=performance_actual_value,
         perf_metric_value=performance_metric_value,
         perf_input_type=performance_input_type,
     )
+
+    task.replace_delegations(delegation_models)
 
     task.update_custom_weekdays(data.get("custom_weekdays"))
 
@@ -536,6 +636,27 @@ def update_task(task_id: int):
         if not delegated_to:
             return jsonify({"msg": "Delegated manager was not found."}), 404
 
+    delegations_payload = data.get("delegations") or []
+    delegation_models: list[ResponsibilityDelegation] = []
+    seen_delegates: set[int] = set()
+    for entry in delegations_payload:
+        delegate_id = entry.get("delegate_id")
+        if delegate_id is None or delegate_id in seen_delegates:
+            continue
+        delegate = User.query.get(delegate_id)
+        if not delegate:
+            return jsonify({"msg": "Delegated manager was not found."}), 404
+        seen_delegates.add(delegate_id)
+        delegation_models.append(
+            ResponsibilityDelegation(
+                delegate_id=delegate.id,
+                allocated_value=entry.get("allocated_value"),
+            )
+        )
+
+    if not delegation_models and delegated_to is not None:
+        delegation_models.append(ResponsibilityDelegation(delegate_id=delegated_to.id))
+
     recurrence = ResponsibilityRecurrence(data["recurrence"])
     if "status" in payload:
         status_value = data.get("status", ResponsibilityTaskStatus.PLANNED.value)
@@ -567,7 +688,7 @@ def update_task(task_id: int):
     task.recipient_email = data["recipient_email"]
     task.progress = progress
     task.assignee_id = assignee.id if assignee else None
-    task.delegated_to_id = delegated_to.id if delegated_to else None
+    task.replace_delegations(delegation_models)
     task.update_custom_weekdays(data.get("custom_weekdays"))
     task.perf_uom = performance_unit
     task.perf_responsible_value = performance_responsible_value
@@ -607,9 +728,17 @@ def list_tasks():
     if role not in _ALLOWED_CREATOR_ROLES:
         return jsonify({"msg": "Only managers can view responsibility tasks."}), 403
 
-    query = ResponsibilityTask.query.order_by(
-        asc(ResponsibilityTask.scheduled_for),
-        asc(ResponsibilityTask.created_at),
+    query = (
+        ResponsibilityTask.query.options(
+            selectinload(ResponsibilityTask.assigner),
+            selectinload(ResponsibilityTask.assignee),
+            selectinload(ResponsibilityTask.delegated_to),
+            selectinload(ResponsibilityTask.delegations).selectinload(ResponsibilityDelegation.delegate),
+        )
+        .order_by(
+            asc(ResponsibilityTask.scheduled_for),
+            asc(ResponsibilityTask.created_at),
+        )
     )
 
     assignee_id = request.args.get("assigneeId")

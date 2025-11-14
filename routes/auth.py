@@ -1,7 +1,13 @@
 from flask import Blueprint, request, jsonify
 from extensions import db, jwt
 from models import User, RoleEnum
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+from flask_jwt_extended import (
+    create_access_token,
+    get_jwt,
+    jwt_required,
+    set_access_cookies,
+    unset_jwt_cookies,
+)
 from sqlalchemy import func
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
@@ -55,7 +61,16 @@ def login():
         return jsonify({"msg": "Invalid email or password"}), 401
 
     token = create_access_token(identity=str(u.id), additional_claims={"role": u.role.value})
-    return jsonify(
+    response = jsonify(
         access_token=token,
         user={"id": u.id, "name": u.name, "role": u.role.value},
     )
+    set_access_cookies(response, token)
+    return response
+
+
+@bp.post("/logout")
+def logout():
+    response = jsonify({"msg": "Logged out"})
+    unset_jwt_cookies(response)
+    return response

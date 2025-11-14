@@ -129,6 +129,30 @@ def _normalize_progress(value, action: ResponsibilityAction) -> int:
     return max(0, min(100, progress_value))
 
 
+def _normalize_recipients(addresses: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for address in addresses:
+        if not address:
+            continue
+        cleaned = address.strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(cleaned)
+    return normalized
+
+
+def _split_email_addresses(value: str | None) -> list[str]:
+    if not value:
+        return []
+    parts = re.split(r"[;,]", value)
+    return _normalize_recipients(parts)
+
+
 def _current_role() -> RoleEnum | None:
     try:
         claims = get_jwt()
@@ -284,19 +308,50 @@ def _deliver_responsibility_email(
     recipient: str,
     body: str,
     context: str,
+    cc: Iterable[str] | None = None,
 ) -> None:
     """Send an email and raise :class:`ResponsibilityEmailError` on failure."""
 
     if not recipient:
         raise ResponsibilityEmailError("No recipient email address was provided.")
 
+    cleaned_recipient = recipient.strip()
+    if not cleaned_recipient:
+        raise ResponsibilityEmailError("No recipient email address was provided.")
+
     html_body = html.escape(body).replace("\n", "<br>")
+
+    cc_values = _normalize_recipients(cc or [])
+    filtered_cc: list[str] = []
+    recipient_set = {cleaned_recipient.lower()}
+    for address in cc_values:
+        lowered = address.lower()
+        if lowered in recipient_set:
+            continue
+        filtered_cc.append(address)
+        recipient_set.add(lowered)
+
+    default_bcc = current_app.config.get("MAIL_DEFAULT_BCC", [])
+    if isinstance(default_bcc, str):
+        default_bcc = [default_bcc]
+    bcc_values = _normalize_recipients(default_bcc or [])
+    filtered_bcc = [
+        address
+        for address in bcc_values
+        if address.lower() not in recipient_set
+    ]
+    recipient_set.update(address.lower() for address in filtered_bcc)
+
     data = {
         "from": RESEND_SENDER,
-        "to": [recipient],
+        "to": [cleaned_recipient],
         "subject": subject,
         "html": html_body,
     }
+    if filtered_cc:
+        data["cc"] = filtered_cc
+    if filtered_bcc:
+        data["bcc"] = filtered_bcc
 
     try:
         _send_email_via_resend(data)
@@ -410,6 +465,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         general_content.append(f"Delegated to: {delegated_name}")
 
     recipients_sent: set[str] = set()
+    cc_addresses = _split_email_addresses(getattr(task, "cc_email", None))
 
     def _send(
         recipient: str,
@@ -431,6 +487,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
             recipient=recipient,
             body=body,
             context="responsibility notification",
+            cc=cc_addresses,
         )
         recipients_sent.add(recipient)
 
@@ -520,12 +577,24 @@ def send_weekly_email(
     recipient: str, start_date: date, subject: str | None, html: str
 ) -> dict[str, str]:
     subject_line = subject or f"Weekly Responsibility Plan ({start_date})"
+    cleaned_recipient = recipient.strip()
     data = {
         "from": RESEND_SENDER,
-        "to": [recipient],
+        "to": [cleaned_recipient],
         "subject": subject_line,
         "html": html,
     }
+    default_bcc = current_app.config.get("MAIL_DEFAULT_BCC", [])
+    if isinstance(default_bcc, str):
+        default_bcc = [default_bcc]
+    bcc_values = _normalize_recipients(default_bcc or [])
+    filtered_bcc = [
+        address
+        for address in bcc_values
+        if address.lower() != cleaned_recipient.lower()
+    ]
+    if filtered_bcc:
+        data["bcc"] = filtered_bcc
 
     try:
         response = requests.post(
@@ -659,6 +728,7 @@ def create_task():
         action=action,
         action_notes=action_notes,
         recipient_email=data["recipient_email"],
+        cc_email=data.get("cc_email"),
         progress=progress,
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
@@ -817,6 +887,7 @@ def update_task(task_id: int):
     task.action = action
     task.action_notes = action_notes
     task.recipient_email = data["recipient_email"]
+    task.cc_email = data.get("cc_email")
     task.progress = progress
     task.assignee_id = assignee.id if assignee else None
     task.replace_delegations(delegation_models)

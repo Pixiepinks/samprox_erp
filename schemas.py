@@ -749,6 +749,7 @@ class ResponsibilityTaskSchema(Schema):
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
     progress = fields.Int(data_key="progress")
     recipient_email = fields.Str(data_key="recipientEmail")
+    cc_email = fields.Str(allow_none=True, data_key="ccEmail")
     performance_unit = fields.Method("get_performance_unit", data_key="performanceUnit")
     performance_input_type = fields.Method(
         "get_performance_input_type",
@@ -884,6 +885,7 @@ class ResponsibilityTaskCreateSchema(Schema):
         data_key="delegations",
     )
     recipient_email = fields.Email(required=True, data_key="recipientEmail")
+    cc_email = fields.Email(allow_none=True, load_default=None, data_key="ccEmail")
     status = fields.Str(load_default=ResponsibilityTaskStatus.PLANNED.value)
     action = fields.Str(required=True)
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
@@ -926,6 +928,11 @@ class ResponsibilityTaskCreateSchema(Schema):
             ]
         elif isinstance(custom_weekdays, (set, tuple)):
             normalized["customWeekdays"] = list(custom_weekdays)
+
+        cc_email = normalized.get("ccEmail")
+        if isinstance(cc_email, str):
+            stripped_cc = cc_email.strip()
+            normalized["ccEmail"] = stripped_cc or None
 
         status = normalized.get("status")
         if isinstance(status, str):

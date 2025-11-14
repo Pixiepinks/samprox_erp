@@ -115,7 +115,9 @@
                     localStorage.setItem("samprox_token", data.access_token);
                     localStorage.setItem("samprox_user", JSON.stringify(data.user));
 
-                    if (data.user?.role === "maintenance_manager") {
+                    if (data.user?.role === "outside_manager") {
+                        window.location.href = "/responsibility_portal";
+                    } else if (data.user?.role === "maintenance_manager") {
                         window.location.href = "/machines";
                     } else {
                         window.location.href = "/mind";

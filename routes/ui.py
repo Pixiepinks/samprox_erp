@@ -37,18 +37,24 @@ def _current_role() -> RoleEnum | None:
 
 
 @bp.before_request
-def _restrict_maintenance_manager_routes():
-    """Redirect maintenance managers to the machines page for disallowed routes."""
+def _enforce_role_page_restrictions():
+    """Limit which UI routes specific roles are allowed to access."""
 
     endpoint = request.endpoint
     if endpoint is None:
         return None
-    if endpoint in {"ui.machines_page", "ui.login_page"}:
-        return None
 
     role = _current_role()
     if role == RoleEnum.maintenance_manager:
+        if endpoint in {"ui.machines_page", "ui.login_page"}:
+            return None
         return redirect(url_for("ui.machines_page"))
+
+    if role == RoleEnum.outside_manager:
+        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal"}
+        if endpoint in allowed_endpoints:
+            return None
+        return render_template("403.html"), 403
 
 
 @bp.get("/")
@@ -79,6 +85,17 @@ def dashboard_redirect():
 def man_page():
     """Render the "Man" resource planning page."""
     return render_template("man.html")
+
+
+@bp.get("/responsibility_portal")
+def responsibility_portal():
+    """Render the standalone responsibility planning portal."""
+
+    role = _current_role()
+    if role not in {RoleEnum.outside_manager}:
+        return render_template("403.html"), 403
+
+    return render_template("responsibility_plan.html")
 
 
 @bp.get("/machines")

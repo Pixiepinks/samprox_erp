@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Responsibility Plan | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Responsibility Portal</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <main class="section">
+            <section class="responsibility-plan" aria-labelledby="responsibility-plan-heading">
+                <div class="responsibility-plan__header">
+                    <div>
+                        <h2 class="responsibility-plan__title" id="responsibility-plan-heading">Responsibility plan</h2>
+                        <p class="responsibility-plan__description">
+                            Assign and monitor managerial responsibilities, plan recurring tasks, and keep everyone informed.
+                        </p>
+                    </div>
+                    <div class="responsibility-plan__header-actions">
+                        <button type="button" class="button button--primary" id="responsibility-create-button">
+                            New responsibility
+                        </button>
+                    </div>
+                </div>
+                <div class="responsibility-plan__utilities">
+                    <form class="responsibility-weekly-form" id="responsibility-weekly-form" novalidate>
+                        <div class="responsibility-weekly-form__fields">
+                            <label class="responsibility-weekly-form__label" for="responsibility-weekly-start">
+                                Week starting
+                                <input class="responsibility-weekly-form__input" id="responsibility-weekly-start" name="startDate" type="date" />
+                            </label>
+                            <label class="responsibility-weekly-form__label" for="responsibility-weekly-email">
+                                Recipient email
+                                <input
+                                    class="responsibility-weekly-form__input"
+                                    id="responsibility-weekly-email"
+                                    name="recipientEmail"
+                                    type="email"
+                                    placeholder="name@example.com"
+                                    required
+                                />
+                            </label>
+                        </div>
+                        <button type="submit" class="button button--secondary" id="responsibility-weekly-send">
+                            Email Monday–Sunday plan
+                        </button>
+                    </form>
+                    <p class="responsibility-plan__message" id="responsibility-weekly-message" hidden></p>
+                </div>
+                <div class="table-container">
+                    <table class="team-table responsibility-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Responsibility No</th>
+                                <th scope="col">Title</th>
+                                <th scope="col">Progress</th>
+                                <th scope="col">Detail</th>
+                                <th scope="col">Assigned by</th>
+                                <th scope="col">Assigned to</th>
+                                <th scope="col">Delegated to</th>
+                                <th scope="col">Scheduled for</th>
+                                <th scope="col">5D Action</th>
+                                <th scope="col">Created</th>
+                                <th scope="col">Update</th>
+                            </tr>
+                        </thead>
+                        <tbody id="responsibility-table-body"></tbody>
+                    </table>
+                </div>
+                <p class="responsibility-plan__empty" id="responsibility-empty" hidden>
+                    No responsibilities have been added yet.
+                </p>
+                <p class="responsibility-plan__message" id="responsibility-message" hidden></p>
+            </section>
+        </main>
+    </div>
+    <div class="modal" id="responsibility-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="responsibility-modal-title">
+            <header class="modal__header">
+                <h2 class="modal__title" id="responsibility-modal-title">New responsibility</h2>
+                <button type="button" class="modal__close" id="responsibility-modal-close" aria-label="Close responsibility form">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </header>
+            <div class="modal__body">
+                <p class="modal__hint">Define the responsibility, choose the recurrence, and notify the appropriate manager.</p>
+                <p class="alert alert--error" id="responsibility-form-error" hidden></p>
+                <form class="edit-form" id="responsibility-form" novalidate>
+                    <div class="edit-form__grid">
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-title">Title <span class="required">*</span></label>
+                            <input class="edit-form__input" id="responsibility-title" name="title" type="text" required />
+                        </div>
+                        <div class="edit-form__field edit-form__field--full">
+                            <label class="edit-form__label" for="responsibility-description">Description</label>
+                            <textarea class="edit-form__input" id="responsibility-description" name="description" rows="3"></textarea>
+                        </div>
+                        <div class="edit-form__field edit-form__field--full">
+                            <label class="edit-form__label" for="responsibility-detail">Detail</label>
+                            <textarea class="edit-form__input" id="responsibility-detail" name="detail" rows="3"></textarea>
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-date">First scheduled date <span class="required">*</span></label>
+                            <input class="edit-form__input" id="responsibility-date" name="scheduledFor" type="date" required />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-recurrence">Recurrence <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-recurrence" name="recurrence" required>
+                                <option value="does_not_repeat">Does not repeat</option>
+                                <option value="monday_to_friday">Monday to Friday</option>
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly on (Today)</option>
+                                <option value="monthly">Monthly on (Today)</option>
+                                <option value="annually">Annually on (Today)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <fieldset class="edit-form__field edit-form__field--full" id="responsibility-custom-days" hidden>
+                            <legend class="edit-form__label">Custom weekdays <span class="required">*</span></legend>
+                            <div class="responsibility-custom-weekdays" id="responsibility-custom-weekdays">
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="0" name="customWeekdays" />
+                                    <span>Monday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="1" name="customWeekdays" />
+                                    <span>Tuesday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="2" name="customWeekdays" />
+                                    <span>Wednesday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="3" name="customWeekdays" />
+                                    <span>Thursday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="4" name="customWeekdays" />
+                                    <span>Friday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="5" name="customWeekdays" />
+                                    <span>Saturday</span>
+                                </label>
+                                <label class="responsibility-custom-weekdays__option">
+                                    <input type="checkbox" value="6" name="customWeekdays" />
+                                    <span>Sunday</span>
+                                </label>
+                            </div>
+                        </fieldset>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
+                            <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
+                                <option value="">Select a manager (optional)</option>
+                            </select>
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-action">5D Action <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-action" name="action" required>
+                                <option value="">Select</option>
+                                <option value="done">Done</option>
+                                <option value="delegated">Delegated</option>
+                                <option value="deferred">Deferred</option>
+                                <option value="discussed">Discussed</option>
+                                <option value="deleted">Deleted</option>
+                            </select>
+                        </div>
+                        <div class="edit-form__field" id="responsibility-delegated-field" hidden>
+                            <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
+                                <option value="">Select a manager</option>
+                            </select>
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-progress">Progress (%)</label>
+                            <input
+                                class="edit-form__input"
+                                id="responsibility-progress"
+                                name="progress"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                inputmode="numeric"
+                                value="0"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-recipient">Notification email <span class="required">*</span></label>
+                            <input class="edit-form__input" id="responsibility-recipient" name="recipientEmail" type="email" required />
+                        </div>
+                    </div>
+                    <input type="hidden" id="responsibility-action-notes" name="actionNotes" />
+                    <div class="modal__actions">
+                        <button type="button" class="button button--ghost" id="responsibility-cancel">Cancel</button>
+                        <button type="submit" class="button button--primary" id="responsibility-submit">Save responsibility</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="responsibility-action-notes-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="responsibility-action-notes-title">
+            <header class="modal__header">
+                <h2 class="modal__title" id="responsibility-action-notes-title">Discussion details</h2>
+                <button type="button" class="modal__close" id="responsibility-action-notes-close" aria-label="Close notes editor">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </header>
+            <div class="modal__body">
+                <p class="modal__hint">Record discussion points or reasons for the selected 5D action.</p>
+                <p class="alert alert--error" id="responsibility-action-notes-error" hidden></p>
+                <div class="edit-form__field edit-form__field--full">
+                    <label class="edit-form__label" for="responsibility-action-notes-text">Notes <span class="required">*</span></label>
+                    <textarea class="edit-form__input" id="responsibility-action-notes-text" rows="4"></textarea>
+                </div>
+                <div class="modal__actions">
+                    <button type="button" class="button button--ghost" id="responsibility-action-notes-cancel">Cancel</button>
+                    <button type="button" class="button button--primary" id="responsibility-action-notes-save">Save notes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        if (user?.role !== "outside_manager") {
+            window.location.replace("/mind");
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
+            technician: "Technician",
+            outside_manager: "Outside Manager",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        userNameEl.textContent = user?.name || "Unknown";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        logoutButton.addEventListener("click", () => {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        });
+
+        const authHeaders = {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        const responsibilityTableBody = document.getElementById("responsibility-table-body");
+        const responsibilityEmptyState = document.getElementById("responsibility-empty");
+        const responsibilityMessage = document.getElementById("responsibility-message");
+        const responsibilityWeeklyForm = document.getElementById("responsibility-weekly-form");
+        const responsibilityWeeklyMessage = document.getElementById("responsibility-weekly-message");
+        const responsibilityWeeklyStartInput = document.getElementById("responsibility-weekly-start");
+        const responsibilityWeeklyEmailInput = document.getElementById("responsibility-weekly-email");
+        const responsibilityWeeklySendButton = document.getElementById("responsibility-weekly-send");
+        const responsibilityCreateButton = document.getElementById("responsibility-create-button");
+        const responsibilityModal = document.getElementById("responsibility-modal");
+        const responsibilityModalTitle = document.getElementById("responsibility-modal-title");
+        const responsibilityModalClose = document.getElementById("responsibility-modal-close");
+        const responsibilityCancelButton = document.getElementById("responsibility-cancel");
+        const responsibilityForm = document.getElementById("responsibility-form");
+        const responsibilityFormError = document.getElementById("responsibility-form-error");
+        const responsibilityTitleInput = document.getElementById("responsibility-title");
+        const responsibilityDescriptionInput = document.getElementById("responsibility-description");
+        const responsibilityDateInput = document.getElementById("responsibility-date");
+        const responsibilityRecurrenceSelect = document.getElementById("responsibility-recurrence");
+        const responsibilityCustomDays = document.getElementById("responsibility-custom-days");
+        const responsibilityCustomWeekdays = document.getElementById("responsibility-custom-weekdays");
+        const responsibilityAssigneeSelect = document.getElementById("responsibility-assignee");
+        const responsibilityDetailInput = document.getElementById("responsibility-detail");
+        const responsibilityActionSelect = document.getElementById("responsibility-action");
+        const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
+        const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
+        const responsibilityProgressInput = document.getElementById("responsibility-progress");
+        const responsibilityRecipientInput = document.getElementById("responsibility-recipient");
+        const responsibilityActionNotesInput = document.getElementById("responsibility-action-notes");
+        const responsibilitySubmitButton = document.getElementById("responsibility-submit");
+        const responsibilityModalOverlay = responsibilityModal?.querySelector("[data-modal-dismiss]");
+        const responsibilityActionNotesModal = document.getElementById("responsibility-action-notes-modal");
+        const responsibilityActionNotesClose = document.getElementById("responsibility-action-notes-close");
+        const responsibilityActionNotesTextarea = document.getElementById("responsibility-action-notes-text");
+        const responsibilityActionNotesError = document.getElementById("responsibility-action-notes-error");
+        const responsibilityActionNotesSave = document.getElementById("responsibility-action-notes-save");
+        const responsibilityActionNotesCancel = document.getElementById("responsibility-action-notes-cancel");
+        const responsibilityActionNotesOverlay = responsibilityActionNotesModal?.querySelector("[data-modal-dismiss]");
+        const responsibilityModalDefaultTitle =
+            responsibilityModalTitle?.textContent?.trim() || "New responsibility";
+        const responsibilitySubmitDefaultText =
+            responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
+        let responsibilityEditingTaskId = null;
+        let responsibilityEditingTask = null;
+
+        const RESPONSIBILITY_WEEKDAY_NAMES = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ];
+
+        const RESPONSIBILITY_RECURRENCE_LABELS = {
+            does_not_repeat: "Does not repeat",
+            monday_to_friday: "Monday to Friday",
+            daily: "Daily",
+            weekly: "Weekly on (Today)",
+            monthly: "Monthly on (Today)",
+            annually: "Annually on (Today)",
+            custom: "Custom",
+        };
+
+        const RESPONSIBILITY_STATUS_LABELS = {
+            planned: "Planned",
+            in_progress: "In progress",
+            completed: "Completed",
+            cancelled: "Cancelled",
+        };
+
+        const RESPONSIBILITY_ACTION_LABELS = {
+            done: "Done",
+            delegated: "Delegated",
+            deferred: "Deferred",
+            discussed: "Discussed",
+            deleted: "Deleted",
+        };
+
+        const ACTIONS_REQUIRING_NOTES = new Set(["delegated", "deferred", "discussed", "deleted"]);
+
+        const PROGRESS_COLOR_RED = [217, 45, 32];
+        const PROGRESS_COLOR_YELLOW = [254, 200, 75];
+        const PROGRESS_COLOR_GREEN = [18, 183, 106];
+        const PROGRESS_COLOR_GRAY = [152, 162, 179];
+
+        const clampProgressValue = (value) => {
+            if (value === null || value === undefined || value === "") {
+                return 0;
+            }
+            const parsed = Number.parseFloat(value);
+            if (Number.isNaN(parsed)) {
+                return 0;
+            }
+            const rounded = Math.round(parsed);
+            return Math.min(100, Math.max(0, rounded));
+        };
+
+        const interpolateProgressColor = (start, end, ratio) => {
+            return start.map((component, index) => component + (end[index] - component) * ratio);
+        };
+
+        const toRgbString = (components) => {
+            const [r, g, b] = components.map((component) => Math.round(component));
+            return `rgb(${r}, ${g}, ${b})`;
+        };
+
+        const resolveProgressColor = (value, action) => {
+            if (action === "deleted") {
+                return toRgbString(PROGRESS_COLOR_GRAY);
+            }
+            if (value <= 0) {
+                return toRgbString(PROGRESS_COLOR_RED);
+            }
+            if (value >= 100) {
+                return toRgbString(PROGRESS_COLOR_GREEN);
+            }
+            if (value <= 50) {
+                const ratio = value / 50;
+                const color = interpolateProgressColor(PROGRESS_COLOR_RED, PROGRESS_COLOR_YELLOW, ratio);
+                return toRgbString(color);
+            }
+            const ratio = (value - 50) / 50;
+            const color = interpolateProgressColor(PROGRESS_COLOR_YELLOW, PROGRESS_COLOR_GREEN, ratio);
+            return toRgbString(color);
+        };
+
+        const resolveProgressTextColor = (value, action) => {
+            if (action === "deleted") {
+                return "#1D2939";
+            }
+            return value >= 45 ? "#FFFFFF" : "#1D2939";
+        };
+
+        const renderResponsibilityProgress = (task) => {
+            const action = task?.action || "";
+            const progressValue = clampProgressValue(task?.progress);
+            const statusText = formatResponsibilityStatus(task?.status);
+            const displayText = `${progressValue}%`;
+            const color = resolveProgressColor(progressValue, action);
+            const textColor = resolveProgressTextColor(progressValue, action);
+            const ariaText = statusText ? `${displayText} complete – ${statusText}` : `${displayText} complete`;
+            const tooltipText = statusText ? `${displayText} complete • ${statusText}` : `${displayText} complete`;
+
+            const container = document.createElement("div");
+            container.className = "responsibility-progress";
+
+            const track = document.createElement("div");
+            track.className = "responsibility-progress__track";
+            track.setAttribute("role", "progressbar");
+            track.setAttribute("aria-valuemin", "0");
+            track.setAttribute("aria-valuemax", "100");
+            track.setAttribute("aria-valuenow", String(progressValue));
+            track.setAttribute("aria-valuetext", ariaText);
+            track.title = tooltipText;
+
+            const fill = document.createElement("div");
+            fill.className = "responsibility-progress__fill";
+            fill.style.width = `${progressValue}%`;
+            fill.style.backgroundColor = color;
+            if (progressValue > 0) {
+                fill.style.minWidth = "4px";
+            }
+
+            const text = document.createElement("span");
+            text.className = "responsibility-progress__text";
+            text.textContent = displayText;
+            text.style.color = textColor;
+
+            track.append(fill, text);
+            container.append(track);
+
+            return container;
+        };
+
+        const updateDelegatedVisibility = (actionValue) => {
+            if (!responsibilityDelegatedField || !responsibilityDelegatedSelect) {
+                return;
+            }
+            const requiresDelegated = actionValue === "delegated";
+            responsibilityDelegatedField.hidden = !requiresDelegated;
+            if (requiresDelegated) {
+                responsibilityDelegatedSelect.setAttribute("required", "required");
+            } else {
+                responsibilityDelegatedSelect.removeAttribute("required");
+                responsibilityDelegatedSelect.value = "";
+            }
+        };
+
+        const setPlanMessage = (element, message, variant = "info") => {
+            if (!element) {
+                return;
+            }
+
+            const classes = ["responsibility-plan__message", `responsibility-plan__message--${variant}`];
+            element.className = classes.join(" ");
+            if (!message) {
+                element.hidden = true;
+                element.textContent = "";
+                return;
+            }
+
+            element.hidden = false;
+            element.textContent = message;
+        };
+
+        const clearResponsibilityFormError = () => {
+            if (!responsibilityFormError) {
+                return;
+            }
+            responsibilityFormError.hidden = true;
+            responsibilityFormError.textContent = "";
+        };
+
+        const showResponsibilityFormError = (message) => {
+            if (!responsibilityFormError) {
+                return;
+            }
+            responsibilityFormError.hidden = false;
+            responsibilityFormError.textContent = message;
+        };
+
+        const formatResponsibilityDate = (iso) => {
+            if (!iso) {
+                return "—";
+            }
+            try {
+                const date = new Date(iso);
+                return date.toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                });
+            } catch (_) {
+                return "—";
+            }
+        };
+
+        const formatResponsibilityDateTime = (value) => {
+            if (!value) {
+                return "—";
+            }
+            try {
+                const date = new Date(value);
+                return date.toLocaleString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+            } catch (_) {
+                return "—";
+            }
+        };
+
+        const formatResponsibilityStatus = (status) => {
+            if (!status) {
+                return "";
+            }
+            return RESPONSIBILITY_STATUS_LABELS[status] || status;
+        };
+
+        const formatResponsibilityAction = (action) => {
+            if (!action) {
+                return "—";
+            }
+            return RESPONSIBILITY_ACTION_LABELS[action] || action;
+        };
+
+        const resetResponsibilityFormState = () => {
+            responsibilityEditingTaskId = null;
+            responsibilityEditingTask = null;
+            clearResponsibilityFormError();
+            if (responsibilityForm) {
+                responsibilityForm.reset();
+            }
+            if (responsibilityActionNotesInput) {
+                responsibilityActionNotesInput.value = "";
+            }
+            if (responsibilityProgressInput) {
+                responsibilityProgressInput.value = "0";
+            }
+            responsibilityActionPreviousValue = "";
+            responsibilityActionModalPreviousValue = "";
+            updateDelegatedVisibility("");
+            responsibilityActionNotesTextarea?.setAttribute("aria-invalid", "false");
+        };
+
+        const openResponsibilityModal = (task = null) => {
+            if (!responsibilityModal) {
+                return;
+            }
+
+            resetResponsibilityFormState();
+
+            const isEditing = Boolean(task);
+            responsibilityEditingTaskId = isEditing ? task.id : null;
+            responsibilityEditingTask = task;
+
+            if (responsibilityModalTitle) {
+                responsibilityModalTitle.textContent = isEditing ? "Update responsibility" : responsibilityModalDefaultTitle;
+            }
+
+            if (responsibilitySubmitButton) {
+                responsibilitySubmitButton.textContent = isEditing ? "Update responsibility" : responsibilitySubmitDefaultText;
+            }
+
+            if (responsibilityForm && task) {
+                responsibilityTitleInput.value = task.title || "";
+                responsibilityDescriptionInput.value = task.description || "";
+                responsibilityDetailInput.value = task.detail || "";
+                responsibilityDateInput.value = task.scheduledFor || "";
+                responsibilityRecurrenceSelect.value = task.recurrence || "does_not_repeat";
+                responsibilityRecipientInput.value = task.recipientEmail || "";
+                responsibilityProgressInput.value = String(task.progress ?? 0);
+                responsibilityAssigneeSelect.value = task.assigneeId ? String(task.assigneeId) : "";
+                responsibilityActionSelect.value = task.action || "";
+                responsibilityActionPreviousValue = task.action || "";
+                responsibilityActionNotesInput.value = task.actionNotes || "";
+                responsibilityDelegatedSelect.value = task.delegatedToId ? String(task.delegatedToId) : "";
+
+                updateDelegatedVisibility(task.action || "");
+
+                if (task.recurrence === "custom") {
+                    responsibilityCustomDays.removeAttribute("hidden");
+                    responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+                        checkbox.checked = Array.isArray(task.customWeekdays)
+                            ? task.customWeekdays.includes(Number.parseInt(checkbox.value, 10))
+                            : false;
+                    });
+                } else {
+                    responsibilityCustomDays.setAttribute("hidden", "");
+                }
+            } else if (responsibilityForm) {
+                responsibilityRecurrenceSelect.value = "does_not_repeat";
+                updateRecurrenceOptionLabels();
+                toggleCustomWeekdayFieldset();
+                responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+                    checkbox.checked = false;
+                });
+            }
+
+            responsibilityModal.removeAttribute("hidden");
+            responsibilityModal.setAttribute("aria-hidden", "false");
+            responsibilityModal.classList.add("modal--open");
+            responsibilityTitleInput?.focus();
+        };
+
+        const closeResponsibilityModal = () => {
+            if (!responsibilityModal) {
+                return;
+            }
+            responsibilityModal.classList.remove("modal--open");
+            responsibilityModal.setAttribute("hidden", "");
+            responsibilityModal.setAttribute("aria-hidden", "true");
+            resetResponsibilityFormState();
+        };
+
+        const appendCell = (text, options = {}) => {
+            const cell = document.createElement("td");
+            if (typeof text === "string" || typeof text === "number") {
+                cell.textContent = text;
+            } else if (text instanceof Node) {
+                cell.appendChild(text);
+            } else {
+                cell.textContent = "—";
+            }
+            if (options.title) {
+                cell.title = options.title;
+            }
+            return cell;
+        };
+
+        const renderResponsibilityRow = (task) => {
+            const row = document.createElement("tr");
+            row.dataset.id = task?.id;
+
+            const openButton = document.createElement("button");
+            openButton.type = "button";
+            openButton.className = "button button--ghost button--small";
+            openButton.textContent = "Update";
+            openButton.addEventListener("click", () => {
+                openResponsibilityModal(task);
+            });
+
+            const progressIndicator = renderResponsibilityProgress(task);
+
+            const createdCell = document.createElement("td");
+            createdCell.textContent = formatResponsibilityDateTime(task?.createdAt) ?? "—";
+
+            const updateCell = document.createElement("td");
+            updateCell.appendChild(openButton);
+
+            row.append(
+                appendCell(task?.number || "—"),
+                appendCell(task?.title || "—"),
+                appendCell(progressIndicator),
+                appendCell(task?.detail || "—"),
+                appendCell(task?.assignerName || "—"),
+                appendCell(task?.assigneeName || "—"),
+                appendCell(task?.delegatedToName || "—"),
+                appendCell(formatResponsibilityDate(task?.scheduledFor)),
+                appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
+                createdCell,
+                updateCell,
+            );
+
+            return row;
+        };
+
+        const updateResponsibilityTable = (tasks) => {
+            if (!responsibilityTableBody) {
+                return;
+            }
+
+            responsibilityTableBody.innerHTML = "";
+            if (!Array.isArray(tasks) || tasks.length === 0) {
+                responsibilityEmptyState?.removeAttribute("hidden");
+                return;
+            }
+
+            responsibilityEmptyState?.setAttribute("hidden", "");
+
+            tasks.forEach((task) => {
+                const row = renderResponsibilityRow(task);
+                responsibilityTableBody.appendChild(row);
+            });
+        };
+
+        const fetchResponsibilities = async () => {
+            if (!token) {
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/responsibilities", {
+                    headers: authHeaders,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(errorData?.msg || "Unable to load responsibilities.");
+                }
+
+                const data = await response.json();
+                updateResponsibilityTable(Array.isArray(data) ? data : []);
+            } catch (error) {
+                console.error("Failed to load responsibilities", error);
+                setPlanMessage(
+                    responsibilityMessage,
+                    error?.message || "Unable to load responsibility plan.",
+                    "error",
+                );
+            }
+        };
+
+        const populateResponsibilityAssignees = (assignees = []) => {
+            if (!responsibilityAssigneeSelect || !responsibilityDelegatedSelect) {
+                return;
+            }
+
+            const renderOption = (option) => {
+                const element = document.createElement("option");
+                element.value = option?.id;
+                element.textContent = option?.name;
+                return element;
+            };
+
+            const fragment = document.createDocumentFragment();
+            assignees.forEach((assignee) => {
+                fragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
+            });
+
+            const delegatedFragment = document.createDocumentFragment();
+            assignees.forEach((assignee) => {
+                delegatedFragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
+            });
+
+            responsibilityAssigneeSelect.append(fragment.cloneNode(true));
+            responsibilityDelegatedSelect.append(delegatedFragment.cloneNode(true));
+        };
+
+        const fetchResponsibilityAssignees = async () => {
+            if (!token) {
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/responsibilities/assignees", {
+                    headers: authHeaders,
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.msg || "Unable to load managers.");
+                }
+
+                const data = await response.json();
+                populateResponsibilityAssignees(Array.isArray(data) ? data : []);
+            } catch (error) {
+                console.error("Failed to load responsibility assignees", error);
+            }
+        };
+
+        const toIsoDateString = (date) => {
+            if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+                return "";
+            }
+            const offset = date.getTimezoneOffset();
+            const normalized = new Date(date.getTime() - offset * 60000);
+            return normalized.toISOString().split("T")[0];
+        };
+
+        const updateRecurrenceOptionLabels = () => {
+            if (!responsibilityRecurrenceSelect) {
+                return;
+            }
+
+            const today = new Date();
+            const weekday = today.toLocaleDateString(undefined, { weekday: "long" });
+            const dayOfMonth = today.getDate();
+            const monthName = today.toLocaleDateString(undefined, { month: "long" });
+
+            Array.from(responsibilityRecurrenceSelect.options).forEach((option) => {
+                const baseLabel = RESPONSIBILITY_RECURRENCE_LABELS[option.value] || option.textContent;
+                if (!baseLabel) {
+                    return;
+                }
+                if (option.value === "weekly") {
+                    option.textContent = baseLabel.replace("(Today)", weekday);
+                } else if (option.value === "monthly") {
+                    option.textContent = baseLabel.replace("(Today)", `${dayOfMonth}${getOrdinalSuffix(dayOfMonth)}`);
+                } else if (option.value === "annually") {
+                    option.textContent = baseLabel.replace("(Today)", `${monthName} ${dayOfMonth}`);
+                } else {
+                    option.textContent = baseLabel;
+                }
+            });
+        };
+
+        const getOrdinalSuffix = (day) => {
+            if (![11, 12, 13].includes(day % 100)) {
+                switch (day % 10) {
+                    case 1:
+                        return "st";
+                    case 2:
+                        return "nd";
+                    case 3:
+                        return "rd";
+                }
+            }
+            return "th";
+        };
+
+        const toggleCustomWeekdayFieldset = () => {
+            if (!responsibilityCustomDays || !responsibilityRecurrenceSelect) {
+                return;
+            }
+            const isCustom = responsibilityRecurrenceSelect.value === "custom";
+            if (isCustom) {
+                responsibilityCustomDays.removeAttribute("hidden");
+                responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+                    checkbox.required = true;
+                });
+            } else {
+                responsibilityCustomDays.setAttribute("hidden", "");
+                responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+                    checkbox.checked = false;
+                    checkbox.required = false;
+                });
+            }
+        };
+
+        const responsibilityActionPreviousNotes = new Map();
+        let responsibilityActionPreviousValue = "";
+        let responsibilityActionModalPreviousValue = "";
+
+        const handleResponsibilityActionChange = (event) => {
+            if (!event?.target) {
+                return;
+            }
+
+            const actionValue = event.target.value;
+            updateDelegatedVisibility(actionValue);
+            if (ACTIONS_REQUIRING_NOTES.has(actionValue)) {
+                const previousNotes = responsibilityActionPreviousNotes.get(actionValue) || "";
+                if (responsibilityActionNotesTextarea) {
+                    responsibilityActionNotesTextarea.value = previousNotes;
+                }
+                openResponsibilityActionNotesModal(responsibilityActionPreviousValue);
+            } else {
+                responsibilityActionNotesInput.value = "";
+            }
+            responsibilityActionPreviousValue = actionValue;
+        };
+
+        const responsibilityActionNotesTextareaInput = (event) => {
+            if (!responsibilityActionNotesTextarea) {
+                return;
+            }
+            responsibilityActionNotesTextarea.setAttribute("aria-invalid", event.target.value.trim().length === 0);
+        };
+
+        const responsibilityActionNotesSaveHandler = () => {
+            const notes = responsibilityActionNotesTextarea.value.trim();
+            if (!notes) {
+                setResponsibilityActionNotesError("Notes are required for this action.");
+                responsibilityActionNotesTextarea.setAttribute("aria-invalid", "true");
+                responsibilityActionNotesTextarea.focus();
+                return;
+            }
+            setResponsibilityActionNotesError();
+            responsibilityActionNotesTextarea.setAttribute("aria-invalid", "false");
+            responsibilityActionNotesInput.value = notes;
+            responsibilityActionPreviousNotes.set(responsibilityActionPreviousValue, notes);
+            closeResponsibilityActionNotesModal();
+        };
+
+        const responsibilityActionNotesCancelHandler = () => {
+            setResponsibilityActionNotesError();
+            responsibilityActionNotesTextarea.setAttribute("aria-invalid", "false");
+            closeResponsibilityActionNotesModal(true);
+        };
+
+        const responsibilityActionNotesOverlayHandler = () => {
+            setResponsibilityActionNotesError();
+            closeResponsibilityActionNotesModal(true);
+        };
+
+        const responsibilityActionNotesCloseHandler = () => {
+            setResponsibilityActionNotesError();
+            closeResponsibilityActionNotesModal(true);
+        };
+
+        const submitResponsibilityForm = async (event) => {
+            event.preventDefault();
+            if (!responsibilityForm) {
+                return;
+            }
+
+            const formData = new FormData(responsibilityForm);
+            const payload = Object.fromEntries(formData.entries());
+            const isEditingResponsibility = responsibilityEditingTaskId !== null;
+
+            if (!payload.title) {
+                showResponsibilityFormError("Title is required.");
+                return;
+            }
+
+            if (!payload.scheduledFor) {
+                showResponsibilityFormError("Select a scheduled date.");
+                return;
+            }
+
+            if (!payload.recurrence) {
+                showResponsibilityFormError("Select a recurrence option.");
+                return;
+            }
+
+            if (payload.recurrence === "custom") {
+                const selected = responsibilityCustomWeekdays
+                    ? Array.from(responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']"))
+                          .filter((checkbox) => checkbox.checked)
+                          .map((checkbox) => Number.parseInt(checkbox.value, 10))
+                    : [];
+                if (selected.length === 0) {
+                    showResponsibilityFormError("Select at least one weekday for the custom schedule.");
+                    return;
+                }
+                payload.customWeekdays = selected;
+            }
+
+            if (!payload.action) {
+                showResponsibilityFormError("Select a 5D action.");
+                return;
+            }
+
+            if (ACTIONS_REQUIRING_NOTES.has(payload.action)) {
+                if (!payload.actionNotes) {
+                    showResponsibilityFormError("Enter discussion points or reasons for the selected action.");
+                    openResponsibilityActionNotesModal(payload.action);
+                    setResponsibilityActionNotesError("Notes are required for this action.");
+                    return;
+                }
+            }
+
+            if (payload.action === "delegated" && !payload.delegatedToId) {
+                showResponsibilityFormError("Select a delegated manager when the action is Delegated.");
+                return;
+            }
+
+            if (!payload.recipientEmail) {
+                showResponsibilityFormError("Enter a notification email address.");
+                return;
+            }
+
+            if (payload.progress && (payload.progress < 0 || payload.progress > 100)) {
+                showResponsibilityFormError("Progress must be between 0 and 100.");
+                return;
+            }
+
+            if (payload.progress) {
+                payload.progress = clampProgressValue(payload.progress);
+            }
+
+            if (payload.assigneeId === "") {
+                delete payload.assigneeId;
+            }
+
+            if (payload.delegatedToId === "") {
+                delete payload.delegatedToId;
+            }
+
+            const requestUrl = isEditingResponsibility
+                ? `/api/responsibilities/${responsibilityEditingTaskId}`
+                : "/api/responsibilities";
+            const requestMethod = isEditingResponsibility ? "PUT" : "POST";
+
+            clearResponsibilityFormError();
+            if (responsibilitySubmitButton) {
+                responsibilitySubmitButton.disabled = true;
+                responsibilitySubmitButton.textContent = isEditingResponsibility
+                    ? "Updating responsibility…"
+                    : "Saving responsibility…";
+            }
+
+            try {
+                const response = await fetch(requestUrl, {
+                    method: requestMethod,
+                    headers: {
+                        ...authHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    if (data?.errors) {
+                        const messages = Object.values(data.errors)
+                            .flat()
+                            .filter(Boolean)
+                            .join(" ");
+                        throw new Error(messages || "Unable to save responsibility.");
+                    }
+                    throw new Error(data?.msg || "Unable to save responsibility.");
+                }
+
+                await fetchResponsibilities();
+                closeResponsibilityModal();
+                const successMessage = isEditingResponsibility
+                    ? "Responsibility updated."
+                    : "Responsibility saved and notification sent.";
+                setPlanMessage(responsibilityMessage, successMessage, "success");
+            } catch (error) {
+                console.error("Failed to submit responsibility", error);
+                showResponsibilityFormError(error?.message || "Unable to save responsibility.");
+            } finally {
+                if (responsibilitySubmitButton) {
+                    responsibilitySubmitButton.disabled = false;
+                    responsibilitySubmitButton.textContent = responsibilitySubmitDefaultText;
+                }
+            }
+        };
+
+        const responsibilityModalOverlayHandler = (event) => {
+            if (event.target !== responsibilityModalOverlay) {
+                return;
+            }
+            closeResponsibilityModal();
+        };
+
+        const deleteResponsibility = async (taskId) => {
+            if (!taskId) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/responsibilities/${taskId}`, {
+                    method: "DELETE",
+                    headers: authHeaders,
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.msg || "Unable to delete responsibility.");
+                }
+
+                await fetchResponsibilities();
+                setPlanMessage(responsibilityMessage, "Responsibility deleted.", "success");
+            } catch (error) {
+                console.error("Failed to delete responsibility", error);
+                setPlanMessage(
+                    responsibilityMessage,
+                    error?.message || "Unable to delete responsibility.",
+                    "error",
+                );
+            }
+        };
+
+        const handleResponsibilityRowAction = (event) => {
+            const trigger = event.target.closest("[data-responsibility-action]");
+            if (!trigger) {
+                return;
+            }
+
+            const row = trigger.closest("tr[data-id]");
+            if (!row) {
+                return;
+            }
+
+            const taskId = Number.parseInt(row.dataset.id, 10);
+            if (Number.isNaN(taskId)) {
+                return;
+            }
+
+            const action = trigger.dataset.responsibilityAction;
+            if (action === "delete") {
+                deleteResponsibility(taskId);
+            }
+        };
+
+        const responsibilityTable = responsibilityTableBody?.closest("table");
+        responsibilityTable?.addEventListener("click", handleResponsibilityRowAction);
+
+        responsibilityCreateButton?.addEventListener("click", () => openResponsibilityModal());
+        responsibilityModalClose?.addEventListener("click", closeResponsibilityModal);
+        responsibilityCancelButton?.addEventListener("click", closeResponsibilityModal);
+        responsibilityModalOverlay?.addEventListener("click", responsibilityModalOverlayHandler);
+        responsibilityForm?.addEventListener("submit", submitResponsibilityForm);
+        responsibilityActionSelect?.addEventListener("change", handleResponsibilityActionChange);
+        responsibilityActionNotesTextarea?.addEventListener("input", responsibilityActionNotesTextareaInput);
+        responsibilityActionNotesSave?.addEventListener("click", responsibilityActionNotesSaveHandler);
+        responsibilityActionNotesCancel?.addEventListener("click", responsibilityActionNotesCancelHandler);
+        responsibilityActionNotesOverlay?.addEventListener("click", responsibilityActionNotesOverlayHandler);
+        responsibilityActionNotesClose?.addEventListener("click", responsibilityActionNotesCloseHandler);
+
+        const sendWeeklyPlan = async (event) => {
+            event.preventDefault();
+            if (!responsibilityWeeklyForm) {
+                return;
+            }
+
+            responsibilityWeeklySendButton.disabled = true;
+            setPlanMessage(responsibilityWeeklyMessage, "Sending weekly plan…", "info");
+
+            const formData = new FormData(responsibilityWeeklyForm);
+            const payload = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch("/api/responsibilities/send-weekly", {
+                    method: "POST",
+                    headers: {
+                        ...authHeaders,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.msg || "Unable to send weekly plan.");
+                }
+
+                const data = await response.json();
+                const rangeText = `${formatResponsibilityDate(data?.startDate)} – ${formatResponsibilityDate(
+                    data?.endDate,
+                )}`;
+                setPlanMessage(
+                    responsibilityWeeklyMessage,
+                    `Weekly plan sent for ${rangeText}.`,
+                    "success",
+                );
+            } catch (error) {
+                console.error("Failed to send weekly plan", error);
+                setPlanMessage(
+                    responsibilityWeeklyMessage,
+                    error?.message || "Unable to send weekly plan.",
+                    "error",
+                );
+            } finally {
+                responsibilityWeeklySendButton.disabled = false;
+            }
+        };
+
+        responsibilityWeeklyForm?.addEventListener("submit", sendWeeklyPlan);
+
+        const initializeResponsibilityWeeklyStart = () => {
+            if (!responsibilityWeeklyStartInput) {
+                return;
+            }
+            const today = new Date();
+            const day = today.getDay();
+            const offset = day === 0 ? -6 : 1 - day;
+            const monday = new Date(today);
+            monday.setDate(today.getDate() + offset);
+            responsibilityWeeklyStartInput.value = toIsoDateString(monday);
+        };
+
+        initializeResponsibilityWeeklyStart();
+        toggleCustomWeekdayFieldset();
+        updateRecurrenceOptionLabels();
+        fetchResponsibilityAssignees();
+        fetchResponsibilities();
+    </script>
+</body>
+</html>

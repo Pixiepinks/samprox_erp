@@ -1084,6 +1084,10 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "outside_manager") {
+            window.location.replace("/responsibility_portal");
+        }
+
         if (user?.role === "maintenance_manager") {
             document.querySelectorAll(".subnav__link").forEach((link) => {
                 const href = link.getAttribute("href");
@@ -1101,6 +1105,7 @@
             maintenance_manager: "Maintenance Manager",
             finance_manager: "Finance Manager",
             technician: "Technician",
+            outside_manager: "Outside Manager",
         };
 
         const userNameEl = document.getElementById("user-name");

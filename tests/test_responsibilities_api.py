@@ -270,6 +270,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "custom",
             "customWeekdays": [0, 2],
             "recipientEmail": "owner@example.com",
+            "ccEmail": "owner.cc@example.com",
             "action": "delegated",
             "performanceUnit": "percentage_pct",
             "performanceResponsible": "100",
@@ -288,6 +289,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(create_response.status_code, 201, create_response.get_json())
         created_data = create_response.get_json()
         task_id = created_data["id"]
+        self.assertEqual(created_data.get("ccEmail"), "owner.cc@example.com")
 
         update_payload = {
             "title": "Production sync updated",
@@ -297,6 +299,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "does_not_repeat",
             "customWeekdays": [],
             "recipientEmail": "team@example.com",
+            "ccEmail": "opslead@example.com",
             "action": "done",
             "actionNotes": "Follow up next month.",
             "assigneeId": self.secondary_manager.id,
@@ -321,6 +324,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(updated["performanceUnit"], "percentage_pct")
         self.assertEqual(updated["performanceResponsible"], "100")
         self.assertEqual(updated["performanceActual"], "110")
+        self.assertEqual(updated.get("ccEmail"), "opslead@example.com")
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
         self.assertEqual(updated.get("delegations"), [])
@@ -340,9 +344,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.action_notes, "Follow up next month.")
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
         self.assertEqual(task.progress, 100)
+        self.assertEqual(task.cc_email, "opslead@example.com")
 
         # Updating should send a fresh email notification
         self.assertEqual(len(self.sent_emails), 3)
+        for message in self.sent_emails:
+            self.assertIn("prakash@rainbowsholdings.com", message.get("bcc", []))
+        self.assertEqual(self.sent_emails[-1].get("cc"), ["opslead@example.com"])
 
     def test_update_responsibility_deleted_action_sets_progress_to_100(self):
         scheduled_for = date.today().isoformat()

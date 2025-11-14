@@ -192,6 +192,27 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
         default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
         if default_sender:
             message.sender = default_sender
+        bcc_config = current_app.config.get("MAIL_DEFAULT_BCC", [])
+        if isinstance(bcc_config, str):
+            bcc_config = [bcc_config]
+        cleaned_bcc: list[str] = []
+        seen_bcc: set[str] = set()
+        recipient_lower = recipient.strip().lower()
+        for address in bcc_config or []:
+            if not address:
+                continue
+            cleaned = address.strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered == recipient_lower:
+                continue
+            if lowered in seen_bcc:
+                continue
+            cleaned_bcc.append(cleaned)
+            seen_bcc.add(lowered)
+        if cleaned_bcc:
+            message.bcc = cleaned_bcc
         message.body = body
         mail.send(message)
         return True, f"Notification email sent to {recipient}."

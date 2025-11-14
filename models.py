@@ -322,6 +322,7 @@ class ResponsibilityTask(db.Model):
     )
     action_notes = db.Column(db.Text)
     recipient_email = db.Column(db.String(255), nullable=False)
+    cc_email = db.Column(db.String(255))
     progress = db.Column(db.Integer, nullable=False, default=0)
 
     perf_uom = db.Column(

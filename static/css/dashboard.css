@@ -1604,6 +1604,33 @@ body.modal-open {
     color: #1f2937;
 }
 
+.edit-form__label--sub {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #4b5563;
+}
+
+.edit-form__group {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.edit-form__group--columns {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.edit-form__subfield {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.edit-form__hint {
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin: 0;
+}
+
 .edit-form__input {
     border-radius: 10px;
     border: 1px solid rgba(148, 163, 184, 0.6);

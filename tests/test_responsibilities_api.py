@@ -197,13 +197,28 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             if message.get("to", [None])[0] == "lead@example.com"
         )
         self.assertIn("Safety walkdown", general_email["subject"])
+        self.assertIn(
+            "Hi Bob, A new responsibility has been assigned to you.",
+            general_email["html"],
+        )
+        self.assertIn("Responsibility overview:", general_email["html"])
         self.assertIn("Delegated allocations:", general_email["html"])
+        self.assertIn(
+            "Great achievements begin with clear responsibilities.",
+            general_email["html"],
+        )
+        self.assertIn("Maximus — Your AICEO", general_email["html"])
         delegate_email = next(
             message
             for message in self.sent_emails
             if message.get("to", [None])[0] == "sudara@example.com"
         )
+        self.assertIn(
+            "Hi Sudara, A new responsibility has been delegated to you.",
+            delegate_email["html"],
+        )
         self.assertIn("Delegated allocation assigned to you", delegate_email["html"])
+        self.assertIn("Maximus — Your AICEO", delegate_email["html"])
 
     def test_create_responsibility_without_actual_metric_is_allowed(self):
         scheduled_for = date.today().isoformat()

@@ -212,6 +212,11 @@ def _split_recipients(value: Optional[str]) -> list[str]:
 
 
 def _resolve_sender() -> str:
+    sender = current_app.config.get("RESEND_DEFAULT_SENDER")
+    if isinstance(sender, (list, tuple)) and sender:
+        sender = sender[0]
+    if isinstance(sender, str) and sender.strip():
+        return sender.strip()
     sender = current_app.config.get("MAIL_DEFAULT_SENDER")
     if isinstance(sender, (list, tuple)) and sender:
         sender = sender[0]
@@ -309,7 +314,11 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
 
 
 def _resend_api_key() -> str:
-    api_key = os.environ["RESEND_API_KEY"].strip()
+    api_key = current_app.config.get("RESEND_API_KEY")
+    if isinstance(api_key, str):
+        api_key = api_key.strip()
+    if not api_key:
+        api_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not api_key:
         raise KeyError("RESEND_API_KEY")
     return api_key

@@ -11,7 +11,18 @@ from models import (
     ResponsibilityTask,
     ResponsibilityRecurrence,
     ResponsibilityTaskStatus,
+    ResponsibilityPerformanceUnit,
     User,
+)
+
+from responsibility_metrics import (
+    PerformanceMetricValidationError,
+    compute_metric,
+    denormalize_value,
+    format_value_for_display,
+    get_unit_config,
+    list_unit_options,
+    normalize_performance_value,
 )
 
 class UserSchema(Schema):
@@ -734,6 +745,20 @@ class ResponsibilityTaskSchema(Schema):
     delegated_to = fields.Nested(UserSchema, dump_only=True, allow_none=True, data_key="delegatedTo")
     created_at = fields.Method("get_created_at", data_key="createdAt")
     updated_at = fields.Method("get_updated_at", data_key="updatedAt")
+    perf_uom = fields.Method("get_perf_uom", data_key="perfUom")
+    perf_input_type = fields.Method("get_perf_input_type", data_key="perfInputType")
+    perf_responsible_value = fields.Method("get_perf_responsible_value", data_key="perfResponsibleValue")
+    perf_actual_value = fields.Method("get_perf_actual_value", data_key="perfActualValue")
+    perf_metric_value = fields.Method("get_perf_metric_value", data_key="perfMetricValue")
+    perf_responsible_display = fields.Method(
+        "get_perf_responsible_display", data_key="perfResponsibleDisplay"
+    )
+    perf_actual_display = fields.Method(
+        "get_perf_actual_display", data_key="perfActualDisplay"
+    )
+    perf_metric_display = fields.Method(
+        "get_perf_metric_display", data_key="perfMetricDisplay"
+    )
 
     class Meta:
         ordered = True
@@ -776,6 +801,56 @@ class ResponsibilityTaskSchema(Schema):
     def get_updated_at(self, obj):
         return format_datetime_as_colombo_iso(getattr(obj, "updated_at", None), assume_local=True)
 
+    def _get_perf_unit(self, obj) -> ResponsibilityPerformanceUnit:
+        value = getattr(obj, "perf_uom", ResponsibilityPerformanceUnit.PERCENTAGE_PCT)
+        if isinstance(value, ResponsibilityPerformanceUnit):
+            return value
+        try:
+            return ResponsibilityPerformanceUnit(value)
+        except ValueError:
+            return ResponsibilityPerformanceUnit.PERCENTAGE_PCT
+
+    def get_perf_uom(self, obj):
+        return self._get_perf_unit(obj).value
+
+    def get_perf_input_type(self, obj):
+        unit = self._get_perf_unit(obj)
+        return get_unit_config(unit).input_type
+
+    def _denormalize_value(self, obj, attribute):
+        unit = self._get_perf_unit(obj)
+        stored_value = getattr(obj, attribute, None)
+        if stored_value is None:
+            return None
+        return denormalize_value(unit, stored_value)
+
+    def get_perf_responsible_value(self, obj):
+        return self._denormalize_value(obj, "perf_responsible_value")
+
+    def get_perf_actual_value(self, obj):
+        return self._denormalize_value(obj, "perf_actual_value")
+
+    def get_perf_metric_value(self, obj):
+        value = getattr(obj, "perf_metric_value", None)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def get_perf_responsible_display(self, obj):
+        unit = self._get_perf_unit(obj)
+        return format_value_for_display(unit, getattr(obj, "perf_responsible_value", None))
+
+    def get_perf_actual_display(self, obj):
+        unit = self._get_perf_unit(obj)
+        return format_value_for_display(unit, getattr(obj, "perf_actual_value", None))
+
+    def get_perf_metric_display(self, obj):
+        unit = self._get_perf_unit(obj)
+        return format_value_for_display(ResponsibilityPerformanceUnit.PERCENTAGE_PCT, getattr(obj, "perf_metric_value", None))
+
 
 class ResponsibilityTaskCreateSchema(Schema):
     title = fields.Str(required=True)
@@ -791,6 +866,9 @@ class ResponsibilityTaskCreateSchema(Schema):
     action = fields.Str(required=True)
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
     progress = fields.Int(allow_none=True, validate=Range(min=0, max=100))
+    perf_uom = fields.Str(required=True, data_key="perfUom")
+    perf_responsible_value = fields.Raw(required=True, data_key="perfResponsibleValue")
+    perf_actual_value = fields.Raw(required=True, data_key="perfActualValue")
 
     class Meta:
         ordered = True
@@ -837,6 +915,13 @@ class ResponsibilityTaskCreateSchema(Schema):
         elif isinstance(progress, float):
             normalized["progress"] = int(round(progress))
 
+        for field_name in ("perfResponsibleValue", "perfActualValue"):
+            raw_value = normalized.get(field_name)
+            if isinstance(raw_value, str):
+                stripped = raw_value.strip()
+                if stripped == "":
+                    normalized[field_name] = None
+
         return normalized
 
     @validates("recurrence")
@@ -861,6 +946,15 @@ class ResponsibilityTaskCreateSchema(Schema):
             ResponsibilityAction(value)
         except ValueError as error:
             raise ValidationError("Invalid 5D action option.") from error
+
+    @validates("perf_uom")
+    def validate_perf_uom(self, value):
+        if value is None:
+            raise ValidationError("Select a unit of measure.")
+        try:
+            ResponsibilityPerformanceUnit(value)
+        except ValueError as error:
+            raise ValidationError("Select a valid unit of measure.") from error
 
     @validates("custom_weekdays")
     def validate_custom_weekdays(self, value):
@@ -903,3 +997,47 @@ class ResponsibilityTaskCreateSchema(Schema):
                 "Provide discussion points or reasons for this action.",
                 "actionNotes",
             )
+
+        perf_uom = data.get("perf_uom")
+        if not perf_uom:
+            raise ValidationError("Select a unit of measure.", field_name="perfUom")
+
+        try:
+            unit = ResponsibilityPerformanceUnit(perf_uom)
+            config = get_unit_config(unit)
+        except (ValueError, PerformanceMetricValidationError) as error:
+            raise ValidationError(str(error), field_name="perfUom") from error
+
+        responsible_raw = data.get("perf_responsible_value")
+        actual_raw = data.get("perf_actual_value")
+
+        if responsible_raw is None:
+            raise ValidationError("Enter a responsible target.", "perfResponsibleValue")
+        if actual_raw is None:
+            raise ValidationError("Enter an actual value.", "perfActualValue")
+
+        try:
+            responsible_value = normalize_performance_value(
+                unit,
+                responsible_raw,
+                field_name="Responsible target",
+            )
+        except PerformanceMetricValidationError as error:
+            raise ValidationError(str(error), "perfResponsibleValue") from error
+
+        try:
+            actual_value = normalize_performance_value(
+                unit,
+                actual_raw,
+                field_name="Actual value",
+            )
+        except PerformanceMetricValidationError as error:
+            raise ValidationError(str(error), "perfActualValue") from error
+
+        metric_value = compute_metric(unit, responsible_value, actual_value)
+
+        data["perf_uom"] = unit.value
+        data["perf_responsible_value"] = responsible_value
+        data["perf_actual_value"] = actual_value
+        data["perf_metric_value"] = metric_value
+        data["perf_input_type"] = config.input_type

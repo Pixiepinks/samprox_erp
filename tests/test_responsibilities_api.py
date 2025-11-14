@@ -9,6 +9,8 @@ from sqlalchemy.exc import IntegrityError
 
 from requests import exceptions as requests_exceptions
 
+from responsibility_metrics import denormalize_value
+
 
 class ResponsibilityApiTestCase(unittest.TestCase):
     def setUp(self):
@@ -103,6 +105,20 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         return response.get_json()["access_token"]
 
+    def _make_base_payload(self, **overrides):
+        payload = {
+            "title": "Default responsibility",
+            "scheduledFor": date.today().isoformat(),
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "owner@example.com",
+            "action": "done",
+            "perfUom": "percentage_pct",
+            "perfResponsibleValue": "100",
+            "perfActualValue": "100",
+        }
+        payload.update(overrides)
+        return payload
+
     def test_create_responsibility_records_task_and_sends_email(self):
         scheduled_for = date.today().isoformat()
         payload = {
@@ -115,6 +131,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recipientEmail": "lead@example.com",
             "action": "delegated",
             "delegatedToId": self.secondary_manager.id,
+            "perfUom": "kg",
+            "perfResponsibleValue": "10.000",
+            "perfActualValue": "8.500",
         }
 
         response = self.client.post(
@@ -129,6 +148,8 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(data["recurrence"], "weekly")
         self.assertEqual(data["progress"], 0)
         self.assertTrue(data["email_notification"]["sent"])
+        self.assertEqual(data["perfUom"], "kg")
+        self.assertAlmostEqual(data["perfMetricValue"], 85.0)
 
         task = self.app_module.ResponsibilityTask.query.one()
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
@@ -140,6 +161,10 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIsNone(task.action_notes)
         self.assertEqual(task.number, "0001")
         self.assertEqual(task.progress, 0)
+        self.assertEqual(task.perf_uom.value, "kg")
+        self.assertAlmostEqual(float(task.perf_metric_value), 85.0)
+        self.assertAlmostEqual(float(task.perf_responsible_value), 10.0)
+        self.assertAlmostEqual(float(task.perf_actual_value), 8.5)
 
         self.assertEqual(len(self.sent_emails), 1)
         message = self.sent_emails[0]
@@ -147,6 +172,83 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIn("Weekly", message["html"])
         self.assertIn("5D Action: Delegated", message["html"])
         self.assertIn("Responsibility No: 0001", message["html"])
+
+    def test_create_responsibility_currency_metric(self):
+        payload = self._make_base_payload(
+            title="Revenue review",
+            perfUom="amount_lkr",
+            perfResponsibleValue="100000",
+            perfActualValue="125000",
+        )
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201, response.get_json())
+        data = response.get_json()
+        self.assertEqual(data["perfUom"], "amount_lkr")
+        self.assertAlmostEqual(data["perfMetricValue"], 125.0)
+
+        task = self.app_module.ResponsibilityTask.query.one()
+        self.assertEqual(task.perf_uom.value, "amount_lkr")
+        self.assertAlmostEqual(float(task.perf_metric_value), 125.0)
+
+    def test_create_responsibility_percentage_metric(self):
+        payload = self._make_base_payload(
+            title="Project completion",
+            perfUom="completion_pct",
+            perfResponsibleValue="100",
+            perfActualValue="60",
+        )
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertAlmostEqual(data["perfMetricValue"], 60.0)
+
+    def test_negative_actual_allowed_for_profit(self):
+        payload = self._make_base_payload(
+            title="Loss review",
+            perfUom="profit",
+            perfResponsibleValue="50",
+            perfActualValue="-10",
+        )
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201, response.get_json())
+        data = response.get_json()
+        self.assertLess(data["perfMetricValue"], 0)
+
+    def test_negative_actual_rejected_for_kg(self):
+        payload = self._make_base_payload(
+            title="Inventory audit",
+            perfUom="kg",
+            perfResponsibleValue="10",
+            perfActualValue="-2",
+        )
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 422)
+        errors = response.get_json().get("errors", {})
+        self.assertIn("perfActualValue", errors)
 
     def test_update_responsibility_updates_existing_task(self):
         scheduled_for = date.today().isoformat()
@@ -160,6 +262,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recipientEmail": "owner@example.com",
             "action": "delegated",
             "delegatedToId": self.secondary_manager.id,
+            "perfUom": "hours",
+            "perfResponsibleValue": "8",
+            "perfActualValue": "7",
         }
 
         create_response = self.client.post(
@@ -184,6 +289,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "actionNotes": "Follow up next month.",
             "assigneeId": self.secondary_manager.id,
             "status": created_data.get("status", "planned"),
+            "perfUom": "hours",
+            "perfResponsibleValue": "8",
+            "perfActualValue": "9.5",
         }
 
         update_response = self.client.put(
@@ -201,6 +309,8 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
         self.assertEqual(updated["progress"], 100)
+        self.assertEqual(updated["perfUom"], "hours")
+        self.assertAlmostEqual(updated["perfMetricValue"], 118.8)
         notification = updated.get("email_notification")
         self.assertIsNotNone(notification)
         self.assertTrue(notification.get("sent"))
@@ -215,23 +325,31 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.action_notes, "Follow up next month.")
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
         self.assertEqual(task.progress, 100)
+        self.assertEqual(task.perf_uom.value, "hours")
+        self.assertAlmostEqual(
+            denormalize_value(task.perf_uom, task.perf_actual_value), 9.5
+        )
+        self.assertAlmostEqual(
+            denormalize_value(task.perf_uom, task.perf_responsible_value), 8.0
+        )
+        self.assertAlmostEqual(float(task.perf_metric_value), 118.8)
 
         # Updating should send a fresh email notification
         self.assertEqual(len(self.sent_emails), 2)
 
     def test_update_responsibility_deleted_action_sets_progress_to_100(self):
         scheduled_for = date.today().isoformat()
-        create_payload = {
-            "title": "Waste audit",
-            "description": "Review scrap handling.",
-            "detail": "Check bins and documentation.",
-            "scheduledFor": scheduled_for,
-            "recurrence": "does_not_repeat",
-            "recipientEmail": "auditor@example.com",
-            "action": "discussed",
-            "progress": 25,
-            "actionNotes": "Discussed cleanup approach.",
-        }
+        create_payload = self._make_base_payload(
+            title="Waste audit",
+            description="Review scrap handling.",
+            detail="Check bins and documentation.",
+            scheduledFor=scheduled_for,
+            recurrence="does_not_repeat",
+            recipientEmail="auditor@example.com",
+            action="discussed",
+            progress=25,
+            actionNotes="Discussed cleanup approach.",
+        )
 
         create_response = self.client.post(
             "/api/responsibilities",
@@ -245,17 +363,17 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         update_response = self.client.put(
             f"/api/responsibilities/{task_id}",
             headers=self.auth_headers,
-            json={
-                "title": "Waste audit",
-                "description": "Review scrap handling.",
-                "detail": "Check bins and documentation.",
-                "scheduledFor": scheduled_for,
-                "recurrence": "does_not_repeat",
-                "recipientEmail": "auditor@example.com",
-                "action": "deleted",
-                "progress": 5,
-                "actionNotes": "Task no longer required.",
-            },
+            json=self._make_base_payload(
+                title="Waste audit",
+                description="Review scrap handling.",
+                detail="Check bins and documentation.",
+                scheduledFor=scheduled_for,
+                recurrence="does_not_repeat",
+                recipientEmail="auditor@example.com",
+                action="deleted",
+                progress=5,
+                actionNotes="Task no longer required.",
+            ),
         )
 
         self.assertEqual(update_response.status_code, 200)
@@ -272,20 +390,20 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         wednesday = monday + timedelta(days=2)
 
         payloads = [
-            {
-                "title": "Daily standup",
-                "scheduledFor": monday.isoformat(),
-                "recurrence": "daily",
-                "recipientEmail": "daily@example.com",
-                "action": "done",
-            },
-            {
-                "title": "Quality audit",
-                "scheduledFor": wednesday.isoformat(),
-                "recurrence": "does_not_repeat",
-                "recipientEmail": "audit@example.com",
-                "action": "done",
-            },
+            self._make_base_payload(
+                title="Daily standup",
+                scheduledFor=monday.isoformat(),
+                recurrence="daily",
+                recipientEmail="daily@example.com",
+                action="done",
+            ),
+            self._make_base_payload(
+                title="Quality audit",
+                scheduledFor=wednesday.isoformat(),
+                recurrence="does_not_repeat",
+                recipientEmail="audit@example.com",
+                action="done",
+            ),
         ]
 
         for payload in payloads:
@@ -316,15 +434,17 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         weekly_summary = self.sent_emails[-1]["html"]
         self.assertIn("Daily standup", weekly_summary)
         self.assertIn("Quality audit", weekly_summary)
+        self.assertIn("Responsible:", weekly_summary)
+        self.assertIn("Achievement:", weekly_summary)
 
     def test_custom_recurrence_requires_weekdays(self):
-        payload = {
-            "title": "Maintenance sync",
-            "scheduledFor": date.today().isoformat(),
-            "recurrence": "custom",
-            "recipientEmail": "sync@example.com",
-            "action": "done",
-        }
+        payload = self._make_base_payload(
+            title="Maintenance sync",
+            scheduledFor=date.today().isoformat(),
+            recurrence="custom",
+            recipientEmail="sync@example.com",
+            action="done",
+        )
 
         response = self.client.post(
             "/api/responsibilities",
@@ -338,13 +458,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(self.app_module.ResponsibilityTask.query.count(), 0)
 
     def test_delegated_action_requires_manager(self):
-        payload = {
-            "title": "Vendor coordination",
-            "scheduledFor": date.today().isoformat(),
-            "recurrence": "does_not_repeat",
-            "recipientEmail": "coord@example.com",
-            "action": "delegated",
-        }
+        payload = self._make_base_payload(
+            title="Vendor coordination",
+            scheduledFor=date.today().isoformat(),
+            recurrence="does_not_repeat",
+            recipientEmail="coord@example.com",
+            action="delegated",
+        )
 
         response = self.client.post(
             "/api/responsibilities",
@@ -358,13 +478,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
 
     def test_create_responsibility_reports_email_failure(self):
         scheduled_for = date.today().isoformat()
-        payload = {
-            "title": "Line inspection",
-            "scheduledFor": scheduled_for,
-            "recurrence": "weekly",
-            "recipientEmail": "inspect@example.com",
-            "action": "done",
-        }
+        payload = self._make_base_payload(
+            title="Line inspection",
+            scheduledFor=scheduled_for,
+            recurrence="weekly",
+            recipientEmail="inspect@example.com",
+            action="done",
+        )
 
         self._raise_next_exception(requests_exceptions.Timeout("timed out"))
         response = self.client.post(
@@ -381,13 +501,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
     def test_send_weekly_plan_returns_error_when_email_fails(self):
         monday = date.today() - timedelta(days=date.today().weekday())
 
-        payload = {
-            "title": "Daily standup",
-            "scheduledFor": monday.isoformat(),
-            "recurrence": "daily",
-            "recipientEmail": "daily@example.com",
-            "action": "done",
-        }
+        payload = self._make_base_payload(
+            title="Daily standup",
+            scheduledFor=monday.isoformat(),
+            recurrence="daily",
+            recipientEmail="daily@example.com",
+            action="done",
+        )
 
         response = self.client.post(
             "/api/responsibilities",
@@ -412,13 +532,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIn("authentication failed", message)
 
     def test_discussed_action_requires_notes(self):
-        payload = {
-            "title": "Budget review",
-            "scheduledFor": date.today().isoformat(),
-            "recurrence": "does_not_repeat",
-            "recipientEmail": "budget@example.com",
-            "action": "discussed",
-        }
+        payload = self._make_base_payload(
+            title="Budget review",
+            scheduledFor=date.today().isoformat(),
+            recurrence="does_not_repeat",
+            recipientEmail="budget@example.com",
+            action="discussed",
+        )
 
         response = self.client.post(
             "/api/responsibilities",
@@ -433,13 +553,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
 
     def test_create_responsibility_retries_when_number_conflict_occurs(self):
         scheduled_for = date.today().isoformat()
-        payload = {
-            "title": "Factory inspection",
-            "scheduledFor": scheduled_for,
-            "recurrence": "does_not_repeat",
-            "recipientEmail": "inspect@example.com",
-            "action": "done",
-        }
+        payload = self._make_base_payload(
+            title="Factory inspection",
+            scheduledFor=scheduled_for,
+            recurrence="does_not_repeat",
+            recipientEmail="inspect@example.com",
+            action="done",
+        )
 
         original_commit = self.app_module.db.session.commit
         conflict_error = IntegrityError(

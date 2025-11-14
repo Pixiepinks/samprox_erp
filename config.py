@@ -159,3 +159,8 @@ class Config:
     COMPANY_CONTACT = _env_str("COMPANY_CONTACT")
     COMPANY_TAGLINE = _env_str("COMPANY_TAGLINE", "The Shape of Tomorrow")
     COMPANY_LOGO_PATH = _env_str("COMPANY_LOGO_PATH", "static/profile_images/GRNLOGO.png")
+    RESEND_API_KEY = _env_password("RESEND_API_KEY")
+    RESEND_DEFAULT_SENDER = _env_str(
+        "RESEND_DEFAULT_SENDER",
+        "Samprox ERP <no-reply@samprox.lk>",
+    )

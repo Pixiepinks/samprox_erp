@@ -49,7 +49,7 @@ task_create_schema = ResponsibilityTaskCreateSchema()
 users_schema = UserSchema(many=True)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
-RESEND_SENDER = "Samprox ERP <no-reply@samprox.lk>"
+RESEND_DEFAULT_SENDER = "Samprox ERP <no-reply@samprox.lk>"
 
 MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
     "Great achievements begin with clear responsibilities. Let’s make this task a success!",
@@ -75,8 +75,26 @@ MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
 )
 
 
+def _resolve_resend_sender() -> str:
+    sender = current_app.config.get("RESEND_DEFAULT_SENDER")
+    if isinstance(sender, (list, tuple)) and sender:
+        sender = sender[0]
+    if isinstance(sender, str) and sender.strip():
+        return sender.strip()
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER")
+    if isinstance(sender, (list, tuple)) and sender:
+        sender = sender[0]
+    if isinstance(sender, str) and sender.strip():
+        return sender.strip()
+    return RESEND_DEFAULT_SENDER
+
+
 def _resend_api_key() -> str:
-    api_key = os.environ["RESEND_API_KEY"].strip()
+    api_key = current_app.config.get("RESEND_API_KEY")
+    if isinstance(api_key, str):
+        api_key = api_key.strip()
+    if not api_key:
+        api_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not api_key:
         raise KeyError("RESEND_API_KEY")
     return api_key
@@ -350,7 +368,7 @@ def _deliver_responsibility_email(
     recipient_set.update(address.lower() for address in filtered_bcc)
 
     data = {
-        "from": RESEND_SENDER,
+        "from": _resolve_resend_sender(),
         "to": [cleaned_recipient],
         "subject": subject,
         "html": html_body,
@@ -586,7 +604,7 @@ def send_weekly_email(
     subject_line = subject or f"Weekly Responsibility Plan ({start_date})"
     cleaned_recipient = recipient.strip()
     data = {
-        "from": RESEND_SENDER,
+        "from": _resolve_resend_sender(),
         "to": [cleaned_recipient],
         "subject": subject_line,
         "html": html,
@@ -606,7 +624,10 @@ def send_weekly_email(
     try:
         response = requests.post(
             RESEND_ENDPOINT,
-            headers={"Authorization": f"Bearer {_resend_api_key()}"},
+            headers={
+                "Authorization": f"Bearer {_resend_api_key()}",
+                "Content-Type": "application/json",
+            },
             json=data,
             timeout=15,
         )

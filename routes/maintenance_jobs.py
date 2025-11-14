@@ -248,8 +248,8 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
     html_body = html.escape(body).replace("\n", "<br>")
 
     data: dict[str, object] = {
-        "from": _resolve_sender(),
-        "to": [primary_recipient],
+        "from": RESEND_SENDER,
+        "to": [cleaned_recipient],
         "subject": subject,
         "text": body,
         "html": html_body,

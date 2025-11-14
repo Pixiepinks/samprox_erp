@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import html
+import os
 import re
-import smtplib
-import ssl
-import socket
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+import requests
+from requests import exceptions as requests_exceptions
 from flask import Blueprint, jsonify, request, url_for, current_app
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_mail import Message
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
-from extensions import db, mail
+from extensions import db
 from models import (
     MachineAsset,
     MachinePart,
@@ -34,6 +34,9 @@ from schemas import MaintenanceJobSchema
 bp = Blueprint("maintenance_jobs", __name__, url_prefix="/api/maintenance-jobs")
 job_schema = MaintenanceJobSchema()
 jobs_schema = MaintenanceJobSchema(many=True)
+
+RESEND_ENDPOINT = "https://api.resend.com/emails"
+RESEND_DEFAULT_SENDER = "Samprox ERP <no-reply@samprox.lk>"
 
 _CODE_PATTERN = re.compile(r"(\d+)$")
 _ALLOWED_PRIORITIES = {"Normal", "Urgent", "Critical"}
@@ -184,56 +187,140 @@ def _find_user_by_email(email: Optional[str]) -> Optional[User]:
     ).scalar_one_or_none()
 
 
+def _normalize_recipients(addresses: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for address in addresses:
+        if not address:
+            continue
+        cleaned = address.strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(cleaned)
+    return normalized
+
+
+def _split_recipients(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    parts = re.split(r"[;,]", value)
+    return _normalize_recipients(parts)
+
+
+def _resolve_sender() -> str:
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER")
+    if isinstance(sender, (list, tuple)) and sender:
+        sender = sender[0]
+    if isinstance(sender, str) and sender.strip():
+        return sender.strip()
+    return RESEND_DEFAULT_SENDER
+
+
 def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool, Optional[str]]:
-    if not recipient:
+    recipients = _split_recipients(recipient)
+    if not recipients:
         return False, "No recipient email address was provided."
+
+    primary_recipient, *cc_recipients = recipients
+    recipient_set = {primary_recipient.lower()}
+
+    filtered_cc: list[str] = []
+    for address in cc_recipients:
+        lowered = address.lower()
+        if lowered in recipient_set:
+            continue
+        filtered_cc.append(address)
+        recipient_set.add(lowered)
+
+    bcc_config = current_app.config.get("MAIL_DEFAULT_BCC", [])
+    if isinstance(bcc_config, str):
+        bcc_config = [bcc_config]
+    filtered_bcc = [
+        address.strip()
+        for address in bcc_config or []
+        if address and address.strip().lower() not in recipient_set
+    ]
+
+    html_body = html.escape(body).replace("\n", "<br>")
+
+    data: dict[str, object] = {
+        "from": _resolve_sender(),
+        "to": [primary_recipient],
+        "subject": subject,
+        "text": body,
+        "html": html_body,
+    }
+    if filtered_cc:
+        data["cc"] = filtered_cc
+    if filtered_bcc:
+        data["bcc"] = filtered_bcc
+
     try:
-        message = Message(subject, recipients=[recipient])
-        default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
-        if default_sender:
-            message.sender = default_sender
-        bcc_config = current_app.config.get("MAIL_DEFAULT_BCC", [])
-        if isinstance(bcc_config, str):
-            bcc_config = [bcc_config]
-        cleaned_bcc: list[str] = []
-        seen_bcc: set[str] = set()
-        recipient_lower = recipient.strip().lower()
-        for address in bcc_config or []:
-            if not address:
-                continue
-            cleaned = address.strip()
-            if not cleaned:
-                continue
-            lowered = cleaned.lower()
-            if lowered == recipient_lower:
-                continue
-            if lowered in seen_bcc:
-                continue
-            cleaned_bcc.append(cleaned)
-            seen_bcc.add(lowered)
-        if cleaned_bcc:
-            message.bcc = cleaned_bcc
-        message.body = body
-        mail.send(message)
-        return True, f"Notification email sent to {recipient}."
-    except Exception as exc:  # pragma: no cover - logging only
-        current_app.logger.warning("Failed to send maintenance job email: %s", exc)
-        message = "Failed to send the notification email."
-        if isinstance(exc, (socket.timeout, TimeoutError)):
-            message = "Failed to send the notification email: the mail server timed out."
-        elif isinstance(exc, smtplib.SMTPAuthenticationError):
+        _send_email_via_resend(data)
+    except KeyError as exc:  # pragma: no cover - configuration error
+        current_app.logger.warning(
+            "RESEND_API_KEY is not configured for maintenance job emails."
+        )
+        message = "Failed to send the notification email: email service is not configured."
+    except requests_exceptions.Timeout as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to timeout: %s", exc, exc_info=exc
+        )
+        message = "Failed to send the notification email: the email service timed out."
+    except requests_exceptions.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in {401, 403}:
             message = "Failed to send the notification email: authentication failed."
-        elif isinstance(exc, smtplib.SMTPConnectError):
-            message = "Failed to send the notification email: could not connect to the mail server."
-        elif isinstance(exc, smtplib.SMTPRecipientsRefused):
-            message = "Failed to send the notification email: the recipient address was rejected."
-        elif isinstance(exc, ssl.SSLCertVerificationError):
-            message = "Failed to send the notification email: the mail server's SSL certificate could not be verified."
-        elif isinstance(exc, ssl.SSLError):
-            message = "Failed to send the notification email: a secure connection to the mail server could not be established."
-        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
-            message = "Failed to send the notification email: the mail server could not be reached."
-        return False, message
+        else:
+            message = "Failed to send the notification email: the email service returned an error."
+        current_app.logger.warning(
+            "Failed to send maintenance job email (status %s): %s",
+            status_code,
+            exc,
+            exc_info=exc,
+        )
+    except requests_exceptions.SSLError as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to SSL error: %s",
+            exc,
+            exc_info=exc,
+        )
+        message = "Failed to send the notification email: a secure connection to the email service could not be established."
+    except requests_exceptions.ConnectionError as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to connection error: %s",
+            exc,
+            exc_info=exc,
+        )
+        message = "Failed to send the notification email: the email service could not be reached."
+    except requests_exceptions.RequestException as exc:  # pragma: no cover - logging only
+        current_app.logger.warning(
+            "Failed to send maintenance job email: %s", exc, exc_info=exc
+        )
+        message = "Failed to send the notification email."
+    else:
+        return True, f"Notification email sent to {primary_recipient}."
+
+    return False, f"{message} Please notify them manually."
+
+
+def _send_email_via_resend(data: dict) -> None:
+    api_key = os.environ["RESEND_API_KEY"]
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        RESEND_ENDPOINT,
+        headers=headers,
+        json=data,
+        timeout=15,
+    )
+    response.raise_for_status()
 
 
 @bp.get("/next-code")

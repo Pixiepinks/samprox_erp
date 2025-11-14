@@ -1,16 +1,17 @@
 import importlib
 import os
-import smtplib
-import socket
-import ssl
 import sys
 import unittest
 from unittest.mock import patch
+
+import requests
+from requests import exceptions as requests_exceptions
 
 
 class MaintenanceEmailTestCase(unittest.TestCase):
     def setUp(self):
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+        os.environ["RESEND_API_KEY"] = "test-key"
         if "app" in sys.modules:
             self.app_module = importlib.reload(sys.modules["app"])
         else:
@@ -43,6 +44,7 @@ class MaintenanceEmailTestCase(unittest.TestCase):
         self.app_module.db.drop_all()
         self.ctx.pop()
         os.environ.pop("DATABASE_URL", None)
+        os.environ.pop("RESEND_API_KEY", None)
         if "app" in sys.modules:
             del sys.modules["app"]
 
@@ -50,7 +52,10 @@ class MaintenanceEmailTestCase(unittest.TestCase):
         return {"Authorization": f"Bearer {self.token}"}
 
     def test_timeout_error_returns_descriptive_message(self):
-        with patch.object(self.app_module.mail, "send", side_effect=socket.timeout):
+        with patch(
+            "routes.maintenance_jobs._send_email_via_resend",
+            side_effect=requests_exceptions.Timeout(),
+        ):
             response = self.client.post(
                 "/api/maintenance-jobs",
                 headers=self._auth_headers(),
@@ -64,8 +69,13 @@ class MaintenanceEmailTestCase(unittest.TestCase):
         self.assertIn("timed out", notification["message"].lower())
 
     def test_authentication_error_returns_descriptive_message(self):
-        auth_error = smtplib.SMTPAuthenticationError(535, b"Authentication failed")
-        with patch.object(self.app_module.mail, "send", side_effect=auth_error):
+        response_obj = requests.Response()
+        response_obj.status_code = 403
+        auth_error = requests_exceptions.HTTPError(response=response_obj)
+        with patch(
+            "routes.maintenance_jobs._send_email_via_resend",
+            side_effect=auth_error,
+        ):
             response = self.client.post(
                 "/api/maintenance-jobs",
                 headers=self._auth_headers(),
@@ -79,8 +89,11 @@ class MaintenanceEmailTestCase(unittest.TestCase):
         self.assertIn("authentication failed", notification["message"].lower())
 
     def test_ssl_error_returns_descriptive_message(self):
-        ssl_error = ssl.SSLError("handshake failed")
-        with patch.object(self.app_module.mail, "send", side_effect=ssl_error):
+        ssl_error = requests_exceptions.SSLError("handshake failed")
+        with patch(
+            "routes.maintenance_jobs._send_email_via_resend",
+            side_effect=ssl_error,
+        ):
             response = self.client.post(
                 "/api/maintenance-jobs",
                 headers=self._auth_headers(),

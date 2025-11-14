@@ -346,6 +346,13 @@ class ResponsibilityTask(db.Model):
     delegated_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     delegated_to = db.relationship("User", foreign_keys=[delegated_to_id], backref="tasks_delegated")
 
+    delegations = db.relationship(
+        "ResponsibilityDelegation",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -371,6 +378,16 @@ class ResponsibilityTask(db.Model):
         """Return the stored custom weekdays as integers (0 = Monday)."""
 
         return self._custom_weekday_values()
+
+    def replace_delegations(self, delegations: Iterable["ResponsibilityDelegation"]) -> None:
+        """Replace delegations while maintaining backward compatible fields."""
+
+        delegation_list = list(delegations)
+        self.delegations = delegation_list
+        if delegation_list:
+            self.delegated_to_id = delegation_list[0].delegate_id
+        else:
+            self.delegated_to_id = None
 
     def occurs_on(self, target_date: date) -> bool:
         """Return ``True`` if the task is scheduled for ``target_date``."""
@@ -430,6 +447,30 @@ class ResponsibilityTask(db.Model):
 
         normalized.sort()
         self.custom_weekdays = ",".join(str(v) for v in normalized) if normalized else None
+
+
+class ResponsibilityDelegation(db.Model):
+    """Represents an allocation of a responsibility to another manager."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(
+        db.Integer,
+        db.ForeignKey("responsibility_task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    delegate_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    allocated_value = db.Column(db.Numeric(18, 4), nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    task = db.relationship("ResponsibilityTask", back_populates="delegations")
+    delegate = db.relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "delegate_id", name="uq_responsibility_delegation"),
+    )
 
 
 @event.listens_for(ResponsibilityTask, "before_insert")

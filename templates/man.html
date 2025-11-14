@@ -656,11 +656,34 @@
                             </select>
                         </div>
                         <div class="edit-form__field" id="responsibility-delegated-field" hidden>
-                            <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
-                            <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
-                                <option value="">Select a manager</option>
-                            </select>
+                            <label class="edit-form__label" for="responsibility-delegations-list">Delegated managers <span class="required">*</span></label>
+                            <div class="responsibility-delegations" id="responsibility-delegations">
+                                <div class="responsibility-delegations__list" id="responsibility-delegations-list"></div>
+                                <button
+                                    type="button"
+                                    class="button button--secondary button--small responsibility-delegations__add"
+                                    id="responsibility-add-delegation"
+                                >Add delegated manager</button>
+                                <p class="edit-form__hint">Split the responsibility target among the managers below.</p>
+                            </div>
                         </div>
+                        <template id="responsibility-delegation-template">
+                            <div class="responsibility-delegations__row">
+                                <select class="edit-form__input responsibility-delegations__select" name="delegationManager"></select>
+                                <input
+                                    type="text"
+                                    class="edit-form__input responsibility-delegations__value"
+                                    name="delegationValue"
+                                    inputmode="decimal"
+                                    placeholder="Allocated value"
+                                />
+                                <button
+                                    type="button"
+                                    class="button button--ghost button--small responsibility-delegations__remove"
+                                    aria-label="Remove delegated manager"
+                                >Remove</button>
+                            </div>
+                        </template>
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-progress">Progress (%)</label>
                             <input
@@ -1339,7 +1362,10 @@
         const responsibilityDetailInput = document.getElementById("responsibility-detail");
         const responsibilityActionSelect = document.getElementById("responsibility-action");
         const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
-        const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
+        const responsibilityDelegationsContainer = document.getElementById("responsibility-delegations");
+        const responsibilityDelegationsList = document.getElementById("responsibility-delegations-list");
+        const responsibilityAddDelegationButton = document.getElementById("responsibility-add-delegation");
+        const responsibilityDelegationTemplate = document.getElementById("responsibility-delegation-template");
         const responsibilityProgressInput = document.getElementById("responsibility-progress");
         const responsibilityPerformanceUnitSelect = document.getElementById("responsibility-performance-unit");
         const responsibilityPerformanceResponsibleInput = document.getElementById(
@@ -1382,6 +1408,8 @@
 
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
+
+        const assignerNameFallback = (user) => user?.name || user?.email || "";
 
         const PERFORMANCE_DEFAULT_UNIT = "percentage_pct";
         const PERFORMANCE_UNIT_VALUES = [
@@ -1540,6 +1568,132 @@
             "quality_metric",
             "defects_per_unit",
         ]);
+
+        const populateDelegationSelectOptions = (select, selectedValue = "") => {
+            if (!select) {
+                return;
+            }
+            const selectedOption = select.selectedOptions?.[0];
+            const previousLabel = selectedOption?.textContent ?? "";
+            const previousValue = selectedValue || select.value;
+            select.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select a manager";
+            select.appendChild(placeholder);
+
+            responsibilityAssignees.forEach((assignee) => {
+                if (!assignee?.id) {
+                    return;
+                }
+                const option = document.createElement("option");
+                option.value = String(assignee.id);
+                option.textContent = assignerNameFallback(assignee) || option.value;
+                if (String(assignee.id) === String(previousValue)) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+
+            if (previousValue && !select.value) {
+                const fallbackOption = document.createElement("option");
+                fallbackOption.value = String(previousValue);
+                fallbackOption.textContent = previousLabel || String(previousValue);
+                fallbackOption.selected = true;
+                select.appendChild(fallbackOption);
+            }
+        };
+
+        const clearResponsibilityDelegations = () => {
+            if (responsibilityDelegationsList) {
+                responsibilityDelegationsList.innerHTML = "";
+            }
+        };
+
+        const createDelegationRow = (initialData = {}) => {
+            if (!responsibilityDelegationsList) {
+                return null;
+            }
+
+            let row = null;
+            if (responsibilityDelegationTemplate?.content) {
+                const clone = responsibilityDelegationTemplate.content.cloneNode(true);
+                row = clone.querySelector(".responsibility-delegations__row");
+            }
+
+            if (!row) {
+                row = document.createElement("div");
+                row.className = "responsibility-delegations__row";
+                const selectElement = document.createElement("select");
+                selectElement.className = "edit-form__input responsibility-delegations__select";
+                row.appendChild(selectElement);
+                const valueElement = document.createElement("input");
+                valueElement.type = "text";
+                valueElement.className = "edit-form__input responsibility-delegations__value";
+                row.appendChild(valueElement);
+                const removeElement = document.createElement("button");
+                removeElement.type = "button";
+                removeElement.className = "button button--ghost button--small responsibility-delegations__remove";
+                removeElement.textContent = "Remove";
+                row.appendChild(removeElement);
+            }
+
+            const selectElement = row.querySelector(".responsibility-delegations__select");
+            const valueElement = row.querySelector(".responsibility-delegations__value");
+            const removeElement = row.querySelector(".responsibility-delegations__remove");
+
+            const delegateId =
+                initialData?.delegateId ?? initialData?.delegate_id ?? initialData?.delegate?.id ?? "";
+            populateDelegationSelectOptions(selectElement, delegateId);
+
+            if (
+                delegateId &&
+                selectElement &&
+                selectElement.value !== String(delegateId)
+            ) {
+                const fallbackOption = document.createElement("option");
+                fallbackOption.value = String(delegateId);
+                fallbackOption.textContent =
+                    assignerNameFallback(initialData?.delegate) || String(delegateId);
+                selectElement.appendChild(fallbackOption);
+                selectElement.value = String(delegateId);
+            }
+
+            if (valueElement) {
+                const allocation =
+                    initialData?.allocatedValue ??
+                    initialData?.allocated_value ??
+                    initialData?.allocation ??
+                    "";
+                valueElement.value = allocation !== null && allocation !== undefined ? String(allocation) : "";
+            }
+
+            if (removeElement) {
+                removeElement.addEventListener("click", () => {
+                    row.remove();
+                });
+            }
+
+            responsibilityDelegationsList.appendChild(row);
+            return row;
+        };
+
+        const ensureDelegationRow = () => {
+            if (responsibilityDelegationsList?.childElementCount === 0) {
+                createDelegationRow();
+            }
+        };
+
+        const updateDelegationSelectOptions = () => {
+            if (!responsibilityDelegationsList) {
+                return;
+            }
+            responsibilityDelegationsList
+                .querySelectorAll(".responsibility-delegations__select")
+                .forEach((selectElement) => {
+                    populateDelegationSelectOptions(selectElement);
+                });
+        };
 
         const PERFORMANCE_CURRENCY_FORMATTER = new Intl.NumberFormat(undefined, {
             style: "currency",
@@ -1945,6 +2099,38 @@
             return normalized.replace(/(^|\s)([a-z])/g, (_, space, letter) => `${space}${letter.toUpperCase()}`);
         };
 
+        const formatResponsibilityDelegations = (delegations, unitValue, performanceConfig) => {
+            if (!Array.isArray(delegations) || delegations.length === 0) {
+                return "—";
+            }
+
+            const parts = delegations
+                .map((entry) => {
+                    if (!entry) {
+                        return null;
+                    }
+                    const delegate = entry.delegate ?? {};
+                    const name = assignerNameFallback(delegate) ||
+                        (entry.delegateId ? String(entry.delegateId) : "");
+                    const rawValue =
+                        entry.allocatedValue ??
+                        entry.allocated_value ??
+                        entry.value ??
+                        "";
+                    let formatted = rawValue;
+                    if (rawValue !== null && rawValue !== undefined && rawValue !== "") {
+                        formatted = formatPerformanceValueDisplay(rawValue, unitValue, performanceConfig);
+                    }
+                    if (name && formatted && formatted !== "—") {
+                        return `${name} (${formatted})`;
+                    }
+                    return name || null;
+                })
+                .filter(Boolean);
+
+            return parts.length > 0 ? parts.join(", ") : "—";
+        };
+
         const PROGRESS_COLOR_RED = [217, 45, 32];
         const PROGRESS_COLOR_YELLOW = [254, 200, 75];
         const PROGRESS_COLOR_GREEN = [18, 183, 106];
@@ -2053,16 +2239,15 @@
         };
 
         const updateDelegatedVisibility = (actionValue) => {
-            if (!responsibilityDelegatedField || !responsibilityDelegatedSelect) {
+            if (!responsibilityDelegatedField) {
                 return;
             }
             const requiresDelegated = actionValue === "delegated";
             responsibilityDelegatedField.hidden = !requiresDelegated;
             if (requiresDelegated) {
-                responsibilityDelegatedSelect.setAttribute("required", "required");
+                ensureDelegationRow();
             } else {
-                responsibilityDelegatedSelect.removeAttribute("required");
-                responsibilityDelegatedSelect.value = "";
+                clearResponsibilityDelegations();
             }
         };
 
@@ -2282,6 +2467,7 @@
             }
             responsibilityEditingTaskId = null;
             responsibilityEditingTask = null;
+            clearResponsibilityDelegations();
             if (responsibilityModalTitle) {
                 responsibilityModalTitle.textContent = responsibilityModalDefaultTitle;
             }
@@ -2414,8 +2600,6 @@
                         });
                 }
 
-                const assignerNameFallback = (user) => user?.name || user?.email || "";
-
                 const ensureSelectOption = (select, user) => {
                     if (!select || !user || !user.id) {
                         return;
@@ -2432,7 +2616,23 @@
                 };
 
                 ensureSelectOption(responsibilityAssigneeSelect, task.assignee);
-                ensureSelectOption(responsibilityDelegatedSelect, task.delegatedTo);
+
+                clearResponsibilityDelegations();
+                if (Array.isArray(task.delegations) && task.delegations.length > 0) {
+                    task.delegations.forEach((delegation) => {
+                        createDelegationRow({
+                            delegateId:
+                                delegation?.delegateId ??
+                                delegation?.delegate_id ??
+                                delegation?.delegate?.id ??
+                                null,
+                            allocatedValue:
+                                delegation?.allocatedValue ??
+                                delegation?.allocated_value ??
+                                "",
+                        });
+                    });
+                }
 
                 const actionValue = task.action || "done";
                 if (responsibilityActionSelect) {
@@ -2469,6 +2669,7 @@
                     responsibilityDateInput.value = toIsoDateString(today);
                 }
                 responsibilityActionPreviousValue = responsibilityActionSelect?.value || "";
+                clearResponsibilityDelegations();
                 updateDelegatedVisibility(responsibilityActionPreviousValue);
                 if (responsibilityProgressInput) {
                     responsibilityProgressInput.value = "0";
@@ -2571,7 +2772,13 @@
                 appendCell(task?.detail ?? "—", { title: task?.detail });
                 appendCell(task?.assigner?.name ?? task?.assigner?.email ?? "—");
                 appendCell(task?.assignee?.name ?? task?.assignee?.email ?? "—");
-                appendCell(task?.delegatedTo?.name ?? task?.delegatedTo?.email ?? "—");
+                appendCell(
+                    formatResponsibilityDelegations(
+                        task?.delegations,
+                        performanceUnitValue,
+                        performanceConfig,
+                    ),
+                );
                 appendCell(formatResponsibilityDate(task?.scheduledFor));
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes });
 
@@ -2602,10 +2809,6 @@
         };
 
         const populateResponsibilityAssignees = () => {
-            if (!responsibilityAssigneeSelect && !responsibilityDelegatedSelect) {
-                return;
-            }
-
             if (responsibilityAssigneeSelect) {
                 const currentValue = responsibilityAssigneeSelect.value;
                 responsibilityAssigneeSelect.innerHTML = "";
@@ -2617,7 +2820,7 @@
                 responsibilityAssignees.forEach((assignee) => {
                     const option = document.createElement("option");
                     option.value = String(assignee.id);
-                    option.textContent = assignee.name || assignee.email;
+                    option.textContent = assignerNameFallback(assignee) || option.value;
                     if (currentValue && currentValue === option.value) {
                         option.selected = true;
                     }
@@ -2625,28 +2828,11 @@
                 });
             }
 
-            if (responsibilityDelegatedSelect) {
-                const currentDelegated = responsibilityDelegatedSelect.value;
-                responsibilityDelegatedSelect.innerHTML = "";
-                const delegatedPlaceholder = document.createElement("option");
-                delegatedPlaceholder.value = "";
-                delegatedPlaceholder.textContent = "Select a manager";
-                responsibilityDelegatedSelect.appendChild(delegatedPlaceholder);
-
-                responsibilityAssignees.forEach((assignee) => {
-                    const option = document.createElement("option");
-                    option.value = String(assignee.id);
-                    option.textContent = assignee.name || assignee.email;
-                    if (currentDelegated && currentDelegated === option.value) {
-                        option.selected = true;
-                    }
-                    responsibilityDelegatedSelect.appendChild(option);
-                });
-            }
+            updateDelegationSelectOptions();
         };
 
         const fetchResponsibilityAssignees = async () => {
-            if (!responsibilityAssigneeSelect && !responsibilityDelegatedSelect) {
+            if (!responsibilityAssigneeSelect && !responsibilityDelegationsList) {
                 return;
             }
             try {
@@ -2795,6 +2981,7 @@
             if (actionValue) {
                 payload.action = actionValue;
             }
+            const isDelegatedAction = actionValue === "delegated";
 
             if (responsibilityProgressInput) {
                 const progressRaw = formData.get("progress");
@@ -2822,18 +3009,51 @@
                 payload.progress = progressValue;
             }
 
-            const delegatedValueRaw = formData.get("delegatedToId")?.toString();
-            if (actionValue === "delegated" && !delegatedValueRaw) {
-                showResponsibilityFormError("Select a delegated manager when the action is Delegated.");
-                responsibilityDelegatedSelect?.focus();
+            const delegationRows = Array.from(
+                responsibilityDelegationsList?.querySelectorAll(".responsibility-delegations__row") ?? [],
+            );
+            const delegationsPayload = [];
+            for (const row of delegationRows) {
+                const managerSelect = row.querySelector(".responsibility-delegations__select");
+                const valueInput = row.querySelector(".responsibility-delegations__value");
+                const delegateValueRaw = managerSelect?.value?.toString().trim() ?? "";
+
+                if (!delegateValueRaw) {
+                    if (isDelegatedAction) {
+                        showResponsibilityFormError(
+                            "Select a manager for each delegated allocation.",
+                        );
+                        managerSelect?.focus();
+                        return;
+                    }
+                    continue;
+                }
+
+                const parsedDelegated = Number.parseInt(delegateValueRaw, 10);
+                if (Number.isNaN(parsedDelegated)) {
+                    showResponsibilityFormError("Select a valid delegated manager.");
+                    managerSelect?.focus();
+                    return;
+                }
+
+                const allocationRaw = valueInput?.value?.toString().trim() ?? "";
+                delegationsPayload.push({
+                    delegateId: parsedDelegated,
+                    allocatedValue: allocationRaw || null,
+                });
+            }
+
+            if (isDelegatedAction && delegationsPayload.length === 0) {
+                showResponsibilityFormError("Add at least one delegated manager when the action is Delegated.");
+                ensureDelegationRow();
+                responsibilityDelegationsList
+                    ?.querySelector(".responsibility-delegations__select")
+                    ?.focus();
                 return;
             }
 
-            if (delegatedValueRaw) {
-                const parsedDelegated = Number.parseInt(delegatedValueRaw, 10);
-                if (!Number.isNaN(parsedDelegated)) {
-                    payload.delegatedToId = parsedDelegated;
-                }
+            if (delegationsPayload.length > 0) {
+                payload.delegations = delegationsPayload;
             }
 
             const actionNotesValue = formData.get("actionNotes")?.toString().trim();
@@ -2916,6 +3136,11 @@
         };
 
         responsibilityActionSelect?.addEventListener("change", handleResponsibilityActionChange);
+
+        responsibilityAddDelegationButton?.addEventListener("click", () => {
+            const row = createDelegationRow();
+            row?.querySelector(".responsibility-delegations__select")?.focus();
+        });
 
         responsibilityActionNotesSave?.addEventListener("click", () => {
             const value = responsibilityActionNotesTextarea?.value?.trim();

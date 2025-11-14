@@ -225,6 +225,67 @@ class ResponsibilityAction(str, Enum):
     DELETED = "deleted"
 
 
+class ResponsibilityPerformanceUnit(str, Enum):
+    """Supported units of measure for responsibility performance tracking."""
+
+    DATE = "date"
+    TIME = "time"
+    HOURS = "hours"
+    MINUTES = "minutes"
+    DAYS = "days"
+    WEEKS = "weeks"
+    MONTHS = "months"
+    YEARS = "years"
+    QUANTITY_BASED = "quantity_based"
+    QTY = "qty"
+    UNITS = "units"
+    PIECES = "pieces"
+    BATCHES = "batches"
+    ITEMS = "items"
+    PARCELS = "parcels"
+    ORDERS = "orders"
+    AMOUNT_LKR = "amount_lkr"
+    REVENUE = "revenue"
+    COST = "cost"
+    EXPENSE = "expense"
+    PROFIT = "profit"
+    SAVINGS = "savings"
+    MARGIN_PCT = "margin_pct"
+    NUMBER = "number"
+    COUNT = "count"
+    SCORE = "score"
+    FREQUENCY = "frequency"
+    RATE = "rate"
+    INDEX = "index"
+    KG = "kg"
+    TONNES = "tonnes"
+    LITRES = "litres"
+    METERS = "meters"
+    KWH = "kwh"
+    RPM = "rpm"
+    QUALITY_METRIC = "quality_metric"
+    PERCENTAGE_PCT = "percentage_pct"
+    ERROR_RATE_PCT = "error_rate_pct"
+    SUCCESS_RATE_PCT = "success_rate_pct"
+    DEFECTS_PER_UNIT = "defects_per_unit"
+    ACCURACY_PCT = "accuracy_pct"
+    COMPLIANCE_PCT = "compliance_pct"
+    TIME_PER_UNIT = "time_per_unit"
+    UNITS_PER_HOUR = "units_per_hour"
+    CYCLE_TIME = "cycle_time"
+    LEAD_TIME = "lead_time"
+    CUSTOMER_COUNT = "customer_count"
+    LEADS = "leads"
+    CONVERSION_PCT = "conversion_pct"
+    TICKETS_RESOLVED = "tickets_resolved"
+    RESPONSE_TIME = "response_time"
+    MILESTONES = "milestones"
+    STAGES = "stages"
+    COMPLETION_PCT = "completion_pct"
+    TASKS_COMPLETED = "tasks_completed"
+    SLA_PCT = "sla_pct"
+
+
 class ResponsibilityTask(db.Model):
     """Represents a scheduled responsibility item for a manager."""
 
@@ -262,6 +323,19 @@ class ResponsibilityTask(db.Model):
     action_notes = db.Column(db.Text)
     recipient_email = db.Column(db.String(255), nullable=False)
     progress = db.Column(db.Integer, nullable=False, default=0)
+
+    perf_uom = db.Column(
+        db.Enum(
+            ResponsibilityPerformanceUnit,
+            values_callable=lambda enum: [member.value for member in enum],
+        ),
+        nullable=False,
+        default=ResponsibilityPerformanceUnit.PERCENTAGE_PCT,
+    )
+    perf_responsible_value = db.Column(db.Numeric(18, 4), nullable=False, default=Decimal("0"))
+    perf_actual_value = db.Column(db.Numeric(18, 4), nullable=True)
+    perf_metric_value = db.Column(db.Numeric(6, 1), nullable=True)
+    perf_input_type = db.Column(db.String(40))
 
     assigner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     assigner = db.relationship("User", foreign_keys=[assigner_id], backref="tasks_created")

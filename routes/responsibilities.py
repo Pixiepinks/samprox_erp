@@ -18,12 +18,14 @@ from requests import exceptions as requests_exceptions
 from extensions import db
 from models import (
     ResponsibilityAction,
+    ResponsibilityPerformanceUnit,
     ResponsibilityRecurrence,
     ResponsibilityTask,
     ResponsibilityTaskStatus,
     RoleEnum,
     User,
 )
+from responsibility_performance import calculate_metric, unit_input_type
 from schemas import (
     ResponsibilityTaskCreateSchema,
     ResponsibilityTaskSchema,
@@ -381,6 +383,21 @@ def create_task():
     except ValidationError as error:
         return jsonify({"errors": error.normalized_messages()}), 422
 
+    performance_unit_value = data.get("performance_unit")
+    try:
+        performance_unit = ResponsibilityPerformanceUnit(performance_unit_value)
+    except ValueError:
+        return jsonify({"errors": {"performanceUnit": ["Invalid unit of measure option."]}}), 422
+
+    performance_responsible_value = data.get("performance_responsible")
+    performance_actual_value = data.get("performance_actual")
+    performance_metric_value = calculate_metric(
+        performance_unit,
+        performance_responsible_value,
+        performance_actual_value,
+    )
+    performance_input_type = unit_input_type(performance_unit)
+
     assignee = None
     assignee_id = data.get("assignee_id")
     if assignee_id is not None:
@@ -416,6 +433,11 @@ def create_task():
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
         delegated_to_id=delegated_to.id if delegated_to else None,
+        perf_uom=performance_unit,
+        perf_responsible_value=performance_responsible_value,
+        perf_actual_value=performance_actual_value,
+        perf_metric_value=performance_metric_value,
+        perf_input_type=performance_input_type,
     )
 
     task.update_custom_weekdays(data.get("custom_weekdays"))
@@ -485,6 +507,21 @@ def update_task(task_id: int):
     except ValidationError as error:
         return jsonify({"errors": error.normalized_messages()}), 422
 
+    performance_unit_value = data.get("performance_unit")
+    try:
+        performance_unit = ResponsibilityPerformanceUnit(performance_unit_value)
+    except ValueError:
+        return jsonify({"errors": {"performanceUnit": ["Invalid unit of measure option."]}}), 422
+
+    performance_responsible_value = data.get("performance_responsible")
+    performance_actual_value = data.get("performance_actual")
+    performance_metric_value = calculate_metric(
+        performance_unit,
+        performance_responsible_value,
+        performance_actual_value,
+    )
+    performance_input_type = unit_input_type(performance_unit)
+
     assignee = None
     assignee_id = data.get("assignee_id")
     if assignee_id is not None:
@@ -532,6 +569,11 @@ def update_task(task_id: int):
     task.assignee_id = assignee.id if assignee else None
     task.delegated_to_id = delegated_to.id if delegated_to else None
     task.update_custom_weekdays(data.get("custom_weekdays"))
+    task.perf_uom = performance_unit
+    task.perf_responsible_value = performance_responsible_value
+    task.perf_actual_value = performance_actual_value
+    task.perf_metric_value = performance_metric_value
+    task.perf_input_type = performance_input_type
 
     error_message = "Unable to update responsibility. Please try again."
     try:

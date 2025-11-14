@@ -114,8 +114,7 @@ def upgrade():
                 sa.Column(
                     "perf_actual_value",
                     sa.Numeric(18, 4),
-                    nullable=False,
-                    server_default="0",
+                    nullable=True,
                 )
             )
         if not _has_column("responsibility_task", "perf_metric_value"):
@@ -123,8 +122,7 @@ def upgrade():
                 sa.Column(
                     "perf_metric_value",
                     sa.Numeric(6, 1),
-                    nullable=False,
-                    server_default="0",
+                    nullable=True,
                 )
             )
         if not _has_column("responsibility_task", "perf_input_type"):
@@ -136,8 +134,8 @@ def upgrade():
         SET
             perf_uom = 'percentage_pct',
             perf_responsible_value = 100,
-            perf_actual_value = 0,
-            perf_metric_value = 0,
+            perf_actual_value = NULL,
+            perf_metric_value = NULL,
             perf_input_type = 'percentage'
         """
     )
@@ -152,18 +150,6 @@ def upgrade():
         batch_op.alter_column(
             "perf_responsible_value",
             existing_type=sa.Numeric(18, 4),
-            nullable=False,
-            server_default=None,
-        )
-        batch_op.alter_column(
-            "perf_actual_value",
-            existing_type=sa.Numeric(18, 4),
-            nullable=False,
-            server_default=None,
-        )
-        batch_op.alter_column(
-            "perf_metric_value",
-            existing_type=sa.Numeric(6, 1),
             nullable=False,
             server_default=None,
         )

@@ -115,6 +115,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recipientEmail": "lead@example.com",
             "action": "delegated",
             "delegatedToId": self.secondary_manager.id,
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "80",
         }
 
         response = self.client.post(
@@ -140,6 +143,10 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIsNone(task.action_notes)
         self.assertEqual(task.number, "0001")
         self.assertEqual(task.progress, 0)
+        self.assertEqual(task.perf_uom.value, "percentage_pct")
+        self.assertEqual(float(task.perf_responsible_value), 100.0)
+        self.assertEqual(float(task.perf_actual_value), 80.0)
+        self.assertEqual(float(task.perf_metric_value), -20.0)
 
         self.assertEqual(len(self.sent_emails), 1)
         message = self.sent_emails[0]
@@ -147,6 +154,39 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIn("Weekly", message["html"])
         self.assertIn("5D Action: Delegated", message["html"])
         self.assertIn("Responsibility No: 0001", message["html"])
+
+    def test_create_responsibility_without_actual_metric_is_allowed(self):
+        scheduled_for = date.today().isoformat()
+        payload = {
+            "title": "Team briefing",
+            "description": "Coordinate daily maintenance goals.",
+            "detail": "Highlight safety priorities and pending actions.",
+            "scheduledFor": scheduled_for,
+            "recurrence": "weekly",
+            "recipientEmail": "lead@example.com",
+            "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "75",
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201, response.get_json())
+        data = response.get_json()
+        self.assertEqual(data["performanceUnit"], "percentage_pct")
+        self.assertEqual(data["performanceResponsible"], "75")
+        self.assertIsNone(data.get("performanceActual"))
+        self.assertIsNone(data.get("performanceMetric"))
+
+        task = self.app_module.ResponsibilityTask.query.get(data["id"])
+        self.assertEqual(task.perf_uom.value, "percentage_pct")
+        self.assertEqual(float(task.perf_responsible_value), 75.0)
+        self.assertIsNone(task.perf_actual_value)
+        self.assertIsNone(task.perf_metric_value)
 
     def test_update_responsibility_updates_existing_task(self):
         scheduled_for = date.today().isoformat()
@@ -160,6 +200,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recipientEmail": "owner@example.com",
             "action": "delegated",
             "delegatedToId": self.secondary_manager.id,
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "95",
         }
 
         create_response = self.client.post(
@@ -184,6 +227,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "actionNotes": "Follow up next month.",
             "assigneeId": self.secondary_manager.id,
             "status": created_data.get("status", "planned"),
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "110",
         }
 
         update_response = self.client.put(
@@ -198,6 +244,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(updated["recurrence"], "does_not_repeat")
         self.assertEqual(updated["recipientEmail"], "team@example.com")
         self.assertEqual(updated["actionNotes"], "Follow up next month.")
+        self.assertEqual(updated["performanceUnit"], "percentage_pct")
+        self.assertEqual(updated["performanceResponsible"], "100")
+        self.assertEqual(updated["performanceActual"], "110")
         self.assertIsNotNone(updated["assignee"])
         self.assertIsNone(updated.get("delegatedTo"))
         self.assertEqual(updated["progress"], 100)
@@ -231,6 +280,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "action": "discussed",
             "progress": 25,
             "actionNotes": "Discussed cleanup approach.",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "25",
         }
 
         create_response = self.client.post(
@@ -255,6 +307,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "action": "deleted",
                 "progress": 5,
                 "actionNotes": "Task no longer required.",
+                "performanceUnit": "percentage_pct",
+                "performanceResponsible": "100",
+                "performanceActual": "0",
             },
         )
 
@@ -278,6 +333,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "recurrence": "daily",
                 "recipientEmail": "daily@example.com",
                 "action": "done",
+                "performanceUnit": "percentage_pct",
+                "performanceResponsible": "100",
+                "performanceActual": "100",
             },
             {
                 "title": "Quality audit",
@@ -285,6 +343,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "recurrence": "does_not_repeat",
                 "recipientEmail": "audit@example.com",
                 "action": "done",
+                "performanceUnit": "percentage_pct",
+                "performanceResponsible": "100",
+                "performanceActual": "90",
             },
         ]
 
@@ -324,6 +385,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "custom",
             "recipientEmail": "sync@example.com",
             "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "100",
         }
 
         response = self.client.post(
@@ -344,6 +408,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "does_not_repeat",
             "recipientEmail": "coord@example.com",
             "action": "delegated",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "90",
         }
 
         response = self.client.post(
@@ -364,6 +431,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "weekly",
             "recipientEmail": "inspect@example.com",
             "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "90",
         }
 
         self._raise_next_exception(requests_exceptions.Timeout("timed out"))
@@ -387,6 +457,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "daily",
             "recipientEmail": "daily@example.com",
             "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "100",
         }
 
         response = self.client.post(
@@ -418,6 +491,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "does_not_repeat",
             "recipientEmail": "budget@example.com",
             "action": "discussed",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "100",
         }
 
         response = self.client.post(
@@ -439,6 +515,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "recurrence": "does_not_repeat",
             "recipientEmail": "inspect@example.com",
             "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "100",
         }
 
         original_commit = self.app_module.db.session.commit

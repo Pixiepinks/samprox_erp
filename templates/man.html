@@ -128,6 +128,10 @@
                                 <th scope="col">Responsibility No</th>
                                 <th scope="col">Title</th>
                                 <th scope="col">Progress</th>
+                                <th scope="col">Unit of Measure</th>
+                                <th scope="col">Responsible</th>
+                                <th scope="col">Actual</th>
+                                <th scope="col">Performance Metric</th>
                                 <th scope="col">Detail</th>
                                 <th scope="col">Assigned by</th>
                                 <th scope="col">Assigned to</th>
@@ -669,6 +673,42 @@
                                 step="1"
                                 inputmode="numeric"
                                 value="0"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-performance-unit">Unit of measure <span class="required">*</span></label>
+                            <select
+                                class="edit-form__input"
+                                id="responsibility-performance-unit"
+                                name="performanceUnit"
+                                required
+                            ></select>
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-performance-responsible">Responsible <span class="required">*</span></label>
+                            <input
+                                class="edit-form__input"
+                                id="responsibility-performance-responsible"
+                                name="performanceResponsible"
+                                required
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-performance-actual">Actual</label>
+                            <input
+                                class="edit-form__input"
+                                id="responsibility-performance-actual"
+                                name="performanceActual"
+                            />
+                        </div>
+                        <div class="edit-form__field">
+                            <label class="edit-form__label" for="responsibility-performance-metric">Performance metric</label>
+                            <input
+                                class="edit-form__input"
+                                id="responsibility-performance-metric"
+                                type="text"
+                                readonly
+                                tabindex="-1"
                             />
                         </div>
                         <div class="edit-form__field">
@@ -1301,6 +1341,14 @@
         const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
         const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
         const responsibilityProgressInput = document.getElementById("responsibility-progress");
+        const responsibilityPerformanceUnitSelect = document.getElementById("responsibility-performance-unit");
+        const responsibilityPerformanceResponsibleInput = document.getElementById(
+            "responsibility-performance-responsible",
+        );
+        const responsibilityPerformanceActualInput = document.getElementById(
+            "responsibility-performance-actual",
+        );
+        const responsibilityPerformanceMetricInput = document.getElementById("responsibility-performance-metric");
         const responsibilityRecipientInput = document.getElementById("responsibility-recipient");
         const responsibilityActionNotesInput = document.getElementById("responsibility-action-notes");
         const responsibilitySubmitButton = document.getElementById("responsibility-submit");
@@ -1334,6 +1382,489 @@
 
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
+
+        const PERFORMANCE_DEFAULT_UNIT = "percentage_pct";
+        const PERFORMANCE_UNIT_VALUES = [
+            "date",
+            "time",
+            "hours",
+            "minutes",
+            "days",
+            "weeks",
+            "months",
+            "years",
+            "quantity_based",
+            "qty",
+            "units",
+            "pieces",
+            "batches",
+            "items",
+            "parcels",
+            "orders",
+            "amount_lkr",
+            "revenue",
+            "cost",
+            "expense",
+            "profit",
+            "savings",
+            "margin_pct",
+            "number",
+            "count",
+            "score",
+            "frequency",
+            "rate",
+            "index",
+            "kg",
+            "tonnes",
+            "litres",
+            "meters",
+            "kwh",
+            "rpm",
+            "quality_metric",
+            "percentage_pct",
+            "error_rate_pct",
+            "success_rate_pct",
+            "defects_per_unit",
+            "accuracy_pct",
+            "compliance_pct",
+            "time_per_unit",
+            "units_per_hour",
+            "cycle_time",
+            "lead_time",
+            "customer_count",
+            "leads",
+            "conversion_pct",
+            "tickets_resolved",
+            "response_time",
+            "milestones",
+            "stages",
+            "completion_pct",
+            "tasks_completed",
+            "sla_pct",
+        ];
+
+        const PERFORMANCE_LABEL_OVERRIDES = {
+            quantity_based: "Quantity-based",
+            qty: "Quantity (Qty)",
+            amount_lkr: "Amount (LKR)",
+            kg: "Kilograms (kg)",
+            kwh: "kWh",
+            rpm: "RPM",
+            quality_metric: "Quality Metrics",
+            percentage_pct: "Percentage (%)",
+            margin_pct: "Margin (%)",
+            error_rate_pct: "Error Rate (%)",
+            success_rate_pct: "Success Rate (%)",
+            accuracy_pct: "Accuracy (%)",
+            compliance_pct: "Compliance (%)",
+            conversion_pct: "Conversion (%)",
+            completion_pct: "Completion (%)",
+            sla_pct: "SLA (%)",
+            time_per_unit: "Time per Unit",
+            units_per_hour: "Units per Hour",
+            cycle_time: "Cycle Time",
+            lead_time: "Lead Time",
+            response_time: "Response Time (Minutes/Hours)",
+            customer_count: "Customer Count",
+            tickets_resolved: "Tickets Resolved",
+            tasks_completed: "Tasks Completed",
+        };
+
+        const PERFORMANCE_INTEGER_UNITS = new Set([
+            "quantity_based",
+            "qty",
+            "units",
+            "pieces",
+            "batches",
+            "items",
+            "parcels",
+            "orders",
+            "number",
+            "count",
+            "score",
+            "frequency",
+            "rate",
+            "index",
+            "customer_count",
+            "leads",
+            "tickets_resolved",
+            "milestones",
+            "stages",
+            "tasks_completed",
+        ]);
+
+        const PERFORMANCE_PERCENT_UNITS = new Set([
+            "margin_pct",
+            "percentage_pct",
+            "error_rate_pct",
+            "success_rate_pct",
+            "accuracy_pct",
+            "compliance_pct",
+            "conversion_pct",
+            "completion_pct",
+            "sla_pct",
+        ]);
+
+        const PERFORMANCE_CURRENCY_UNITS = new Set([
+            "amount_lkr",
+            "revenue",
+            "cost",
+            "expense",
+            "profit",
+            "savings",
+        ]);
+
+        const PERFORMANCE_DATE_UNITS = new Set(["date"]);
+        const PERFORMANCE_TIME_UNITS = new Set(["time"]);
+        const PERFORMANCE_DURATION_UNITS = new Set([
+            "hours",
+            "minutes",
+            "days",
+            "weeks",
+            "months",
+            "years",
+            "time_per_unit",
+            "units_per_hour",
+            "cycle_time",
+            "lead_time",
+            "response_time",
+        ]);
+
+        const PERFORMANCE_DECIMAL_STEP_UNITS = new Set([
+            "kg",
+            "tonnes",
+            "litres",
+            "meters",
+            "kwh",
+            "rpm",
+            "quality_metric",
+            "defects_per_unit",
+        ]);
+
+        const PERFORMANCE_CURRENCY_FORMATTER = new Intl.NumberFormat(undefined, {
+            style: "currency",
+            currency: "LKR",
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+
+        const PERFORMANCE_NUMBER_FORMATTERS = new Map();
+        const PERFORMANCE_EPOCH_MS = Date.UTC(1970, 0, 1);
+
+        const getNumberFormatter = (decimals = 2) => {
+            const key = Number(decimals);
+            if (!PERFORMANCE_NUMBER_FORMATTERS.has(key)) {
+                PERFORMANCE_NUMBER_FORMATTERS.set(
+                    key,
+                    new Intl.NumberFormat(undefined, {
+                        minimumFractionDigits: Math.max(0, decimals),
+                        maximumFractionDigits: Math.max(0, decimals),
+                    }),
+                );
+            }
+            return PERFORMANCE_NUMBER_FORMATTERS.get(key);
+        };
+
+        const toTitleCase = (value) =>
+            String(value || "")
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+        const getPerformanceConfig = (unitValue) => {
+            const normalized = (unitValue || PERFORMANCE_DEFAULT_UNIT).toString().trim() || PERFORMANCE_DEFAULT_UNIT;
+            const label = PERFORMANCE_LABEL_OVERRIDES[normalized] || toTitleCase(normalized);
+            const config = {
+                value: normalized,
+                label,
+                input: "number",
+                format: "decimal",
+                step: "0.1",
+                decimals: 2,
+                metricDecimals: 1,
+            };
+
+            if (PERFORMANCE_DATE_UNITS.has(normalized)) {
+                config.input = "date";
+                config.format = "date";
+                config.decimals = 0;
+                config.metricDecimals = 0;
+            } else if (PERFORMANCE_TIME_UNITS.has(normalized)) {
+                config.input = "time";
+                config.format = "time";
+                config.decimals = 0;
+                config.metricDecimals = 0;
+            } else if (PERFORMANCE_PERCENT_UNITS.has(normalized)) {
+                config.format = "percentage";
+                config.step = "0.1";
+                config.decimals = 1;
+                config.metricDecimals = 1;
+            } else if (PERFORMANCE_CURRENCY_UNITS.has(normalized)) {
+                config.format = "currency";
+                config.step = "0.01";
+                config.decimals = 2;
+                config.metricDecimals = 2;
+            } else if (PERFORMANCE_INTEGER_UNITS.has(normalized)) {
+                config.format = "integer";
+                config.step = "1";
+                config.decimals = 0;
+                config.metricDecimals = 0;
+            } else if (PERFORMANCE_DURATION_UNITS.has(normalized)) {
+                config.step = "0.1";
+                config.decimals = 2;
+                config.metricDecimals = 1;
+            } else if (PERFORMANCE_DECIMAL_STEP_UNITS.has(normalized)) {
+                config.step = "0.01";
+                config.decimals = 2;
+                config.metricDecimals = 2;
+            }
+
+            return config;
+        };
+
+        const roundHalfAwayFromZero = (value, decimals = 0) => {
+            if (!Number.isFinite(value)) {
+                return value;
+            }
+            const factor = 10 ** decimals;
+            if (value >= 0) {
+                return Math.round(value * factor) / factor;
+            }
+            return -Math.round(Math.abs(value) * factor) / factor;
+        };
+
+        const parsePerformanceInputValue = (rawValue, unitValue, config) => {
+            const value = rawValue == null ? "" : rawValue.toString().trim();
+            if (!value) {
+                return { numeric: null, isBlank: true, isValid: true };
+            }
+
+            if (config.format === "date") {
+                const parsed = new Date(`${value}T00:00:00Z`);
+                if (Number.isNaN(parsed.getTime())) {
+                    return { numeric: null, isBlank: false, isValid: false };
+                }
+                const days = Math.floor((parsed.getTime() - PERFORMANCE_EPOCH_MS) / 86_400_000);
+                return { numeric: days, isBlank: false, isValid: true };
+            }
+
+            if (config.format === "time") {
+                const parts = value.split(":");
+                if (parts.length < 2) {
+                    return { numeric: null, isBlank: false, isValid: false };
+                }
+                const hours = Number.parseInt(parts[0], 10);
+                const minutes = Number.parseInt(parts[1], 10);
+                if (!Number.isFinite(hours) || Number.isNaN(minutes)) {
+                    return { numeric: null, isBlank: false, isValid: false };
+                }
+                return { numeric: hours * 60 + minutes, isBlank: false, isValid: true };
+            }
+
+            const numeric = Number.parseFloat(value);
+            if (!Number.isFinite(numeric)) {
+                return { numeric: null, isBlank: false, isValid: false };
+            }
+            return { numeric, isBlank: false, isValid: true };
+        };
+
+        const formatNumberWithDecimals = (value, decimals = 2) => {
+            if (!Number.isFinite(value)) {
+                return String(value ?? "");
+            }
+            return getNumberFormatter(decimals).format(value);
+        };
+
+        const formatPerformanceValueDisplay = (rawValue, unitValue, config) => {
+            if (rawValue === null || rawValue === undefined || rawValue === "") {
+                return "—";
+            }
+            if (config.format === "date" || config.format === "time") {
+                return rawValue;
+            }
+            const numeric = Number.parseFloat(rawValue);
+            if (!Number.isFinite(numeric)) {
+                return rawValue;
+            }
+            if (config.format === "currency") {
+                return PERFORMANCE_CURRENCY_FORMATTER.format(numeric);
+            }
+            if (config.format === "percentage") {
+                return `${formatNumberWithDecimals(numeric, config.decimals ?? 1)}%`;
+            }
+            const decimals = config.format === "integer" ? 0 : config.decimals ?? 2;
+            return formatNumberWithDecimals(numeric, decimals);
+        };
+
+        const formatTimeDifference = (minutes) => {
+            if (!Number.isFinite(minutes)) {
+                return "—";
+            }
+            if (minutes === 0) {
+                return "0m";
+            }
+            const prefix = minutes > 0 ? "+" : "-";
+            const absolute = Math.abs(Math.trunc(minutes));
+            const hours = Math.floor(absolute / 60);
+            const mins = absolute % 60;
+            const parts = [];
+            if (hours > 0) {
+                parts.push(`${hours}h`);
+            }
+            if (mins > 0 || hours === 0) {
+                parts.push(`${mins}m`);
+            }
+            return `${prefix}${parts.join(" ")}`;
+        };
+
+        const formatPerformanceMetricDisplay = (rawMetric, unitValue, config) => {
+            if (rawMetric === null || rawMetric === undefined || rawMetric === "") {
+                return "—";
+            }
+            const metric = Number.parseFloat(rawMetric);
+            if (!Number.isFinite(metric)) {
+                return "—";
+            }
+            if (config.format === "date") {
+                if (metric === 0) {
+                    return "0 days";
+                }
+                const suffix = Math.abs(metric) === 1 ? "day" : "days";
+                return `${metric > 0 ? "+" : ""}${metric} ${suffix}`;
+            }
+            if (config.format === "time") {
+                return formatTimeDifference(metric);
+            }
+            if (config.format === "currency") {
+                const formatted = PERFORMANCE_CURRENCY_FORMATTER.format(metric);
+                return metric > 0 ? `+${formatted}` : formatted;
+            }
+            if (config.format === "percentage") {
+                const absolute = Math.abs(metric);
+                const formatted = formatNumberWithDecimals(absolute, config.metricDecimals ?? 1);
+                if (metric === 0) {
+                    return `${formatted}%`;
+                }
+                return `${metric > 0 ? "+" : "-"}${formatted}%`;
+            }
+            const decimals = config.format === "integer" ? 0 : config.metricDecimals ?? 1;
+            const formatted = formatNumberWithDecimals(Math.abs(metric), decimals);
+            if (metric === 0) {
+                return formatted;
+            }
+            return `${metric > 0 ? "+" : "-"}${formatted}`;
+        };
+
+        const calculatePerformanceMetricNumeric = (unitValue, responsibleNumeric, actualNumeric, config) => {
+            if (!Number.isFinite(responsibleNumeric) || !Number.isFinite(actualNumeric)) {
+                return null;
+            }
+            if (config.format === "date" || config.format === "time") {
+                return actualNumeric - responsibleNumeric;
+            }
+            return roundHalfAwayFromZero(actualNumeric - responsibleNumeric, config.metricDecimals ?? 1);
+        };
+
+        const populatePerformanceUnitOptions = () => {
+            if (!responsibilityPerformanceUnitSelect) {
+                return;
+            }
+            responsibilityPerformanceUnitSelect.innerHTML = "";
+            PERFORMANCE_UNIT_VALUES.forEach((unit) => {
+                const config = getPerformanceConfig(unit);
+                const option = document.createElement("option");
+                option.value = unit;
+                option.textContent = config.label;
+                responsibilityPerformanceUnitSelect.appendChild(option);
+            });
+        };
+
+        const getSelectedPerformanceConfig = () => {
+            const unitValue = responsibilityPerformanceUnitSelect?.value || PERFORMANCE_DEFAULT_UNIT;
+            return getPerformanceConfig(unitValue);
+        };
+
+        const applyPerformanceInputAttributes = (input, config) => {
+            if (!input) {
+                return;
+            }
+            if (config.input === "date") {
+                input.type = "date";
+                input.removeAttribute("step");
+                input.removeAttribute("min");
+                input.removeAttribute("max");
+                input.removeAttribute("inputmode");
+            } else if (config.input === "time") {
+                input.type = "time";
+                input.step = "60";
+                input.removeAttribute("min");
+                input.removeAttribute("max");
+                input.removeAttribute("inputmode");
+            } else {
+                input.type = "number";
+                if (config.step) {
+                    input.step = config.step;
+                } else {
+                    input.removeAttribute("step");
+                }
+                if (config.min !== undefined) {
+                    input.min = String(config.min);
+                } else {
+                    input.removeAttribute("min");
+                }
+                if (config.max !== undefined) {
+                    input.max = String(config.max);
+                } else {
+                    input.removeAttribute("max");
+                }
+                input.inputMode = config.format === "integer" ? "numeric" : "decimal";
+            }
+        };
+
+        const updatePerformanceUnitState = () => {
+            const config = getSelectedPerformanceConfig();
+            applyPerformanceInputAttributes(responsibilityPerformanceResponsibleInput, config);
+            applyPerformanceInputAttributes(responsibilityPerformanceActualInput, config);
+        };
+
+        const updatePerformanceMetricDisplay = () => {
+            if (!responsibilityPerformanceMetricInput) {
+                return;
+            }
+            const config = getSelectedPerformanceConfig();
+            const unitValue = config.value;
+            const responsibleState = parsePerformanceInputValue(
+                responsibilityPerformanceResponsibleInput?.value,
+                unitValue,
+                config,
+            );
+            const actualState = parsePerformanceInputValue(
+                responsibilityPerformanceActualInput?.value,
+                unitValue,
+                config,
+            );
+
+            if (!responsibleState.isValid) {
+                responsibilityPerformanceMetricInput.value = "—";
+                return;
+            }
+
+            if (actualState.isBlank || !actualState.isValid) {
+                responsibilityPerformanceMetricInput.value = "—";
+                return;
+            }
+
+            const metricNumeric = calculatePerformanceMetricNumeric(
+                unitValue,
+                responsibleState.numeric,
+                actualState.numeric,
+                config,
+            );
+            responsibilityPerformanceMetricInput.value = formatPerformanceMetricDisplay(
+                metricNumeric,
+                unitValue,
+                config,
+            );
+        };
 
         const responsibilityDateFormatter = new Intl.DateTimeFormat(undefined, {
             year: "numeric",
@@ -1614,6 +2145,31 @@
 
         updateDelegatedVisibility(responsibilityActionPreviousValue);
 
+        if (responsibilityPerformanceUnitSelect) {
+            populatePerformanceUnitOptions();
+            if (!responsibilityPerformanceUnitSelect.value) {
+                responsibilityPerformanceUnitSelect.value = PERFORMANCE_DEFAULT_UNIT;
+            }
+            updatePerformanceUnitState();
+        }
+        if (responsibilityPerformanceMetricInput) {
+            responsibilityPerformanceMetricInput.value = "—";
+        }
+        updatePerformanceMetricDisplay();
+
+        responsibilityPerformanceUnitSelect?.addEventListener("change", () => {
+            updatePerformanceUnitState();
+            updatePerformanceMetricDisplay();
+        });
+        responsibilityPerformanceResponsibleInput?.addEventListener(
+            "input",
+            updatePerformanceMetricDisplay,
+        );
+        responsibilityPerformanceActualInput?.addEventListener(
+            "input",
+            updatePerformanceMetricDisplay,
+        );
+
         const setPlanMessage = (element, message = "", tone = "info") => {
             if (!element) {
                 return;
@@ -1756,6 +2312,20 @@
                 responsibilityProgressInput.readOnly = false;
                 delete responsibilityProgressInput.dataset.progressPrevious;
             }
+            if (responsibilityPerformanceUnitSelect) {
+                responsibilityPerformanceUnitSelect.value = PERFORMANCE_DEFAULT_UNIT;
+            }
+            if (responsibilityPerformanceResponsibleInput) {
+                responsibilityPerformanceResponsibleInput.value = "";
+            }
+            if (responsibilityPerformanceActualInput) {
+                responsibilityPerformanceActualInput.value = "";
+            }
+            if (responsibilityPerformanceMetricInput) {
+                responsibilityPerformanceMetricInput.value = "—";
+            }
+            updatePerformanceUnitState();
+            updatePerformanceMetricDisplay();
             toggleCustomWeekdayFieldset();
             updateRecurrenceOptionLabels();
             clearResponsibilityFormError();
@@ -1808,6 +2378,27 @@
                     responsibilityRecurrenceSelect.value = recurrenceValue;
                 }
                 toggleCustomWeekdayFieldset();
+
+                const performanceUnit = task.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
+                const performanceConfig = getPerformanceConfig(performanceUnit);
+                if (responsibilityPerformanceUnitSelect) {
+                    responsibilityPerformanceUnitSelect.value = performanceUnit;
+                }
+                updatePerformanceUnitState();
+                if (responsibilityPerformanceResponsibleInput) {
+                    responsibilityPerformanceResponsibleInput.value = task.performanceResponsible ?? "";
+                }
+                if (responsibilityPerformanceActualInput) {
+                    responsibilityPerformanceActualInput.value = task.performanceActual ?? "";
+                }
+                if (responsibilityPerformanceMetricInput) {
+                    responsibilityPerformanceMetricInput.value = formatPerformanceMetricDisplay(
+                        task.performanceMetric,
+                        performanceUnit,
+                        performanceConfig,
+                    );
+                }
+                updatePerformanceMetricDisplay();
 
                 if (responsibilityCustomWeekdays) {
                     const selectedWeekdays = new Set(
@@ -1884,6 +2475,20 @@
                     responsibilityProgressInput.readOnly = false;
                     delete responsibilityProgressInput.dataset.progressPrevious;
                 }
+                if (responsibilityPerformanceUnitSelect) {
+                    responsibilityPerformanceUnitSelect.value = PERFORMANCE_DEFAULT_UNIT;
+                }
+                updatePerformanceUnitState();
+                if (responsibilityPerformanceResponsibleInput) {
+                    responsibilityPerformanceResponsibleInput.value = "";
+                }
+                if (responsibilityPerformanceActualInput) {
+                    responsibilityPerformanceActualInput.value = "";
+                }
+                if (responsibilityPerformanceMetricInput) {
+                    responsibilityPerformanceMetricInput.value = "—";
+                }
+                updatePerformanceMetricDisplay();
             }
 
             updateRecurrenceOptionLabels();
@@ -1936,6 +2541,32 @@
                     progressCell.textContent = "—";
                 }
                 row.appendChild(progressCell);
+
+                const performanceUnitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
+                const performanceConfig = getPerformanceConfig(performanceUnitValue);
+
+                appendCell(performanceConfig.label);
+                appendCell(
+                    formatPerformanceValueDisplay(
+                        task?.performanceResponsible,
+                        performanceUnitValue,
+                        performanceConfig,
+                    ),
+                );
+                appendCell(
+                    formatPerformanceValueDisplay(
+                        task?.performanceActual,
+                        performanceUnitValue,
+                        performanceConfig,
+                    ),
+                );
+                appendCell(
+                    formatPerformanceMetricDisplay(
+                        task?.performanceMetric,
+                        performanceUnitValue,
+                        performanceConfig,
+                    ),
+                );
 
                 appendCell(task?.detail ?? "—", { title: task?.detail });
                 appendCell(task?.assigner?.name ?? task?.assigner?.email ?? "—");
@@ -2111,6 +2742,46 @@
                 recurrence: formData.get("recurrence")?.toString(),
                 recipientEmail: formData.get("recipientEmail")?.toString().trim(),
             };
+
+            const performanceUnitValue = responsibilityPerformanceUnitSelect?.value?.toString().trim();
+            if (!performanceUnitValue) {
+                showResponsibilityFormError("Select a unit of measure.");
+                responsibilityPerformanceUnitSelect?.focus();
+                return;
+            }
+            const performanceConfig = getPerformanceConfig(performanceUnitValue);
+            payload.performanceUnit = performanceUnitValue;
+
+            const responsibleRaw = responsibilityPerformanceResponsibleInput?.value?.toString().trim() ?? "";
+            const responsibleState = parsePerformanceInputValue(
+                responsibleRaw,
+                performanceUnitValue,
+                performanceConfig,
+            );
+            if (!responsibleRaw) {
+                showResponsibilityFormError("Enter the responsible target value.");
+                responsibilityPerformanceResponsibleInput?.focus();
+                return;
+            }
+            if (!responsibleState.isValid) {
+                showResponsibilityFormError("Enter a valid responsible value for the selected unit.");
+                responsibilityPerformanceResponsibleInput?.focus();
+                return;
+            }
+            payload.performanceResponsible = responsibleRaw;
+
+            const actualRaw = responsibilityPerformanceActualInput?.value?.toString().trim() ?? "";
+            const actualState = parsePerformanceInputValue(actualRaw, performanceUnitValue, performanceConfig);
+            if (actualRaw && !actualState.isValid) {
+                showResponsibilityFormError("Enter a valid actual value for the selected unit.");
+                responsibilityPerformanceActualInput?.focus();
+                return;
+            }
+            if (!actualState.isBlank) {
+                payload.performanceActual = actualRaw;
+            } else {
+                payload.performanceActual = null;
+            }
 
             const assigneeValue = formData.get("assigneeId");
             if (assigneeValue) {

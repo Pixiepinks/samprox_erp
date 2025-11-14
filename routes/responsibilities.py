@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 import html
 import os
 from datetime import date, timedelta
@@ -161,10 +162,54 @@ def _delegation_summary_lines(task: ResponsibilityTask) -> list[str]:
             delegate_name = "Delegated manager"
         allocation_display = _format_delegation_allocation(task, delegation)
         if allocation_display:
-            lines.append(f"  • {delegate_name} — {allocation_display}")
+            lines.append(f"• {delegate_name} — {allocation_display}")
         else:
-            lines.append(f"  • {delegate_name}")
+            lines.append(f"• {delegate_name}")
     return lines
+
+
+def _first_name_from(name_hint: str | None, email: str | None) -> str:
+    """Return a friendly first name for the greeting line."""
+
+    if name_hint:
+        parts = [part for part in name_hint.strip().split() if part]
+        if parts:
+            return parts[0]
+
+    if email:
+        local_part = email.split("@", 1)[0]
+        pieces = [part for part in re.split(r"[-._\s]+", local_part) if part]
+        if pieces:
+            return pieces[0].title()
+
+    return "there"
+
+
+def _compose_responsibility_email(
+    *,
+    recipient: str,
+    name_hint: str | None,
+    verb: str,
+    content_lines: list[str],
+) -> str:
+    """Return a formatted email body with greeting and inspirational closing."""
+
+    first_name = _first_name_from(name_hint, recipient)
+    greeting_line = f"Hi {first_name}, A new responsibility has been {verb} to you."
+
+    body_lines = [greeting_line, ""]
+    body_lines.extend(content_lines)
+    body_lines.extend(
+        [
+            "",
+            "Great achievements begin with clear responsibilities.",
+            "Let’s make this task a success; I’ll be tracking your progress and milestones.",
+            "Regards,",
+            "Maximus — Your AICEO",
+        ]
+    )
+
+    return "\n".join(body_lines)
 
 
 @bp.get("/assignees")
@@ -304,58 +349,116 @@ def _send_task_email(task: ResponsibilityTask) -> None:
 
     base_lines.append(f"Assigned by: {assigner_name}")
 
+    overview_lines = ["Responsibility overview:"]
+    overview_lines.extend(f"• {line}" for line in base_lines)
+
+    extra_sections: list[str] = []
+
     if task.description:
-        base_lines.append("")
-        base_lines.append(task.description.strip())
+        extra_sections.append("")
+        extra_sections.append("Summary:")
+        extra_sections.append(task.description.strip())
 
     if task.detail:
-        base_lines.append("")
-        base_lines.append(f"Detail: {task.detail.strip()}")
+        extra_sections.append("")
+        extra_sections.append(f"Detail: {task.detail.strip()}")
 
     if task.action_notes:
-        base_lines.append("")
-        base_lines.append(f"Notes: {task.action_notes.strip()}")
+        extra_sections.append("")
+        extra_sections.append(f"Notes: {task.action_notes.strip()}")
+
+    base_content = list(overview_lines)
+    base_content.extend(extra_sections)
 
     delegation_summary = _delegation_summary_lines(task)
 
-    general_lines = list(base_lines)
+    general_content = list(base_content)
     if delegation_summary:
-        general_lines.append("")
-        general_lines.append("Delegated allocations:")
-        general_lines.extend(delegation_summary)
+        general_content.append("")
+        general_content.append("Delegated allocations:")
+        general_content.extend(delegation_summary)
     elif delegated_name:
-        general_lines.append(f"Delegated to: {delegated_name}")
+        general_content.append("")
+        general_content.append(f"Delegated to: {delegated_name}")
 
     recipients_sent: set[str] = set()
 
-    def _send(recipient: str, lines: list[str]) -> None:
+    def _send(
+        recipient: str,
+        lines: list[str],
+        *,
+        verb: str,
+        name_hint: str | None = None,
+    ) -> None:
         if not recipient or recipient in recipients_sent:
             return
+        body = _compose_responsibility_email(
+            recipient=recipient,
+            name_hint=name_hint,
+            verb=verb,
+            content_lines=lines,
+        )
         _deliver_responsibility_email(
             subject=f"New responsibility: {task.title}",
             recipient=recipient,
-            body="\n".join(lines),
+            body=body,
             context="responsibility notification",
         )
         recipients_sent.add(recipient)
 
-    _send(task.recipient_email, general_lines)
+    delegate_email_map: dict[str, User] = {}
+
+    for delegation in getattr(task, "delegations", []) or []:
+        delegate = getattr(delegation, "delegate", None)
+        delegate_email = getattr(delegate, "email", None)
+        if delegate_email:
+            delegate_email_map[delegate_email] = delegate
+
+    general_recipient = task.recipient_email
+    general_name_hint = assignee_name
+    general_verb = "assigned"
+
+    if general_recipient in delegate_email_map:
+        delegate_user = delegate_email_map[general_recipient]
+        general_name_hint = getattr(delegate_user, "name", None)
+        general_verb = "delegated"
+    elif general_recipient == getattr(task.delegated_to, "email", None):
+        general_name_hint = delegated_name
+        general_verb = "delegated"
+    elif general_recipient == getattr(task.assignee, "email", None):
+        general_name_hint = assignee_name
+    elif assignee_name:
+        general_name_hint = assignee_name
+    elif delegated_name:
+        general_name_hint = delegated_name
+
+    _send(
+        general_recipient,
+        general_content,
+        verb=general_verb,
+        name_hint=general_name_hint,
+    )
 
     for delegation in getattr(task, "delegations", []) or []:
         delegate = getattr(delegation, "delegate", None)
         delegate_email = getattr(delegate, "email", None)
         if not delegate_email:
             continue
-        delegate_lines = list(base_lines)
+        delegate_content = list(base_content)
         allocation_display = _format_delegation_allocation(task, delegation)
         delegate_name = getattr(delegate, "name", None) or delegate_email
-        delegate_lines.append("")
-        delegate_lines.append("Delegated allocation assigned to you:")
+        delegate_content.append("")
+        delegate_content.append("Delegated allocation assigned to you:")
         if allocation_display:
-            delegate_lines.append(f"  • {delegate_name} — {allocation_display}")
+            delegate_content.append(f"• {delegate_name} — {allocation_display}")
         else:
-            delegate_lines.append(f"  • {delegate_name}")
-        _send(delegate_email, delegate_lines)
+            delegate_content.append(f"• {delegate_name}")
+        _send(
+            delegate_email,
+            delegate_content,
+            verb="delegated",
+            name_hint=getattr(delegate, "name", None),
+        )
 
 
 def _occurrences_for_week(tasks: Iterable[ResponsibilityTask], start: date) -> dict[date, list[ResponsibilityTask]]:

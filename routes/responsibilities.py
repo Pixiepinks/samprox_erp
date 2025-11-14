@@ -70,6 +70,7 @@ _ALLOWED_CREATOR_ROLES = {
     RoleEnum.production_manager,
     RoleEnum.maintenance_manager,
     RoleEnum.admin,
+    RoleEnum.outside_manager,
 }
 
 

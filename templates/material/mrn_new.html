@@ -607,13 +607,22 @@
             }
         }
 
-        logoutButton.addEventListener("click", () => {
-            localStorage.removeItem("samprox_token");
-            localStorage.removeItem("samprox_user");
-            window.location.href = "/";
+        logoutButton.addEventListener("click", async () => {
+            try {
+                await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+            } catch (error) {
+                console.error("Failed to log out", error);
+            } finally {
+                localStorage.removeItem("samprox_token");
+                localStorage.removeItem("samprox_user");
+                window.location.href = "/";
+            }
         });
 
         function handleUnauthorized() {
+            fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch((error) => {
+                console.error("Failed to log out", error);
+            });
             localStorage.removeItem("samprox_token");
             localStorage.removeItem("samprox_user");
             window.location.href = "/";

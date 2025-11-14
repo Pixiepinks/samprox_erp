@@ -21,8 +21,13 @@ from models import (
     ResponsibilityRecurrence,
     ResponsibilityTask,
     ResponsibilityTaskStatus,
+    ResponsibilityPerformanceUnit,
     RoleEnum,
     User,
+)
+from responsibility_metrics import (
+    format_value_for_display,
+    get_unit_config,
 )
 from schemas import (
     ResponsibilityTaskCreateSchema,
@@ -300,7 +305,19 @@ def _format_weekly_summary(schedule: dict[date, list[ResponsibilityTask]]) -> st
         parts.append(formatted_day)
         for task in schedule[day]:
             assignee = getattr(task.assignee, "name", "Unassigned")
-            parts.append(f"  • {task.title} ({assignee}) — {_render_recurrence(task)}")
+            perf_unit = getattr(task, "perf_uom", ResponsibilityPerformanceUnit.PERCENTAGE_PCT)
+            responsible = format_value_for_display(perf_unit, getattr(task, "perf_responsible_value", None))
+            actual = format_value_for_display(perf_unit, getattr(task, "perf_actual_value", None))
+            metric = format_value_for_display(
+                ResponsibilityPerformanceUnit.PERCENTAGE_PCT,
+                getattr(task, "perf_metric_value", None),
+            )
+            metrics_text = (
+                f"Responsible: {responsible}; Actual: {actual}; Achievement: {metric}"
+            )
+            parts.append(
+                f"  • {task.title} ({assignee}) — {_render_recurrence(task)} — {metrics_text}"
+            )
         parts.append("")
     return "\n".join(parts).strip()
 
@@ -402,6 +419,8 @@ def create_task():
     action_notes = data.get("action_notes")
     progress = _normalize_progress(data.get("progress"), action)
 
+    perf_unit = ResponsibilityPerformanceUnit(data["perf_uom"])
+
     task = ResponsibilityTask(
         title=data["title"],
         description=data.get("description"),
@@ -416,6 +435,11 @@ def create_task():
         assigner_id=assigner_id,
         assignee_id=assignee.id if assignee else None,
         delegated_to_id=delegated_to.id if delegated_to else None,
+        perf_uom=perf_unit,
+        perf_responsible_value=data["perf_responsible_value"],
+        perf_actual_value=data["perf_actual_value"],
+        perf_metric_value=data["perf_metric_value"],
+        perf_input_type=data.get("perf_input_type"),
     )
 
     task.update_custom_weekdays(data.get("custom_weekdays"))
@@ -519,6 +543,8 @@ def update_task(task_id: int):
         progress_input = getattr(task, "progress", None)
     progress = _normalize_progress(progress_input, action)
 
+    perf_unit = ResponsibilityPerformanceUnit(data["perf_uom"])
+
     task.title = data["title"]
     task.description = data.get("description")
     task.detail = data.get("detail")
@@ -532,6 +558,11 @@ def update_task(task_id: int):
     task.assignee_id = assignee.id if assignee else None
     task.delegated_to_id = delegated_to.id if delegated_to else None
     task.update_custom_weekdays(data.get("custom_weekdays"))
+    task.perf_uom = perf_unit
+    task.perf_responsible_value = data["perf_responsible_value"]
+    task.perf_actual_value = data["perf_actual_value"]
+    task.perf_metric_value = data["perf_metric_value"]
+    task.perf_input_type = data.get("perf_input_type")
 
     error_message = "Unable to update responsibility. Please try again."
     try:

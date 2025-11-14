@@ -7,6 +7,7 @@ from material import (
     list_material_items,
 )
 from schemas import MaterialItemSchema, MRNSchema
+from responsibility_metrics import list_unit_options
 
 from models import RoleEnum
 
@@ -84,7 +85,7 @@ def dashboard_redirect():
 @bp.get("/man")
 def man_page():
     """Render the "Man" resource planning page."""
-    return render_template("man.html")
+    return render_template("man.html", perf_unit_options=list_unit_options())
 
 
 @bp.get("/responsibility_portal")
@@ -95,7 +96,10 @@ def responsibility_portal():
     if role not in {RoleEnum.outside_manager}:
         return render_template("403.html"), 403
 
-    return render_template("responsibility_plan.html")
+    return render_template(
+        "responsibility_plan.html",
+        perf_unit_options=list_unit_options(),
+    )
 
 
 @bp.get("/machines")

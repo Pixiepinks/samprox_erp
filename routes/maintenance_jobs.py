@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import smtplib
 import ssl
@@ -9,6 +10,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+import requests
+from requests import exceptions as requests_exceptions
 from flask import Blueprint, jsonify, request, url_for, current_app
 from flask_jwt_extended import get_jwt, jwt_required
 from flask_mail import Message
@@ -34,6 +37,9 @@ from schemas import MaintenanceJobSchema
 bp = Blueprint("maintenance_jobs", __name__, url_prefix="/api/maintenance-jobs")
 job_schema = MaintenanceJobSchema()
 jobs_schema = MaintenanceJobSchema(many=True)
+
+RESEND_ENDPOINT = "https://api.resend.com/emails"
+RESEND_DEFAULT_SENDER = "Samprox ERP <no-reply@samprox.lk>"
 
 _CODE_PATTERN = re.compile(r"(\d+)$")
 _ALLOWED_PRIORITIES = {"Normal", "Urgent", "Critical"}
@@ -184,35 +190,177 @@ def _find_user_by_email(email: Optional[str]) -> Optional[User]:
     ).scalar_one_or_none()
 
 
+def _normalize_recipients(addresses: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for address in addresses:
+        if not address:
+            continue
+        cleaned = address.strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(cleaned)
+    return normalized
+
+
+def _split_recipients(value: Optional[str]) -> list[str]:
+    if not value:
+        return []
+    parts = re.split(r"[;,]", value)
+    return _normalize_recipients(parts)
+
+
+def _resolve_sender() -> str:
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER")
+    if isinstance(sender, (list, tuple)) and sender:
+        sender = sender[0]
+    if isinstance(sender, str) and sender.strip():
+        return sender.strip()
+    return RESEND_DEFAULT_SENDER
+
+
 def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool, Optional[str]]:
-    if not recipient:
+    recipients = _split_recipients(recipient)
+    if not recipients:
         return False, "No recipient email address was provided."
+
+    primary_recipient, *cc_recipients = recipients
+    recipient_set = {primary_recipient.lower()}
+
+    filtered_cc: list[str] = []
+    for address in cc_recipients:
+        lowered = address.lower()
+        if lowered in recipient_set:
+            continue
+        filtered_cc.append(address)
+        recipient_set.add(lowered)
+
+    bcc_config = current_app.config.get("MAIL_DEFAULT_BCC", [])
+    if isinstance(bcc_config, str):
+        bcc_config = [bcc_config]
+    filtered_bcc = [
+        address.strip()
+        for address in bcc_config or []
+        if address and address.strip().lower() not in recipient_set
+    ]
+
+    api_key = os.environ.get("RESEND_API_KEY")
+    if api_key:
+        resend_success, resend_message = _send_email_via_resend(
+            subject,
+            primary_recipient,
+            body,
+            filtered_cc,
+            filtered_bcc,
+            api_key,
+        )
+        if resend_success:
+            return resend_success, resend_message
+        if resend_message:
+            current_app.logger.info(
+                "Resend delivery failed; attempting Flask-Mail fallback: %s",
+                resend_message,
+            )
+
+    return _send_email_via_mail(
+        subject,
+        primary_recipient,
+        body,
+        filtered_bcc,
+        filtered_cc,
+    )
+
+
+def _send_email_via_resend(
+    subject: str,
+    recipient: str,
+    body: str,
+    cc: list[str],
+    bcc: list[str],
+    api_key: str,
+) -> tuple[bool, Optional[str]]:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    data: dict[str, object] = {
+        "from": _resolve_sender(),
+        "to": [recipient],
+        "subject": subject,
+        "text": body,
+    }
+    if cc:
+        data["cc"] = cc
+    if bcc:
+        data["bcc"] = bcc
+
+    try:
+        response = requests.post(RESEND_ENDPOINT, headers=headers, json=data, timeout=15)
+        response.raise_for_status()
+    except requests_exceptions.Timeout as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to timeout: %s", exc, exc_info=exc
+        )
+        return False, "Failed to send the notification email: the email service timed out."
+    except requests_exceptions.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in {401, 403}:
+            message = "Failed to send the notification email: authentication failed."
+        elif status_code and 500 <= status_code < 600:
+            message = "Failed to send the notification email: the email service is unavailable."
+        else:
+            message = "Failed to send the notification email: the email request was rejected."
+        current_app.logger.warning(
+            "Failed to send maintenance job email (status %s): %s",
+            status_code,
+            exc,
+            exc_info=exc,
+        )
+        if status_code in {401, 403}:
+            fallback_success, fallback_message = _send_email_via_mail(
+                subject,
+                recipient,
+                body,
+                bcc,
+                cc,
+            )
+            if fallback_success:
+                current_app.logger.info(
+                    "Resend authentication failed; delivered maintenance job email via Flask-Mail."
+                )
+                return True, fallback_message
+            if fallback_message:
+                return False, fallback_message
+        return False, message
+    except requests_exceptions.RequestException as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email: %s", exc, exc_info=exc
+        )
+        return False, "Failed to send the notification email: unable to reach the email service."
+
+    return True, f"Notification email sent to {recipient}."
+
+
+def _send_email_via_mail(
+    subject: str,
+    recipient: str,
+    body: str,
+    bcc: list[str],
+    cc: Optional[list[str]] = None,
+) -> tuple[bool, Optional[str]]:
     try:
         message = Message(subject, recipients=[recipient])
         default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
         if default_sender:
             message.sender = default_sender
-        bcc_config = current_app.config.get("MAIL_DEFAULT_BCC", [])
-        if isinstance(bcc_config, str):
-            bcc_config = [bcc_config]
-        cleaned_bcc: list[str] = []
-        seen_bcc: set[str] = set()
-        recipient_lower = recipient.strip().lower()
-        for address in bcc_config or []:
-            if not address:
-                continue
-            cleaned = address.strip()
-            if not cleaned:
-                continue
-            lowered = cleaned.lower()
-            if lowered == recipient_lower:
-                continue
-            if lowered in seen_bcc:
-                continue
-            cleaned_bcc.append(cleaned)
-            seen_bcc.add(lowered)
-        if cleaned_bcc:
-            message.bcc = cleaned_bcc
+        if cc:
+            message.cc = cc
+        if bcc:
+            message.bcc = bcc
         message.body = body
         mail.send(message)
         return True, f"Notification email sent to {recipient}."

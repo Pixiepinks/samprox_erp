@@ -250,7 +250,7 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
 
     api_key = os.environ.get("RESEND_API_KEY")
     if api_key:
-        return _send_email_via_resend(
+        resend_success, resend_message = _send_email_via_resend(
             subject,
             primary_recipient,
             body,
@@ -258,8 +258,21 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
             filtered_bcc,
             api_key,
         )
+        if resend_success:
+            return resend_success, resend_message
+        if resend_message:
+            current_app.logger.info(
+                "Resend delivery failed; attempting Flask-Mail fallback: %s",
+                resend_message,
+            )
 
-    return _send_email_via_mail(subject, primary_recipient, body, filtered_bcc)
+    return _send_email_via_mail(
+        subject,
+        primary_recipient,
+        body,
+        filtered_bcc,
+        filtered_cc,
+    )
 
 
 def _send_email_via_resend(
@@ -307,6 +320,21 @@ def _send_email_via_resend(
             exc,
             exc_info=exc,
         )
+        if status_code in {401, 403}:
+            fallback_success, fallback_message = _send_email_via_mail(
+                subject,
+                recipient,
+                body,
+                bcc,
+                cc,
+            )
+            if fallback_success:
+                current_app.logger.info(
+                    "Resend authentication failed; delivered maintenance job email via Flask-Mail."
+                )
+                return True, fallback_message
+            if fallback_message:
+                return False, fallback_message
         return False, message
     except requests_exceptions.RequestException as exc:
         current_app.logger.warning(
@@ -322,12 +350,15 @@ def _send_email_via_mail(
     recipient: str,
     body: str,
     bcc: list[str],
+    cc: Optional[list[str]] = None,
 ) -> tuple[bool, Optional[str]]:
     try:
         message = Message(subject, recipients=[recipient])
         default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
         if default_sender:
             message.sender = default_sender
+        if cc:
+            message.cc = cc
         if bcc:
             message.bcc = bcc
         message.body = body

@@ -270,6 +270,9 @@
                 row.appendChild(statusCell);
 
                 const actionsCell = document.createElement("td");
+                const actionsWrapper = document.createElement("div");
+                actionsWrapper.className = "data-table__actions";
+
                 const editButton = document.createElement("button");
                 editButton.type = "button";
                 editButton.className = "button button--ghost";
@@ -285,7 +288,26 @@
                     formFeedback.textContent = "Editing existing user. Save to confirm changes.";
                     userNameInput.focus();
                 });
-                actionsCell.appendChild(editButton);
+                actionsWrapper.appendChild(editButton);
+
+                const deleteButton = document.createElement("button");
+                deleteButton.type = "button";
+                deleteButton.className = "button button--secondary button--danger";
+                deleteButton.textContent = "Delete";
+
+                const isSelf = user?.id === record.id;
+                if (isSelf) {
+                    deleteButton.disabled = true;
+                    deleteButton.title = "You cannot delete your own account.";
+                } else {
+                    deleteButton.addEventListener("click", () => {
+                        handleDeleteUser(record, deleteButton);
+                    });
+                }
+
+                actionsWrapper.appendChild(deleteButton);
+
+                actionsCell.appendChild(actionsWrapper);
                 row.appendChild(actionsCell);
 
                 userTableBody.appendChild(row);
@@ -311,6 +333,51 @@
                 renderUsers(Array.isArray(data) ? data : []);
             } catch (error) {
                 formFeedback.textContent = error.message || "Unable to load users.";
+            }
+        }
+
+        async function handleDeleteUser(record, deleteButton) {
+            const confirmed = window.confirm(
+                `Are you sure you want to delete ${record.name || "this user"}?`
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            deleteButton.disabled = true;
+            deleteButton.textContent = "Deleting...";
+            formFeedback.textContent = "";
+
+            try {
+                const response = await fetch(`/api/users/${record.id}`, {
+                    method: "DELETE",
+                    headers: authHeaders,
+                });
+
+                if (response.status === 401) {
+                    logoutButton.click();
+                    return;
+                }
+
+                const responseData = await response.json().catch(() => null);
+
+                if (!response.ok) {
+                    const message = responseData?.msg || "Unable to delete user.";
+                    throw new Error(message);
+                }
+
+                if (String(userIdInput.value) === String(record.id)) {
+                    resetForm();
+                }
+
+                formFeedback.textContent = "User deleted successfully.";
+                await loadUsers();
+            } catch (error) {
+                formFeedback.textContent = error.message || "Unable to delete user.";
+            } finally {
+                deleteButton.disabled = false;
+                deleteButton.textContent = "Delete";
             }
         }
 

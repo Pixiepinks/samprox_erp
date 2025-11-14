@@ -130,6 +130,16 @@ body {
     box-shadow: none;
 }
 
+.button--danger {
+    background: linear-gradient(135deg, #dc2626, #f87171);
+    color: #fff;
+    box-shadow: 0 12px 30px rgba(220, 38, 38, 0.25);
+}
+
+.button--danger:hover {
+    box-shadow: 0 14px 34px rgba(220, 38, 38, 0.35);
+}
+
 .subnav {
     display: flex;
     gap: 0.75rem;
@@ -2077,6 +2087,12 @@ body.modal-open {
 
 .data-table tbody tr:hover {
     background: rgba(59, 130, 246, 0.08);
+}
+
+.data-table__actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 #stock-status-table th:nth-child(2),

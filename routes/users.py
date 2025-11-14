@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import asc, func
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import RoleEnum, User
@@ -146,3 +147,49 @@ def update_user(user_id: int):
     db.session.commit()
 
     return jsonify(_serialise_user(user))
+
+
+@bp.delete("/<int:user_id>")
+@jwt_required()
+def delete_user(user_id: int):
+    """Delete the selected user from the system."""
+
+    _, error = _require_admin()
+    if error:
+        return error
+
+    current_identity = get_jwt_identity()
+    try:
+        current_user_id = int(current_identity)
+    except (TypeError, ValueError):
+        current_user_id = None
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
+    if current_user_id is not None and user.id == current_user_id:
+        return jsonify({"msg": "You cannot delete your own account."}), 400
+
+    if user.role == RoleEnum.admin:
+        remaining_admins = (
+            User.query.filter(User.role == RoleEnum.admin, User.id != user.id).count()
+        )
+        if remaining_admins == 0:
+            return jsonify({"msg": "Cannot delete the last admin user."}), 400
+
+    try:
+        db.session.delete(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "msg": "Unable to delete user because they are linked to other records."
+                }
+            ),
+            400,
+        )
+
+    return jsonify({"msg": "User deleted"})

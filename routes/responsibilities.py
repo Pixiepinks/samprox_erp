@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import random
 import re
 import html
 import os
@@ -49,6 +50,29 @@ users_schema = UserSchema(many=True)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 RESEND_SENDER = "Samprox ERP <no-reply@samprox.lk>"
+
+MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
+    "Great achievements begin with clear responsibilities. Let’s make this task a success!",
+    "Every great outcome starts with ownership — lead this one with confidence and focus.",
+    "Your leadership in this responsibility will shape the results we’re aiming for.",
+    "Small steps done with consistency create big outcomes — let’s start strong!",
+    "Clear goals lead to powerful results — make this responsibility count.",
+    "Excellence begins with accountability — and this task is your next opportunity to shine.",
+    "Success follows those who take charge — let’s make this a milestone to remember.",
+    "Every responsibility is a chance to grow, improve, and achieve something greater.",
+    "You’ve got the skill and the drive — now let’s see your impact in action.",
+    "Your dedication is the foundation of progress — let’s build success together.",
+    "Big goals are achieved through small wins — start with this one.",
+    "The future belongs to those who take responsibility — lead the way!",
+    "Great teams grow through great ownership — thank you for taking this on.",
+    "Success doesn’t happen by chance, it happens by commitment — and you’ve got it.",
+    "Responsibility isn’t a burden, it’s a mark of trust — and you’ve earned it.",
+    "Every task well done adds to our collective success — let’s make this one exceptional.",
+    "When responsibility meets action, results follow — let’s make it happen!",
+    "Your initiative makes the difference — lead this with purpose and passion.",
+    "Accountability is the seed of progress — nurture it with excellence.",
+    "You are trusted with this responsibility because you make things happen — let’s do it again!",
+)
 
 
 def _send_email_via_resend(data: dict) -> None:
@@ -195,15 +219,19 @@ def _compose_responsibility_email(
     """Return a formatted email body with greeting and inspirational closing."""
 
     first_name = _first_name_from(name_hint, recipient)
-    greeting_line = f"Hi {first_name}, A new responsibility has been {verb} to you."
+    greeting_lines = [
+        f"Hi {first_name},",
+        f"A new responsibility has been {verb} to you.",
+    ]
 
-    body_lines = [greeting_line, ""]
+    body_lines = greeting_lines + [""]
     body_lines.extend(content_lines)
+    motivational_line = random.choice(MOTIVATIONAL_MESSAGES)
     body_lines.extend(
         [
             "",
-            "Great achievements begin with clear responsibilities.",
-            "Let’s make this task a success; I’ll be tracking your progress and milestones.",
+            motivational_line,
+            "",
             "Regards,",
             "Maximus — Your AICEO",
         ]

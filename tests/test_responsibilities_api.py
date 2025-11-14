@@ -144,11 +144,18 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             ],
         }
 
-        response = self.client.post(
-            "/api/responsibilities",
-            headers=self.auth_headers,
-            json=payload,
-        )
+        with patch(
+            "routes.responsibilities.random.choice",
+            return_value=(
+                "Great achievements begin with clear responsibilities. "
+                "Let’s make this task a success!"
+            ),
+        ):
+            response = self.client.post(
+                "/api/responsibilities",
+                headers=self.auth_headers,
+                json=payload,
+            )
 
         self.assertEqual(response.status_code, 201)
         data = response.get_json()
@@ -198,13 +205,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         )
         self.assertIn("Safety walkdown", general_email["subject"])
         self.assertIn(
-            "Hi Bob, A new responsibility has been assigned to you.",
+            "Hi Bob,<br>A new responsibility has been assigned to you.",
             general_email["html"],
         )
         self.assertIn("Responsibility overview:", general_email["html"])
         self.assertIn("Delegated allocations:", general_email["html"])
         self.assertIn(
-            "Great achievements begin with clear responsibilities.",
+            "Great achievements begin with clear responsibilities. Let’s make this task a success!",
             general_email["html"],
         )
         self.assertIn("Maximus — Your AICEO", general_email["html"])
@@ -214,7 +221,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             if message.get("to", [None])[0] == "sudara@example.com"
         )
         self.assertIn(
-            "Hi Sudara, A new responsibility has been delegated to you.",
+            "Hi Sudara,<br>A new responsibility has been delegated to you.",
             delegate_email["html"],
         )
         self.assertIn("Delegated allocation assigned to you", delegate_email["html"])

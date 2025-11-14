@@ -1,10 +1,8 @@
 from __future__ import annotations
 
+import html
 import os
 import re
-import smtplib
-import ssl
-import socket
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
@@ -14,11 +12,10 @@ import requests
 from requests import exceptions as requests_exceptions
 from flask import Blueprint, jsonify, request, url_for, current_app
 from flask_jwt_extended import get_jwt, jwt_required
-from flask_mail import Message
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
-from extensions import db, mail
+from extensions import db
 from models import (
     MachineAsset,
     MachinePart,
@@ -248,140 +245,82 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
         if address and address.strip().lower() not in recipient_set
     ]
 
-    api_key = os.environ.get("RESEND_API_KEY")
-    if api_key:
-        resend_success, resend_message = _send_email_via_resend(
-            subject,
-            primary_recipient,
-            body,
-            filtered_cc,
-            filtered_bcc,
-            api_key,
-        )
-        if resend_success:
-            return resend_success, resend_message
-        if resend_message:
-            current_app.logger.info(
-                "Resend delivery failed; attempting Flask-Mail fallback: %s",
-                resend_message,
-            )
+    html_body = html.escape(body).replace("\n", "<br>")
 
-    return _send_email_via_mail(
-        subject,
-        primary_recipient,
-        body,
-        filtered_bcc,
-        filtered_cc,
-    )
-
-
-def _send_email_via_resend(
-    subject: str,
-    recipient: str,
-    body: str,
-    cc: list[str],
-    bcc: list[str],
-    api_key: str,
-) -> tuple[bool, Optional[str]]:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
     data: dict[str, object] = {
         "from": _resolve_sender(),
-        "to": [recipient],
+        "to": [primary_recipient],
         "subject": subject,
         "text": body,
+        "html": html_body,
     }
-    if cc:
-        data["cc"] = cc
-    if bcc:
-        data["bcc"] = bcc
+    if filtered_cc:
+        data["cc"] = filtered_cc
+    if filtered_bcc:
+        data["bcc"] = filtered_bcc
 
     try:
-        response = requests.post(RESEND_ENDPOINT, headers=headers, json=data, timeout=15)
-        response.raise_for_status()
+        _send_email_via_resend(data)
+    except KeyError as exc:  # pragma: no cover - configuration error
+        current_app.logger.warning(
+            "RESEND_API_KEY is not configured for maintenance job emails."
+        )
+        message = "Failed to send the notification email: email service is not configured."
     except requests_exceptions.Timeout as exc:
         current_app.logger.warning(
             "Failed to send maintenance job email due to timeout: %s", exc, exc_info=exc
         )
-        return False, "Failed to send the notification email: the email service timed out."
+        message = "Failed to send the notification email: the email service timed out."
     except requests_exceptions.HTTPError as exc:
         status_code = getattr(getattr(exc, "response", None), "status_code", None)
         if status_code in {401, 403}:
             message = "Failed to send the notification email: authentication failed."
-        elif status_code and 500 <= status_code < 600:
-            message = "Failed to send the notification email: the email service is unavailable."
         else:
-            message = "Failed to send the notification email: the email request was rejected."
+            message = "Failed to send the notification email: the email service returned an error."
         current_app.logger.warning(
             "Failed to send maintenance job email (status %s): %s",
             status_code,
             exc,
             exc_info=exc,
         )
-        if status_code in {401, 403}:
-            fallback_success, fallback_message = _send_email_via_mail(
-                subject,
-                recipient,
-                body,
-                bcc,
-                cc,
-            )
-            if fallback_success:
-                current_app.logger.info(
-                    "Resend authentication failed; delivered maintenance job email via Flask-Mail."
-                )
-                return True, fallback_message
-            if fallback_message:
-                return False, fallback_message
-        return False, message
-    except requests_exceptions.RequestException as exc:
+    except requests_exceptions.SSLError as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to SSL error: %s",
+            exc,
+            exc_info=exc,
+        )
+        message = "Failed to send the notification email: a secure connection to the email service could not be established."
+    except requests_exceptions.ConnectionError as exc:
+        current_app.logger.warning(
+            "Failed to send maintenance job email due to connection error: %s",
+            exc,
+            exc_info=exc,
+        )
+        message = "Failed to send the notification email: the email service could not be reached."
+    except requests_exceptions.RequestException as exc:  # pragma: no cover - logging only
         current_app.logger.warning(
             "Failed to send maintenance job email: %s", exc, exc_info=exc
         )
-        return False, "Failed to send the notification email: unable to reach the email service."
-
-    return True, f"Notification email sent to {recipient}."
-
-
-def _send_email_via_mail(
-    subject: str,
-    recipient: str,
-    body: str,
-    bcc: list[str],
-    cc: Optional[list[str]] = None,
-) -> tuple[bool, Optional[str]]:
-    try:
-        message = Message(subject, recipients=[recipient])
-        default_sender = current_app.config.get("MAIL_DEFAULT_SENDER")
-        if default_sender:
-            message.sender = default_sender
-        if cc:
-            message.cc = cc
-        if bcc:
-            message.bcc = bcc
-        message.body = body
-        mail.send(message)
-        return True, f"Notification email sent to {recipient}."
-    except Exception as exc:  # pragma: no cover - logging only
-        current_app.logger.warning("Failed to send maintenance job email: %s", exc)
         message = "Failed to send the notification email."
-        if isinstance(exc, (socket.timeout, TimeoutError)):
-            message = "Failed to send the notification email: the mail server timed out."
-        elif isinstance(exc, smtplib.SMTPAuthenticationError):
-            message = "Failed to send the notification email: authentication failed."
-        elif isinstance(exc, smtplib.SMTPConnectError):
-            message = "Failed to send the notification email: could not connect to the mail server."
-        elif isinstance(exc, smtplib.SMTPRecipientsRefused):
-            message = "Failed to send the notification email: the recipient address was rejected."
-        elif isinstance(exc, ssl.SSLCertVerificationError):
-            message = "Failed to send the notification email: the mail server's SSL certificate could not be verified."
-        elif isinstance(exc, ssl.SSLError):
-            message = "Failed to send the notification email: a secure connection to the mail server could not be established."
-        elif isinstance(exc, OSError) and getattr(exc, "errno", None) in {101, 111}:
-            message = "Failed to send the notification email: the mail server could not be reached."
-        return False, message
+    else:
+        return True, f"Notification email sent to {primary_recipient}."
+
+    return False, f"{message} Please notify them manually."
+
+
+def _send_email_via_resend(data: dict) -> None:
+    api_key = os.environ["RESEND_API_KEY"]
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        RESEND_ENDPOINT,
+        headers=headers,
+        json=data,
+        timeout=15,
+    )
+    response.raise_for_status()
 
 
 @bp.get("/next-code")

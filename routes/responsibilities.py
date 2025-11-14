@@ -75,8 +75,15 @@ MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
 )
 
 
+def _resend_api_key() -> str:
+    api_key = os.environ["RESEND_API_KEY"].strip()
+    if not api_key:
+        raise KeyError("RESEND_API_KEY")
+    return api_key
+
+
 def _send_email_via_resend(data: dict) -> None:
-    api_key = os.environ["RESEND_API_KEY"]
+    api_key = _resend_api_key()
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -599,7 +606,7 @@ def send_weekly_email(
     try:
         response = requests.post(
             RESEND_ENDPOINT,
-            headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+            headers={"Authorization": f"Bearer {_resend_api_key()}"},
             json=data,
             timeout=15,
         )

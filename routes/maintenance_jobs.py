@@ -308,8 +308,15 @@ def _send_email(subject: str, recipient: Optional[str], body: str) -> tuple[bool
     return False, f"{message} Please notify them manually."
 
 
+def _resend_api_key() -> str:
+    api_key = os.environ["RESEND_API_KEY"].strip()
+    if not api_key:
+        raise KeyError("RESEND_API_KEY")
+    return api_key
+
+
 def _send_email_via_resend(data: dict) -> None:
-    api_key = os.environ["RESEND_API_KEY"]
+    api_key = _resend_api_key()
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",

@@ -1,13 +1,16 @@
-"""Add responsibility delegations table"""
+"""Add responsibility delegations table
 
-"""Add responsibility delegations table"""
+Revision ID: 1f0f3d2c7e45
+Revises: 1f9c6b304abc
+Create Date: 2025-11-14 12:00:00.000000
+"""
 
 from alembic import op
 import sqlalchemy as sa
 
 
 revision = "1f0f3d2c7e45"
-down_revision = "0decbf7fe4f3"
+down_revision = "1f9c6b304abc"
 branch_labels = None
 depends_on = None
 

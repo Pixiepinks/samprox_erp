@@ -11,7 +11,15 @@ from models import (
     ResponsibilityTask,
     ResponsibilityRecurrence,
     ResponsibilityTaskStatus,
+    ResponsibilityPerformanceUnit,
     User,
+)
+from responsibility_performance import (
+    calculate_metric,
+    format_metric,
+    format_performance_value,
+    parse_performance_value,
+    unit_input_type,
 )
 
 class UserSchema(Schema):
@@ -729,6 +737,23 @@ class ResponsibilityTaskSchema(Schema):
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
     progress = fields.Int(data_key="progress")
     recipient_email = fields.Str(data_key="recipientEmail")
+    performance_unit = fields.Method("get_performance_unit", data_key="performanceUnit")
+    performance_input_type = fields.Method(
+        "get_performance_input_type",
+        data_key="performanceInputType",
+    )
+    performance_responsible = fields.Method(
+        "get_performance_responsible",
+        data_key="performanceResponsible",
+    )
+    performance_actual = fields.Method(
+        "get_performance_actual",
+        data_key="performanceActual",
+    )
+    performance_metric = fields.Method(
+        "get_performance_metric",
+        data_key="performanceMetric",
+    )
     assigner = fields.Nested(UserSchema, dump_only=True)
     assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
     delegated_to = fields.Nested(UserSchema, dump_only=True, allow_none=True, data_key="delegatedTo")
@@ -776,6 +801,45 @@ class ResponsibilityTaskSchema(Schema):
     def get_updated_at(self, obj):
         return format_datetime_as_colombo_iso(getattr(obj, "updated_at", None), assume_local=True)
 
+    def _resolve_unit(self, obj) -> ResponsibilityPerformanceUnit:
+        value = getattr(obj, "perf_uom", None)
+        if isinstance(value, ResponsibilityPerformanceUnit):
+            return value
+        if isinstance(value, str):
+            try:
+                return ResponsibilityPerformanceUnit(value)
+            except ValueError:
+                return ResponsibilityPerformanceUnit.PERCENTAGE_PCT
+        return ResponsibilityPerformanceUnit.PERCENTAGE_PCT
+
+    def get_performance_unit(self, obj):
+        unit = getattr(obj, "perf_uom", None)
+        if isinstance(unit, ResponsibilityPerformanceUnit):
+            return unit.value
+        if isinstance(unit, str):
+            return unit
+        return ResponsibilityPerformanceUnit.PERCENTAGE_PCT.value
+
+    def get_performance_input_type(self, obj):
+        unit = self._resolve_unit(obj)
+        return unit_input_type(unit)
+
+    def _format_performance_value(self, obj, attribute):
+        unit = self._resolve_unit(obj)
+        value = getattr(obj, attribute, None)
+        return format_performance_value(unit, value)
+
+    def get_performance_responsible(self, obj):
+        return self._format_performance_value(obj, "perf_responsible_value")
+
+    def get_performance_actual(self, obj):
+        return self._format_performance_value(obj, "perf_actual_value")
+
+    def get_performance_metric(self, obj):
+        unit = self._resolve_unit(obj)
+        metric = getattr(obj, "perf_metric_value", None)
+        return format_metric(unit, metric)
+
 
 class ResponsibilityTaskCreateSchema(Schema):
     title = fields.Str(required=True)
@@ -791,6 +855,20 @@ class ResponsibilityTaskCreateSchema(Schema):
     action = fields.Str(required=True)
     action_notes = fields.Str(allow_none=True, data_key="actionNotes")
     progress = fields.Int(allow_none=True, validate=Range(min=0, max=100))
+    performance_unit = fields.Str(required=True, data_key="performanceUnit")
+    performance_responsible = fields.Decimal(
+        required=True,
+        data_key="performanceResponsible",
+        allow_none=False,
+        as_string=True,
+        places=4,
+    )
+    performance_actual = fields.Decimal(
+        allow_none=True,
+        data_key="performanceActual",
+        as_string=True,
+        places=4,
+    )
 
     class Meta:
         ordered = True
@@ -837,6 +915,45 @@ class ResponsibilityTaskCreateSchema(Schema):
         elif isinstance(progress, float):
             normalized["progress"] = int(round(progress))
 
+        performance_unit = normalized.get("performanceUnit")
+        if isinstance(performance_unit, str):
+            normalized_unit = performance_unit.strip().lower().replace(" ", "_")
+            normalized["performanceUnit"] = normalized_unit
+        else:
+            normalized_unit = performance_unit
+
+        unit_enum = None
+        if isinstance(normalized_unit, ResponsibilityPerformanceUnit):
+            unit_enum = normalized_unit
+        elif isinstance(normalized_unit, str):
+            try:
+                unit_enum = ResponsibilityPerformanceUnit(normalized_unit)
+            except ValueError:
+                unit_enum = None
+
+        if unit_enum is not None:
+            responsible_value = normalized.get("performanceResponsible")
+            actual_value = normalized.get("performanceActual")
+
+            try:
+                normalized["performanceResponsible"] = parse_performance_value(
+                    unit_enum,
+                    "" if responsible_value is None else str(responsible_value),
+                )
+            except ValueError as error:
+                raise ValidationError(str(error), field_name="performanceResponsible") from error
+
+            if actual_value is None:
+                normalized["performanceActual"] = None
+            else:
+                try:
+                    normalized["performanceActual"] = parse_performance_value(
+                        unit_enum,
+                        str(actual_value),
+                    )
+                except ValueError as error:
+                    raise ValidationError(str(error), field_name="performanceActual") from error
+
         return normalized
 
     @validates("recurrence")
@@ -861,6 +978,13 @@ class ResponsibilityTaskCreateSchema(Schema):
             ResponsibilityAction(value)
         except ValueError as error:
             raise ValidationError("Invalid 5D action option.") from error
+
+    @validates("performance_unit")
+    def validate_performance_unit(self, value):
+        try:
+            ResponsibilityPerformanceUnit(value)
+        except ValueError as error:
+            raise ValidationError("Invalid unit of measure option.") from error
 
     @validates("custom_weekdays")
     def validate_custom_weekdays(self, value):
@@ -902,4 +1026,10 @@ class ResponsibilityTaskCreateSchema(Schema):
             raise ValidationError(
                 "Provide discussion points or reasons for this action.",
                 "actionNotes",
+            )
+
+        if data.get("performance_responsible") is None:
+            raise ValidationError(
+                "Enter a responsible target value.",
+                field_name="performanceResponsible",
             )

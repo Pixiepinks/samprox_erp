@@ -67,24 +67,159 @@
                     </form>
                     <p class="responsibility-plan__message" id="responsibility-weekly-message" hidden></p>
                 </div>
+                <div class="responsibility-plan__controls" id="responsibility-table-controls">
+                    <div class="responsibility-plan__control-group">
+                        <label class="responsibility-plan__control-label" for="responsibility-period-start">
+                            Period start
+                            <input
+                                class="responsibility-plan__control-input"
+                                id="responsibility-period-start"
+                                name="periodStart"
+                                type="date"
+                            />
+                        </label>
+                        <label class="responsibility-plan__control-label" for="responsibility-period-end">
+                            Period end
+                            <input
+                                class="responsibility-plan__control-input"
+                                id="responsibility-period-end"
+                                name="periodEnd"
+                                type="date"
+                            />
+                        </label>
+                        <button type="button" class="button button--ghost button--small" id="responsibility-period-clear">
+                            Clear period
+                        </button>
+                    </div>
+                    <div class="responsibility-plan__control-group">
+                        <label class="responsibility-plan__control-label" for="responsibility-filter-column">
+                            Filter column
+                            <select
+                                class="responsibility-plan__control-input"
+                                id="responsibility-filter-column"
+                                name="filterColumn"
+                            ></select>
+                        </label>
+                        <label class="responsibility-plan__control-label" for="responsibility-filter-value">
+                            Filter value
+                            <input
+                                class="responsibility-plan__control-input"
+                                id="responsibility-filter-value"
+                                name="filterValue"
+                                type="text"
+                                placeholder="Search responsibilities"
+                                autocomplete="off"
+                            />
+                        </label>
+                        <button type="button" class="button button--ghost button--small" id="responsibility-filter-clear">
+                            Clear filter
+                        </button>
+                    </div>
+                </div>
                 <div class="table-container">
                     <table class="team-table responsibility-table">
                         <thead>
                             <tr>
-                                <th scope="col">Responsibility No</th>
-                                <th scope="col">Title</th>
-                                <th scope="col">Progress</th>
-                                <th scope="col">Assigned by</th>
-                                <th scope="col">Assigned to</th>
-                                <th scope="col">Delegated to</th>
-                                <th scope="col">Unit of Measure</th>
-                                <th scope="col">Responsible</th>
-                                <th scope="col">Actual</th>
-                                <th scope="col">Performance Metric</th>
-                                <th scope="col">Detail</th>
-                                <th scope="col">Scheduled for</th>
-                                <th scope="col">5D Action</th>
-                                <th scope="col">Created</th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="number">
+                                        <span>Responsibility No</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="title">
+                                        <span>Title</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="progress">
+                                        <span>Progress</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="assigner">
+                                        <span>Assigned by</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="assignee">
+                                        <span>Assigned to</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="delegatedTo">
+                                        <span>Delegated to</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="performanceUnit">
+                                        <span>Unit of Measure</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button
+                                        type="button"
+                                        class="responsibility-table__sort-button"
+                                        data-sort-key="performanceResponsible"
+                                    >
+                                        <span>Responsible</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button
+                                        type="button"
+                                        class="responsibility-table__sort-button"
+                                        data-sort-key="performanceActual"
+                                    >
+                                        <span>Actual</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button
+                                        type="button"
+                                        class="responsibility-table__sort-button"
+                                        data-sort-key="performanceMetric"
+                                    >
+                                        <span>Performance Metric</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="detail">
+                                        <span>Detail</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button
+                                        type="button"
+                                        class="responsibility-table__sort-button"
+                                        data-sort-key="scheduledFor"
+                                    >
+                                        <span>Scheduled for</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="action">
+                                        <span>5D Action</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
+                                <th scope="col" aria-sort="none">
+                                    <button type="button" class="responsibility-table__sort-button" data-sort-key="createdAt">
+                                        <span>Created</span>
+                                        <span class="responsibility-table__sort-icon" aria-hidden="true">⇅</span>
+                                    </button>
+                                </th>
                                 <th scope="col">Update</th>
                             </tr>
                         </thead>
@@ -449,6 +584,13 @@
         const responsibilityTableBody = document.getElementById("responsibility-table-body");
         const responsibilityEmptyState = document.getElementById("responsibility-empty");
         const responsibilityMessage = document.getElementById("responsibility-message");
+        const responsibilityPeriodStartInput = document.getElementById("responsibility-period-start");
+        const responsibilityPeriodEndInput = document.getElementById("responsibility-period-end");
+        const responsibilityPeriodClearButton = document.getElementById("responsibility-period-clear");
+        const responsibilityFilterColumnSelect = document.getElementById("responsibility-filter-column");
+        const responsibilityFilterValueInput = document.getElementById("responsibility-filter-value");
+        const responsibilityFilterClearButton = document.getElementById("responsibility-filter-clear");
+        const responsibilitySortButtons = document.querySelectorAll(".responsibility-table__sort-button");
         const responsibilityReportForm = document.getElementById("responsibility-report-form");
         const responsibilityReportStart = document.getElementById("responsibility-report-start");
         const responsibilityReportEnd = document.getElementById("responsibility-report-end");
@@ -513,9 +655,18 @@
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
         const responsibilityTeamMembers = new Map();
+        let responsibilityTasks = [];
         let responsibilityAssignees = [];
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
+        let responsibilitySortKey = null;
+        let responsibilitySortDirection = "ascending";
+        let responsibilityFilterColumn = "all";
+        let responsibilityFilterQuery = "";
+        let responsibilityPeriodStart = "";
+        let responsibilityPeriodEnd = "";
+        const responsibilityEmptyDefaultText = responsibilityEmptyState?.textContent?.trim() || "";
+        const responsibilityEmptyFilteredText = "No responsibilities match the selected filters.";
 
         const preferNonEmptyString = (...values) => {
             for (const value of values) {
@@ -1749,6 +1900,429 @@
             return getUserDisplay(task?.assignee, [task?.assigneeEmail]);
         };
 
+        const getNormalizedDateString = (value) => {
+            if (!value) {
+                return "";
+            }
+
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) {
+                    return "";
+                }
+                const year = String(value.getFullYear()).padStart(4, "0");
+                const month = String(value.getMonth() + 1).padStart(2, "0");
+                const day = String(value.getDate()).padStart(2, "0");
+                return `${year}-${month}-${day}`;
+            }
+
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (!trimmed) {
+                    return "";
+                }
+                if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+                    return trimmed;
+                }
+                const parsed = new Date(trimmed);
+                if (Number.isNaN(parsed.getTime())) {
+                    return "";
+                }
+                const year = String(parsed.getFullYear()).padStart(4, "0");
+                const month = String(parsed.getMonth() + 1).padStart(2, "0");
+                const day = String(parsed.getDate()).padStart(2, "0");
+                return `${year}-${month}-${day}`;
+            }
+
+            try {
+                const parsed = new Date(value);
+                if (Number.isNaN(parsed.getTime())) {
+                    return "";
+                }
+                const year = String(parsed.getFullYear()).padStart(4, "0");
+                const month = String(parsed.getMonth() + 1).padStart(2, "0");
+                const day = String(parsed.getDate()).padStart(2, "0");
+                return `${year}-${month}-${day}`;
+            } catch (_) {
+                return "";
+            }
+        };
+
+        const sanitizeFilterValue = (value) => {
+            if (value === null || value === undefined) {
+                return "";
+            }
+
+            if (value instanceof Date) {
+                return getNormalizedDateString(value);
+            }
+
+            if (typeof value === "number") {
+                return Number.isFinite(value) ? String(value) : "";
+            }
+
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                if (!trimmed || trimmed === "—") {
+                    return "";
+                }
+                return trimmed;
+            }
+
+            return String(value);
+        };
+
+        const getTaskPerformanceContext = (task) => {
+            const unitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
+            return { unitValue, config: getPerformanceConfig(unitValue) };
+        };
+
+        const RESPONSIBILITY_TABLE_COLUMNS = {
+            number: {
+                label: "Responsibility No",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => sanitizeFilterValue(preferNonEmptyString(task?.number, task?.id)),
+            },
+            title: {
+                label: "Title",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => sanitizeFilterValue(task?.title),
+            },
+            progress: {
+                label: "Progress",
+                type: "number",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => clampProgressValue(task?.progress),
+                getFilterValue: (task) => String(clampProgressValue(task?.progress)),
+            },
+            assigner: {
+                label: "Assigned by",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) =>
+                    sanitizeFilterValue(
+                        preferNonEmptyString(task?.assignerName, task?.assignerEmail, assignerNameFallback(task?.assigner)),
+                    ),
+            },
+            assignee: {
+                label: "Assigned to",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => sanitizeFilterValue(getTaskAssigneeDisplay(task)),
+            },
+            delegatedTo: {
+                label: "Delegated to",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const { unitValue, config } = getTaskPerformanceContext(task);
+                    return sanitizeFilterValue(formatResponsibilityDelegations(task, unitValue, config));
+                },
+            },
+            performanceUnit: {
+                label: "Unit of Measure",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const { config } = getTaskPerformanceContext(task);
+                    return sanitizeFilterValue(config.label);
+                },
+            },
+            performanceResponsible: {
+                label: "Responsible",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const { unitValue, config } = getTaskPerformanceContext(task);
+                    return sanitizeFilterValue(
+                        formatPerformanceValueDisplay(task?.performanceResponsible, unitValue, config),
+                    );
+                },
+            },
+            performanceActual: {
+                label: "Actual",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const { unitValue, config } = getTaskPerformanceContext(task);
+                    return sanitizeFilterValue(
+                        formatPerformanceValueDisplay(task?.performanceActual, unitValue, config),
+                    );
+                },
+            },
+            performanceMetric: {
+                label: "Performance Metric",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const { unitValue, config } = getTaskPerformanceContext(task);
+                    return sanitizeFilterValue(
+                        formatPerformanceMetricDisplay(task?.performanceMetric, unitValue, config),
+                    );
+                },
+            },
+            detail: {
+                label: "Detail",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => sanitizeFilterValue(task?.detail),
+            },
+            scheduledFor: {
+                label: "Scheduled for",
+                type: "date",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    const dateKey = getNormalizedDateString(task?.scheduledFor);
+                    if (!dateKey) {
+                        return null;
+                    }
+                    return new Date(`${dateKey}T00:00:00Z`);
+                },
+                getFilterValue: (task) => {
+                    const normalized = getNormalizedDateString(task?.scheduledFor);
+                    const formatted = sanitizeFilterValue(formatResponsibilityDate(task?.scheduledFor));
+                    return sanitizeFilterValue([normalized, formatted].filter(Boolean).join(" "));
+                },
+            },
+            action: {
+                label: "5D Action",
+                type: "text",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => sanitizeFilterValue(formatResponsibilityAction(task?.action)),
+            },
+            createdAt: {
+                label: "Created",
+                type: "date",
+                sortable: true,
+                filterable: true,
+                getValue: (task) => {
+                    if (!task?.createdAt) {
+                        return null;
+                    }
+                    const parsed = new Date(task.createdAt);
+                    return Number.isNaN(parsed.getTime()) ? null : parsed;
+                },
+                getFilterValue: (task) => {
+                    const formatted = sanitizeFilterValue(formatResponsibilityDateTime(task?.createdAt));
+                    const normalized = getNormalizedDateString(task?.createdAt);
+                    return sanitizeFilterValue([normalized, formatted].filter(Boolean).join(" "));
+                },
+            },
+        };
+
+        const RESPONSIBILITY_FILTERABLE_KEYS = Object.entries(RESPONSIBILITY_TABLE_COLUMNS)
+            .filter(([, config]) => config?.filterable)
+            .map(([key]) => key);
+
+        const getColumnFilterValue = (task, key) => {
+            const definition = RESPONSIBILITY_TABLE_COLUMNS[key];
+            if (!definition) {
+                return "";
+            }
+            const rawValue =
+                typeof definition.getFilterValue === "function"
+                    ? definition.getFilterValue(task)
+                    : definition.getValue(task);
+            return sanitizeFilterValue(rawValue);
+        };
+
+        const getTaskScheduledDateKey = (task) => getNormalizedDateString(task?.scheduledFor);
+
+        const getSortValue = (task, key) => {
+            const definition = RESPONSIBILITY_TABLE_COLUMNS[key];
+            if (!definition) {
+                return { value: null, isEmpty: true };
+            }
+
+            const rawValue = definition.getValue(task);
+            if (definition.type === "number") {
+                const numeric = Number(rawValue);
+                if (!Number.isFinite(numeric)) {
+                    return { value: 0, isEmpty: true };
+                }
+                return { value: numeric, isEmpty: false };
+            }
+
+            if (definition.type === "date") {
+                if (!rawValue) {
+                    return { value: 0, isEmpty: true };
+                }
+                const dateValue = rawValue instanceof Date ? rawValue : new Date(rawValue);
+                const timestamp = dateValue.getTime();
+                if (!Number.isFinite(timestamp)) {
+                    return { value: 0, isEmpty: true };
+                }
+                return { value: timestamp, isEmpty: false };
+            }
+
+            const textValue = sanitizeFilterValue(rawValue).toLowerCase();
+            if (!textValue) {
+                return { value: "", isEmpty: true };
+            }
+            return { value: textValue, isEmpty: false };
+        };
+
+        const matchesPeriodFilter = (task) => {
+            if (!responsibilityPeriodStart && !responsibilityPeriodEnd) {
+                return true;
+            }
+            const scheduledKey = getTaskScheduledDateKey(task);
+            if (!scheduledKey) {
+                return false;
+            }
+            if (responsibilityPeriodStart && scheduledKey < responsibilityPeriodStart) {
+                return false;
+            }
+            if (responsibilityPeriodEnd && scheduledKey > responsibilityPeriodEnd) {
+                return false;
+            }
+            return true;
+        };
+
+        const matchesFilterQuery = (task) => {
+            const query = responsibilityFilterQuery.trim().toLowerCase();
+            if (!query) {
+                return true;
+            }
+
+            if (responsibilityFilterColumn && responsibilityFilterColumn !== "all") {
+                const value = getColumnFilterValue(task, responsibilityFilterColumn).toLowerCase();
+                return value.includes(query);
+            }
+
+            return RESPONSIBILITY_FILTERABLE_KEYS.some((key) =>
+                getColumnFilterValue(task, key).toLowerCase().includes(query),
+            );
+        };
+
+        const getFilteredResponsibilityTasks = () => {
+            const tasks = Array.isArray(responsibilityTasks) ? responsibilityTasks : [];
+            return tasks.filter((task) => matchesPeriodFilter(task) && matchesFilterQuery(task));
+        };
+
+        const sortResponsibilityTasks = (tasks) => {
+            if (!responsibilitySortKey) {
+                return tasks.slice();
+            }
+
+            const definition = RESPONSIBILITY_TABLE_COLUMNS[responsibilitySortKey];
+            if (!definition?.sortable) {
+                return tasks.slice();
+            }
+
+            return tasks.slice().sort((a, b) => {
+                const aValue = getSortValue(a, responsibilitySortKey);
+                const bValue = getSortValue(b, responsibilitySortKey);
+
+                if (aValue.isEmpty && bValue.isEmpty) {
+                    return 0;
+                }
+                if (aValue.isEmpty) {
+                    return responsibilitySortDirection === "ascending" ? 1 : -1;
+                }
+                if (bValue.isEmpty) {
+                    return responsibilitySortDirection === "ascending" ? -1 : 1;
+                }
+
+                if (aValue.value < bValue.value) {
+                    return responsibilitySortDirection === "ascending" ? -1 : 1;
+                }
+                if (aValue.value > bValue.value) {
+                    return responsibilitySortDirection === "ascending" ? 1 : -1;
+                }
+                return 0;
+            });
+        };
+
+        const RESPONSIBILITY_SORT_ICONS = {
+            ascending: "▲",
+            descending: "▼",
+            none: "⇅",
+        };
+
+        const updateSortIndicators = () => {
+            responsibilitySortButtons.forEach((button) => {
+                const key = button.dataset.sortKey;
+                const header = button.closest("th");
+                const icon = button.querySelector(".responsibility-table__sort-icon");
+                const isActive = Boolean(key) && key === responsibilitySortKey;
+
+                if (header) {
+                    header.setAttribute(
+                        "aria-sort",
+                        isActive && responsibilitySortKey
+                            ? responsibilitySortDirection === "descending"
+                                ? "descending"
+                                : "ascending"
+                            : "none",
+                    );
+                }
+
+                if (icon) {
+                    if (!isActive || !responsibilitySortKey) {
+                        icon.textContent = RESPONSIBILITY_SORT_ICONS.none;
+                    } else if (responsibilitySortDirection === "descending") {
+                        icon.textContent = RESPONSIBILITY_SORT_ICONS.descending;
+                    } else {
+                        icon.textContent = RESPONSIBILITY_SORT_ICONS.ascending;
+                    }
+                }
+            });
+        };
+
+        const updateFilterPlaceholder = () => {
+            if (!responsibilityFilterValueInput) {
+                return;
+            }
+
+            if (!responsibilityFilterColumn || responsibilityFilterColumn === "all") {
+                responsibilityFilterValueInput.placeholder = "Search responsibilities";
+                return;
+            }
+
+            const definition = RESPONSIBILITY_TABLE_COLUMNS[responsibilityFilterColumn];
+            const label = definition?.label || "column";
+            responsibilityFilterValueInput.placeholder = `Search ${label.toLowerCase()}`;
+        };
+
+        const populateResponsibilityFilterOptions = () => {
+            if (!responsibilityFilterColumnSelect) {
+                return;
+            }
+
+            responsibilityFilterColumnSelect.innerHTML = "";
+
+            const allOption = document.createElement("option");
+            allOption.value = "all";
+            allOption.textContent = "All columns";
+            responsibilityFilterColumnSelect.appendChild(allOption);
+
+            Object.entries(RESPONSIBILITY_TABLE_COLUMNS)
+                .filter(([, config]) => config?.filterable)
+                .forEach(([key, config]) => {
+                    const option = document.createElement("option");
+                    option.value = key;
+                    option.textContent = config.label;
+                    responsibilityFilterColumnSelect.appendChild(option);
+                });
+
+            responsibilityFilterColumnSelect.value = responsibilityFilterColumn || "all";
+        };
+
         const renderResponsibilityRow = (task) => {
             const row = document.createElement("tr");
             row.dataset.id = task?.id;
@@ -1824,25 +2398,44 @@
             return row;
         };
 
-        const updateResponsibilityTable = (tasks) => {
+        const renderResponsibilityTable = () => {
             if (!responsibilityTableBody) {
                 return;
             }
 
-            responsibilityTasks = Array.isArray(tasks) ? tasks : [];
+            const hasPeriodFilter = Boolean(responsibilityPeriodStart || responsibilityPeriodEnd);
+            const hasTextFilter = Boolean(responsibilityFilterQuery.trim());
+            const hasActiveFilter = hasPeriodFilter || hasTextFilter;
 
+            if (responsibilityEmptyState) {
+                const fallbackText = responsibilityEmptyDefaultText || responsibilityEmptyState.textContent || "";
+                responsibilityEmptyState.textContent = hasActiveFilter
+                    ? responsibilityEmptyFilteredText
+                    : fallbackText;
+            }
+
+            const filteredTasks = sortResponsibilityTasks(getFilteredResponsibilityTasks());
             responsibilityTableBody.innerHTML = "";
-            if (responsibilityTasks.length === 0) {
+
+            if (filteredTasks.length === 0) {
                 responsibilityEmptyState?.removeAttribute("hidden");
+                updateSortIndicators();
                 return;
             }
 
             responsibilityEmptyState?.setAttribute("hidden", "");
 
-            responsibilityTasks.forEach((task) => {
+            filteredTasks.forEach((task) => {
                 const row = renderResponsibilityRow(task);
                 responsibilityTableBody.appendChild(row);
             });
+
+            updateSortIndicators();
+        };
+
+        const updateResponsibilityTable = (tasks) => {
+            responsibilityTasks = Array.isArray(tasks) ? tasks : [];
+            renderResponsibilityTable();
         };
 
         const fetchResponsibilities = async () => {
@@ -2598,6 +3191,81 @@
         responsibilityActionNotesCancel?.addEventListener("click", responsibilityActionNotesCancelHandler);
         responsibilityActionNotesOverlay?.addEventListener("click", responsibilityActionNotesOverlayHandler);
         responsibilityActionNotesClose?.addEventListener("click", responsibilityActionNotesCloseHandler);
+
+        populateResponsibilityFilterOptions();
+        updateFilterPlaceholder();
+        updateSortIndicators();
+
+        const applyPeriodFilters = () => {
+            responsibilityPeriodStart = getNormalizedDateString(responsibilityPeriodStartInput?.value);
+            responsibilityPeriodEnd = getNormalizedDateString(responsibilityPeriodEndInput?.value);
+            renderResponsibilityTable();
+        };
+
+        responsibilityPeriodStartInput?.addEventListener("change", applyPeriodFilters);
+        responsibilityPeriodEndInput?.addEventListener("change", applyPeriodFilters);
+
+        responsibilityPeriodClearButton?.addEventListener("click", () => {
+            if (responsibilityPeriodStartInput) {
+                responsibilityPeriodStartInput.value = "";
+            }
+            if (responsibilityPeriodEndInput) {
+                responsibilityPeriodEndInput.value = "";
+            }
+            responsibilityPeriodStart = "";
+            responsibilityPeriodEnd = "";
+            renderResponsibilityTable();
+        });
+
+        responsibilityFilterColumnSelect?.addEventListener("change", (event) => {
+            const selected = event.target?.value || "all";
+            responsibilityFilterColumn = selected;
+            updateFilterPlaceholder();
+            renderResponsibilityTable();
+        });
+
+        responsibilityFilterValueInput?.addEventListener("input", (event) => {
+            responsibilityFilterQuery = event.target?.value || "";
+            renderResponsibilityTable();
+        });
+
+        responsibilityFilterClearButton?.addEventListener("click", () => {
+            responsibilityFilterColumn = "all";
+            responsibilityFilterQuery = "";
+            if (responsibilityFilterColumnSelect) {
+                responsibilityFilterColumnSelect.value = "all";
+            }
+            if (responsibilityFilterValueInput) {
+                responsibilityFilterValueInput.value = "";
+            }
+            updateFilterPlaceholder();
+            renderResponsibilityTable();
+        });
+
+        responsibilitySortButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const key = button.dataset.sortKey;
+                if (!key || !RESPONSIBILITY_TABLE_COLUMNS[key]?.sortable) {
+                    return;
+                }
+
+                if (responsibilitySortKey === key) {
+                    if (responsibilitySortDirection === "ascending") {
+                        responsibilitySortDirection = "descending";
+                    } else if (responsibilitySortDirection === "descending") {
+                        responsibilitySortKey = null;
+                        responsibilitySortDirection = "ascending";
+                    } else {
+                        responsibilitySortDirection = "ascending";
+                    }
+                } else {
+                    responsibilitySortKey = key;
+                    responsibilitySortDirection = "ascending";
+                }
+
+                renderResponsibilityTable();
+            });
+        });
 
         const sendWeeklyPlan = async (event) => {
             event.preventDefault();

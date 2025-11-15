@@ -415,6 +415,32 @@
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
 
+        const preferNonEmptyString = (...values) => {
+            for (const value of values) {
+                if (typeof value !== "string") {
+                    continue;
+                }
+
+                const trimmed = value.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+            }
+
+            return "";
+        };
+
+        const assignerNameFallback = (user) =>
+            preferNonEmptyString(
+                user?.nickname,
+                user?.name,
+                user?.regNumber,
+                user?.reg_number,
+                user?.email,
+            );
+
+        const resolveTeamMemberName = (id) => getStoredTeamMemberName(id) || "";
+
         const getMemberDisplayName = (member) => {
             const candidates = [member?.name, member?.nickname, member?.regNumber];
 
@@ -787,9 +813,11 @@
                 const delegatedMemberDisplay = resolveTeamMemberName(task?.delegatedToId);
 
                 const fallback = preferNonEmptyString(
+                    task?.delegatedTo?.name,
                     task?.delegatedToName,
                     delegatedMemberDisplay,
                     delegatedUserDisplay,
+                    task?.delegatedTo?.email,
                 );
                 return fallback || "—";
             }
@@ -804,6 +832,7 @@
                     const delegateMemberDisplay = resolveTeamMemberName(entry?.delegateId);
 
                     const delegateName = preferNonEmptyString(
+                        entry?.delegateName,
                         entry?.delegate?.name,
                         delegateMemberDisplay,
                         delegateUserDisplay,

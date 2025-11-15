@@ -191,11 +191,34 @@
                             </select>
                         </div>
                         <div class="edit-form__field" id="responsibility-delegated-field" hidden>
-                            <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
-                            <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
-                                <option value="">Select a team member</option>
-                            </select>
+                            <label class="edit-form__label" for="responsibility-delegations-list">Delegated team members <span class="required">*</span></label>
+                            <div class="responsibility-delegations" id="responsibility-delegations">
+                                <div class="responsibility-delegations__list" id="responsibility-delegations-list"></div>
+                                <button
+                                    type="button"
+                                    class="button button--secondary button--small responsibility-delegations__add"
+                                    id="responsibility-add-delegation"
+                                >Add delegated team member</button>
+                                <p class="edit-form__hint">Split the responsibility target among the team members below.</p>
+                            </div>
                         </div>
+                        <template id="responsibility-delegation-template">
+                            <div class="responsibility-delegations__row">
+                                <select class="edit-form__input responsibility-delegations__select" name="delegationManager"></select>
+                                <input
+                                    type="text"
+                                    class="edit-form__input responsibility-delegations__value"
+                                    name="delegationValue"
+                                    inputmode="decimal"
+                                    placeholder="Allocated value"
+                                />
+                                <button
+                                    type="button"
+                                    class="button button--ghost button--small responsibility-delegations__remove"
+                                    aria-label="Remove delegated team member"
+                                >Remove</button>
+                            </div>
+                        </template>
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-progress">Progress (%)</label>
                             <input
@@ -385,7 +408,10 @@
         const responsibilityDetailInput = document.getElementById("responsibility-detail");
         const responsibilityActionSelect = document.getElementById("responsibility-action");
         const responsibilityDelegatedField = document.getElementById("responsibility-delegated-field");
-        const responsibilityDelegatedSelect = document.getElementById("responsibility-delegated-to");
+        const responsibilityDelegationsContainer = document.getElementById("responsibility-delegations");
+        const responsibilityDelegationsList = document.getElementById("responsibility-delegations-list");
+        const responsibilityAddDelegationButton = document.getElementById("responsibility-add-delegation");
+        const responsibilityDelegationTemplate = document.getElementById("responsibility-delegation-template");
         const responsibilityProgressInput = document.getElementById("responsibility-progress");
         const responsibilityPerformanceUnitSelect = document.getElementById("responsibility-performance-unit");
         const responsibilityPerformanceResponsibleInput = document.getElementById(
@@ -412,6 +438,7 @@
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
         const responsibilityTeamMembers = new Map();
+        let responsibilityAssignees = [];
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
 
@@ -467,6 +494,144 @@
             }
 
             return "Team member";
+        };
+
+        const populateDelegationSelectOptions = (selectElement, selectedValue = "") => {
+            if (!selectElement) {
+                return;
+            }
+
+            const previousSelection = selectElement.value || selectedValue;
+            const previousLabel = selectElement.selectedOptions?.[0]?.textContent || "";
+
+            selectElement.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select a team member";
+            selectElement.appendChild(placeholder);
+
+            responsibilityAssignees.forEach((assignee) => {
+                if (!assignee?.id) {
+                    return;
+                }
+
+                const option = document.createElement("option");
+                option.value = String(assignee.id);
+                option.textContent = assignerNameFallback(assignee) || option.value;
+                if (previousSelection && option.value === String(previousSelection)) {
+                    option.selected = true;
+                }
+                selectElement.appendChild(option);
+            });
+
+            if (previousSelection && !selectElement.value) {
+                const fallback = document.createElement("option");
+                fallback.value = String(previousSelection);
+                fallback.textContent = previousLabel || String(previousSelection);
+                fallback.selected = true;
+                selectElement.appendChild(fallback);
+            }
+        };
+
+        const clearResponsibilityDelegations = () => {
+            if (responsibilityDelegationsList) {
+                responsibilityDelegationsList.innerHTML = "";
+            }
+        };
+
+        const createDelegationRow = (initialData = {}) => {
+            if (!responsibilityDelegationsList) {
+                return null;
+            }
+
+            let row = null;
+            if (responsibilityDelegationTemplate?.content) {
+                const clone = responsibilityDelegationTemplate.content.cloneNode(true);
+                row = clone.querySelector(".responsibility-delegations__row");
+            }
+
+            if (!row) {
+                row = document.createElement("div");
+                row.className = "responsibility-delegations__row";
+
+                const select = document.createElement("select");
+                select.className = "edit-form__input responsibility-delegations__select";
+                row.appendChild(select);
+
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "edit-form__input responsibility-delegations__value";
+                input.setAttribute("inputmode", "decimal");
+                input.placeholder = "Allocated value";
+                row.appendChild(input);
+
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.className = "button button--ghost button--small responsibility-delegations__remove";
+                removeButton.textContent = "Remove";
+                row.appendChild(removeButton);
+            }
+
+            const select = row.querySelector(".responsibility-delegations__select");
+            const valueInput = row.querySelector(".responsibility-delegations__value");
+            const removeButton = row.querySelector(".responsibility-delegations__remove");
+
+            const delegateId =
+                initialData?.delegateId ??
+                initialData?.delegate_id ??
+                initialData?.delegateMemberId ??
+                initialData?.delegate_member_id ??
+                initialData?.delegate?.id ??
+                initialData?.delegate_member?.id ??
+                "";
+
+            populateDelegationSelectOptions(select, delegateId);
+
+            if (delegateId && select && select.value !== String(delegateId)) {
+                const fallback = document.createElement("option");
+                fallback.value = String(delegateId);
+                fallback.textContent =
+                    assignerNameFallback(initialData?.delegate) ||
+                    assignerNameFallback(initialData?.delegate_member) ||
+                    String(delegateId);
+                select.appendChild(fallback);
+                select.value = String(delegateId);
+            }
+
+            if (valueInput) {
+                const allocation =
+                    initialData?.allocatedValue ??
+                    initialData?.allocated_value ??
+                    initialData?.allocation ??
+                    "";
+                valueInput.value = allocation !== null && allocation !== undefined ? String(allocation) : "";
+            }
+
+            if (removeButton) {
+                removeButton.addEventListener("click", () => {
+                    row.remove();
+                });
+            }
+
+            responsibilityDelegationsList.appendChild(row);
+            return row;
+        };
+
+        const ensureDelegationRow = () => {
+            if (responsibilityDelegationsList?.childElementCount === 0) {
+                createDelegationRow();
+            }
+        };
+
+        const updateDelegationSelectOptions = () => {
+            if (!responsibilityDelegationsList) {
+                return;
+            }
+
+            responsibilityDelegationsList
+                .querySelectorAll(".responsibility-delegations__select")
+                .forEach((select) => populateDelegationSelectOptions(select));
         };
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
@@ -1144,16 +1309,15 @@
         };
 
         const updateDelegatedVisibility = (actionValue) => {
-            if (!responsibilityDelegatedField || !responsibilityDelegatedSelect) {
+            if (!responsibilityDelegatedField) {
                 return;
             }
             const requiresDelegated = actionValue === "delegated";
             responsibilityDelegatedField.hidden = !requiresDelegated;
             if (requiresDelegated) {
-                responsibilityDelegatedSelect.setAttribute("required", "required");
+                ensureDelegationRow();
             } else {
-                responsibilityDelegatedSelect.removeAttribute("required");
-                responsibilityDelegatedSelect.value = "";
+                clearResponsibilityDelegations();
             }
         };
 
@@ -1271,6 +1435,7 @@
             updatePerformanceMetricDisplay();
             responsibilityActionPreviousValue = "";
             responsibilityActionModalPreviousValue = "";
+            clearResponsibilityDelegations();
             updateDelegatedVisibility("");
             responsibilityActionNotesTextarea?.setAttribute("aria-invalid", "false");
         };
@@ -1309,7 +1474,27 @@
                 responsibilityActionSelect.value = task.action || "";
                 responsibilityActionPreviousValue = task.action || "";
                 responsibilityActionNotesInput.value = task.actionNotes || "";
-                responsibilityDelegatedSelect.value = task.delegatedToId ? String(task.delegatedToId) : "";
+                clearResponsibilityDelegations();
+                const delegations = Array.isArray(task.delegations) ? task.delegations : [];
+                if (delegations.length > 0) {
+                    delegations.forEach((delegation) => {
+                        createDelegationRow({
+                            ...delegation,
+                            delegate: delegation?.delegate || delegation?.delegate_member,
+                        });
+                    });
+                } else if (task.delegatedToId || task.delegatedTo) {
+                    createDelegationRow({
+                        delegateId: task.delegatedToId ?? task.delegatedTo?.id ?? "",
+                        delegate: task.delegatedTo,
+                        allocatedValue:
+                            task.delegatedToAllocation ??
+                            task.delegated_to_allocation ??
+                            task.delegatedToValue ??
+                            task.delegated_to_value ??
+                            "",
+                    });
+                }
 
                 updateDelegatedVisibility(task.action || "");
 
@@ -1598,28 +1783,15 @@
         };
 
         const populateResponsibilityAssignees = (assignees = []) => {
-            if (!responsibilityAssigneeSelect || !responsibilityDelegatedSelect) {
+            if (!responsibilityAssigneeSelect && !responsibilityDelegationsList) {
                 return;
             }
 
-            const clearOptions = (select) => {
-                while (select.options.length > 1) {
-                    select.remove(1);
-                }
-            };
-
-            const renderOption = ({ id, name }) => {
-                const element = document.createElement("option");
-                element.value = String(id);
-                element.textContent = name;
-                return element;
-            };
-
+            const normalizedAssignees = Array.isArray(assignees) ? assignees : [];
             responsibilityTeamMembers.clear();
-            clearOptions(responsibilityAssigneeSelect);
-            clearOptions(responsibilityDelegatedSelect);
+            responsibilityAssignees = [];
 
-            assignees.forEach((assignee) => {
+            normalizedAssignees.forEach((assignee) => {
                 if (!assignee || assignee.id === null || assignee.id === undefined) {
                     return;
                 }
@@ -1634,27 +1806,58 @@
                         ? assignee.member
                         : {};
 
-                const teamMemberRecord = {
-                    ...sourceMember,
+                const displayName =
+                    assignee.name ??
+                    getMemberDisplayName(sourceMember) ??
+                    normalizedId;
+
+                const record = {
                     id: normalizedId,
-                    name: sourceMember?.name ?? assignee.name ?? "",
+                    name: displayName,
                     nickname: sourceMember?.nickname ?? assignee.nickname ?? "",
                     regNumber:
                         sourceMember?.regNumber ??
                         sourceMember?.reg_number ??
                         assignee.regNumber ??
                         "",
-                    displayName: assignee.name ?? getMemberDisplayName(sourceMember),
+                    email:
+                        typeof assignee.email === "string" && assignee.email.trim()
+                            ? assignee.email.trim()
+                            : typeof sourceMember?.email === "string" && sourceMember.email.trim()
+                            ? sourceMember.email.trim()
+                            : undefined,
+                    type: assignee.type || "team_member",
+                    displayName,
                 };
 
-                if (typeof assignee.email === "string" && assignee.email.trim()) {
-                    teamMemberRecord.email = assignee.email.trim();
-                }
-
-                responsibilityTeamMembers.set(normalizedId, teamMemberRecord);
-                responsibilityAssigneeSelect.appendChild(renderOption(assignee));
-                responsibilityDelegatedSelect.appendChild(renderOption(assignee));
+                responsibilityTeamMembers.set(normalizedId, record);
+                responsibilityAssignees.push(record);
             });
+
+            responsibilityAssignees.sort((a, b) =>
+                a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
+            );
+
+            if (responsibilityAssigneeSelect) {
+                const currentValue = responsibilityAssigneeSelect.value;
+                responsibilityAssigneeSelect.innerHTML = "";
+                const placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = "Select a team member";
+                responsibilityAssigneeSelect.appendChild(placeholder);
+
+                responsibilityAssignees.forEach((assignee) => {
+                    const option = document.createElement("option");
+                    option.value = String(assignee.id);
+                    option.textContent = assignerNameFallback(assignee) || option.value;
+                    if (currentValue && option.value === currentValue) {
+                        option.selected = true;
+                    }
+                    responsibilityAssigneeSelect.appendChild(option);
+                });
+            }
+
+            updateDelegationSelectOptions();
         };
 
         const fetchResponsibilityAssignees = async () => {
@@ -1707,6 +1910,11 @@
                                 : typeof member?.reg_number === "string"
                                 ? member.reg_number
                                 : undefined,
+                        email:
+                            typeof member?.email === "string" && member.email.trim()
+                                ? member.email.trim()
+                                : undefined,
+                        type: "team_member",
                         member,
                     });
                 });
@@ -1964,11 +2172,6 @@
                 }
             }
 
-            if (payload.action === "delegated" && !payload.delegatedToId) {
-                showResponsibilityFormError("Select a delegated team member when the action is Delegated.");
-                return;
-            }
-
             if (!payload.recipientEmail) {
                 showResponsibilityFormError("Enter a notification email address.");
                 return;
@@ -1983,6 +2186,59 @@
                 payload.progress = clampProgressValue(payload.progress);
             }
 
+            const isDelegatedAction = payload.action === "delegated";
+            const delegationRows = Array.from(
+                responsibilityDelegationsList?.querySelectorAll(".responsibility-delegations__row") ?? [],
+            );
+            const delegationsPayload = [];
+
+            for (const row of delegationRows) {
+                const selectElement = row.querySelector(".responsibility-delegations__select");
+                const valueInput = row.querySelector(".responsibility-delegations__value");
+                const delegateRaw = selectElement?.value?.toString().trim() ?? "";
+
+                if (!delegateRaw) {
+                    if (isDelegatedAction) {
+                        showResponsibilityFormError("Select a team member for each delegated allocation.");
+                        selectElement?.focus();
+                        return;
+                    }
+                    continue;
+                }
+
+                const parsedDelegate = Number.parseInt(delegateRaw, 10);
+                if (!Number.isFinite(parsedDelegate)) {
+                    showResponsibilityFormError("Select a valid delegated team member.");
+                    selectElement?.focus();
+                    return;
+                }
+
+                const allocationRaw = valueInput?.value?.toString().trim() ?? "";
+                const delegateRecord = responsibilityTeamMembers.get(String(parsedDelegate));
+                const delegateType = delegateRecord?.type || "team_member";
+
+                delegationsPayload.push({
+                    delegateId: parsedDelegate,
+                    delegateType,
+                    allocatedValue: allocationRaw || null,
+                });
+            }
+
+            if (isDelegatedAction && delegationsPayload.length === 0) {
+                showResponsibilityFormError(
+                    "Add at least one delegated team member when the action is Delegated.",
+                );
+                ensureDelegationRow();
+                responsibilityDelegationsList
+                    ?.querySelector(".responsibility-delegations__select")
+                    ?.focus();
+                return;
+            }
+
+            if (delegationsPayload.length > 0) {
+                payload.delegations = delegationsPayload;
+            }
+
             const resolveAssignmentType = (value) => {
                 if (value === null || value === undefined) {
                     return undefined;
@@ -1991,22 +2247,16 @@
                 if (!normalized) {
                     return undefined;
                 }
-                return responsibilityTeamMembers.has(normalized) ? "team_member" : "user";
+                const record = responsibilityTeamMembers.get(normalized);
+                if (!record) {
+                    return "user";
+                }
+                return record.type || "team_member";
             };
 
             const assigneeType = resolveAssignmentType(payload.assigneeId);
             if (assigneeType) {
                 payload.assigneeType = assigneeType;
-            }
-
-            const delegatedType = resolveAssignmentType(payload.delegatedToId);
-            if (delegatedType) {
-                payload.delegatedToType = delegatedType;
-            }
-
-            if (payload.delegatedToId === "") {
-                delete payload.delegatedToId;
-                delete payload.delegatedToType;
             }
 
             const requestUrl = isEditingResponsibility
@@ -2147,6 +2397,9 @@
         responsibilityCreateButton?.addEventListener("click", () => openResponsibilityModal());
         responsibilityModalClose?.addEventListener("click", closeResponsibilityModal);
         responsibilityCancelButton?.addEventListener("click", closeResponsibilityModal);
+        responsibilityAddDelegationButton?.addEventListener("click", () => {
+            createDelegationRow();
+        });
         responsibilityModalOverlay?.addEventListener("click", responsibilityModalOverlayHandler);
         responsibilityForm?.addEventListener("submit", submitResponsibilityForm);
         responsibilityActionSelect?.addEventListener("change", handleResponsibilityActionChange);

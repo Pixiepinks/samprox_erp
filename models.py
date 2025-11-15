@@ -384,9 +384,26 @@ class ResponsibilityTask(db.Model):
         """Replace delegations while maintaining backward compatible fields."""
 
         delegation_list = list(delegations)
-        self.delegations = delegation_list
-        if delegation_list:
-            self.delegated_to_id = delegation_list[0].delegate_id
+        existing = {
+            delegation.delegate_id: delegation for delegation in list(self.delegations or [])
+        }
+
+        updated: list["ResponsibilityDelegation"] = []
+        for entry in delegation_list:
+            current = existing.pop(entry.delegate_id, None)
+            if current is not None:
+                current.allocated_value = entry.allocated_value
+                updated.append(current)
+            else:
+                updated.append(entry)
+
+        for orphan in existing.values():
+            self.delegations.remove(orphan)
+
+        self.delegations = updated
+
+        if updated:
+            self.delegated_to_id = updated[0].delegate_id
         else:
             self.delegated_to_id = None
 

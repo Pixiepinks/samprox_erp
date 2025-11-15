@@ -176,7 +176,7 @@
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
                             <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
-                                <option value="">Select a manager (optional)</option>
+                                <option value="">Select a team member (optional)</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -193,7 +193,7 @@
                         <div class="edit-form__field" id="responsibility-delegated-field" hidden>
                             <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
                             <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
-                                <option value="">Select a manager</option>
+                                <option value="">Select a team member</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -411,8 +411,24 @@
             responsibilityModalTitle?.textContent?.trim() || "New responsibility";
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
+        const responsibilityTeamMembers = new Map();
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
+
+        const getMemberDisplayName = (member) => {
+            const candidates = [member?.name, member?.nickname, member?.regNumber];
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "Team member";
+        };
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
             "Monday",
@@ -1262,6 +1278,74 @@
             return cell;
         };
 
+        const getUserDisplay = (user, fallbacks = []) => {
+            const candidates = [];
+
+            if (user && typeof user === "object") {
+                candidates.push(
+                    user.nickname,
+                    user.name,
+                    user.regNumber,
+                    user.reg_number,
+                    user.email,
+                );
+            }
+
+            if (Array.isArray(fallbacks)) {
+                candidates.push(...fallbacks);
+            } else if (typeof fallbacks === "string") {
+                candidates.push(fallbacks);
+            }
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "—";
+        };
+
+        const getResponsibilityTeamMemberDisplay = (task, relationKey) => {
+            if (!task) {
+                return "—";
+            }
+
+            const relation =
+                relationKey === "assignee"
+                    ? task?.assignee
+                    : relationKey === "delegatedTo"
+                    ? task?.delegatedTo
+                    : null;
+
+            const idCandidates = [
+                relation?.id,
+                relation?.memberId,
+                relation?.member_id,
+                task?.[`${relationKey}Id`],
+                task?.[`${relationKey}_id`],
+            ];
+
+            for (const candidate of idCandidates) {
+                const stored = getStoredTeamMemberName(candidate);
+                if (stored) {
+                    return stored;
+                }
+            }
+
+            if (relation && typeof relation === "object") {
+                const directDisplay = getMemberDisplayName(relation);
+                if (directDisplay && directDisplay !== "Team member") {
+                    return directDisplay;
+                }
+            }
+
+            return getUserDisplay(relation, [task?.[`${relationKey}Name`], task?.[`${relationKey}Email`]]);
+        };
+
         const renderResponsibilityRow = (task) => {
             const row = document.createElement("tr");
             row.dataset.id = task?.id;
@@ -1312,9 +1396,9 @@
                     ),
                 ),
                 appendCell(task?.detail || "—"),
-                appendCell(task?.assignerName || "—"),
-                appendCell(task?.assigneeName || "—"),
-                appendCell(task?.delegatedToName || "—"),
+                appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
+                appendCell(getResponsibilityTeamMemberDisplay(task, "assignee")),
+                appendCell(getResponsibilityTeamMemberDisplay(task, "delegatedTo")),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
                 createdCell,
@@ -1370,30 +1454,86 @@
             }
         };
 
+        const getStoredTeamMemberName = (id) => {
+            if (id === null || id === undefined) {
+                return null;
+            }
+
+            const normalized = String(id).trim();
+            if (!normalized) {
+                return null;
+            }
+
+            const record = responsibilityTeamMembers.get(normalized);
+            if (!record) {
+                return null;
+            }
+
+            if (typeof record.displayName === "string" && record.displayName.trim()) {
+                return record.displayName.trim();
+            }
+
+            return getMemberDisplayName(record);
+        };
+
         const populateResponsibilityAssignees = (assignees = []) => {
             if (!responsibilityAssigneeSelect || !responsibilityDelegatedSelect) {
                 return;
             }
 
-            const renderOption = (option) => {
+            const clearOptions = (select) => {
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+            };
+
+            const renderOption = ({ id, name }) => {
                 const element = document.createElement("option");
-                element.value = option?.id;
-                element.textContent = option?.name;
+                element.value = String(id);
+                element.textContent = name;
                 return element;
             };
 
-            const fragment = document.createDocumentFragment();
-            assignees.forEach((assignee) => {
-                fragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
-            });
+            responsibilityTeamMembers.clear();
+            clearOptions(responsibilityAssigneeSelect);
+            clearOptions(responsibilityDelegatedSelect);
 
-            const delegatedFragment = document.createDocumentFragment();
             assignees.forEach((assignee) => {
-                delegatedFragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
-            });
+                if (!assignee || assignee.id === null || assignee.id === undefined) {
+                    return;
+                }
 
-            responsibilityAssigneeSelect.append(fragment.cloneNode(true));
-            responsibilityDelegatedSelect.append(delegatedFragment.cloneNode(true));
+                const normalizedId = String(assignee.id).trim();
+                if (!normalizedId) {
+                    return;
+                }
+
+                const sourceMember =
+                    assignee.member && typeof assignee.member === "object"
+                        ? assignee.member
+                        : {};
+
+                const teamMemberRecord = {
+                    ...sourceMember,
+                    id: normalizedId,
+                    name: sourceMember?.name ?? assignee.name ?? "",
+                    nickname: sourceMember?.nickname ?? assignee.nickname ?? "",
+                    regNumber:
+                        sourceMember?.regNumber ??
+                        sourceMember?.reg_number ??
+                        assignee.regNumber ??
+                        "",
+                    displayName: assignee.name ?? getMemberDisplayName(sourceMember),
+                };
+
+                if (typeof assignee.email === "string" && assignee.email.trim()) {
+                    teamMemberRecord.email = assignee.email.trim();
+                }
+
+                responsibilityTeamMembers.set(normalizedId, teamMemberRecord);
+                responsibilityAssigneeSelect.appendChild(renderOption(assignee));
+                responsibilityDelegatedSelect.appendChild(renderOption(assignee));
+            });
         };
 
         const fetchResponsibilityAssignees = async () => {
@@ -1402,19 +1542,61 @@
             }
 
             try {
-                const response = await fetch("/api/responsibilities/assignees", {
+                const response = await fetch("/api/team/members", {
                     headers: authHeaders,
                 });
 
                 if (!response.ok) {
                     const data = await response.json().catch(() => null);
-                    throw new Error(data?.msg || "Unable to load managers.");
+                    throw new Error(data?.msg || "Unable to load team members.");
                 }
 
                 const data = await response.json();
-                populateResponsibilityAssignees(Array.isArray(data) ? data : []);
+                const uniqueMembers = new Map();
+
+                (Array.isArray(data) ? data : []).forEach((member) => {
+                    if (!member) {
+                        return;
+                    }
+
+                    const rawId =
+                        member?.id ?? member?.memberId ?? member?.regNumber ?? member?.reg_number;
+                    if (rawId === null || rawId === undefined) {
+                        return;
+                    }
+
+                    const parsedId = Number.parseInt(String(rawId).trim(), 10);
+                    if (!Number.isFinite(parsedId)) {
+                        return;
+                    }
+
+                    const normalizedId = String(parsedId);
+                    if (uniqueMembers.has(normalizedId)) {
+                        return;
+                    }
+
+                    const displayName = getMemberDisplayName(member);
+                    uniqueMembers.set(normalizedId, {
+                        id: normalizedId,
+                        name: displayName,
+                        nickname: typeof member?.nickname === "string" ? member.nickname : undefined,
+                        regNumber:
+                            typeof member?.regNumber === "string"
+                                ? member.regNumber
+                                : typeof member?.reg_number === "string"
+                                ? member.reg_number
+                                : undefined,
+                        member,
+                    });
+                });
+
+                const assignees = Array.from(uniqueMembers.values()).sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+                );
+
+                populateResponsibilityAssignees(assignees);
             } catch (error) {
-                console.error("Failed to load responsibility assignees", error);
+                console.error("Failed to load responsibility team members", error);
             }
         };
 
@@ -1648,7 +1830,7 @@
             }
 
             if (payload.action === "delegated" && !payload.delegatedToId) {
-                showResponsibilityFormError("Select a delegated manager when the action is Delegated.");
+                showResponsibilityFormError("Select a delegated team member when the action is Delegated.");
                 return;
             }
 
@@ -1886,8 +2068,9 @@
         initializeResponsibilityWeeklyStart();
         toggleCustomWeekdayFieldset();
         updateRecurrenceOptionLabels();
-        fetchResponsibilityAssignees();
-        fetchResponsibilities();
+        fetchResponsibilityAssignees().finally(() => {
+            fetchResponsibilities();
+        });
     </script>
 </body>
 </html>

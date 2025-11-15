@@ -430,6 +430,19 @@
             return "";
         };
 
+        const normalizeDisplayValue = (value) => {
+            if (typeof value !== "string") {
+                return value;
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed || trimmed === "—") {
+                return "";
+            }
+
+            return trimmed;
+        };
+
         const assignerNameFallback = (user) =>
             preferNonEmptyString(
                 user?.nickname,
@@ -442,7 +455,7 @@
         const resolveTeamMemberName = (id) => getStoredTeamMemberName(id) || "";
 
         const getMemberDisplayName = (member) => {
-            const candidates = [member?.name, member?.nickname, member?.regNumber];
+            const candidates = [member?.nickname, member?.name, member?.regNumber];
 
             for (const candidate of candidates) {
                 if (typeof candidate === "string") {
@@ -1490,14 +1503,20 @@
                 appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
                 appendCell(
                     preferNonEmptyString(
+                        normalizeDisplayValue(
+                            getResponsibilityTeamMemberDisplay(task, "assignee"),
+                        ),
                         task?.assigneeName,
-                        getResponsibilityTeamMemberDisplay(task, "assignee"),
+                        task?.assigneeEmail,
                     ) || "—",
                 ),
                 appendCell(
                     preferNonEmptyString(
+                        normalizeDisplayValue(
+                            getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                        ),
                         task?.delegatedToName,
-                        getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                        task?.delegatedToEmail,
                     ) || "—",
                 ),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),

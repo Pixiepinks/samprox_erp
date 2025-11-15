@@ -601,21 +601,29 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         )
         recipients_sent.add(recipient)
 
-    delegate_email_map: dict[str, User] = {}
+    delegate_email_map: dict[str, str | None] = {}
 
     for delegation in getattr(task, "delegations", []) or []:
-        delegate = getattr(delegation, "delegate", None)
-        delegate_email = getattr(delegate, "email", None)
-        if delegate_email:
-            delegate_email_map[delegate_email] = delegate
+        delegate_user = getattr(delegation, "delegate", None)
+        delegate_email = getattr(delegate_user, "email", None)
+        if isinstance(delegate_email, str) and delegate_email.strip():
+            delegate_email_map[delegate_email.strip()] = _normalize_user_name(
+                delegate_user
+            )
+
+        delegate_member = getattr(delegation, "delegate_member", None)
+        member_email = getattr(delegate_member, "email", None)
+        if isinstance(member_email, str) and member_email.strip():
+            delegate_email_map[member_email.strip()] = _normalize_member_name(
+                delegate_member
+            )
 
     general_recipient = task.recipient_email
     general_name_hint = assignee_name
     general_verb = "assigned"
 
     if general_recipient in delegate_email_map:
-        delegate_user = delegate_email_map[general_recipient]
-        general_name_hint = _normalize_user_name(delegate_user)
+        general_name_hint = delegate_email_map[general_recipient] or delegated_name
         general_verb = "delegated"
     elif general_recipient == getattr(task.delegated_to, "email", None):
         general_name_hint = delegated_name
@@ -633,27 +641,6 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         verb=general_verb,
         name_hint=general_name_hint,
     )
-
-    for delegation in getattr(task, "delegations", []) or []:
-        delegate = getattr(delegation, "delegate", None)
-        delegate_email = getattr(delegate, "email", None)
-        if not delegate_email:
-            continue
-        delegate_content = list(base_content)
-        allocation_display = _format_delegation_allocation(task, delegation)
-        delegate_name = _delegation_display_name(delegation)
-        delegate_content.append("")
-        delegate_content.append("Delegated allocation assigned to you:")
-        if allocation_display:
-            delegate_content.append(f"• {delegate_name} — {allocation_display}")
-        else:
-            delegate_content.append(f"• {delegate_name}")
-        _send(
-            delegate_email,
-            delegate_content,
-            verb="delegated",
-            name_hint=_normalize_user_name(delegate) or delegate_name,
-        )
 
 
 def _occurrences_for_week(tasks: Iterable[ResponsibilityTask], start: date) -> dict[date, list[ResponsibilityTask]]:
@@ -803,8 +790,9 @@ def create_task():
     delegated_to_member: TeamMember | None = None
     delegated_to_id = data.get("delegated_to_id")
     if delegated_to_id is not None:
+        preferred_delegate_type = data.get("delegated_to_type") or "team_member"
         delegated_to_user, delegated_to_member = _resolve_assignment_target(
-            delegated_to_id, preferred=data.get("delegated_to_type")
+            delegated_to_id, preferred=preferred_delegate_type
         )
         if delegated_to_user is None and delegated_to_member is None:
             return jsonify({"msg": "Selected delegate was not found."}), 404
@@ -816,8 +804,9 @@ def create_task():
         delegate_id = entry.get("delegate_id")
         if delegate_id is None:
             continue
+        preferred_delegate_type = entry.get("delegate_type") or "team_member"
         delegate_user, delegate_member = _resolve_assignment_target(
-            delegate_id, preferred=entry.get("delegate_type")
+            delegate_id, preferred=preferred_delegate_type
         )
         if delegate_user is None and delegate_member is None:
             return jsonify({"msg": "Selected delegate was not found."}), 404
@@ -985,8 +974,9 @@ def update_task(task_id: int):
     delegated_to_member: TeamMember | None = None
     delegated_to_id = data.get("delegated_to_id")
     if delegated_to_id is not None:
+        preferred_delegate_type = data.get("delegated_to_type") or "team_member"
         delegated_to_user, delegated_to_member = _resolve_assignment_target(
-            delegated_to_id, preferred=data.get("delegated_to_type")
+            delegated_to_id, preferred=preferred_delegate_type
         )
         if delegated_to_user is None and delegated_to_member is None:
             return jsonify({"msg": "Selected delegate was not found."}), 404
@@ -998,8 +988,9 @@ def update_task(task_id: int):
         delegate_id = entry.get("delegate_id")
         if delegate_id is None:
             continue
+        preferred_delegate_type = entry.get("delegate_type") or "team_member"
         delegate_user, delegate_member = _resolve_assignment_target(
-            delegate_id, preferred=entry.get("delegate_type")
+            delegate_id, preferred=preferred_delegate_type
         )
         if delegate_user is None and delegate_member is None:
             return jsonify({"msg": "Selected delegate was not found."}), 404

@@ -1178,9 +1178,9 @@ class ResponsibilityTaskCreateSchema(Schema):
                     or entry.get("delegate_id") in {None, ""}
                 ]
                 if missing:
-                    raise ValidationError("Select a delegated manager.", "delegations")
+                    raise ValidationError("Select a delegated team member.", "delegations")
             elif not delegated_to:
-                raise ValidationError("Select a delegated manager.", "delegations")
+                raise ValidationError("Select a delegated team member.", "delegations")
 
         if action in {
             ResponsibilityAction.DISCUSSED.value,

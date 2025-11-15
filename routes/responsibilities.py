@@ -112,6 +112,15 @@ def _task_delegated_name(task: ResponsibilityTask) -> str | None:
     return _normalize_user_name(getattr(task, "delegated_to", None))
 
 
+def _decorate_task_names(task: ResponsibilityTask) -> dict[str, str | None]:
+    """Return a mapping with decorated assignee and delegate names."""
+
+    return {
+        "assigneeName": _task_assignee_name(task),
+        "delegatedToName": _task_delegated_name(task),
+    }
+
+
 def _delegation_display_name(delegation: ResponsibilityDelegation) -> str:
     member_name = _normalize_member_name(getattr(delegation, "delegate_member", None))
     if member_name:
@@ -922,6 +931,7 @@ def create_task():
         }
 
     response = task_schema.dump(task)
+    response.update(_decorate_task_names(task))
     response["email_notification"] = notification
     return jsonify(response), 201
 
@@ -1090,6 +1100,7 @@ def update_task(task_id: int):
         }
 
     response = task_schema.dump(task)
+    response.update(_decorate_task_names(task))
     response["email_notification"] = notification
     return jsonify(response), 200
 
@@ -1133,7 +1144,10 @@ def list_tasks():
         )
 
     tasks = query.all()
-    return jsonify(tasks_schema.dump(tasks))
+    payload = tasks_schema.dump(tasks)
+    for item, model in zip(payload, tasks):
+        item.update(_decorate_task_names(model))
+    return jsonify(payload)
 
 
 @bp.post("/send-weekly")

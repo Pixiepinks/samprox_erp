@@ -6,7 +6,7 @@ import re
 import html
 import os
 from datetime import date, datetime, timedelta
-from typing import Iterable, Optional
+from typing import Iterable
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
@@ -135,17 +135,6 @@ def _format_progress_label(progress: object) -> str | None:
     if text.endswith("%"):
         return text
     return f"{text}%"
-
-
-def _normalize_text(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    return text or None
-
-
-def _single_line(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def _normalize_member_name(member: TeamMember | None) -> str | None:
@@ -686,20 +675,11 @@ def _deliver_responsibility_email(
         ) from exc
 
 
-def _task_display_metadata(
-    task: ResponsibilityTask, occurrence_date: Optional[date] = None
-) -> dict[str, object]:
+def _send_task_email(task: ResponsibilityTask) -> None:
     assigner_name = _normalize_user_name(getattr(task, "assigner", None)) or "A manager"
     assignee_name = _task_assignee_name(task)
-
-    scheduled = occurrence_date or getattr(task, "scheduled_for", None)
-    if isinstance(scheduled, datetime):
-        scheduled_label = scheduled.strftime("%B %d, %Y")
-    elif isinstance(scheduled, date):
-        scheduled_label = scheduled.strftime("%B %d, %Y")
-    else:
-        scheduled_label = "N/A"
-
+    delegated_name = _task_delegated_name(task)
+    first_date = task.scheduled_for.strftime("%B %d, %Y") if task.scheduled_for else "N/A"
     action = getattr(task, "action", ResponsibilityAction.DONE)
     try:
         action_label = ResponsibilityAction(action).value.replace("_", " ").title()
@@ -707,8 +687,14 @@ def _task_display_metadata(
         action_label = "—"
 
     unit = _resolve_performance_unit(task)
-    unit_label = _performance_unit_label(unit.value)
-    unit_display = unit_label or unit.value.replace("_", " ").title()
+    unit_label = _performance_unit_label(
+        unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else unit
+    )
+    unit_display = (
+        unit_label
+        or (unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else str(unit))
+        or "—"
+    )
 
     responsible_value = format_performance_value(
         unit, getattr(task, "perf_responsible_value", None)
@@ -717,43 +703,17 @@ def _task_display_metadata(
         unit, getattr(task, "perf_actual_value", None)
     )
     metric_value = format_metric(unit, getattr(task, "perf_metric_value", None))
-
     progress_label = _format_progress_label(getattr(task, "progress", None))
-
-    summary_text = _normalize_text(getattr(task, "description", None))
-    detail_text = _normalize_text(getattr(task, "detail", None))
-    notes_text = _normalize_text(getattr(task, "action_notes", None))
-
-    return {
-        "assigner_name": assigner_name,
-        "assignee_name": assignee_name,
-        "scheduled_label": scheduled_label,
-        "action_label": action_label,
-        "unit_display": unit_display or "—",
-        "responsible_display": responsible_value if responsible_value is not None else "—",
-        "actual_display": actual_value if actual_value is not None else "—",
-        "metric_display": metric_value if metric_value is not None else "—",
-        "progress_label": progress_label,
-        "summary_text": summary_text,
-        "detail_text": detail_text,
-        "notes_text": notes_text,
-    }
-
-
-def _send_task_email(task: ResponsibilityTask) -> None:
-    details = _task_display_metadata(task)
-    assignee_name = details["assignee_name"]
-    delegated_name = _task_delegated_name(task)
 
     base_lines = [
         f"Responsibility No: {task.number}",
         f"Title: {task.title}",
-        f"Scheduled for: {details['scheduled_label']}",
-        f"5D Action: {details['action_label']}",
-        f"Unit of measure: {details['unit_display']}",
-        f"Responsible: {details['responsible_display']}",
-        f"Actual: {details['actual_display']}",
-        f"Performance metric: {details['metric_display']}",
+        f"Scheduled for: {first_date}",
+        f"5D Action: {action_label}",
+        f"Unit of measure: {unit_display}",
+        f"Responsible: {responsible_value if responsible_value is not None else '—'}",
+        f"Actual: {actual_value if actual_value is not None else '—'}",
+        f"Performance metric: {metric_value if metric_value is not None else '—'}",
     ]
 
     if assignee_name:
@@ -761,10 +721,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     else:
         base_lines.append("Assigned to: (not specified)")
 
-    base_lines.append(f"Assigned by: {details['assigner_name']}")
-
-    if details["progress_label"]:
-        base_lines.append(f"Progress: {details['progress_label']}")
+    base_lines.append(f"Assigned by: {assigner_name}")
 
     if progress_label:
         base_lines.append(f"Progress: {progress_label}")
@@ -774,18 +731,18 @@ def _send_task_email(task: ResponsibilityTask) -> None:
 
     extra_sections: list[str] = []
 
-    if details["summary_text"]:
+    if task.description:
         extra_sections.append("")
         extra_sections.append("Summary:")
-        extra_sections.append(details["summary_text"])
+        extra_sections.append(task.description.strip())
 
-    if details["detail_text"]:
+    if task.detail:
         extra_sections.append("")
-        extra_sections.append(f"Detail: {details['detail_text']}")
+        extra_sections.append(f"Detail: {task.detail.strip()}")
 
-    if details["notes_text"]:
+    if task.action_notes:
         extra_sections.append("")
-        extra_sections.append(f"Notes: {details['notes_text']}")
+        extra_sections.append(f"Notes: {task.action_notes.strip()}")
 
     base_content = list(overview_lines)
     base_content.extend(extra_sections)
@@ -901,53 +858,15 @@ def _format_weekly_summary(schedule: dict[date, list[ResponsibilityTask]]) -> st
     if not schedule:
         return "No responsibilities are scheduled for the selected week."
 
-    lines: list[str] = []
+    parts: list[str] = []
     for day in sorted(schedule):
         formatted_day = day.strftime("%A, %B %d")
-        lines.append(formatted_day)
-
-        day_tasks = schedule[day]
-        if not day_tasks:
-            lines.append("  • No responsibilities scheduled.")
-            lines.append("")
-            continue
-
-        for task in day_tasks:
-            details = _task_display_metadata(task, occurrence_date=day)
-            assignee_display = details["assignee_name"] or "Unassigned"
-            lines.append(f"  • {task.title} ({assignee_display})")
-            lines.append(f"      Scheduled for: {details['scheduled_label']}")
-            lines.append(f"      Responsibility No: {task.number}")
-            lines.append(f"      5D Action: {details['action_label']}")
-            lines.append(f"      Unit of measure: {details['unit_display']}")
-            lines.append(f"      Responsible: {details['responsible_display']}")
-            lines.append(f"      Actual: {details['actual_display']}")
-            lines.append(f"      Performance metric: {details['metric_display']}")
-            lines.append(f"      Assigned by: {details['assigner_name']}")
-
-            progress_label = details["progress_label"]
-            if progress_label:
-                lines.append(f"      Progress: {progress_label}")
-
-            delegated_name = _task_delegated_name(task)
-            if delegated_name:
-                lines.append(f"      Delegated to: {delegated_name}")
-
-            detail_text = details["detail_text"]
-            if detail_text:
-                lines.append(f"      Detail: {_single_line(detail_text)}")
-
-            summary_text = details["summary_text"]
-            if summary_text:
-                lines.append(f"      Summary: {_single_line(summary_text)}")
-
-            notes_text = details["notes_text"]
-            if notes_text:
-                lines.append(f"      Notes: {_single_line(notes_text)}")
-
-        lines.append("")
-
-    return "\n".join(lines).strip()
+        parts.append(formatted_day)
+        for task in schedule[day]:
+            assignee_name = _task_assignee_name(task) or "Unassigned"
+            parts.append(f"  • {task.title} ({assignee_name}) — {_render_recurrence(task)}")
+        parts.append("")
+    return "\n".join(parts).strip()
 
 
 def send_weekly_email(

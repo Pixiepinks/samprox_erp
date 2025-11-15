@@ -5,7 +5,7 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from models import ResponsibilityAction
+from models import ResponsibilityAction, ResponsibilityRecurrence
 
 from sqlalchemy.exc import IntegrityError
 
@@ -859,6 +859,164 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         task = self.app_module.ResponsibilityTask.query.one()
         self.assertEqual(task.title, "Factory inspection")
         self.assertEqual(task.number, "0001")
+
+    def test_member_summary_groups_occurrences_by_team_member(self):
+        ResponsibilityTask = self.app_module.ResponsibilityTask
+        ResponsibilityDelegation = ResponsibilityTask.delegations.property.mapper.class_
+
+        today = date.today()
+
+        recurring_task = ResponsibilityTask(
+            number="0001",
+            title="Morning briefing",
+            scheduled_for=today - timedelta(days=2),
+            recipient_email="ops@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DONE,
+            assignee_member_id=self.team_member_primary.id,
+            recurrence=ResponsibilityRecurrence.DAILY,
+        )
+        recurring_task.assignee_member = self.team_member_primary
+
+        delegated_task = ResponsibilityTask(
+            number="0002",
+            title="Loading audit",
+            scheduled_for=today - timedelta(days=1),
+            recipient_email="ops@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DELEGATED,
+        )
+        delegated_entry = ResponsibilityDelegation(
+            task=delegated_task,
+            delegate_member_id=self.team_member_delegate_one.id,
+        )
+        delegated_entry.delegate_member = self.team_member_delegate_one
+
+        weekly_task = ResponsibilityTask(
+            number="0003",
+            title="Packing follow-up",
+            scheduled_for=today,
+            recipient_email="ops@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DELEGATED,
+            recurrence=ResponsibilityRecurrence.WEEKLY,
+        )
+        weekly_entry = ResponsibilityDelegation(
+            task=weekly_task,
+            delegate_member_id=self.team_member_delegate_two.id,
+        )
+        weekly_entry.delegate_member = self.team_member_delegate_two
+
+        self.app_module.db.session.add_all(
+            [recurring_task, delegated_task, delegated_entry, weekly_task, weekly_entry]
+        )
+        self.app_module.db.session.commit()
+
+        start = (today - timedelta(days=3)).isoformat()
+        end = today.isoformat()
+
+        response = self.client.get(
+            f"/api/responsibilities/reports/member-summary?startDate={start}&endDate={end}",
+            headers=self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["startDate"], start)
+        self.assertEqual(payload["endDate"], end)
+        self.assertEqual(payload["totalOccurrences"], 5)
+        members = payload["members"]
+        self.assertGreaterEqual(len(members), 3)
+
+        primary_entry = next(
+            member for member in members if member["id"] == self.team_member_primary.id
+        )
+        self.assertEqual(primary_entry["occurrenceCount"], 3)
+        self.assertEqual(primary_entry["uniqueTaskCount"], 1)
+        self.assertEqual(
+            {occ["date"] for occ in primary_entry["occurrences"]},
+            {
+                (today - timedelta(days=2)).isoformat(),
+                (today - timedelta(days=1)).isoformat(),
+                today.isoformat(),
+            },
+        )
+
+        delegate_one_entry = next(
+            member for member in members if member["id"] == self.team_member_delegate_one.id
+        )
+        self.assertEqual(delegate_one_entry["occurrenceCount"], 1)
+        self.assertEqual(delegate_one_entry["uniqueTaskCount"], 1)
+
+        delegate_two_entry = next(
+            member for member in members if member["id"] == self.team_member_delegate_two.id
+        )
+        self.assertEqual(delegate_two_entry["occurrenceCount"], 1)
+        self.assertEqual(delegate_two_entry["uniqueTaskCount"], 1)
+
+    def test_member_summary_supports_team_member_filter(self):
+        ResponsibilityTask = self.app_module.ResponsibilityTask
+        ResponsibilityDelegation = ResponsibilityTask.delegations.property.mapper.class_
+
+        today = date.today()
+
+        delegated_task = ResponsibilityTask(
+            number="0001",
+            title="Inventory review",
+            scheduled_for=today,
+            recipient_email="ops@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DELEGATED,
+        )
+        delegated_entry = ResponsibilityDelegation(
+            task=delegated_task,
+            delegate_member_id=self.team_member_delegate_one.id,
+        )
+        delegated_entry.delegate_member = self.team_member_delegate_one
+
+        self.app_module.db.session.add_all([delegated_task, delegated_entry])
+        self.app_module.db.session.commit()
+
+        start = (today - timedelta(days=1)).isoformat()
+        end = today.isoformat()
+
+        response = self.client.get(
+            (
+                "/api/responsibilities/reports/member-summary?startDate="
+                f"{start}&endDate={end}&teamMemberId={self.team_member_delegate_one.id}"
+            ),
+            headers=self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["totalOccurrences"], 1)
+        self.assertEqual(len(payload["members"]), 1)
+        self.assertEqual(payload["members"][0]["id"], self.team_member_delegate_one.id)
+
+        response = self.client.get(
+            (
+                "/api/responsibilities/reports/member-summary?startDate="
+                f"{start}&endDate={end}&teamMemberId=99999"
+            ),
+            headers=self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_member_summary_validates_date_inputs(self):
+        response = self.client.get(
+            "/api/responsibilities/reports/member-summary?startDate=2024-13-01",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(response.status_code, 422)
+
+        today = date.today().isoformat()
+        response = self.client.get(
+            f"/api/responsibilities/reports/member-summary?startDate={today}&endDate=2024-01-01",
+            headers=self.auth_headers,
+        )
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == "__main__":

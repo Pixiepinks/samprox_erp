@@ -5,7 +5,7 @@ import random
 import re
 import html
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Iterable
 
 from flask import Blueprint, current_app, jsonify, request
@@ -164,6 +164,50 @@ def _decorate_task_names(task: ResponsibilityTask) -> dict[str, str | None]:
     }
 
 
+def _task_team_members(task: ResponsibilityTask) -> list[TeamMember]:
+    """Return the team members directly responsible for ``task``."""
+
+    members: list[TeamMember] = []
+    seen_ids: set[int] = set()
+
+    for delegation in getattr(task, "delegations", []) or []:
+        delegate_member = getattr(delegation, "delegate_member", None)
+        member_id = getattr(delegate_member, "id", None)
+        if member_id is None:
+            continue
+        try:
+            member_id = int(member_id)
+        except (TypeError, ValueError):
+            continue
+        if member_id in seen_ids:
+            continue
+        members.append(delegate_member)
+        seen_ids.add(member_id)
+
+    delegated_member = getattr(task, "delegated_to_member", None)
+    delegated_member_id = getattr(delegated_member, "id", None)
+    if delegated_member_id is not None:
+        try:
+            delegated_member_id = int(delegated_member_id)
+        except (TypeError, ValueError):
+            delegated_member_id = None
+    if delegated_member_id is not None and delegated_member_id not in seen_ids:
+        members.append(delegated_member)
+        seen_ids.add(delegated_member_id)
+
+    assignee_member = getattr(task, "assignee_member", None)
+    assignee_member_id = getattr(assignee_member, "id", None)
+    if assignee_member_id is not None:
+        try:
+            assignee_member_id = int(assignee_member_id)
+        except (TypeError, ValueError):
+            assignee_member_id = None
+    if assignee_member_id is not None and assignee_member_id not in seen_ids:
+        members.append(assignee_member)
+
+    return [member for member in members if isinstance(member, TeamMember)]
+
+
 def _delegation_display_name(delegation: ResponsibilityDelegation) -> str:
     member_name = _normalize_member_name(getattr(delegation, "delegate_member", None))
     if member_name:
@@ -270,6 +314,8 @@ _ALLOWED_CREATOR_ROLES = {
     RoleEnum.admin,
     RoleEnum.outside_manager,
 }
+
+_REPORT_ALLOWED_ROLES = set(RoleEnum)
 
 
 def _normalize_progress(value, action: ResponsibilityAction) -> int:
@@ -705,6 +751,21 @@ def _occurrences_for_week(tasks: Iterable[ResponsibilityTask], start: date) -> d
                 schedule[current].append(task)
         current += timedelta(days=1)
     return schedule
+
+
+def _occurrences_for_range(
+    tasks: Iterable[ResponsibilityTask], start: date, end: date
+) -> list[tuple[date, ResponsibilityTask]]:
+    """Return ``(date, task)`` tuples for occurrences in ``[start, end]``."""
+
+    occurrences: list[tuple[date, ResponsibilityTask]] = []
+    current = start
+    while current <= end:
+        for task in tasks:
+            if task.occurs_on(current):
+                occurrences.append((current, task))
+        current += timedelta(days=1)
+    return occurrences
 
 
 def _format_weekly_summary(schedule: dict[date, list[ResponsibilityTask]]) -> str:
@@ -1234,6 +1295,207 @@ def send_weekly_plan():
         "startDate": start_date.isoformat(),
         "endDate": (start_date + timedelta(days=6)).isoformat(),
         "occurrenceCount": total_occurrences,
+    }
+    return jsonify(response), 200
+
+
+@bp.get("/reports/member-summary")
+@jwt_required()
+def responsibility_member_summary():
+    """Return a responsibility occurrence summary grouped by team member."""
+
+    role = _current_role()
+    if role not in _REPORT_ALLOWED_ROLES:
+        return (
+            jsonify({"msg": "You are not allowed to view responsibility reports."}),
+            403,
+        )
+
+    today = date.today()
+    default_end = today
+    default_start = today - timedelta(days=29)
+
+    start_value = request.args.get("startDate")
+    end_value = request.args.get("endDate")
+
+    try:
+        start_date = date.fromisoformat(start_value) if start_value else default_start
+    except ValueError:
+        return jsonify({"msg": "startDate must be YYYY-MM-DD."}), 422
+
+    try:
+        end_date = date.fromisoformat(end_value) if end_value else default_end
+    except ValueError:
+        return jsonify({"msg": "endDate must be YYYY-MM-DD."}), 422
+
+    if end_date < start_date:
+        return jsonify({"msg": "endDate must be on or after startDate."}), 422
+
+    raw_member_filters = request.args.getlist("teamMemberId")
+    member_filter: set[int] | None = None
+    if raw_member_filters:
+        candidate_ids: set[int] = set()
+        for raw_value in raw_member_filters:
+            if isinstance(raw_value, str) and raw_value.strip().lower() == "all":
+                candidate_ids = set()
+                break
+            try:
+                candidate_ids.add(int(raw_value))
+            except (TypeError, ValueError):
+                return jsonify({"msg": "teamMemberId must be numeric."}), 422
+        if candidate_ids:
+            member_filter = candidate_ids
+
+    selected_members: dict[int, TeamMember] = {}
+    if member_filter:
+        members = TeamMember.query.filter(TeamMember.id.in_(member_filter)).all()
+        selected_members = {member.id: member for member in members}
+        if len(selected_members) != len(member_filter):
+            return jsonify({"msg": "Unknown team member filter."}), 422
+
+    query = (
+        ResponsibilityTask.query.options(
+            selectinload(ResponsibilityTask.assigner),
+            selectinload(ResponsibilityTask.assignee),
+            selectinload(ResponsibilityTask.assignee_member),
+            selectinload(ResponsibilityTask.delegated_to),
+            selectinload(ResponsibilityTask.delegated_to_member),
+            selectinload(ResponsibilityTask.delegations).selectinload(
+                ResponsibilityDelegation.delegate
+            ),
+            selectinload(ResponsibilityTask.delegations).selectinload(
+                ResponsibilityDelegation.delegate_member
+            ),
+        )
+        .filter(ResponsibilityTask.scheduled_for <= end_date)
+        .order_by(
+            asc(ResponsibilityTask.scheduled_for),
+            asc(ResponsibilityTask.created_at),
+        )
+    )
+
+    tasks = query.all()
+
+    task_members: dict[int, list[TeamMember]] = {}
+    relevant_tasks: list[ResponsibilityTask] = []
+    for task in tasks:
+        members = _task_team_members(task)
+        if not members:
+            continue
+        if member_filter is not None:
+            member_ids = {
+                getattr(member, "id", None)
+                for member in members
+                if getattr(member, "id", None) is not None
+            }
+            if not member_ids.intersection(member_filter):
+                continue
+        task_members[task.id] = members
+        relevant_tasks.append(task)
+
+    occurrences = _occurrences_for_range(relevant_tasks, start_date, end_date)
+    serialized_tasks: dict[int, dict] = {}
+
+    member_occurrences: dict[int, dict] = {}
+
+    for occurrence_date, task in occurrences:
+        members = task_members.get(task.id, [])
+        if not members:
+            continue
+
+        if task.id not in serialized_tasks:
+            serialized = task_schema.dump(task)
+            serialized.update(_decorate_task_names(task))
+            serialized_tasks[task.id] = serialized
+        else:
+            serialized = serialized_tasks[task.id]
+
+        for member in members:
+            member_id = getattr(member, "id", None)
+            if member_id is None:
+                continue
+            try:
+                member_id = int(member_id)
+            except (TypeError, ValueError):
+                continue
+            if member_filter is not None and member_id not in member_filter:
+                continue
+
+            bucket = member_occurrences.setdefault(
+                member_id,
+                {
+                    "member": member,
+                    "occurrences": [],
+                },
+            )
+
+            bucket["occurrences"].append(
+                {
+                    "date": occurrence_date.isoformat(),
+                    "taskId": serialized.get("id"),
+                    "taskNumber": serialized.get("number"),
+                    "taskTitle": serialized.get("title"),
+                    "taskStatus": serialized.get("status"),
+                    "taskAction": serialized.get("action"),
+                    "taskProgress": serialized.get("progress"),
+                    "assigneeName": serialized.get("assigneeName"),
+                    "delegatedToName": serialized.get("delegatedToName"),
+                }
+            )
+
+    if member_filter:
+        for member_id, member in selected_members.items():
+            member_occurrences.setdefault(
+                member_id,
+                {
+                    "member": member,
+                    "occurrences": [],
+                },
+            )
+
+    members_payload: list[dict] = []
+    total_occurrences = 0
+
+    for member_id, payload in member_occurrences.items():
+        member = payload.get("member")
+        occurrences_list = payload.get("occurrences", [])
+        occurrences_list.sort(
+            key=lambda item: (
+                item.get("date") or "",
+                item.get("taskNumber") or "",
+                item.get("taskId") or 0,
+            )
+        )
+        total_occurrences += len(occurrences_list)
+        unique_task_ids = {
+            item.get("taskId")
+            for item in occurrences_list
+            if item.get("taskId") is not None
+        }
+        members_payload.append(
+            {
+                "id": member_id,
+                "name": _normalize_member_name(member) or getattr(member, "name", "Team member"),
+                "occurrenceCount": len(occurrences_list),
+                "uniqueTaskCount": len(unique_task_ids),
+                "occurrences": occurrences_list,
+            }
+        )
+
+    members_payload.sort(
+        key=lambda item: (
+            -item["occurrenceCount"],
+            item["name"].lower() if isinstance(item["name"], str) else "",
+        )
+    )
+
+    response = {
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
+        "generatedAt": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "totalOccurrences": total_occurrences,
+        "memberCount": len(members_payload),
+        "members": members_payload,
     }
     return jsonify(response), 200
 

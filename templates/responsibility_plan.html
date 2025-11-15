@@ -96,6 +96,65 @@
                 </p>
                 <p class="responsibility-plan__message" id="responsibility-message" hidden></p>
             </section>
+            <section class="responsibility-report" aria-labelledby="responsibility-report-heading">
+                <div class="responsibility-report__header">
+                    <div>
+                        <h2 class="responsibility-report__title" id="responsibility-report-heading">Responsibilities by team member</h2>
+                        <p class="responsibility-report__description">
+                            Review the responsibilities assigned to each team member within your chosen date range and export the overview instantly.
+                        </p>
+                    </div>
+                    <div class="responsibility-report__downloads" role="group" aria-label="Download responsibility report">
+                        <button type="button" class="button button--ghost button--small" data-report-download="excel" disabled>
+                            Download Excel
+                        </button>
+                        <button type="button" class="button button--ghost button--small" data-report-download="pdf" disabled>
+                            Download PDF
+                        </button>
+                        <button type="button" class="button button--ghost button--small" data-report-download="png" disabled>
+                            Download PNG
+                        </button>
+                    </div>
+                </div>
+                <form class="responsibility-report__filters" id="responsibility-report-form" novalidate>
+                    <div class="responsibility-report__field">
+                        <label for="responsibility-report-start">Start date</label>
+                        <input class="responsibility-report__input" type="date" id="responsibility-report-start" name="startDate" required />
+                    </div>
+                    <div class="responsibility-report__field">
+                        <label for="responsibility-report-end">End date</label>
+                        <input class="responsibility-report__input" type="date" id="responsibility-report-end" name="endDate" required />
+                    </div>
+                    <div class="responsibility-report__field">
+                        <label for="responsibility-report-member">Team member</label>
+                        <select class="responsibility-report__select" id="responsibility-report-member" name="teamMemberId" required>
+                            <option value="all">All team members</option>
+                        </select>
+                    </div>
+                </form>
+                <div class="responsibility-report__body">
+                    <div class="responsibility-report__chart-container">
+                        <canvas id="responsibility-report-chart" role="img" aria-label="Responsibilities per team member"></canvas>
+                    </div>
+                    <div class="responsibility-report__table-wrapper">
+                        <table class="responsibility-report__table" aria-describedby="responsibility-report-heading">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Team member</th>
+                                    <th scope="col">Occurrences</th>
+                                    <th scope="col">Unique responsibilities</th>
+                                </tr>
+                            </thead>
+                            <tbody id="responsibility-report-tbody"></tbody>
+                        </table>
+                        <p class="responsibility-report__empty" id="responsibility-report-empty" hidden>
+                            No responsibilities recorded for the selected filters.
+                        </p>
+                    </div>
+                </div>
+                <p class="responsibility-report__summary" id="responsibility-report-summary"></p>
+                <p class="responsibility-report__message" id="responsibility-report-message" hidden></p>
+            </section>
         </main>
     </div>
     <div class="modal" id="responsibility-modal" hidden aria-hidden="true">
@@ -331,6 +390,10 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" integrity="sha384-8FmKpVzVfU6Ly3OJUokHknsE+Fjr12JOP5tBxOBE31AyGdSzZsv/CrKHr2TRVsyG" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
+    <script src="{{ url_for('static', filename='js/responsibility-report.js') }}"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -386,6 +449,18 @@
         const responsibilityTableBody = document.getElementById("responsibility-table-body");
         const responsibilityEmptyState = document.getElementById("responsibility-empty");
         const responsibilityMessage = document.getElementById("responsibility-message");
+        const responsibilityReportForm = document.getElementById("responsibility-report-form");
+        const responsibilityReportStart = document.getElementById("responsibility-report-start");
+        const responsibilityReportEnd = document.getElementById("responsibility-report-end");
+        const responsibilityReportMember = document.getElementById("responsibility-report-member");
+        const responsibilityReportSummary = document.getElementById("responsibility-report-summary");
+        const responsibilityReportMessage = document.getElementById("responsibility-report-message");
+        const responsibilityReportTableBody = document.getElementById("responsibility-report-tbody");
+        const responsibilityReportEmpty = document.getElementById("responsibility-report-empty");
+        const responsibilityReportChart = document.getElementById("responsibility-report-chart");
+        const responsibilityReportDownloads = document.querySelectorAll(
+            ".responsibility-report [data-report-download]"
+        );
         const responsibilityWeeklyForm = document.getElementById("responsibility-weekly-form");
         const responsibilityWeeklyMessage = document.getElementById("responsibility-weekly-message");
         const responsibilityWeeklyStartInput = document.getElementById("responsibility-weekly-start");
@@ -2573,6 +2648,22 @@
         };
 
         responsibilityWeeklyForm?.addEventListener("submit", sendWeeklyPlan);
+
+        if (typeof window.initResponsibilityReport === "function") {
+            window.initResponsibilityReport({
+                form: responsibilityReportForm,
+                startInput: responsibilityReportStart,
+                endInput: responsibilityReportEnd,
+                memberSelect: responsibilityReportMember,
+                summaryElement: responsibilityReportSummary,
+                messageElement: responsibilityReportMessage,
+                tableBody: responsibilityReportTableBody,
+                emptyState: responsibilityReportEmpty,
+                chartCanvas: responsibilityReportChart,
+                downloadButtons: Array.from(responsibilityReportDownloads || []),
+                authHeaders,
+            });
+        }
 
         const initializeResponsibilityWeeklyStart = () => {
             if (!responsibilityWeeklyStartInput) {

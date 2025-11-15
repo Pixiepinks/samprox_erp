@@ -641,7 +641,7 @@
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
                             <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
-                                <option value="">Select a manager (optional)</option>
+                                <option value="">Select a team member (optional)</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -656,15 +656,15 @@
                             </select>
                         </div>
                         <div class="edit-form__field" id="responsibility-delegated-field" hidden>
-                            <label class="edit-form__label" for="responsibility-delegations-list">Delegated managers <span class="required">*</span></label>
+                            <label class="edit-form__label" for="responsibility-delegations-list">Delegated team members <span class="required">*</span></label>
                             <div class="responsibility-delegations" id="responsibility-delegations">
                                 <div class="responsibility-delegations__list" id="responsibility-delegations-list"></div>
                                 <button
                                     type="button"
                                     class="button button--secondary button--small responsibility-delegations__add"
                                     id="responsibility-add-delegation"
-                                >Add delegated manager</button>
-                                <p class="edit-form__hint">Split the responsibility target among the managers below.</p>
+                                >Add delegated team member</button>
+                                <p class="edit-form__hint">Split the responsibility target among the team members below.</p>
                             </div>
                         </div>
                         <template id="responsibility-delegation-template">
@@ -680,7 +680,7 @@
                                 <button
                                     type="button"
                                     class="button button--ghost button--small responsibility-delegations__remove"
-                                    aria-label="Remove delegated manager"
+                                    aria-label="Remove delegated team member"
                                 >Remove</button>
                             </div>
                         </template>
@@ -1437,6 +1437,21 @@
 
         const assignerNameFallback = (user) => user?.name || user?.email || "";
 
+        const getMemberDisplayName = (member) => {
+            const candidates = [member?.name, member?.nickname, member?.regNumber];
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "Team member";
+        };
+
         const PERFORMANCE_DEFAULT_UNIT = "percentage_pct";
         const PERFORMANCE_UNIT_VALUES = [
             "date",
@@ -1605,7 +1620,7 @@
             select.innerHTML = "";
             const placeholder = document.createElement("option");
             placeholder.value = "";
-            placeholder.textContent = "Select a manager";
+            placeholder.textContent = "Select a team member";
             select.appendChild(placeholder);
 
             responsibilityAssignees.forEach((assignee) => {
@@ -2846,7 +2861,7 @@
                 responsibilityAssigneeSelect.innerHTML = "";
                 const placeholder = document.createElement("option");
                 placeholder.value = "";
-                placeholder.textContent = "Select a manager (optional)";
+                placeholder.textContent = "Select a team member (optional)";
                 responsibilityAssigneeSelect.appendChild(placeholder);
 
                 responsibilityAssignees.forEach((assignee) => {
@@ -2868,7 +2883,7 @@
                 return;
             }
             try {
-                const response = await fetch("/api/responsibilities/assignees", { headers: authHeaders });
+                const response = await fetch("/api/team/members", { headers: authHeaders });
                 let data = [];
                 try {
                     data = await response.json();
@@ -2876,12 +2891,46 @@
                     data = [];
                 }
                 if (!response.ok) {
-                    throw new Error(data?.msg || "Unable to load managers.");
+                    throw new Error(data?.msg || "Unable to load team members.");
                 }
-                responsibilityAssignees = Array.isArray(data) ? data : [];
+
+                const uniqueMembers = new Map();
+                (Array.isArray(data) ? data : []).forEach((member) => {
+                    if (!member) {
+                        return;
+                    }
+
+                    const rawId =
+                        member?.id ?? member?.memberId ?? member?.regNumber ?? member?.reg_number;
+                    if (rawId === null || rawId === undefined) {
+                        return;
+                    }
+                    const parsedId = Number.parseInt(String(rawId).trim(), 10);
+                    if (!Number.isFinite(parsedId)) {
+                        return;
+                    }
+                    const normalizedId = String(parsedId);
+                    if (uniqueMembers.has(normalizedId)) {
+                        return;
+                    }
+
+                    const displayName = getMemberDisplayName(member);
+                    const assignee = { id: normalizedId, name: displayName };
+                    if (typeof member?.email === "string") {
+                        const trimmedEmail = member.email.trim();
+                        if (trimmedEmail) {
+                            assignee.email = trimmedEmail;
+                        }
+                    }
+                    uniqueMembers.set(normalizedId, assignee);
+                });
+
+                responsibilityAssignees = Array.from(uniqueMembers.values()).sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+                );
                 populateResponsibilityAssignees();
             } catch (error) {
-                console.error("Failed to load responsibility assignees", error);
+                console.error("Failed to load responsibility team members", error);
             }
         };
 
@@ -3058,7 +3107,7 @@
                 if (!delegateValueRaw) {
                     if (isDelegatedAction) {
                         showResponsibilityFormError(
-                            "Select a manager for each delegated allocation.",
+                            "Select a team member for each delegated allocation.",
                         );
                         managerSelect?.focus();
                         return;
@@ -3068,7 +3117,7 @@
 
                 const parsedDelegated = Number.parseInt(delegateValueRaw, 10);
                 if (Number.isNaN(parsedDelegated)) {
-                    showResponsibilityFormError("Select a valid delegated manager.");
+                    showResponsibilityFormError("Select a valid delegated team member.");
                     managerSelect?.focus();
                     return;
                 }
@@ -3081,7 +3130,7 @@
             }
 
             if (isDelegatedAction && delegationsPayload.length === 0) {
-                showResponsibilityFormError("Add at least one delegated manager when the action is Delegated.");
+                showResponsibilityFormError("Add at least one delegated team member when the action is Delegated.");
                 ensureDelegationRow();
                 responsibilityDelegationsList
                     ?.querySelector(".responsibility-delegations__select")
@@ -6273,21 +6322,6 @@
             }
 
             return cell;
-        };
-
-        const getMemberDisplayName = (member) => {
-            const candidates = [member?.name, member?.nickname, member?.regNumber];
-
-            for (const candidate of candidates) {
-                if (typeof candidate === "string") {
-                    const trimmed = candidate.trim();
-                    if (trimmed) {
-                        return trimmed;
-                    }
-                }
-            }
-
-            return "Team member";
         };
 
         const createAvatarElement = (member) => {

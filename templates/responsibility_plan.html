@@ -176,7 +176,7 @@
                         <div class="edit-form__field">
                             <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
                             <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
-                                <option value="">Select a manager (optional)</option>
+                                <option value="">Select a team member (optional)</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -193,7 +193,7 @@
                         <div class="edit-form__field" id="responsibility-delegated-field" hidden>
                             <label class="edit-form__label" for="responsibility-delegated-to">Delegated to <span class="required">*</span></label>
                             <select class="edit-form__input" id="responsibility-delegated-to" name="delegatedToId">
-                                <option value="">Select a manager</option>
+                                <option value="">Select a team member</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -413,6 +413,21 @@
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
+
+        const getMemberDisplayName = (member) => {
+            const candidates = [member?.name, member?.nickname, member?.regNumber];
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "Team member";
+        };
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
             "Monday",
@@ -1375,25 +1390,26 @@
                 return;
             }
 
-            const renderOption = (option) => {
+            const clearOptions = (select) => {
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+            };
+
+            const renderOption = ({ id, name }) => {
                 const element = document.createElement("option");
-                element.value = option?.id;
-                element.textContent = option?.name;
+                element.value = String(id);
+                element.textContent = name;
                 return element;
             };
 
-            const fragment = document.createDocumentFragment();
-            assignees.forEach((assignee) => {
-                fragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
-            });
+            clearOptions(responsibilityAssigneeSelect);
+            clearOptions(responsibilityDelegatedSelect);
 
-            const delegatedFragment = document.createDocumentFragment();
             assignees.forEach((assignee) => {
-                delegatedFragment.appendChild(renderOption({ id: assignee.id, name: assignee.name }));
+                responsibilityAssigneeSelect.appendChild(renderOption(assignee));
+                responsibilityDelegatedSelect.appendChild(renderOption(assignee));
             });
-
-            responsibilityAssigneeSelect.append(fragment.cloneNode(true));
-            responsibilityDelegatedSelect.append(delegatedFragment.cloneNode(true));
         };
 
         const fetchResponsibilityAssignees = async () => {
@@ -1402,19 +1418,52 @@
             }
 
             try {
-                const response = await fetch("/api/responsibilities/assignees", {
+                const response = await fetch("/api/team/members", {
                     headers: authHeaders,
                 });
 
                 if (!response.ok) {
                     const data = await response.json().catch(() => null);
-                    throw new Error(data?.msg || "Unable to load managers.");
+                    throw new Error(data?.msg || "Unable to load team members.");
                 }
 
                 const data = await response.json();
-                populateResponsibilityAssignees(Array.isArray(data) ? data : []);
+                const uniqueMembers = new Map();
+
+                (Array.isArray(data) ? data : []).forEach((member) => {
+                    if (!member) {
+                        return;
+                    }
+
+                    const rawId =
+                        member?.id ?? member?.memberId ?? member?.regNumber ?? member?.reg_number;
+                    if (rawId === null || rawId === undefined) {
+                        return;
+                    }
+
+                    const parsedId = Number.parseInt(String(rawId).trim(), 10);
+                    if (!Number.isFinite(parsedId)) {
+                        return;
+                    }
+
+                    const normalizedId = String(parsedId);
+                    if (uniqueMembers.has(normalizedId)) {
+                        return;
+                    }
+
+                    uniqueMembers.set(normalizedId, {
+                        id: normalizedId,
+                        name: getMemberDisplayName(member),
+                    });
+                });
+
+                const assignees = Array.from(uniqueMembers.values()).sort((a, b) =>
+                    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+                );
+
+                populateResponsibilityAssignees(assignees);
             } catch (error) {
-                console.error("Failed to load responsibility assignees", error);
+                console.error("Failed to load responsibility team members", error);
             }
         };
 
@@ -1648,7 +1697,7 @@
             }
 
             if (payload.action === "delegated" && !payload.delegatedToId) {
-                showResponsibilityFormError("Select a delegated manager when the action is Delegated.");
+                showResponsibilityFormError("Select a delegated team member when the action is Delegated.");
                 return;
             }
 

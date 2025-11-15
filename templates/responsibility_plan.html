@@ -74,14 +74,14 @@
                                 <th scope="col">Responsibility No</th>
                                 <th scope="col">Title</th>
                                 <th scope="col">Progress</th>
+                                <th scope="col">Assigned by</th>
+                                <th scope="col">Assigned to</th>
+                                <th scope="col">Delegated to</th>
                                 <th scope="col">Unit of Measure</th>
                                 <th scope="col">Responsible</th>
                                 <th scope="col">Actual</th>
                                 <th scope="col">Performance Metric</th>
                                 <th scope="col">Detail</th>
-                                <th scope="col">Assigned by</th>
-                                <th scope="col">Assigned to</th>
-                                <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
                                 <th scope="col">5D Action</th>
                                 <th scope="col">Created</th>
@@ -1699,6 +1699,7 @@
 
             const assignerDisplay = preferNonEmptyString(
                 task?.assignerName,
+                task?.assignerEmail,
                 assignerNameFallback(task?.assigner),
             );
 
@@ -1713,6 +1714,9 @@
                 appendCell(task?.number || "—"),
                 appendCell(task?.title || "—"),
                 appendCell(progressIndicator),
+                appendCell(assignerDisplay || "—"),
+                appendCell(assigneeDisplay || "—"),
+                appendCell(delegatedDisplay || "—"),
                 appendCell(performanceConfig.label),
                 appendCell(
                     formatPerformanceValueDisplay(
@@ -1736,9 +1740,6 @@
                     ),
                 ),
                 appendCell(task?.detail || "—"),
-                appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
-                appendCell(assigneeDisplay),
-                appendCell(delegatedDisplay || "—"),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
                 createdCell,

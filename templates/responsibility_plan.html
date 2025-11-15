@@ -469,10 +469,15 @@
                 return "—";
             }
 
+            const userAssigneeDisplay = assignerNameFallback(task.assignee);
+            const memberLookupDisplay = !userAssigneeDisplay
+                ? resolveTeamMemberName(task.assigneeId)
+                : "";
+
             const display = preferNonEmptyString(
                 task.assigneeName,
-                resolveTeamMemberName(task.assigneeId),
-                assignerNameFallback(task.assignee),
+                userAssigneeDisplay,
+                memberLookupDisplay,
                 task.assigneeEmail,
             );
 
@@ -832,10 +837,15 @@
             const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
 
             if (delegations.length === 0) {
+                const delegatedUserDisplay = assignerNameFallback(task?.delegatedTo);
+                const delegatedMemberDisplay = !delegatedUserDisplay
+                    ? resolveTeamMemberName(task?.delegatedToId)
+                    : "";
+
                 const fallback = preferNonEmptyString(
                     task?.delegatedToName,
-                    resolveTeamMemberName(task?.delegatedToId),
-                    assignerNameFallback(task?.delegatedTo),
+                    delegatedUserDisplay,
+                    delegatedMemberDisplay,
                 );
                 return fallback || "—";
             }
@@ -846,10 +856,16 @@
                         return null;
                     }
 
+                    const delegateUserDisplay = assignerNameFallback(entry?.delegate);
+                    const delegateMemberDisplay = !delegateUserDisplay
+                        ? resolveTeamMemberName(entry?.delegateId)
+                        : "";
+
                     const delegateName = preferNonEmptyString(
                         entry?.delegate?.name,
+                        delegateUserDisplay,
+                        delegateMemberDisplay,
                         entry?.delegate?.email,
-                        resolveTeamMemberName(entry?.delegateId),
                         entry?.delegateId ? String(entry.delegateId) : "",
                     );
 

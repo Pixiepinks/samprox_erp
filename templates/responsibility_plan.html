@@ -784,14 +784,12 @@
 
             if (delegations.length === 0) {
                 const delegatedUserDisplay = assignerNameFallback(task?.delegatedTo);
-                const delegatedMemberDisplay = !delegatedUserDisplay
-                    ? resolveTeamMemberName(task?.delegatedToId)
-                    : "";
+                const delegatedMemberDisplay = resolveTeamMemberName(task?.delegatedToId);
 
                 const fallback = preferNonEmptyString(
                     task?.delegatedToName,
-                    delegatedUserDisplay,
                     delegatedMemberDisplay,
+                    delegatedUserDisplay,
                 );
                 return fallback || "—";
             }
@@ -803,14 +801,12 @@
                     }
 
                     const delegateUserDisplay = assignerNameFallback(entry?.delegate);
-                    const delegateMemberDisplay = !delegateUserDisplay
-                        ? resolveTeamMemberName(entry?.delegateId)
-                        : "";
+                    const delegateMemberDisplay = resolveTeamMemberName(entry?.delegateId);
 
                     const delegateName = preferNonEmptyString(
                         entry?.delegate?.name,
-                        delegateUserDisplay,
                         delegateMemberDisplay,
+                        delegateUserDisplay,
                         entry?.delegate?.email,
                         entry?.delegateId ? String(entry.delegateId) : "",
                     );

@@ -1512,10 +1512,22 @@
                 ),
                 appendCell(
                     preferNonEmptyString(
+                        normalizeDisplayValue(task?.delegatedToName),
+                        normalizeDisplayValue(task?.delegated_to_member?.name),
+                        normalizeDisplayValue(task?.delegated_to?.name),
                         normalizeDisplayValue(
                             getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
                         ),
-                        task?.delegatedToName,
+                        normalizeDisplayValue(
+                            task?.delegated_to_id !== undefined && task?.delegated_to_id !== null
+                                ? String(task.delegated_to_id)
+                                : "",
+                        ),
+                        normalizeDisplayValue(
+                            task?.delegatedToId !== undefined && task?.delegatedToId !== null
+                                ? String(task.delegatedToId)
+                                : "",
+                        ),
                         task?.delegatedToEmail,
                     ) || "—",
                 ),

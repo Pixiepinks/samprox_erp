@@ -5,6 +5,8 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import patch
 
+from models import ResponsibilityAction
+
 from sqlalchemy.exc import IntegrityError
 
 from requests import exceptions as requests_exceptions
@@ -647,6 +649,77 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIn(
             "Select a delegated team member.", errors.get("delegations", [])
         )
+
+    def test_list_includes_delegated_team_member_name_from_delegations(self):
+        ResponsibilityTask = self.app_module.ResponsibilityTask
+        ResponsibilityDelegation = (
+            ResponsibilityTask.delegations.property.mapper.class_
+        )
+
+        task = ResponsibilityTask(
+            title="Warehouse check",
+            scheduled_for=date.today(),
+            recipient_email="warehouse@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DELEGATED,
+            delegated_to_id=self.secondary_manager.id,
+        )
+
+        delegation = ResponsibilityDelegation(
+            task=task,
+            delegate_member_id=self.team_member_delegate_one.id,
+        )
+        delegation.delegate_member = self.team_member_delegate_one
+
+        self.app_module.db.session.add_all([task, delegation])
+        self.app_module.db.session.commit()
+
+        response = self.client.get(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(len(payload), 1)
+        entry = payload[0]
+        self.assertEqual(entry["delegatedToId"], self.team_member_delegate_one.id)
+        self.assertEqual(entry["delegatedToName"], "Ishara Loader")
+
+    def test_list_includes_delegated_user_name_when_member_missing(self):
+        ResponsibilityTask = self.app_module.ResponsibilityTask
+        ResponsibilityDelegation = (
+            ResponsibilityTask.delegations.property.mapper.class_
+        )
+
+        task = ResponsibilityTask(
+            title="Packing review",
+            scheduled_for=date.today(),
+            recipient_email="packing@example.com",
+            assigner_id=self.primary_manager.id,
+            action=ResponsibilityAction.DELEGATED,
+        )
+
+        delegation = ResponsibilityDelegation(
+            task=task,
+            delegate_id=self.assistant_manager_one.id,
+        )
+        delegation.delegate = self.assistant_manager_one
+
+        self.app_module.db.session.add_all([task, delegation])
+        self.app_module.db.session.commit()
+
+        response = self.client.get(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(len(payload), 1)
+        entry = payload[0]
+        self.assertEqual(entry["delegatedToId"], self.assistant_manager_one.id)
+        self.assertEqual(entry["delegatedToName"], "Sudara")
 
     def test_create_responsibility_reports_email_failure(self):
         scheduled_for = date.today().isoformat()

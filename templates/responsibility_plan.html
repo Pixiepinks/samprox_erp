@@ -809,14 +809,11 @@
             const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
 
             if (delegations.length === 0) {
-                const delegatedUserDisplay = assignerNameFallback(task?.delegatedTo);
-                const delegatedMemberDisplay = resolveTeamMemberName(task?.delegatedToId);
-
                 const fallback = preferNonEmptyString(
                     task?.delegatedTo?.name,
                     task?.delegatedToName,
-                    delegatedMemberDisplay,
-                    delegatedUserDisplay,
+                    getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                    assignerNameFallback(task?.delegatedTo),
                     task?.delegatedTo?.email,
                 );
                 return fallback || "—";
@@ -828,16 +825,11 @@
                         return null;
                     }
 
-                    const delegateUserDisplay = assignerNameFallback(entry?.delegate);
-                    const delegateMemberDisplay = resolveTeamMemberName(entry?.delegateId);
-
                     const delegateName = preferNonEmptyString(
                         entry?.delegateName,
-                        entry?.delegate?.name,
-                        delegateMemberDisplay,
-                        delegateUserDisplay,
+                        resolveTeamMemberName(entry?.delegateId),
+                        assignerNameFallback(entry?.delegate),
                         entry?.delegate?.email,
-                        entry?.delegateId ? String(entry.delegateId) : "",
                     );
 
                     const rawValue =

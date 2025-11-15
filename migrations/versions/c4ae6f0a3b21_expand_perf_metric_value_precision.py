@@ -1,7 +1,7 @@
 """expand perf_metric_value precision
 
 Revision ID: c4ae6f0a3b21
-Revises: 1f9c6b304abc
+Revises: a97a7fa6d280
 Create Date: 2025-11-15 05:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "c4ae6f0a3b21"
-down_revision = "1f9c6b304abc"
+down_revision = "a97a7fa6d280"
 branch_labels = None
 depends_on = None
 

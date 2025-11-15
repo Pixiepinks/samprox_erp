@@ -76,6 +76,66 @@ MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
 )
 
 
+_PERFORMANCE_LABEL_OVERRIDES: dict[str, str] = {
+    "quantity_based": "Quantity-based",
+    "qty": "Quantity (Qty)",
+    "amount_lkr": "Amount (LKR)",
+    "kg": "Kilograms (kg)",
+    "kwh": "kWh",
+    "rpm": "RPM",
+    "quality_metric": "Quality Metrics",
+    "percentage_pct": "Percentage (%)",
+    "margin_pct": "Margin (%)",
+    "error_rate_pct": "Error Rate (%)",
+    "success_rate_pct": "Success Rate (%)",
+    "accuracy_pct": "Accuracy (%)",
+    "compliance_pct": "Compliance (%)",
+    "conversion_pct": "Conversion (%)",
+    "completion_pct": "Completion (%)",
+    "sla_pct": "SLA (%)",
+    "time_per_unit": "Time per Unit",
+}
+
+
+def _performance_unit_label(unit: str | None) -> str | None:
+    if not unit:
+        return None
+    normalized = str(unit).strip().lower()
+    if not normalized:
+        return None
+    override = _PERFORMANCE_LABEL_OVERRIDES.get(normalized)
+    if override:
+        return override
+    words = [
+        word.capitalize() if word else ""
+        for word in normalized.replace("-", " ").replace("_", " ").split()
+    ]
+    if not words:
+        return None
+    return " ".join(words)
+
+
+def _format_progress_label(progress: object) -> str | None:
+    if progress is None:
+        return None
+    if isinstance(progress, bool):
+        return None
+    if isinstance(progress, (int, float)):
+        value = float(progress)
+        if value.is_integer():
+            return f"{int(value)}%"
+        rounded = round(value, 1)
+        if rounded.is_integer():
+            return f"{int(rounded)}%"
+        return f"{rounded}%"
+    text = str(progress).strip()
+    if not text:
+        return None
+    if text.endswith("%"):
+        return text
+    return f"{text}%"
+
+
 def _normalize_member_name(member: TeamMember | None) -> str | None:
     if member is None:
         return None
@@ -1406,6 +1466,10 @@ def responsibility_member_summary():
         if task.id not in serialized_tasks:
             serialized = task_schema.dump(task)
             serialized.update(_decorate_task_names(task))
+            if "performanceUnit" in serialized:
+                serialized["performanceUnitLabel"] = _performance_unit_label(
+                    serialized.get("performanceUnit")
+                )
             serialized_tasks[task.id] = serialized
         else:
             serialized = serialized_tasks[task.id]
@@ -1438,8 +1502,21 @@ def responsibility_member_summary():
                     "taskStatus": serialized.get("status"),
                     "taskAction": serialized.get("action"),
                     "taskProgress": serialized.get("progress"),
+                    "taskProgressLabel": _format_progress_label(
+                        serialized.get("progress")
+                    ),
                     "assigneeName": serialized.get("assigneeName"),
                     "delegatedToName": serialized.get("delegatedToName"),
+                    "taskDescription": serialized.get("description"),
+                    "taskDetail": serialized.get("detail"),
+                    "taskDiscussion": serialized.get("actionNotes"),
+                    "taskActionNotes": serialized.get("actionNotes"),
+                    "taskPerformanceUnit": serialized.get("performanceUnit"),
+                    "taskPerformanceUnitLabel": serialized.get("performanceUnitLabel")
+                    or _performance_unit_label(serialized.get("performanceUnit")),
+                    "taskPerformanceResponsible": serialized.get("performanceResponsible"),
+                    "taskPerformanceActual": serialized.get("performanceActual"),
+                    "taskPerformanceMetric": serialized.get("performanceMetric"),
                 }
             )
 

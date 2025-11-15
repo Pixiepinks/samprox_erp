@@ -63,25 +63,45 @@
                     "Responsibility No": "",
                     Title: "No responsibilities in range",
                     Status: "",
-                    Action: "",
-                    Progress: "",
+                    "5D Action": "",
+                    "Progress (%)": "",
+                    "Unit of Measure": "",
+                    Responsible: "",
+                    Actual: "",
+                    "Performance Metric": "",
+                    Description: "",
+                    Detail: "",
+                    "Discussion Detail": "",
                     "Assigned To": "",
                     "Delegated To": "",
                 });
                 return;
             }
             occurrences.forEach((occurrence) => {
+                const progressLabel =
+                    occurrence.taskProgressLabel ||
+                    (occurrence.taskProgress === 0 || occurrence.taskProgress
+                        ? `${occurrence.taskProgress}%`
+                        : "");
+                const unitLabel =
+                    occurrence.taskPerformanceUnitLabel ||
+                    occurrence.taskPerformanceUnit ||
+                    "";
                 rows.push({
                     "Team member": member.name || "",
                     Date: formatDateDisplay(occurrence.date),
                     "Responsibility No": occurrence.taskNumber || "",
                     Title: occurrence.taskTitle || "",
+                    Description: occurrence.taskDescription || "",
+                    Detail: occurrence.taskDetail || "",
+                    "Discussion Detail": occurrence.taskDiscussion || "",
                     Status: occurrence.taskStatus || "",
-                    Action: occurrence.taskAction || "",
-                    Progress:
-                        occurrence.taskProgress === 0 || occurrence.taskProgress
-                            ? String(occurrence.taskProgress)
-                            : "",
+                    "5D Action": occurrence.taskAction || "",
+                    "Progress (%)": progressLabel,
+                    "Unit of Measure": unitLabel,
+                    Responsible: occurrence.taskPerformanceResponsible || "",
+                    Actual: occurrence.taskPerformanceActual || "",
+                    "Performance Metric": occurrence.taskPerformanceMetric || "",
                     "Assigned To": occurrence.assigneeName || "",
                     "Delegated To": occurrence.delegatedToName || "",
                 });
@@ -180,6 +200,59 @@
                     doc.setFontSize(11);
                     cursorY += 12;
                 }
+                const progressLabel =
+                    occurrence.taskProgressLabel ||
+                    (occurrence.taskProgress === 0 || occurrence.taskProgress
+                        ? `${occurrence.taskProgress}%`
+                        : "");
+                const unitLabel =
+                    occurrence.taskPerformanceUnitLabel ||
+                    occurrence.taskPerformanceUnit ||
+                    "";
+                const metrics = [];
+                if (progressLabel) {
+                    metrics.push(`Progress: ${progressLabel}`);
+                }
+                if (unitLabel) {
+                    metrics.push(`Unit of Measure: ${unitLabel}`);
+                }
+                if (occurrence.taskPerformanceResponsible) {
+                    metrics.push(`Responsible: ${occurrence.taskPerformanceResponsible}`);
+                }
+                if (occurrence.taskPerformanceActual) {
+                    metrics.push(`Actual: ${occurrence.taskPerformanceActual}`);
+                }
+                if (occurrence.taskPerformanceMetric) {
+                    metrics.push(`Performance Metric: ${occurrence.taskPerformanceMetric}`);
+                }
+                metrics.forEach((metricLine) => {
+                    const metricWrapped = doc.splitTextToSize(metricLine, 720);
+                    metricWrapped.forEach((metricText) => {
+                        doc.setFontSize(10);
+                        doc.text(metricText, marginLeft + 24, cursorY);
+                        cursorY += 12;
+                    });
+                    doc.setFontSize(11);
+                });
+                const discussionBlocks = [
+                    ["Description", occurrence.taskDescription],
+                    ["Detail", occurrence.taskDetail],
+                    ["Discussion", occurrence.taskDiscussion || occurrence.taskActionNotes],
+                ];
+                discussionBlocks.forEach(([label, value]) => {
+                    const content = value && value.toString().trim();
+                    if (!content) {
+                        return;
+                    }
+                    const prefixed = `${label}: ${content}`;
+                    const wrappedContent = doc.splitTextToSize(prefixed, 720);
+                    wrappedContent.forEach((entry) => {
+                        doc.setFontSize(10);
+                        doc.text(entry, marginLeft + 24, cursorY);
+                        cursorY += 12;
+                    });
+                    doc.setFontSize(11);
+                });
                 cursorY += 6;
             });
 

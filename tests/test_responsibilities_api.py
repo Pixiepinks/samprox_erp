@@ -3,9 +3,14 @@ import os
 import sys
 import unittest
 from datetime import date, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
-from models import ResponsibilityAction, ResponsibilityRecurrence
+from models import (
+    ResponsibilityAction,
+    ResponsibilityPerformanceUnit,
+    ResponsibilityRecurrence,
+)
 
 from sqlalchemy.exc import IntegrityError
 
@@ -877,6 +882,10 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             recurrence=ResponsibilityRecurrence.DAILY,
         )
         recurring_task.assignee_member = self.team_member_primary
+        recurring_task.description = "Share updates with shift leaders."
+        recurring_task.detail = "Review yesterday's production numbers."
+        recurring_task.action_notes = "Covered maintenance backlog."
+        recurring_task.progress = 80
 
         delegated_task = ResponsibilityTask(
             number="0002",
@@ -891,6 +900,14 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             delegate_member_id=self.team_member_delegate_one.id,
         )
         delegated_entry.delegate_member = self.team_member_delegate_one
+        delegated_task.description = "Validate outbound lorries."
+        delegated_task.detail = "Check packaging slips for five random orders."
+        delegated_task.action_notes = "Discussed with Kasun regarding late departure."
+        delegated_task.progress = 45
+        delegated_task.perf_uom = ResponsibilityPerformanceUnit.AMOUNT_LKR
+        delegated_task.perf_responsible_value = Decimal("3000000")
+        delegated_task.perf_actual_value = Decimal("2500000")
+        delegated_task.perf_metric_value = Decimal("-500000")
 
         weekly_task = ResponsibilityTask(
             number="0003",
@@ -906,6 +923,8 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             delegate_member_id=self.team_member_delegate_two.id,
         )
         weekly_entry.delegate_member = self.team_member_delegate_two
+        weekly_task.detail = "Confirm training attendance."
+        weekly_task.action_notes = "Awaiting update from HR."
 
         self.app_module.db.session.add_all(
             [recurring_task, delegated_task, delegated_entry, weekly_task, weekly_entry]
@@ -947,6 +966,26 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         )
         self.assertEqual(delegate_one_entry["occurrenceCount"], 1)
         self.assertEqual(delegate_one_entry["uniqueTaskCount"], 1)
+        self.assertEqual(len(delegate_one_entry["occurrences"]), 1)
+        delegate_occurrence = delegate_one_entry["occurrences"][0]
+        self.assertEqual(
+            delegate_occurrence["taskPerformanceUnit"],
+            ResponsibilityPerformanceUnit.AMOUNT_LKR.value,
+        )
+        self.assertEqual(
+            delegate_occurrence["taskPerformanceUnitLabel"],
+            "Amount (LKR)",
+        )
+        self.assertEqual(delegate_occurrence["taskPerformanceResponsible"], "3000000")
+        self.assertEqual(delegate_occurrence["taskPerformanceActual"], "2500000")
+        self.assertEqual(delegate_occurrence["taskPerformanceMetric"], "-500000")
+        self.assertEqual(delegate_occurrence["taskDetail"], "Check packaging slips for five random orders.")
+        self.assertEqual(
+            delegate_occurrence["taskDiscussion"],
+            "Discussed with Kasun regarding late departure.",
+        )
+        self.assertEqual(delegate_occurrence["taskProgress"], 45)
+        self.assertEqual(delegate_occurrence["taskProgressLabel"], "45%")
 
         delegate_two_entry = next(
             member for member in members if member["id"] == self.team_member_delegate_two.id

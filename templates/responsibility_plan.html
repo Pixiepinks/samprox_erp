@@ -415,6 +415,32 @@
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
 
+        const preferNonEmptyString = (...values) => {
+            for (const value of values) {
+                if (typeof value !== "string") {
+                    continue;
+                }
+
+                const trimmed = value.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+            }
+
+            return "";
+        };
+
+        const assignerNameFallback = (user) =>
+            preferNonEmptyString(
+                user?.nickname,
+                user?.name,
+                user?.regNumber,
+                user?.reg_number,
+                user?.email,
+            );
+
+        const resolveTeamMemberName = (id) => getStoredTeamMemberName(id) || "";
+
         const getMemberDisplayName = (member) => {
             const candidates = [member?.name, member?.nickname, member?.regNumber];
 
@@ -783,13 +809,11 @@
             const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
 
             if (delegations.length === 0) {
-                const delegatedUserDisplay = assignerNameFallback(task?.delegatedTo);
-                const delegatedMemberDisplay = resolveTeamMemberName(task?.delegatedToId);
-
                 const fallback = preferNonEmptyString(
                     task?.delegatedToName,
-                    delegatedMemberDisplay,
-                    delegatedUserDisplay,
+                    getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                    assignerNameFallback(task?.delegatedTo),
+                    task?.delegatedTo?.email,
                 );
                 return fallback || "—";
             }
@@ -800,15 +824,11 @@
                         return null;
                     }
 
-                    const delegateUserDisplay = assignerNameFallback(entry?.delegate);
-                    const delegateMemberDisplay = resolveTeamMemberName(entry?.delegateId);
-
                     const delegateName = preferNonEmptyString(
-                        entry?.delegate?.name,
-                        delegateMemberDisplay,
-                        delegateUserDisplay,
+                        entry?.delegateName,
+                        resolveTeamMemberName(entry?.delegateId),
+                        assignerNameFallback(entry?.delegate),
                         entry?.delegate?.email,
-                        entry?.delegateId ? String(entry.delegateId) : "",
                     );
 
                     const rawValue =

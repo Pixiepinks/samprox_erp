@@ -930,6 +930,16 @@ class ResponsibilityTaskSchema(Schema):
         member_id = getattr(obj, "delegated_to_member_id", None)
         if member_id is not None:
             return member_id
+        delegations = getattr(obj, "delegations", None) or []
+        for delegation in delegations:
+            delegate_member_id = getattr(delegation, "delegate_member_id", None)
+            if delegate_member_id is not None:
+                return delegate_member_id
+        if delegations:
+            first = delegations[0]
+            delegate_id = getattr(first, "delegate_id", None)
+            if delegate_id is not None:
+                return delegate_id
         return getattr(obj, "delegated_to_id", None)
 
     def get_delegated_to_name(self, obj):
@@ -940,11 +950,54 @@ class ResponsibilityTaskSchema(Schema):
             if stripped:
                 return stripped
         delegated = getattr(obj, "delegated_to", None)
+        delegations = getattr(obj, "delegations", None) or []
+        if delegations:
+            first = delegations[0]
+            delegate_member = getattr(first, "delegate_member", None)
+            member_name = getattr(delegate_member, "name", None)
+            if isinstance(member_name, str):
+                stripped_member = member_name.strip()
+                if stripped_member:
+                    return stripped_member
+        for delegation in delegations[1:]:
+            member = getattr(delegation, "delegate_member", None)
+            member_name = getattr(member, "name", None)
+            if isinstance(member_name, str):
+                stripped_member = member_name.strip()
+                if stripped_member:
+                    return stripped_member
         user_name = getattr(delegated, "name", None)
         if isinstance(user_name, str):
             stripped_user = user_name.strip()
             if stripped_user:
                 return stripped_user
+        if delegations:
+            first = delegations[0]
+            delegate = getattr(first, "delegate", None)
+            first_user_name = getattr(delegate, "name", None)
+            if isinstance(first_user_name, str):
+                stripped_first_user = first_user_name.strip()
+                if stripped_first_user:
+                    return stripped_first_user
+            email = getattr(delegate, "email", None)
+            if isinstance(email, str):
+                stripped_email = email.strip()
+                if stripped_email:
+                    return stripped_email
+        for delegation in delegations[1:]:
+            delegate = getattr(delegation, "delegate", None)
+            user_name = getattr(delegate, "name", None)
+            if isinstance(user_name, str):
+                stripped_user = user_name.strip()
+                if stripped_user:
+                    return stripped_user
+        for delegation in delegations[1:]:
+            delegate = getattr(delegation, "delegate", None)
+            email = getattr(delegate, "email", None)
+            if isinstance(email, str):
+                stripped_email = email.strip()
+                if stripped_email:
+                    return stripped_email
         email = getattr(delegated, "email", None)
         if isinstance(email, str):
             stripped_email = email.strip()

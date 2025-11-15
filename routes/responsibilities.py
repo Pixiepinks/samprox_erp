@@ -109,7 +109,50 @@ def _task_delegated_name(task: ResponsibilityTask) -> str | None:
     member_name = _normalize_member_name(getattr(task, "delegated_to_member", None))
     if member_name:
         return member_name
-    return _normalize_user_name(getattr(task, "delegated_to", None))
+    delegated = getattr(task, "delegated_to", None)
+    delegations = getattr(task, "delegations", None) or []
+    if delegations:
+        first = delegations[0]
+        fallback_member = _normalize_member_name(getattr(first, "delegate_member", None))
+        if fallback_member:
+            return fallback_member
+    for delegation in delegations[1:]:
+        delegation_member = getattr(delegation, "delegate_member", None)
+        member_name = _normalize_member_name(delegation_member)
+        if member_name:
+            return member_name
+    user_name = _normalize_user_name(delegated)
+    if user_name:
+        return user_name
+    if delegations:
+        first = delegations[0]
+        fallback_user = _normalize_user_name(getattr(first, "delegate", None))
+        if fallback_user:
+            return fallback_user
+        delegate_user = getattr(first, "delegate", None)
+        email = getattr(delegate_user, "email", None)
+        if isinstance(email, str):
+            stripped = email.strip()
+            if stripped:
+                return stripped
+    for delegation in delegations[1:]:
+        delegate_user = getattr(delegation, "delegate", None)
+        user_name = _normalize_user_name(delegate_user)
+        if user_name:
+            return user_name
+    for delegation in delegations[1:]:
+        delegate_user = getattr(delegation, "delegate", None)
+        email = getattr(delegate_user, "email", None)
+        if isinstance(email, str):
+            stripped = email.strip()
+            if stripped:
+                return stripped
+    email = getattr(delegated, "email", None)
+    if isinstance(email, str):
+        stripped = email.strip()
+        if stripped:
+            return stripped
+    return None
 
 
 def _decorate_task_names(task: ResponsibilityTask) -> dict[str, str | None]:

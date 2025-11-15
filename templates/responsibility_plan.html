@@ -1435,6 +1435,7 @@
             updatePerformanceMetricDisplay();
             responsibilityActionPreviousValue = "";
             responsibilityActionModalPreviousValue = "";
+            responsibilityActionPreviousNotes.clear();
             clearResponsibilityDelegations();
             updateDelegatedVisibility("");
             responsibilityActionNotesTextarea?.setAttribute("aria-invalid", "false");
@@ -1474,6 +1475,10 @@
                 responsibilityActionSelect.value = task.action || "";
                 responsibilityActionPreviousValue = task.action || "";
                 responsibilityActionNotesInput.value = task.actionNotes || "";
+                responsibilityActionPreviousNotes.clear();
+                if (task.action) {
+                    responsibilityActionPreviousNotes.set(task.action, task.actionNotes || "");
+                }
                 clearResponsibilityDelegations();
                 const delegations = Array.isArray(task.delegations) ? task.delegations : [];
                 if (delegations.length > 0) {
@@ -2001,6 +2006,84 @@
         const responsibilityActionPreviousNotes = new Map();
         let responsibilityActionPreviousValue = "";
         let responsibilityActionModalPreviousValue = "";
+
+        const setResponsibilityActionNotesError = (message = "") => {
+            if (!responsibilityActionNotesError) {
+                return;
+            }
+
+            const text = typeof message === "string" ? message.trim() : "";
+            if (!text) {
+                responsibilityActionNotesError.hidden = true;
+                responsibilityActionNotesError.textContent = "";
+                return;
+            }
+
+            responsibilityActionNotesError.hidden = false;
+            responsibilityActionNotesError.textContent = text;
+        };
+
+        const openResponsibilityActionNotesModal = (previousActionValue = "") => {
+            if (!responsibilityActionNotesModal) {
+                return;
+            }
+
+            responsibilityActionModalPreviousValue =
+                previousActionValue ?? responsibilityActionSelect?.value ?? "";
+
+            setResponsibilityActionNotesError();
+            responsibilityActionNotesModal.removeAttribute("hidden");
+            responsibilityActionNotesModal.setAttribute("aria-hidden", "false");
+            responsibilityActionNotesModal.classList.add("modal--open");
+
+            if (responsibilityActionNotesTextarea) {
+                requestAnimationFrame(() => {
+                    responsibilityActionNotesTextarea.focus();
+                    const length = responsibilityActionNotesTextarea.value.length;
+                    responsibilityActionNotesTextarea.setSelectionRange(length, length);
+                });
+            }
+        };
+
+        const closeResponsibilityActionNotesModal = (restorePreviousSelection = false) => {
+            if (!responsibilityActionNotesModal) {
+                return;
+            }
+
+            responsibilityActionNotesModal.classList.remove("modal--open");
+            responsibilityActionNotesModal.setAttribute("hidden", "");
+            responsibilityActionNotesModal.setAttribute("aria-hidden", "true");
+
+            if (restorePreviousSelection) {
+                const previousAction = responsibilityActionModalPreviousValue || "";
+                if (responsibilityActionSelect) {
+                    responsibilityActionSelect.value = previousAction;
+                }
+                responsibilityActionPreviousValue = previousAction;
+
+                const restoredNotes =
+                    responsibilityActionPreviousNotes.get(previousAction) ||
+                    (previousAction ? responsibilityActionNotesInput?.value || "" : "");
+
+                if (responsibilityActionNotesInput) {
+                    responsibilityActionNotesInput.value = restoredNotes;
+                }
+                if (responsibilityActionNotesTextarea) {
+                    responsibilityActionNotesTextarea.value = restoredNotes;
+                    const requiresNotes = ACTIONS_REQUIRING_NOTES.has(previousAction);
+                    responsibilityActionNotesTextarea.setAttribute(
+                        "aria-invalid",
+                        requiresNotes && !restoredNotes ? "true" : "false",
+                    );
+                }
+                updateDelegatedVisibility(previousAction);
+            }
+
+            responsibilityActionModalPreviousValue = "";
+            setResponsibilityActionNotesError();
+            responsibilityActionNotesTextarea?.setAttribute("aria-invalid", "false");
+            responsibilityActionSelect?.focus();
+        };
 
         const handleResponsibilityActionChange = (event) => {
             if (!event?.target) {

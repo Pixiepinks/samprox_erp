@@ -582,10 +582,6 @@
                             <input class="edit-form__input" id="responsibility-title" name="title" type="text" required />
                         </div>
                         <div class="edit-form__field edit-form__field--full">
-                            <label class="edit-form__label" for="responsibility-description">Description</label>
-                            <textarea class="edit-form__input" id="responsibility-description" name="description" rows="3"></textarea>
-                        </div>
-                        <div class="edit-form__field edit-form__field--full">
                             <label class="edit-form__label" for="responsibility-detail">Detail</label>
                             <textarea class="edit-form__input" id="responsibility-detail" name="detail" rows="3"></textarea>
                         </div>
@@ -1378,7 +1374,6 @@
         const responsibilityForm = document.getElementById("responsibility-form");
         const responsibilityFormError = document.getElementById("responsibility-form-error");
         const responsibilityTitleInput = document.getElementById("responsibility-title");
-        const responsibilityDescriptionInput = document.getElementById("responsibility-description");
         const responsibilityDateInput = document.getElementById("responsibility-date");
         const responsibilityRecurrenceSelect = document.getElementById("responsibility-recurrence");
         const responsibilityCustomDays = document.getElementById("responsibility-custom-days");
@@ -2592,9 +2587,6 @@
                 if (responsibilityTitleInput) {
                     responsibilityTitleInput.value = task.title ?? "";
                 }
-                if (responsibilityDescriptionInput) {
-                    responsibilityDescriptionInput.value = task.description ?? "";
-                }
                 if (responsibilityDetailInput) {
                     responsibilityDetailInput.value = task.detail ?? "";
                 }
@@ -3036,14 +3028,18 @@
 
             const isEditingResponsibility = responsibilityEditingTaskId !== null;
             const formData = new FormData(responsibilityForm);
+            const existingDescription = responsibilityEditingTask?.description;
             const payload = {
                 title: formData.get("title")?.toString().trim(),
-                description: formData.get("description")?.toString().trim() || undefined,
                 detail: formData.get("detail")?.toString().trim() || undefined,
                 scheduledFor: formData.get("scheduledFor")?.toString(),
                 recurrence: formData.get("recurrence")?.toString(),
                 recipientEmail: formData.get("recipientEmail")?.toString().trim(),
             };
+
+            if (existingDescription !== undefined) {
+                payload.description = existingDescription;
+            }
 
             if (responsibilityCcInput) {
                 const ccRaw = formData.get("ccEmail")?.toString().trim() ?? "";

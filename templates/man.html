@@ -1431,10 +1431,33 @@
         let responsibilityAssignees = [];
         const responsibilityAssigneeLookup = new Map();
 
-        const assignerNameFallback = (user) => user?.name || user?.email || "";
+        const preferNonEmptyString = (...values) => {
+            for (const value of values) {
+                if (typeof value !== "string") {
+                    continue;
+                }
+
+                const trimmed = value.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+            }
+
+            return "";
+        };
+
+        const assignerNameFallback = (user) =>
+            preferNonEmptyString(
+                user?.nickname,
+                user?.displayName,
+                user?.name,
+                user?.regNumber,
+                user?.reg_number,
+                user?.email,
+            );
 
         const getMemberDisplayName = (member) => {
-            const candidates = [member?.name, member?.nickname, member?.regNumber];
+            const candidates = [member?.nickname, member?.name, member?.regNumber];
 
             for (const candidate of candidates) {
                 if (typeof candidate === "string") {
@@ -1446,6 +1469,80 @@
             }
 
             return "Team member";
+        };
+
+        const getCachedResponsibilityMember = (id) => {
+            if (id === null || id === undefined) {
+                return null;
+            }
+
+            const normalized = String(id).trim();
+            if (!normalized) {
+                return null;
+            }
+
+            const lookupRecord = responsibilityAssigneeLookup.get(normalized);
+            if (lookupRecord) {
+                return lookupRecord;
+            }
+
+            return responsibilityAssignees.find((assignee) => String(assignee.id) === normalized) || null;
+        };
+
+        const getCachedResponsibilityMemberDisplay = (id) => {
+            if (id === null || id === undefined) {
+                return "";
+            }
+
+            const normalized = String(id).trim();
+            if (!normalized) {
+                return "";
+            }
+
+            const record = getCachedResponsibilityMember(id);
+            if (!record) {
+                return "";
+            }
+
+            return assignerNameFallback(record) || normalized;
+        };
+
+        const getResponsibilityAssigneeDisplay = (task) => {
+            if (!task) {
+                return "";
+            }
+
+            const idCandidates = [task?.assigneeId, task?.assignee_id, task?.assignee?.id];
+            for (const candidate of idCandidates) {
+                const stored = getCachedResponsibilityMemberDisplay(candidate);
+                if (stored) {
+                    return stored;
+                }
+            }
+
+            return (
+                assignerNameFallback(task?.assignee) ||
+                preferNonEmptyString(
+                    task?.assigneeNickname,
+                    task?.assigneeName,
+                    task?.assigneeEmail,
+                )
+            );
+        };
+
+        const getResponsibilityAssignerDisplay = (task) => {
+            if (!task) {
+                return "";
+            }
+
+            return (
+                assignerNameFallback(task?.assigner) ||
+                preferNonEmptyString(
+                    task?.assignerNickname,
+                    task?.assignerName,
+                    task?.assignerEmail,
+                )
+            );
         };
 
         const PERFORMANCE_DEFAULT_UNIT = "percentage_pct";
@@ -2146,9 +2243,44 @@
                     if (!entry) {
                         return null;
                     }
-                    const delegate = entry.delegate ?? {};
-                    const name = assignerNameFallback(delegate) ||
-                        (entry.delegateId ? String(entry.delegateId) : "");
+                    const delegate =
+                        entry.delegate ?? entry.delegate_member ?? entry.delegateMember ?? {};
+                    const idCandidates = [
+                        entry.delegateId,
+                        entry.delegate_id,
+                        entry.delegateMemberId,
+                        entry.delegate_member_id,
+                        delegate?.id,
+                    ];
+
+                    let name = "";
+                    for (const candidate of idCandidates) {
+                        const stored = getCachedResponsibilityMemberDisplay(candidate);
+                        if (stored) {
+                            name = stored;
+                            break;
+                        }
+                    }
+
+                    if (!name) {
+                        name =
+                            assignerNameFallback(delegate) ||
+                            preferNonEmptyString(
+                                entry?.delegateNickname,
+                                entry?.delegateName,
+                                entry?.delegateEmail,
+                            );
+                    }
+
+                    if (!name) {
+                        const fallbackId = idCandidates.find(
+                            (value) => value !== null && value !== undefined && String(value).trim(),
+                        );
+                        if (fallbackId !== undefined) {
+                            name = String(fallbackId).trim();
+                        }
+                    }
+
                     const rawValue =
                         entry.allocatedValue ??
                         entry.allocated_value ??
@@ -2651,13 +2783,13 @@
                     }
                     const value = String(candidateId);
                     let option = select.querySelector(`option[value="${value}"]`);
-                    const labelCandidates = [
-                        taskData?.assigneeName,
-                        assignerNameFallback(taskData?.assignee),
-                    ];
-                    const label = labelCandidates.find(
-                        (entry) => typeof entry === "string" && entry.trim(),
-                    );
+                    const label =
+                        assignerNameFallback(taskData?.assignee) ||
+                        preferNonEmptyString(
+                            taskData?.assigneeNickname,
+                            taskData?.assigneeName,
+                            taskData?.assigneeEmail,
+                        );
                     if (!option) {
                         option = document.createElement("option");
                         option.value = value;
@@ -2815,8 +2947,10 @@
                 const performanceUnitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
                 const performanceConfig = getPerformanceConfig(performanceUnitValue);
 
-                appendCell(task?.assignerName ?? task?.assigner?.name ?? task?.assigner?.email ?? "—");
-                appendCell(task?.assigneeName ?? task?.assignee?.name ?? task?.assignee?.email ?? "—");
+                const assignerDisplay = getResponsibilityAssignerDisplay(task);
+                const assigneeDisplay = getResponsibilityAssigneeDisplay(task);
+                appendCell(assignerDisplay || "—");
+                appendCell(assigneeDisplay || "—");
                 appendCell(
                     formatResponsibilityDelegations(
                         task?.delegations,
@@ -2942,7 +3076,18 @@
                     }
 
                     const displayName = getMemberDisplayName(member);
-                    const assignee = { id: normalizedId, name: displayName, type: "team_member" };
+                    const assignee = {
+                        id: normalizedId,
+                        name: displayName,
+                        nickname: typeof member?.nickname === "string" ? member.nickname : "",
+                        regNumber:
+                            typeof member?.regNumber === "string"
+                                ? member.regNumber
+                                : typeof member?.reg_number === "string"
+                                ? member.reg_number
+                                : "",
+                        type: "team_member",
+                    };
                     if (typeof member?.email === "string") {
                         const trimmedEmail = member.email.trim();
                         if (trimmedEmail) {

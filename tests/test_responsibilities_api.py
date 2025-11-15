@@ -327,6 +327,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "detail": "Highlight safety priorities and pending actions.",
             "scheduledFor": scheduled_for,
             "recurrence": "weekly",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "lead@example.com",
             "action": "done",
             "performanceUnit": "percentage_pct",
@@ -352,6 +353,29 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertIsNone(task.perf_actual_value)
         self.assertIsNone(task.perf_metric_value)
 
+    def test_create_responsibility_requires_assignee(self):
+        scheduled_for = date.today().isoformat()
+        payload = {
+            "title": "Warehouse inspection",
+            "scheduledFor": scheduled_for,
+            "recurrence": "does_not_repeat",
+            "recipientEmail": "lead@example.com",
+            "action": "done",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "90",
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 422, response.get_json())
+        data = response.get_json()
+        self.assertIn("errors", data)
+        self.assertIn("assigneeId", data["errors"])
+
     def test_update_responsibility_updates_existing_task(self):
         scheduled_for = date.today().isoformat()
         create_payload = {
@@ -361,6 +385,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "scheduledFor": scheduled_for,
             "recurrence": "custom",
             "customWeekdays": [0, 2],
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "owner@example.com",
             "ccEmail": "owner.cc@example.com",
             "action": "delegated",
@@ -452,6 +477,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "detail": "Check bins and documentation.",
             "scheduledFor": scheduled_for,
             "recurrence": "does_not_repeat",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "auditor@example.com",
             "action": "discussed",
             "progress": 25,
@@ -479,6 +505,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "detail": "Check bins and documentation.",
                 "scheduledFor": scheduled_for,
                 "recurrence": "does_not_repeat",
+                "assigneeId": self.secondary_manager.id,
                 "recipientEmail": "auditor@example.com",
                 "action": "deleted",
                 "progress": 5,
@@ -507,6 +534,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "title": "Daily standup",
                 "scheduledFor": monday.isoformat(),
                 "recurrence": "daily",
+                "assigneeId": self.secondary_manager.id,
                 "recipientEmail": "daily@example.com",
                 "action": "done",
                 "performanceUnit": "percentage_pct",
@@ -517,6 +545,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 "title": "Quality audit",
                 "scheduledFor": wednesday.isoformat(),
                 "recurrence": "does_not_repeat",
+                "assigneeId": self.secondary_manager.id,
                 "recipientEmail": "audit@example.com",
                 "action": "done",
                 "performanceUnit": "percentage_pct",
@@ -559,6 +588,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Maintenance sync",
             "scheduledFor": date.today().isoformat(),
             "recurrence": "custom",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "sync@example.com",
             "action": "done",
             "performanceUnit": "percentage_pct",
@@ -582,6 +612,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Vendor coordination",
             "scheduledFor": date.today().isoformat(),
             "recurrence": "does_not_repeat",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "coord@example.com",
             "action": "delegated",
             "performanceUnit": "percentage_pct",
@@ -605,6 +636,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Line inspection",
             "scheduledFor": scheduled_for,
             "recurrence": "weekly",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "inspect@example.com",
             "action": "done",
             "performanceUnit": "percentage_pct",
@@ -631,6 +663,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Daily standup",
             "scheduledFor": monday.isoformat(),
             "recurrence": "daily",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "daily@example.com",
             "action": "done",
             "performanceUnit": "percentage_pct",
@@ -665,6 +698,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Budget review",
             "scheduledFor": date.today().isoformat(),
             "recurrence": "does_not_repeat",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "budget@example.com",
             "action": "discussed",
             "performanceUnit": "percentage_pct",
@@ -689,6 +723,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "title": "Factory inspection",
             "scheduledFor": scheduled_for,
             "recurrence": "does_not_repeat",
+            "assigneeId": self.secondary_manager.id,
             "recipientEmail": "inspect@example.com",
             "action": "done",
             "performanceUnit": "percentage_pct",

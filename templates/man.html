@@ -3168,8 +3168,11 @@
                 }
 
                 const allocationRaw = valueInput?.value?.toString().trim() ?? "";
+                const delegateRecord = responsibilityAssigneeLookup.get(String(parsedDelegated));
+                const delegateType = delegateRecord?.type || "team_member";
                 delegationsPayload.push({
                     delegateId: parsedDelegated,
+                    delegateType,
                     allocatedValue: allocationRaw || null,
                 });
             }

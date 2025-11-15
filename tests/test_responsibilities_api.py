@@ -79,6 +79,13 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             status=TeamMemberStatus.ACTIVE,
             pay_category=PayCategory.LOADING,
         )
+        self.team_member_delegate_three = TeamMember(
+            reg_number="TM004",
+            name="Sanjana Packer",
+            join_date=today,
+            status=TeamMemberStatus.ACTIVE,
+            pay_category=PayCategory.LOADING,
+        )
         self.app_module.db.session.add_all(
             [
                 self.primary_manager,
@@ -89,6 +96,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 self.team_member_primary,
                 self.team_member_delegate_one,
                 self.team_member_delegate_two,
+                self.team_member_delegate_three,
             ]
         )
         self.app_module.db.session.commit()
@@ -166,10 +174,24 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "performanceUnit": "amount_lkr",
             "performanceResponsible": "3000000",
             "performanceActual": "2500000",
+            "delegatedToId": self.team_member_delegate_one.id,
+            "delegatedToType": "team_member",
             "delegations": [
-                {"delegateId": self.assistant_manager_one.id, "allocatedValue": "1000000"},
-                {"delegateId": self.assistant_manager_two.id, "allocatedValue": "1000000"},
-                {"delegateId": self.assistant_manager_three.id, "allocatedValue": "1000000"},
+                {
+                    "delegateId": self.team_member_delegate_one.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "1000000",
+                },
+                {
+                    "delegateId": self.team_member_delegate_two.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "1000000",
+                },
+                {
+                    "delegateId": self.team_member_delegate_three.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "1000000",
+                },
             ],
         }
 
@@ -193,6 +215,8 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(data["progress"], 0)
         self.assertTrue(data["email_notification"]["sent"])
         self.assertEqual(len(data.get("delegations", [])), 3)
+        self.assertEqual(data["delegatedToId"], self.team_member_delegate_one.id)
+        self.assertEqual(data["delegatedToName"], "Ishara Loader")
 
         task = self.app_module.ResponsibilityTask.query.one()
         self.assertEqual(task.assignee_id, self.secondary_manager.id)
@@ -200,17 +224,21 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.recipient_email, "lead@example.com")
         self.assertEqual(task.detail, "Verify emergency exits and PPE logs.")
         self.assertEqual(task.action.value, "delegated")
-        self.assertEqual(task.delegated_to_id, self.assistant_manager_one.id)
+        self.assertIsNone(task.delegated_to_id)
+        self.assertEqual(task.delegated_to_member_id, self.team_member_delegate_one.id)
         self.assertEqual(len(task.delegations), 3)
-        delegate_ids = {delegation.delegate_id for delegation in task.delegations}
+        delegate_member_ids = {
+            delegation.delegate_member_id for delegation in task.delegations
+        }
         self.assertSetEqual(
-            delegate_ids,
+            delegate_member_ids,
             {
-                self.assistant_manager_one.id,
-                self.assistant_manager_two.id,
-                self.assistant_manager_three.id,
+                self.team_member_delegate_one.id,
+                self.team_member_delegate_two.id,
+                self.team_member_delegate_three.id,
             },
         )
+        self.assertTrue(all(delegation.delegate_id is None for delegation in task.delegations))
         allocated_values = sorted(str(delegation.allocated_value) for delegation in task.delegations)
         self.assertListEqual(allocated_values, ["1000000.0000", "1000000.0000", "1000000.0000"])
         self.assertIsNone(task.action_notes)
@@ -221,17 +249,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(float(task.perf_actual_value), 2_500_000.0)
         self.assertEqual(float(task.perf_metric_value), -500_000.0)
 
-        self.assertEqual(len(self.sent_emails), 4)
-        recipients = [message.get("to", [None])[0] for message in self.sent_emails]
-        self.assertIn("lead@example.com", recipients)
-        self.assertIn("sudara@example.com", recipients)
-        self.assertIn("prasad@example.com", recipients)
-        self.assertIn("sumudu@example.com", recipients)
-        general_email = next(
-            message
-            for message in self.sent_emails
-            if message.get("to", [None])[0] == "lead@example.com"
-        )
+        self.assertEqual(len(self.sent_emails), 1)
+        general_email = self.sent_emails[0]
+        self.assertEqual(general_email.get("to"), ["lead@example.com"])
         self.assertIn("Safety walkdown", general_email["subject"])
         self.assertIn(
             "Hi Bob,<br>A new responsibility has been assigned to you.",
@@ -244,17 +264,6 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             general_email["html"],
         )
         self.assertIn("Maximus — Your AICEO", general_email["html"])
-        delegate_email = next(
-            message
-            for message in self.sent_emails
-            if message.get("to", [None])[0] == "sudara@example.com"
-        )
-        self.assertIn(
-            "Hi Sudara,<br>A new responsibility has been delegated to you.",
-            delegate_email["html"],
-        )
-        self.assertIn("Delegated allocation assigned to you", delegate_email["html"])
-        self.assertIn("Maximus — Your AICEO", delegate_email["html"])
 
     def test_create_responsibility_accepts_team_member_assignee(self):
         scheduled_for = date.today().isoformat()
@@ -392,8 +401,14 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             "performanceUnit": "percentage_pct",
             "performanceResponsible": "100",
             "performanceActual": "95",
+            "delegatedToId": self.team_member_delegate_one.id,
+            "delegatedToType": "team_member",
             "delegations": [
-                {"delegateId": self.assistant_manager_one.id, "allocatedValue": "50"},
+                {
+                    "delegateId": self.team_member_delegate_one.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "50",
+                },
             ],
         }
 
@@ -464,7 +479,7 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(task.cc_email, "opslead@example.com")
 
         # Updating should send a fresh email notification
-        self.assertEqual(len(self.sent_emails), 3)
+        self.assertEqual(len(self.sent_emails), 2)
         for message in self.sent_emails:
             self.assertIn("prakash@rainbowsholdings.com", message.get("bcc", []))
         self.assertEqual(self.sent_emails[-1].get("cc"), ["opslead@example.com"])
@@ -629,6 +644,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         errors = response.get_json().get("errors", {})
         self.assertIn("delegations", errors)
+        self.assertIn(
+            "Select a delegated team member.", errors.get("delegations", [])
+        )
 
     def test_create_responsibility_reports_email_failure(self):
         scheduled_for = date.today().isoformat()

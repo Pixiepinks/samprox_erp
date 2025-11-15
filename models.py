@@ -343,9 +343,19 @@ class ResponsibilityTask(db.Model):
 
     assignee_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     assignee = db.relationship("User", foreign_keys=[assignee_id], backref="tasks_assigned")
+    assignee_member_id = db.Column(db.Integer, db.ForeignKey("team_member.id"))
+    assignee_member = db.relationship(
+        "TeamMember", foreign_keys=[assignee_member_id], backref="responsibilities_assigned"
+    )
 
     delegated_to_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     delegated_to = db.relationship("User", foreign_keys=[delegated_to_id], backref="tasks_delegated")
+    delegated_to_member_id = db.Column(db.Integer, db.ForeignKey("team_member.id"))
+    delegated_to_member = db.relationship(
+        "TeamMember",
+        foreign_keys=[delegated_to_member_id],
+        backref="responsibilities_delegated",
+    )
 
     delegations = db.relationship(
         "ResponsibilityDelegation",
@@ -383,16 +393,44 @@ class ResponsibilityTask(db.Model):
     def replace_delegations(self, delegations: Iterable["ResponsibilityDelegation"]) -> None:
         """Replace delegations while maintaining backward compatible fields."""
 
-        delegation_list = list(delegations)
-        existing = {
-            delegation.delegate_id: delegation for delegation in list(self.delegations or [])
-        }
+        delegation_list = [
+            delegation
+            for delegation in delegations
+            if getattr(delegation, "delegate_id", None)
+            or getattr(delegation, "delegate_member_id", None)
+        ]
+
+        def _delegation_key(entry: "ResponsibilityDelegation") -> tuple[str, int] | None:
+            member_id = getattr(entry, "delegate_member_id", None)
+            if member_id is not None:
+                try:
+                    return ("member", int(member_id))
+                except (TypeError, ValueError):
+                    return None
+            delegate_id = getattr(entry, "delegate_id", None)
+            if delegate_id is not None:
+                try:
+                    return ("user", int(delegate_id))
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        existing: dict[tuple[str, int], "ResponsibilityDelegation"] = {}
+        for delegation in list(self.delegations or []):
+            key = _delegation_key(delegation)
+            if key is not None:
+                existing[key] = delegation
 
         updated: list["ResponsibilityDelegation"] = []
         for entry in delegation_list:
-            current = existing.pop(entry.delegate_id, None)
+            key = _delegation_key(entry)
+            if key is None:
+                continue
+            current = existing.pop(key, None)
             if current is not None:
                 current.allocated_value = entry.allocated_value
+                current.delegate_id = entry.delegate_id
+                current.delegate_member_id = entry.delegate_member_id
                 updated.append(current)
             else:
                 updated.append(entry)
@@ -403,9 +441,12 @@ class ResponsibilityTask(db.Model):
         self.delegations = updated
 
         if updated:
-            self.delegated_to_id = updated[0].delegate_id
+            first = updated[0]
+            self.delegated_to_id = getattr(first, "delegate_id", None)
+            self.delegated_to_member_id = getattr(first, "delegate_member_id", None)
         else:
             self.delegated_to_id = None
+            self.delegated_to_member_id = None
 
     def occurs_on(self, target_date: date) -> bool:
         """Return ``True`` if the task is scheduled for ``target_date``."""
@@ -468,7 +509,7 @@ class ResponsibilityTask(db.Model):
 
 
 class ResponsibilityDelegation(db.Model):
-    """Represents an allocation of a responsibility to another manager."""
+    """Represents an allocation of a responsibility to another assignee."""
 
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(
@@ -477,7 +518,10 @@ class ResponsibilityDelegation(db.Model):
         nullable=False,
         index=True,
     )
-    delegate_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    delegate_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    delegate_member_id = db.Column(
+        db.Integer, db.ForeignKey("team_member.id"), nullable=True
+    )
     allocated_value = db.Column(db.Numeric(18, 4), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -485,9 +529,15 @@ class ResponsibilityDelegation(db.Model):
 
     task = db.relationship("ResponsibilityTask", back_populates="delegations")
     delegate = db.relationship("User")
+    delegate_member = db.relationship("TeamMember", foreign_keys=[delegate_member_id])
 
     __table_args__ = (
-        UniqueConstraint("task_id", "delegate_id", name="uq_responsibility_delegation"),
+        UniqueConstraint(
+            "task_id",
+            "delegate_id",
+            "delegate_member_id",
+            name="uq_responsibility_delegation",
+        ),
     )
 
 

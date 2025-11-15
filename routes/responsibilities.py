@@ -11,7 +11,7 @@ from typing import Iterable
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, jwt_required
 from marshmallow import ValidationError
-from sqlalchemy import asc
+from sqlalchemy import asc, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -27,6 +27,7 @@ from models import (
     ResponsibilityTask,
     ResponsibilityTaskStatus,
     RoleEnum,
+    TeamMember,
     User,
 )
 from responsibility_performance import (
@@ -73,6 +74,93 @@ MOTIVATIONAL_MESSAGES: tuple[str, ...] = (
     "Accountability is the seed of progress — nurture it with excellence.",
     "You are trusted with this responsibility because you make things happen — let’s do it again!",
 )
+
+
+def _normalize_member_name(member: TeamMember | None) -> str | None:
+    if member is None:
+        return None
+    name = getattr(member, "name", None)
+    if isinstance(name, str):
+        stripped = name.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _normalize_user_name(user: User | None) -> str | None:
+    if user is None:
+        return None
+    name = getattr(user, "name", None)
+    if isinstance(name, str):
+        stripped = name.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _task_assignee_name(task: ResponsibilityTask) -> str | None:
+    member_name = _normalize_member_name(getattr(task, "assignee_member", None))
+    if member_name:
+        return member_name
+    return _normalize_user_name(getattr(task, "assignee", None))
+
+
+def _task_delegated_name(task: ResponsibilityTask) -> str | None:
+    member_name = _normalize_member_name(getattr(task, "delegated_to_member", None))
+    if member_name:
+        return member_name
+    return _normalize_user_name(getattr(task, "delegated_to", None))
+
+
+def _delegation_display_name(delegation: ResponsibilityDelegation) -> str:
+    member_name = _normalize_member_name(getattr(delegation, "delegate_member", None))
+    if member_name:
+        return member_name
+    user = getattr(delegation, "delegate", None)
+    user_name = _normalize_user_name(user)
+    if user_name:
+        return user_name
+    email = getattr(user, "email", None)
+    if isinstance(email, str) and email.strip():
+        return email.strip()
+    return "Delegated assignee"
+
+
+def _resolve_assignment_target(
+    candidate_id: int | None, *, preferred: str | None = None
+) -> tuple[User | None, TeamMember | None]:
+    if candidate_id is None:
+        return (None, None)
+
+    preference = (preferred or "").strip().lower().replace("-", "_")
+
+    if preference in {"team_member", "team"}:
+        member = TeamMember.query.get(candidate_id)
+        if member is not None:
+            return (None, member)
+        user = User.query.get(candidate_id)
+        if user is not None:
+            return (user, None)
+        return (None, None)
+
+    if preference in {"user", "manager"}:
+        user = User.query.get(candidate_id)
+        if user is not None:
+            return (user, None)
+        member = TeamMember.query.get(candidate_id)
+        if member is not None:
+            return (None, member)
+        return (None, None)
+
+    user = User.query.get(candidate_id)
+    if user is not None:
+        return (user, None)
+
+    member = TeamMember.query.get(candidate_id)
+    if member is not None:
+        return (None, member)
+
+    return (None, None)
 
 
 def _resolve_resend_sender() -> str:
@@ -229,10 +317,7 @@ def _format_delegation_allocation(
 def _delegation_summary_lines(task: ResponsibilityTask) -> list[str]:
     lines: list[str] = []
     for delegation in getattr(task, "delegations", []) or []:
-        delegate = getattr(delegation, "delegate", None)
-        delegate_name = getattr(delegate, "name", None) or getattr(delegate, "email", None)
-        if not delegate_name:
-            delegate_name = "Delegated manager"
+        delegate_name = _delegation_display_name(delegation)
         allocation_display = _format_delegation_allocation(task, delegation)
         if allocation_display:
             lines.append(f"• {delegate_name} — {allocation_display}")
@@ -432,9 +517,9 @@ def _deliver_responsibility_email(
 
 
 def _send_task_email(task: ResponsibilityTask) -> None:
-    assigner_name = getattr(task.assigner, "name", "A manager")
-    assignee_name = getattr(task.assignee, "name", None)
-    delegated_name = getattr(task.delegated_to, "name", None)
+    assigner_name = _normalize_user_name(getattr(task, "assigner", None)) or "A manager"
+    assignee_name = _task_assignee_name(task)
+    delegated_name = _task_delegated_name(task)
     first_date = task.scheduled_for.strftime("%B %d, %Y") if task.scheduled_for else "N/A"
     action = getattr(task, "action", ResponsibilityAction.DONE)
     try:
@@ -530,7 +615,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
 
     if general_recipient in delegate_email_map:
         delegate_user = delegate_email_map[general_recipient]
-        general_name_hint = getattr(delegate_user, "name", None)
+        general_name_hint = _normalize_user_name(delegate_user)
         general_verb = "delegated"
     elif general_recipient == getattr(task.delegated_to, "email", None):
         general_name_hint = delegated_name
@@ -556,7 +641,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
             continue
         delegate_content = list(base_content)
         allocation_display = _format_delegation_allocation(task, delegation)
-        delegate_name = getattr(delegate, "name", None) or delegate_email
+        delegate_name = _delegation_display_name(delegation)
         delegate_content.append("")
         delegate_content.append("Delegated allocation assigned to you:")
         if allocation_display:
@@ -567,7 +652,7 @@ def _send_task_email(task: ResponsibilityTask) -> None:
             delegate_email,
             delegate_content,
             verb="delegated",
-            name_hint=getattr(delegate, "name", None),
+            name_hint=_normalize_user_name(delegate) or delegate_name,
         )
 
 
@@ -592,8 +677,8 @@ def _format_weekly_summary(schedule: dict[date, list[ResponsibilityTask]]) -> st
         formatted_day = day.strftime("%A, %B %d")
         parts.append(formatted_day)
         for task in schedule[day]:
-            assignee = getattr(task.assignee, "name", "Unassigned")
-            parts.append(f"  • {task.title} ({assignee}) — {_render_recurrence(task)}")
+            assignee_name = _task_assignee_name(task) or "Unassigned"
+            parts.append(f"  • {task.title} ({assignee_name}) — {_render_recurrence(task)}")
         parts.append("")
     return "\n".join(parts).strip()
 
@@ -704,40 +789,67 @@ def create_task():
     )
     performance_input_type = unit_input_type(performance_unit)
 
-    assignee = None
+    assignee_user: User | None = None
+    assignee_member: TeamMember | None = None
     assignee_id = data.get("assignee_id")
     if assignee_id is not None:
-        assignee = User.query.get(assignee_id)
-        if not assignee:
-            return jsonify({"msg": "Assigned manager was not found."}), 404
+        assignee_user, assignee_member = _resolve_assignment_target(
+            assignee_id, preferred=data.get("assignee_type")
+        )
+        if assignee_user is None and assignee_member is None:
+            return jsonify({"msg": "Selected assignee was not found."}), 404
 
-    delegated_to = None
+    delegated_to_user: User | None = None
+    delegated_to_member: TeamMember | None = None
     delegated_to_id = data.get("delegated_to_id")
     if delegated_to_id is not None:
-        delegated_to = User.query.get(delegated_to_id)
-        if not delegated_to:
-            return jsonify({"msg": "Delegated manager was not found."}), 404
+        delegated_to_user, delegated_to_member = _resolve_assignment_target(
+            delegated_to_id, preferred=data.get("delegated_to_type")
+        )
+        if delegated_to_user is None and delegated_to_member is None:
+            return jsonify({"msg": "Selected delegate was not found."}), 404
 
     delegations_payload = data.get("delegations") or []
     delegation_models: list[ResponsibilityDelegation] = []
-    seen_delegates: set[int] = set()
+    seen_delegates: set[tuple[str, int]] = set()
     for entry in delegations_payload:
         delegate_id = entry.get("delegate_id")
-        if delegate_id is None or delegate_id in seen_delegates:
+        if delegate_id is None:
             continue
-        delegate = User.query.get(delegate_id)
-        if not delegate:
-            return jsonify({"msg": "Delegated manager was not found."}), 404
-        seen_delegates.add(delegate_id)
-        delegation_models.append(
-            ResponsibilityDelegation(
-                delegate_id=delegate.id,
-                allocated_value=entry.get("allocated_value"),
-            )
+        delegate_user, delegate_member = _resolve_assignment_target(
+            delegate_id, preferred=entry.get("delegate_type")
         )
+        if delegate_user is None and delegate_member is None:
+            return jsonify({"msg": "Selected delegate was not found."}), 404
+        key: tuple[str, int]
+        if delegate_user is not None:
+            key = ("user", int(delegate_user.id))
+        else:
+            key = ("member", int(delegate_member.id))
+        if key in seen_delegates:
+            continue
+        seen_delegates.add(key)
+        delegation = ResponsibilityDelegation(
+            delegate_id=delegate_user.id if delegate_user else None,
+            delegate_member_id=delegate_member.id if delegate_member else None,
+            allocated_value=entry.get("allocated_value"),
+        )
+        if delegate_user is not None:
+            delegation.delegate = delegate_user
+        if delegate_member is not None:
+            delegation.delegate_member = delegate_member
+        delegation_models.append(delegation)
 
-    if not delegation_models and delegated_to is not None:
-        delegation_models.append(ResponsibilityDelegation(delegate_id=delegated_to.id))
+    if not delegation_models and (delegated_to_user is not None or delegated_to_member is not None):
+        fallback_delegation = ResponsibilityDelegation(
+            delegate_id=delegated_to_user.id if delegated_to_user else None,
+            delegate_member_id=delegated_to_member.id if delegated_to_member else None,
+        )
+        if delegated_to_user is not None:
+            fallback_delegation.delegate = delegated_to_user
+        if delegated_to_member is not None:
+            fallback_delegation.delegate_member = delegated_to_member
+        delegation_models.append(fallback_delegation)
 
     recurrence = ResponsibilityRecurrence(data["recurrence"])
     status_value = data.get("status", ResponsibilityTaskStatus.PLANNED.value)
@@ -759,13 +871,21 @@ def create_task():
         cc_email=data.get("cc_email"),
         progress=progress,
         assigner_id=assigner_id,
-        assignee_id=assignee.id if assignee else None,
+        assignee_id=assignee_user.id if assignee_user else None,
+        assignee_member_id=assignee_member.id if assignee_member else None,
         perf_uom=performance_unit,
         perf_responsible_value=performance_responsible_value,
         perf_actual_value=performance_actual_value,
         perf_metric_value=performance_metric_value,
         perf_input_type=performance_input_type,
+        delegated_to_id=delegated_to_user.id if delegated_to_user else None,
+        delegated_to_member_id=delegated_to_member.id if delegated_to_member else None,
     )
+
+    if assignee_member is not None:
+        task.assignee_member = assignee_member
+    if delegated_to_member is not None:
+        task.delegated_to_member = delegated_to_member
 
     task.replace_delegations(delegation_models)
 
@@ -851,40 +971,67 @@ def update_task(task_id: int):
     )
     performance_input_type = unit_input_type(performance_unit)
 
-    assignee = None
+    assignee_user: User | None = None
+    assignee_member: TeamMember | None = None
     assignee_id = data.get("assignee_id")
     if assignee_id is not None:
-        assignee = User.query.get(assignee_id)
-        if not assignee:
-            return jsonify({"msg": "Assigned manager was not found."}), 404
+        assignee_user, assignee_member = _resolve_assignment_target(
+            assignee_id, preferred=data.get("assignee_type")
+        )
+        if assignee_user is None and assignee_member is None:
+            return jsonify({"msg": "Selected assignee was not found."}), 404
 
-    delegated_to = None
+    delegated_to_user: User | None = None
+    delegated_to_member: TeamMember | None = None
     delegated_to_id = data.get("delegated_to_id")
     if delegated_to_id is not None:
-        delegated_to = User.query.get(delegated_to_id)
-        if not delegated_to:
-            return jsonify({"msg": "Delegated manager was not found."}), 404
+        delegated_to_user, delegated_to_member = _resolve_assignment_target(
+            delegated_to_id, preferred=data.get("delegated_to_type")
+        )
+        if delegated_to_user is None and delegated_to_member is None:
+            return jsonify({"msg": "Selected delegate was not found."}), 404
 
     delegations_payload = data.get("delegations") or []
     delegation_models: list[ResponsibilityDelegation] = []
-    seen_delegates: set[int] = set()
+    seen_delegates: set[tuple[str, int]] = set()
     for entry in delegations_payload:
         delegate_id = entry.get("delegate_id")
-        if delegate_id is None or delegate_id in seen_delegates:
+        if delegate_id is None:
             continue
-        delegate = User.query.get(delegate_id)
-        if not delegate:
-            return jsonify({"msg": "Delegated manager was not found."}), 404
-        seen_delegates.add(delegate_id)
-        delegation_models.append(
-            ResponsibilityDelegation(
-                delegate_id=delegate.id,
-                allocated_value=entry.get("allocated_value"),
-            )
+        delegate_user, delegate_member = _resolve_assignment_target(
+            delegate_id, preferred=entry.get("delegate_type")
         )
+        if delegate_user is None and delegate_member is None:
+            return jsonify({"msg": "Selected delegate was not found."}), 404
+        key: tuple[str, int]
+        if delegate_user is not None:
+            key = ("user", int(delegate_user.id))
+        else:
+            key = ("member", int(delegate_member.id))
+        if key in seen_delegates:
+            continue
+        seen_delegates.add(key)
+        delegation = ResponsibilityDelegation(
+            delegate_id=delegate_user.id if delegate_user else None,
+            delegate_member_id=delegate_member.id if delegate_member else None,
+            allocated_value=entry.get("allocated_value"),
+        )
+        if delegate_user is not None:
+            delegation.delegate = delegate_user
+        if delegate_member is not None:
+            delegation.delegate_member = delegate_member
+        delegation_models.append(delegation)
 
-    if not delegation_models and delegated_to is not None:
-        delegation_models.append(ResponsibilityDelegation(delegate_id=delegated_to.id))
+    if not delegation_models and (delegated_to_user is not None or delegated_to_member is not None):
+        fallback_delegation = ResponsibilityDelegation(
+            delegate_id=delegated_to_user.id if delegated_to_user else None,
+            delegate_member_id=delegated_to_member.id if delegated_to_member else None,
+        )
+        if delegated_to_user is not None:
+            fallback_delegation.delegate = delegated_to_user
+        if delegated_to_member is not None:
+            fallback_delegation.delegate_member = delegated_to_member
+        delegation_models.append(fallback_delegation)
 
     recurrence = ResponsibilityRecurrence(data["recurrence"])
     if "status" in payload:
@@ -917,8 +1064,15 @@ def update_task(task_id: int):
     task.recipient_email = data["recipient_email"]
     task.cc_email = data.get("cc_email")
     task.progress = progress
-    task.assignee_id = assignee.id if assignee else None
+    task.assignee_id = assignee_user.id if assignee_user else None
+    task.assignee_member_id = assignee_member.id if assignee_member else None
     task.replace_delegations(delegation_models)
+    task.delegated_to_id = delegated_to_user.id if delegated_to_user else None
+    task.delegated_to_member_id = (
+        delegated_to_member.id if delegated_to_member else None
+    )
+    task.assignee_member = assignee_member
+    task.delegated_to_member = delegated_to_member
     task.update_custom_weekdays(data.get("custom_weekdays"))
     task.perf_uom = performance_unit
     task.perf_responsible_value = performance_responsible_value
@@ -962,8 +1116,11 @@ def list_tasks():
         ResponsibilityTask.query.options(
             selectinload(ResponsibilityTask.assigner),
             selectinload(ResponsibilityTask.assignee),
+            selectinload(ResponsibilityTask.assignee_member),
             selectinload(ResponsibilityTask.delegated_to),
+            selectinload(ResponsibilityTask.delegated_to_member),
             selectinload(ResponsibilityTask.delegations).selectinload(ResponsibilityDelegation.delegate),
+            selectinload(ResponsibilityTask.delegations).selectinload(ResponsibilityDelegation.delegate_member),
         )
         .order_by(
             asc(ResponsibilityTask.scheduled_for),
@@ -977,7 +1134,12 @@ def list_tasks():
             assignee_value = int(assignee_id)
         except ValueError:
             return jsonify({"msg": "Invalid assignee filter."}), 422
-        query = query.filter(ResponsibilityTask.assignee_id == assignee_value)
+        query = query.filter(
+            or_(
+                ResponsibilityTask.assignee_id == assignee_value,
+                ResponsibilityTask.assignee_member_id == assignee_value,
+            )
+        )
 
     tasks = query.all()
     return jsonify(tasks_schema.dump(tasks))

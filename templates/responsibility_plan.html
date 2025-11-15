@@ -411,6 +411,7 @@
             responsibilityModalTitle?.textContent?.trim() || "New responsibility";
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
+        const responsibilityTeamMembers = new Map();
         let responsibilityEditingTaskId = null;
         let responsibilityEditingTask = null;
 
@@ -427,61 +428,6 @@
             }
 
             return "Team member";
-        };
-
-        const preferNonEmptyString = (...candidates) => {
-            for (const candidate of candidates) {
-                if (typeof candidate === "string") {
-                    const trimmed = candidate.trim();
-                    if (trimmed) {
-                        return trimmed;
-                    }
-                } else if (typeof candidate === "number" && Number.isFinite(candidate)) {
-                    return String(candidate);
-                }
-            }
-
-            return "";
-        };
-
-        const assignerNameFallback = (user = {}) => preferNonEmptyString(user?.name, user?.email);
-
-        const responsibilityMemberLookup = new Map();
-
-        let responsibilityTasks = [];
-
-        const resolveTeamMemberName = (id) => {
-            if (id === null || id === undefined) {
-                return "";
-            }
-
-            const normalized = String(id).trim();
-            if (!normalized) {
-                return "";
-            }
-
-            const member = responsibilityMemberLookup.get(normalized);
-            return member?.name || "";
-        };
-
-        const getTaskAssigneeDisplay = (task) => {
-            if (!task) {
-                return "—";
-            }
-
-            const userAssigneeDisplay = assignerNameFallback(task.assignee);
-            const memberLookupDisplay = !userAssigneeDisplay
-                ? resolveTeamMemberName(task.assigneeId)
-                : "";
-
-            const display = preferNonEmptyString(
-                task.assigneeName,
-                userAssigneeDisplay,
-                memberLookupDisplay,
-                task.assigneeEmail,
-            );
-
-            return display || "—";
         };
 
         const RESPONSIBILITY_WEEKDAY_NAMES = [
@@ -1394,6 +1340,74 @@
             return cell;
         };
 
+        const getUserDisplay = (user, fallbacks = []) => {
+            const candidates = [];
+
+            if (user && typeof user === "object") {
+                candidates.push(
+                    user.nickname,
+                    user.name,
+                    user.regNumber,
+                    user.reg_number,
+                    user.email,
+                );
+            }
+
+            if (Array.isArray(fallbacks)) {
+                candidates.push(...fallbacks);
+            } else if (typeof fallbacks === "string") {
+                candidates.push(fallbacks);
+            }
+
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                }
+            }
+
+            return "—";
+        };
+
+        const getResponsibilityTeamMemberDisplay = (task, relationKey) => {
+            if (!task) {
+                return "—";
+            }
+
+            const relation =
+                relationKey === "assignee"
+                    ? task?.assignee
+                    : relationKey === "delegatedTo"
+                    ? task?.delegatedTo
+                    : null;
+
+            const idCandidates = [
+                relation?.id,
+                relation?.memberId,
+                relation?.member_id,
+                task?.[`${relationKey}Id`],
+                task?.[`${relationKey}_id`],
+            ];
+
+            for (const candidate of idCandidates) {
+                const stored = getStoredTeamMemberName(candidate);
+                if (stored) {
+                    return stored;
+                }
+            }
+
+            if (relation && typeof relation === "object") {
+                const directDisplay = getMemberDisplayName(relation);
+                if (directDisplay && directDisplay !== "Team member") {
+                    return directDisplay;
+                }
+            }
+
+            return getUserDisplay(relation, [task?.[`${relationKey}Name`], task?.[`${relationKey}Email`]]);
+        };
+
         const renderResponsibilityRow = (task) => {
             const row = document.createElement("tr");
             row.dataset.id = task?.id;
@@ -1456,9 +1470,9 @@
                     ),
                 ),
                 appendCell(task?.detail || "—"),
-                appendCell(assignerDisplay || "—"),
-                appendCell(assigneeDisplay),
-                appendCell(delegatedDisplay),
+                appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
+                appendCell(getResponsibilityTeamMemberDisplay(task, "assignee")),
+                appendCell(getResponsibilityTeamMemberDisplay(task, "delegatedTo")),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
                 createdCell,
@@ -1516,6 +1530,28 @@
             }
         };
 
+        const getStoredTeamMemberName = (id) => {
+            if (id === null || id === undefined) {
+                return null;
+            }
+
+            const normalized = String(id).trim();
+            if (!normalized) {
+                return null;
+            }
+
+            const record = responsibilityTeamMembers.get(normalized);
+            if (!record) {
+                return null;
+            }
+
+            if (typeof record.displayName === "string" && record.displayName.trim()) {
+                return record.displayName.trim();
+            }
+
+            return getMemberDisplayName(record);
+        };
+
         const populateResponsibilityAssignees = (assignees = []) => {
             if (!responsibilityAssigneeSelect || !responsibilityDelegatedSelect) {
                 return;
@@ -1534,10 +1570,43 @@
                 return element;
             };
 
+            responsibilityTeamMembers.clear();
             clearOptions(responsibilityAssigneeSelect);
             clearOptions(responsibilityDelegatedSelect);
 
             assignees.forEach((assignee) => {
+                if (!assignee || assignee.id === null || assignee.id === undefined) {
+                    return;
+                }
+
+                const normalizedId = String(assignee.id).trim();
+                if (!normalizedId) {
+                    return;
+                }
+
+                const sourceMember =
+                    assignee.member && typeof assignee.member === "object"
+                        ? assignee.member
+                        : {};
+
+                const teamMemberRecord = {
+                    ...sourceMember,
+                    id: normalizedId,
+                    name: sourceMember?.name ?? assignee.name ?? "",
+                    nickname: sourceMember?.nickname ?? assignee.nickname ?? "",
+                    regNumber:
+                        sourceMember?.regNumber ??
+                        sourceMember?.reg_number ??
+                        assignee.regNumber ??
+                        "",
+                    displayName: assignee.name ?? getMemberDisplayName(sourceMember),
+                };
+
+                if (typeof assignee.email === "string" && assignee.email.trim()) {
+                    teamMemberRecord.email = assignee.email.trim();
+                }
+
+                responsibilityTeamMembers.set(normalizedId, teamMemberRecord);
                 responsibilityAssigneeSelect.appendChild(renderOption(assignee));
                 responsibilityDelegatedSelect.appendChild(renderOption(assignee));
             });
@@ -1582,15 +1651,19 @@
                         return;
                     }
 
+                    const displayName = getMemberDisplayName(member);
                     uniqueMembers.set(normalizedId, {
                         id: normalizedId,
-                        name: getMemberDisplayName(member),
+                        name: displayName,
+                        nickname: typeof member?.nickname === "string" ? member.nickname : undefined,
+                        regNumber:
+                            typeof member?.regNumber === "string"
+                                ? member.regNumber
+                                : typeof member?.reg_number === "string"
+                                ? member.reg_number
+                                : undefined,
+                        member,
                     });
-                });
-
-                responsibilityMemberLookup.clear();
-                uniqueMembers.forEach((member, key) => {
-                    responsibilityMemberLookup.set(key, member);
                 });
 
                 const assignees = Array.from(uniqueMembers.values()).sort((a, b) =>
@@ -1598,7 +1671,6 @@
                 );
 
                 populateResponsibilityAssignees(assignees);
-                updateResponsibilityTable(responsibilityTasks);
             } catch (error) {
                 console.error("Failed to load responsibility team members", error);
             }
@@ -2095,8 +2167,9 @@
         initializeResponsibilityWeeklyStart();
         toggleCustomWeekdayFieldset();
         updateRecurrenceOptionLabels();
-        fetchResponsibilityAssignees();
-        fetchResponsibilities();
+        fetchResponsibilityAssignees().finally(() => {
+            fetchResponsibilities();
+        });
     </script>
 </body>
 </html>

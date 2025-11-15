@@ -766,6 +766,9 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     if details["progress_label"]:
         base_lines.append(f"Progress: {details['progress_label']}")
 
+    if progress_label:
+        base_lines.append(f"Progress: {progress_label}")
+
     overview_lines = ["Responsibility overview:"]
     overview_lines.extend(f"• {line}" for line in base_lines)
 

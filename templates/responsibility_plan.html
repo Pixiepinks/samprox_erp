@@ -819,6 +819,13 @@
         };
 
         const formatResponsibilityDelegations = (task, unitValue, performanceConfig) => {
+            // If the backend has already decorated a human-friendly delegate name,
+            // always prefer that instead of trying to reconstruct it or falling
+            // back to numeric IDs.
+            const primaryName = normalizeDisplayValue(task?.delegatedToName);
+            if (primaryName) {
+                return primaryName;
+            }
             const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
 
             if (delegations.length === 0) {

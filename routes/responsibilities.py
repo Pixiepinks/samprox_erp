@@ -32,6 +32,7 @@ from models import (
 )
 from responsibility_performance import (
     calculate_metric,
+    format_metric,
     format_performance_value,
     unit_input_type,
 )
@@ -685,12 +686,34 @@ def _send_task_email(task: ResponsibilityTask) -> None:
     except Exception:
         action_label = "—"
 
+    unit = _resolve_performance_unit(task)
+    unit_label = _performance_unit_label(
+        unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else unit
+    )
+    unit_display = (
+        unit_label
+        or (unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else str(unit))
+        or "—"
+    )
+
+    responsible_value = format_performance_value(
+        unit, getattr(task, "perf_responsible_value", None)
+    )
+    actual_value = format_performance_value(
+        unit, getattr(task, "perf_actual_value", None)
+    )
+    metric_value = format_metric(unit, getattr(task, "perf_metric_value", None))
+    progress_label = _format_progress_label(getattr(task, "progress", None))
+
     base_lines = [
         f"Responsibility No: {task.number}",
         f"Title: {task.title}",
         f"Scheduled for: {first_date}",
-        f"Recurrence: {_render_recurrence(task)}",
         f"5D Action: {action_label}",
+        f"Unit of measure: {unit_display}",
+        f"Responsible: {responsible_value if responsible_value is not None else '—'}",
+        f"Actual: {actual_value if actual_value is not None else '—'}",
+        f"Performance metric: {metric_value if metric_value is not None else '—'}",
     ]
 
     if assignee_name:
@@ -699,6 +722,9 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         base_lines.append("Assigned to: (not specified)")
 
     base_lines.append(f"Assigned by: {assigner_name}")
+
+    if progress_label:
+        base_lines.append(f"Progress: {progress_label}")
 
     overview_lines = ["Responsibility overview:"]
     overview_lines.extend(f"• {line}" for line in base_lines)

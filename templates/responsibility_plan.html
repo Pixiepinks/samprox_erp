@@ -454,28 +454,6 @@
 
         const resolveTeamMemberName = (id) => getStoredTeamMemberName(id) || "";
 
-        const resolveTeamMemberFallbackName = (value) => {
-            if (value === null || value === undefined) {
-                return "";
-            }
-
-            const normalized = String(value).trim();
-            if (!normalized || normalized === "—") {
-                return "";
-            }
-
-            const stored = getStoredTeamMemberName(normalized);
-            if (stored) {
-                return stored;
-            }
-
-            if (/^\d+$/.test(normalized)) {
-                return "";
-            }
-
-            return normalized;
-        };
-
         const getMemberDisplayName = (member) => {
             const candidates = [member?.nickname, member?.name, member?.regNumber];
 
@@ -845,9 +823,8 @@
 
             if (delegations.length === 0) {
                 const fallback = preferNonEmptyString(
-                    normalizeDisplayValue(task?.delegatedTo?.nickname),
-                    normalizeDisplayValue(task?.delegatedTo?.name),
-                    resolveTeamMemberFallbackName(task?.delegatedToName),
+                    task?.delegatedTo?.name,
+                    task?.delegatedToName,
                     getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
                     assignerNameFallback(task?.delegatedTo),
                     task?.delegatedTo?.email,
@@ -1458,22 +1435,7 @@
                 }
             }
 
-            const fallbackNames = [];
-
-            const relationName = resolveTeamMemberFallbackName(task?.[`${relationKey}Name`]);
-            if (relationName) {
-                fallbackNames.push(relationName);
-            }
-
-            const relationEmail =
-                typeof task?.[`${relationKey}Email`] === "string"
-                    ? task?.[`${relationKey}Email`].trim()
-                    : "";
-            if (relationEmail) {
-                fallbackNames.push(relationEmail);
-            }
-
-            return getUserDisplay(relation, fallbackNames);
+            return getUserDisplay(relation, [task?.[`${relationKey}Name`], task?.[`${relationKey}Email`]]);
         };
 
         const renderResponsibilityRow = (task) => {
@@ -1544,7 +1506,7 @@
                         normalizeDisplayValue(
                             getResponsibilityTeamMemberDisplay(task, "assignee"),
                         ),
-                        resolveTeamMemberFallbackName(task?.assigneeName),
+                        task?.assigneeName,
                         task?.assigneeEmail,
                     ) || "—",
                 ),
@@ -1553,7 +1515,7 @@
                         normalizeDisplayValue(
                             getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
                         ),
-                        resolveTeamMemberFallbackName(task?.delegatedToName),
+                        task?.delegatedToName,
                         task?.delegatedToEmail,
                     ) || "—",
                 ),

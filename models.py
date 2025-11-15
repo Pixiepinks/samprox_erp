@@ -335,7 +335,7 @@ class ResponsibilityTask(db.Model):
     )
     perf_responsible_value = db.Column(db.Numeric(18, 4), nullable=False, default=Decimal("0"))
     perf_actual_value = db.Column(db.Numeric(18, 4), nullable=True)
-    perf_metric_value = db.Column(db.Numeric(6, 1), nullable=True)
+    perf_metric_value = db.Column(db.Numeric(18, 4), nullable=True)
     perf_input_type = db.Column(db.String(40))
 
     assigner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)

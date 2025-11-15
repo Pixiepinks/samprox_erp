@@ -779,6 +779,68 @@
             return formatNumberWithDecimals(numeric, decimals);
         };
 
+        const formatResponsibilityDelegations = (task, unitValue, performanceConfig) => {
+            const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
+
+            if (delegations.length === 0) {
+                const delegatedUserDisplay = assignerNameFallback(task?.delegatedTo);
+                const delegatedMemberDisplay = !delegatedUserDisplay
+                    ? resolveTeamMemberName(task?.delegatedToId)
+                    : "";
+
+                const fallback = preferNonEmptyString(
+                    task?.delegatedToName,
+                    delegatedUserDisplay,
+                    delegatedMemberDisplay,
+                );
+                return fallback || "—";
+            }
+
+            const parts = delegations
+                .map((entry) => {
+                    if (!entry) {
+                        return null;
+                    }
+
+                    const delegateUserDisplay = assignerNameFallback(entry?.delegate);
+                    const delegateMemberDisplay = !delegateUserDisplay
+                        ? resolveTeamMemberName(entry?.delegateId)
+                        : "";
+
+                    const delegateName = preferNonEmptyString(
+                        entry?.delegate?.name,
+                        delegateUserDisplay,
+                        delegateMemberDisplay,
+                        entry?.delegate?.email,
+                        entry?.delegateId ? String(entry.delegateId) : "",
+                    );
+
+                    const rawValue =
+                        entry?.allocatedValue ??
+                        entry?.allocated_value ??
+                        entry?.value ??
+                        "";
+
+                    let formattedValue = rawValue;
+                    if (rawValue !== null && rawValue !== undefined && rawValue !== "") {
+                        formattedValue = formatPerformanceValueDisplay(
+                            rawValue,
+                            unitValue,
+                            performanceConfig,
+                        );
+                    }
+
+                    if (delegateName && formattedValue && formattedValue !== "—") {
+                        return `${delegateName} (${formattedValue})`;
+                    }
+
+                    return delegateName || null;
+                })
+                .filter(Boolean);
+
+            return parts.length > 0 ? parts.join(", ") : "—";
+        };
+
         const formatTimeDifference = (minutes) => {
             if (!Number.isFinite(minutes)) {
                 return "—";
@@ -1369,6 +1431,18 @@
             const performanceUnitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
             const performanceConfig = getPerformanceConfig(performanceUnitValue);
 
+            const assignerDisplay = preferNonEmptyString(
+                task?.assignerName,
+                assignerNameFallback(task?.assigner),
+            );
+
+            const assigneeDisplay = getTaskAssigneeDisplay(task);
+            const delegatedDisplay = formatResponsibilityDelegations(
+                task,
+                performanceUnitValue,
+                performanceConfig,
+            );
+
             row.append(
                 appendCell(task?.number || "—"),
                 appendCell(task?.title || "—"),
@@ -1413,15 +1487,17 @@
                 return;
             }
 
+            responsibilityTasks = Array.isArray(tasks) ? tasks : [];
+
             responsibilityTableBody.innerHTML = "";
-            if (!Array.isArray(tasks) || tasks.length === 0) {
+            if (responsibilityTasks.length === 0) {
                 responsibilityEmptyState?.removeAttribute("hidden");
                 return;
             }
 
             responsibilityEmptyState?.setAttribute("hidden", "");
 
-            tasks.forEach((task) => {
+            responsibilityTasks.forEach((task) => {
                 const row = renderResponsibilityRow(task);
                 responsibilityTableBody.appendChild(row);
             });
@@ -1443,7 +1519,7 @@
                 }
 
                 const data = await response.json();
-                updateResponsibilityTable(Array.isArray(data) ? data : []);
+                updateResponsibilityTable(data);
             } catch (error) {
                 console.error("Failed to load responsibilities", error);
                 setPlanMessage(
@@ -1848,12 +1924,35 @@
                 payload.progress = clampProgressValue(payload.progress);
             }
 
+            const resolveAssignmentType = (value) => {
+                if (value === null || value === undefined) {
+                    return undefined;
+                }
+                const normalized = String(value).trim();
+                if (!normalized) {
+                    return undefined;
+                }
+                return responsibilityMemberLookup.has(normalized) ? "team_member" : "user";
+            };
+
+            const assigneeType = resolveAssignmentType(payload.assigneeId);
+            if (assigneeType) {
+                payload.assigneeType = assigneeType;
+            }
+
+            const delegatedType = resolveAssignmentType(payload.delegatedToId);
+            if (delegatedType) {
+                payload.delegatedToType = delegatedType;
+            }
+
             if (payload.assigneeId === "") {
                 delete payload.assigneeId;
+                delete payload.assigneeType;
             }
 
             if (payload.delegatedToId === "") {
                 delete payload.delegatedToId;
+                delete payload.delegatedToType;
             }
 
             const requestUrl = isEditingResponsibility

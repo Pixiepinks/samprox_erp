@@ -1635,6 +1635,45 @@
             return getUserDisplay(relation, [task?.[`${relationKey}Name`], task?.[`${relationKey}Email`]]);
         };
 
+        const getTaskAssigneeDisplay = (task) => {
+            if (!task) {
+                return "—";
+            }
+
+            const teamMemberDisplay = normalizeDisplayValue(
+                getResponsibilityTeamMemberDisplay(task, "assignee"),
+            );
+            if (teamMemberDisplay) {
+                return teamMemberDisplay;
+            }
+
+            const fallback = preferNonEmptyString(
+                task?.assigneeName,
+                assignerNameFallback(task?.assignee),
+                task?.assigneeEmail,
+            );
+            if (fallback) {
+                return fallback;
+            }
+
+            const idCandidates = [
+                task?.assigneeId,
+                task?.assignee_id,
+                task?.assignee?.id,
+                task?.assignee?.memberId,
+                task?.assignee?.member_id,
+            ];
+
+            for (const candidate of idCandidates) {
+                const storedName = getStoredTeamMemberName(candidate);
+                if (storedName) {
+                    return storedName;
+                }
+            }
+
+            return getUserDisplay(task?.assignee, [task?.assigneeEmail]);
+        };
+
         const renderResponsibilityRow = (task) => {
             const row = document.createElement("tr");
             row.dataset.id = task?.id;
@@ -1698,15 +1737,7 @@
                 ),
                 appendCell(task?.detail || "—"),
                 appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
-                appendCell(
-                    preferNonEmptyString(
-                        normalizeDisplayValue(
-                            getResponsibilityTeamMemberDisplay(task, "assignee"),
-                        ),
-                        task?.assigneeName,
-                        task?.assigneeEmail,
-                    ) || "—",
-                ),
+                appendCell(assigneeDisplay),
                 appendCell(delegatedDisplay || "—"),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),

@@ -429,6 +429,56 @@
             return "Team member";
         };
 
+        const preferNonEmptyString = (...candidates) => {
+            for (const candidate of candidates) {
+                if (typeof candidate === "string") {
+                    const trimmed = candidate.trim();
+                    if (trimmed) {
+                        return trimmed;
+                    }
+                } else if (typeof candidate === "number" && Number.isFinite(candidate)) {
+                    return String(candidate);
+                }
+            }
+
+            return "";
+        };
+
+        const assignerNameFallback = (user = {}) => preferNonEmptyString(user?.name, user?.email);
+
+        const responsibilityMemberLookup = new Map();
+
+        let responsibilityTasks = [];
+
+        const resolveTeamMemberName = (id) => {
+            if (id === null || id === undefined) {
+                return "";
+            }
+
+            const normalized = String(id).trim();
+            if (!normalized) {
+                return "";
+            }
+
+            const member = responsibilityMemberLookup.get(normalized);
+            return member?.name || "";
+        };
+
+        const getTaskAssigneeDisplay = (task) => {
+            if (!task) {
+                return "—";
+            }
+
+            const display = preferNonEmptyString(
+                task.assigneeName,
+                resolveTeamMemberName(task.assigneeId),
+                assignerNameFallback(task.assignee),
+                task.assigneeEmail,
+            );
+
+            return display || "—";
+        };
+
         const RESPONSIBILITY_WEEKDAY_NAMES = [
             "Monday",
             "Tuesday",
@@ -776,6 +826,57 @@
             }
             const decimals = config.format === "integer" ? 0 : config.decimals ?? 2;
             return formatNumberWithDecimals(numeric, decimals);
+        };
+
+        const formatResponsibilityDelegations = (task, unitValue, performanceConfig) => {
+            const delegations = Array.isArray(task?.delegations) ? task.delegations : [];
+
+            if (delegations.length === 0) {
+                const fallback = preferNonEmptyString(
+                    task?.delegatedToName,
+                    resolveTeamMemberName(task?.delegatedToId),
+                    assignerNameFallback(task?.delegatedTo),
+                );
+                return fallback || "—";
+            }
+
+            const parts = delegations
+                .map((entry) => {
+                    if (!entry) {
+                        return null;
+                    }
+
+                    const delegateName = preferNonEmptyString(
+                        entry?.delegate?.name,
+                        entry?.delegate?.email,
+                        resolveTeamMemberName(entry?.delegateId),
+                        entry?.delegateId ? String(entry.delegateId) : "",
+                    );
+
+                    const rawValue =
+                        entry?.allocatedValue ??
+                        entry?.allocated_value ??
+                        entry?.value ??
+                        "";
+
+                    let formattedValue = rawValue;
+                    if (rawValue !== null && rawValue !== undefined && rawValue !== "") {
+                        formattedValue = formatPerformanceValueDisplay(
+                            rawValue,
+                            unitValue,
+                            performanceConfig,
+                        );
+                    }
+
+                    if (delegateName && formattedValue && formattedValue !== "—") {
+                        return `${delegateName} (${formattedValue})`;
+                    }
+
+                    return delegateName || null;
+                })
+                .filter(Boolean);
+
+            return parts.length > 0 ? parts.join(", ") : "—";
         };
 
         const formatTimeDifference = (minutes) => {
@@ -1300,6 +1401,18 @@
             const performanceUnitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
             const performanceConfig = getPerformanceConfig(performanceUnitValue);
 
+            const assignerDisplay = preferNonEmptyString(
+                task?.assignerName,
+                assignerNameFallback(task?.assigner),
+            );
+
+            const assigneeDisplay = getTaskAssigneeDisplay(task);
+            const delegatedDisplay = formatResponsibilityDelegations(
+                task,
+                performanceUnitValue,
+                performanceConfig,
+            );
+
             row.append(
                 appendCell(task?.number || "—"),
                 appendCell(task?.title || "—"),
@@ -1327,9 +1440,9 @@
                     ),
                 ),
                 appendCell(task?.detail || "—"),
-                appendCell(task?.assignerName || "—"),
-                appendCell(task?.assigneeName || "—"),
-                appendCell(task?.delegatedToName || "—"),
+                appendCell(assignerDisplay || "—"),
+                appendCell(assigneeDisplay),
+                appendCell(delegatedDisplay),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
                 createdCell,
@@ -1344,15 +1457,17 @@
                 return;
             }
 
+            responsibilityTasks = Array.isArray(tasks) ? tasks : [];
+
             responsibilityTableBody.innerHTML = "";
-            if (!Array.isArray(tasks) || tasks.length === 0) {
+            if (responsibilityTasks.length === 0) {
                 responsibilityEmptyState?.removeAttribute("hidden");
                 return;
             }
 
             responsibilityEmptyState?.setAttribute("hidden", "");
 
-            tasks.forEach((task) => {
+            responsibilityTasks.forEach((task) => {
                 const row = renderResponsibilityRow(task);
                 responsibilityTableBody.appendChild(row);
             });
@@ -1374,7 +1489,7 @@
                 }
 
                 const data = await response.json();
-                updateResponsibilityTable(Array.isArray(data) ? data : []);
+                updateResponsibilityTable(data);
             } catch (error) {
                 console.error("Failed to load responsibilities", error);
                 setPlanMessage(
@@ -1457,11 +1572,17 @@
                     });
                 });
 
+                responsibilityMemberLookup.clear();
+                uniqueMembers.forEach((member, key) => {
+                    responsibilityMemberLookup.set(key, member);
+                });
+
                 const assignees = Array.from(uniqueMembers.values()).sort((a, b) =>
                     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
                 );
 
                 populateResponsibilityAssignees(assignees);
+                updateResponsibilityTable(responsibilityTasks);
             } catch (error) {
                 console.error("Failed to load responsibility team members", error);
             }

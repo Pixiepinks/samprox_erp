@@ -829,12 +829,21 @@ body {
 }
 
 .team-table.responsibility-table th:nth-child(4),
-.team-table.responsibility-table td:nth-child(4) {
+.team-table.responsibility-table td:nth-child(4),
+.team-table.responsibility-table th:nth-child(5),
+.team-table.responsibility-table td:nth-child(5),
+.team-table.responsibility-table th:nth-child(6),
+.team-table.responsibility-table td:nth-child(6) {
     min-width: 12rem;
 }
 
 .team-table.responsibility-table th:nth-child(7),
 .team-table.responsibility-table td:nth-child(7) {
+    min-width: 12rem;
+}
+
+.team-table.responsibility-table th:nth-child(10),
+.team-table.responsibility-table td:nth-child(10) {
     min-width: 12rem;
 }
 

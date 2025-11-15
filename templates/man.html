@@ -128,14 +128,14 @@
                                 <th scope="col">Responsibility No</th>
                                 <th scope="col">Title</th>
                                 <th scope="col">Progress</th>
+                                <th scope="col">Assigned by</th>
+                                <th scope="col">Assigned to</th>
+                                <th scope="col">Delegated to</th>
                                 <th scope="col">Unit of Measure</th>
                                 <th scope="col">Responsible</th>
                                 <th scope="col">Actual</th>
                                 <th scope="col">Performance Metric</th>
                                 <th scope="col">Detail</th>
-                                <th scope="col">Assigned by</th>
-                                <th scope="col">Assigned to</th>
-                                <th scope="col">Delegated to</th>
                                 <th scope="col">Scheduled for</th>
                                 <th scope="col">5D Action</th>
                                 <th scope="col">Created</th>
@@ -2815,6 +2815,15 @@
                 const performanceUnitValue = task?.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
                 const performanceConfig = getPerformanceConfig(performanceUnitValue);
 
+                appendCell(task?.assignerName ?? task?.assigner?.name ?? task?.assigner?.email ?? "—");
+                appendCell(task?.assigneeName ?? task?.assignee?.name ?? task?.assignee?.email ?? "—");
+                appendCell(
+                    formatResponsibilityDelegations(
+                        task?.delegations,
+                        performanceUnitValue,
+                        performanceConfig,
+                    ),
+                );
                 appendCell(performanceConfig.label);
                 appendCell(
                     formatPerformanceValueDisplay(
@@ -2839,15 +2848,6 @@
                 );
 
                 appendCell(task?.detail ?? "—", { title: task?.detail });
-                appendCell(task?.assigner?.name ?? task?.assigner?.email ?? "—");
-                appendCell(task?.assigneeName ?? task?.assignee?.name ?? task?.assignee?.email ?? "—");
-                appendCell(
-                    formatResponsibilityDelegations(
-                        task?.delegations,
-                        performanceUnitValue,
-                        performanceConfig,
-                    ),
-                );
                 appendCell(formatResponsibilityDate(task?.scheduledFor));
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes });
 

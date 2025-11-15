@@ -639,9 +639,9 @@
                             </div>
                         </fieldset>
                         <div class="edit-form__field">
-                            <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
-                            <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
-                                <option value="">Select a team member (optional)</option>
+                            <label class="edit-form__label" for="responsibility-assignee">Assign to <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-assignee" name="assigneeId" required>
+                                <option value="">Select a team member</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -1434,6 +1434,7 @@
 
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
+        const responsibilityAssigneeLookup = new Map();
 
         const assignerNameFallback = (user) => user?.name || user?.email || "";
 
@@ -2641,22 +2642,51 @@
                         });
                 }
 
-                const ensureSelectOption = (select, user) => {
-                    if (!select || !user || !user.id) {
+                const ensureSelectOption = (select, taskData) => {
+                    if (!select || !taskData) {
                         return;
                     }
-                    const value = String(user.id);
+                    const idCandidates = [
+                        taskData?.assigneeId,
+                        taskData?.assignee_id,
+                        taskData?.assignee?.id,
+                    ];
+                    const candidateId = idCandidates.find(
+                        (value) => value !== null && value !== undefined && String(value).trim() !== "",
+                    );
+                    if (candidateId === undefined) {
+                        return;
+                    }
+                    const value = String(candidateId);
                     let option = select.querySelector(`option[value="${value}"]`);
+                    const labelCandidates = [
+                        taskData?.assigneeName,
+                        assignerNameFallback(taskData?.assignee),
+                    ];
+                    const label = labelCandidates.find(
+                        (entry) => typeof entry === "string" && entry.trim(),
+                    );
                     if (!option) {
                         option = document.createElement("option");
                         option.value = value;
-                        option.textContent = assignerNameFallback(user) || value;
+                        option.textContent = label ? label.trim() : value;
                         select.appendChild(option);
+                    } else if (!option.textContent?.trim()) {
+                        option.textContent = label ? label.trim() : value;
                     }
+                    responsibilityAssigneeLookup.set(value, {
+                        id: value,
+                        name: option.textContent,
+                        type:
+                            taskData?.assigneeType ||
+                            (taskData?.assignee && typeof taskData.assignee === "object"
+                                ? "user"
+                                : undefined),
+                    });
                     select.value = value;
                 };
 
-                ensureSelectOption(responsibilityAssigneeSelect, task.assignee);
+                ensureSelectOption(responsibilityAssigneeSelect, task);
 
                 clearResponsibilityDelegations();
                 if (Array.isArray(task.delegations) && task.delegations.length > 0) {
@@ -2818,7 +2848,7 @@
 
                 appendCell(task?.detail ?? "—", { title: task?.detail });
                 appendCell(task?.assigner?.name ?? task?.assigner?.email ?? "—");
-                appendCell(task?.assignee?.name ?? task?.assignee?.email ?? "—");
+                appendCell(task?.assigneeName ?? task?.assignee?.name ?? task?.assignee?.email ?? "—");
                 appendCell(
                     formatResponsibilityDelegations(
                         task?.delegations,
@@ -2859,15 +2889,20 @@
             if (responsibilityAssigneeSelect) {
                 const currentValue = responsibilityAssigneeSelect.value;
                 responsibilityAssigneeSelect.innerHTML = "";
+                responsibilityAssigneeLookup.clear();
                 const placeholder = document.createElement("option");
                 placeholder.value = "";
-                placeholder.textContent = "Select a team member (optional)";
+                placeholder.textContent = "Select a team member";
                 responsibilityAssigneeSelect.appendChild(placeholder);
 
                 responsibilityAssignees.forEach((assignee) => {
                     const option = document.createElement("option");
                     option.value = String(assignee.id);
                     option.textContent = assignerNameFallback(assignee) || option.value;
+                    responsibilityAssigneeLookup.set(option.value, {
+                        ...assignee,
+                        type: assignee.type || "team_member",
+                    });
                     if (currentValue && currentValue === option.value) {
                         option.selected = true;
                     }
@@ -2915,7 +2950,7 @@
                     }
 
                     const displayName = getMemberDisplayName(member);
-                    const assignee = { id: normalizedId, name: displayName };
+                    const assignee = { id: normalizedId, name: displayName, type: "team_member" };
                     if (typeof member?.email === "string") {
                         const trimmedEmail = member.email.trim();
                         if (trimmedEmail) {
@@ -3055,12 +3090,22 @@
                 payload.performanceActual = null;
             }
 
-            const assigneeValue = formData.get("assigneeId");
-            if (assigneeValue) {
-                const parsedAssignee = Number.parseInt(assigneeValue.toString(), 10);
-                if (!Number.isNaN(parsedAssignee)) {
-                    payload.assigneeId = parsedAssignee;
-                }
+            const assigneeRaw = formData.get("assigneeId")?.toString().trim() ?? "";
+            if (!assigneeRaw) {
+                showResponsibilityFormError("Select a team member to assign this responsibility.");
+                responsibilityAssigneeSelect?.focus();
+                return;
+            }
+            const parsedAssignee = Number.parseInt(assigneeRaw, 10);
+            if (Number.isNaN(parsedAssignee)) {
+                showResponsibilityFormError("Select a valid team member for the assignment.");
+                responsibilityAssigneeSelect?.focus();
+                return;
+            }
+            payload.assigneeId = parsedAssignee;
+            const assigneeRecord = responsibilityAssigneeLookup.get(String(parsedAssignee));
+            if (assigneeRecord?.type) {
+                payload.assigneeType = assigneeRecord.type;
             }
 
             const actionValue = formData.get("action")?.toString();

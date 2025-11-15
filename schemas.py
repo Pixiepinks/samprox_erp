@@ -971,7 +971,7 @@ class ResponsibilityTaskCreateSchema(Schema):
     scheduled_for = fields.Date(required=True, data_key="scheduledFor")
     recurrence = fields.Str(required=True, data_key="recurrence")
     custom_weekdays = fields.List(fields.Int(), allow_none=True, data_key="customWeekdays")
-    assignee_id = fields.Int(allow_none=True, data_key="assigneeId")
+    assignee_id = fields.Int(required=True, allow_none=False, data_key="assigneeId")
     assignee_type = fields.Str(load_default=None, data_key="assigneeType")
     delegated_to_id = fields.Int(allow_none=True, data_key="delegatedToId")
     delegated_to_type = fields.Str(load_default=None, data_key="delegatedToType")

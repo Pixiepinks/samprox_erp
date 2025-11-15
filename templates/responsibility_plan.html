@@ -174,9 +174,9 @@
                             </div>
                         </fieldset>
                         <div class="edit-form__field">
-                            <label class="edit-form__label" for="responsibility-assignee">Assign to</label>
-                            <select class="edit-form__input" id="responsibility-assignee" name="assigneeId">
-                                <option value="">Select a team member (optional)</option>
+                            <label class="edit-form__label" for="responsibility-assignee">Assign to <span class="required">*</span></label>
+                            <select class="edit-form__input" id="responsibility-assignee" name="assigneeId" required>
+                                <option value="">Select a team member</option>
                             </select>
                         </div>
                         <div class="edit-form__field">
@@ -1891,6 +1891,20 @@
                 payload.customWeekdays = selected;
             }
 
+            const assigneeRaw = responsibilityAssigneeSelect?.value?.toString().trim() ?? "";
+            if (!assigneeRaw) {
+                showResponsibilityFormError("Select a team member to assign this responsibility.");
+                responsibilityAssigneeSelect?.focus();
+                return;
+            }
+            const assigneeValue = Number.parseInt(assigneeRaw, 10);
+            if (!Number.isFinite(assigneeValue)) {
+                showResponsibilityFormError("Select a valid team member for the assignment.");
+                responsibilityAssigneeSelect?.focus();
+                return;
+            }
+            payload.assigneeId = assigneeValue;
+
             if (!payload.action) {
                 showResponsibilityFormError("Select a 5D action.");
                 return;
@@ -1932,7 +1946,7 @@
                 if (!normalized) {
                     return undefined;
                 }
-                return responsibilityMemberLookup.has(normalized) ? "team_member" : "user";
+                return responsibilityTeamMembers.has(normalized) ? "team_member" : "user";
             };
 
             const assigneeType = resolveAssignmentType(payload.assigneeId);
@@ -1943,11 +1957,6 @@
             const delegatedType = resolveAssignmentType(payload.delegatedToId);
             if (delegatedType) {
                 payload.delegatedToType = delegatedType;
-            }
-
-            if (payload.assigneeId === "") {
-                delete payload.assigneeId;
-                delete payload.assigneeType;
             }
 
             if (payload.delegatedToId === "") {

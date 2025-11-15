@@ -1471,8 +1471,18 @@
                 ),
                 appendCell(task?.detail || "—"),
                 appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
-                appendCell(getResponsibilityTeamMemberDisplay(task, "assignee")),
-                appendCell(getResponsibilityTeamMemberDisplay(task, "delegatedTo")),
+                appendCell(
+                    preferNonEmptyString(
+                        task?.assigneeName,
+                        getResponsibilityTeamMemberDisplay(task, "assignee"),
+                    ) || "—",
+                ),
+                appendCell(
+                    preferNonEmptyString(
+                        task?.delegatedToName,
+                        getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                    ) || "—",
+                ),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),
                 appendCell(formatResponsibilityAction(task?.action), { title: task?.actionNotes }),
                 createdCell,

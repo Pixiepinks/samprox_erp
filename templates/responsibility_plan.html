@@ -430,6 +430,19 @@
             return "";
         };
 
+        const normalizeDisplayValue = (value) => {
+            if (typeof value !== "string") {
+                return value;
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed || trimmed === "—") {
+                return "";
+            }
+
+            return trimmed;
+        };
+
         const assignerNameFallback = (user) =>
             preferNonEmptyString(
                 user?.nickname,
@@ -441,8 +454,30 @@
 
         const resolveTeamMemberName = (id) => getStoredTeamMemberName(id) || "";
 
+        const resolveTeamMemberFallbackName = (value) => {
+            if (value === null || value === undefined) {
+                return "";
+            }
+
+            const normalized = String(value).trim();
+            if (!normalized || normalized === "—") {
+                return "";
+            }
+
+            const stored = getStoredTeamMemberName(normalized);
+            if (stored) {
+                return stored;
+            }
+
+            if (/^\d+$/.test(normalized)) {
+                return "";
+            }
+
+            return normalized;
+        };
+
         const getMemberDisplayName = (member) => {
-            const candidates = [member?.name, member?.nickname, member?.regNumber];
+            const candidates = [member?.nickname, member?.name, member?.regNumber];
 
             for (const candidate of candidates) {
                 if (typeof candidate === "string") {
@@ -810,8 +845,9 @@
 
             if (delegations.length === 0) {
                 const fallback = preferNonEmptyString(
-                    task?.delegatedTo?.name,
-                    task?.delegatedToName,
+                    normalizeDisplayValue(task?.delegatedTo?.nickname),
+                    normalizeDisplayValue(task?.delegatedTo?.name),
+                    resolveTeamMemberFallbackName(task?.delegatedToName),
                     getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
                     assignerNameFallback(task?.delegatedTo),
                     task?.delegatedTo?.email,
@@ -1422,7 +1458,22 @@
                 }
             }
 
-            return getUserDisplay(relation, [task?.[`${relationKey}Name`], task?.[`${relationKey}Email`]]);
+            const fallbackNames = [];
+
+            const relationName = resolveTeamMemberFallbackName(task?.[`${relationKey}Name`]);
+            if (relationName) {
+                fallbackNames.push(relationName);
+            }
+
+            const relationEmail =
+                typeof task?.[`${relationKey}Email`] === "string"
+                    ? task?.[`${relationKey}Email`].trim()
+                    : "";
+            if (relationEmail) {
+                fallbackNames.push(relationEmail);
+            }
+
+            return getUserDisplay(relation, fallbackNames);
         };
 
         const renderResponsibilityRow = (task) => {
@@ -1490,14 +1541,20 @@
                 appendCell(getUserDisplay(task?.assigner, [task?.assignerName, task?.assignerEmail])),
                 appendCell(
                     preferNonEmptyString(
-                        task?.assigneeName,
-                        getResponsibilityTeamMemberDisplay(task, "assignee"),
+                        normalizeDisplayValue(
+                            getResponsibilityTeamMemberDisplay(task, "assignee"),
+                        ),
+                        resolveTeamMemberFallbackName(task?.assigneeName),
+                        task?.assigneeEmail,
                     ) || "—",
                 ),
                 appendCell(
                     preferNonEmptyString(
-                        task?.delegatedToName,
-                        getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                        normalizeDisplayValue(
+                            getResponsibilityTeamMemberDisplay(task, "delegatedTo"),
+                        ),
+                        resolveTeamMemberFallbackName(task?.delegatedToName),
+                        task?.delegatedToEmail,
                     ) || "—",
                 ),
                 appendCell(formatResponsibilityDate(task?.scheduledFor)),

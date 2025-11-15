@@ -726,12 +726,39 @@ def describe_responsibility_recurrence(task: ResponsibilityTask) -> str | None:
 class ResponsibilityDelegationSchema(Schema):
     id = fields.Int(dump_only=True)
     delegate = fields.Nested(UserSchema, dump_only=True, allow_none=True)
-    delegate_id = fields.Int(attribute="delegate_id", data_key="delegateId")
+    delegate_id = fields.Method("get_delegate_id", data_key="delegateId")
+    delegate_name = fields.Method("get_delegate_name", data_key="delegateName")
     allocated_value = fields.Decimal(
         allow_none=True,
         as_string=True,
         data_key="allocatedValue",
     )
+
+    def get_delegate_id(self, obj):
+        member_id = getattr(obj, "delegate_member_id", None)
+        if member_id is not None:
+            return member_id
+        return getattr(obj, "delegate_id", None)
+
+    def get_delegate_name(self, obj):
+        member = getattr(obj, "delegate_member", None)
+        name = getattr(member, "name", None)
+        if isinstance(name, str):
+            stripped = name.strip()
+            if stripped:
+                return stripped
+        delegate = getattr(obj, "delegate", None)
+        user_name = getattr(delegate, "name", None)
+        if isinstance(user_name, str):
+            stripped_user = user_name.strip()
+            if stripped_user:
+                return stripped_user
+        email = getattr(delegate, "email", None)
+        if isinstance(email, str):
+            stripped_email = email.strip()
+            if stripped_email:
+                return stripped_email
+        return None
 
 
 class ResponsibilityTaskSchema(Schema):
@@ -770,6 +797,11 @@ class ResponsibilityTaskSchema(Schema):
     assigner = fields.Nested(UserSchema, dump_only=True)
     assignee = fields.Nested(UserSchema, dump_only=True, allow_none=True)
     delegated_to = fields.Nested(UserSchema, dump_only=True, allow_none=True, data_key="delegatedTo")
+    assignee_id = fields.Method("get_assignee_id", data_key="assigneeId")
+    assignee_name = fields.Method("get_assignee_name", data_key="assigneeName")
+    assignee_email = fields.Method("get_assignee_email", data_key="assigneeEmail")
+    delegated_to_id = fields.Method("get_delegated_to_id", data_key="delegatedToId")
+    delegated_to_name = fields.Method("get_delegated_to_name", data_key="delegatedToName")
     delegations = fields.List(
         fields.Nested(ResponsibilityDelegationSchema),
         dump_only=True,
@@ -859,6 +891,67 @@ class ResponsibilityTaskSchema(Schema):
         metric = getattr(obj, "perf_metric_value", None)
         return format_metric(unit, metric)
 
+    def get_assignee_id(self, obj):
+        member_id = getattr(obj, "assignee_member_id", None)
+        if member_id is not None:
+            return member_id
+        return getattr(obj, "assignee_id", None)
+
+    def get_assignee_name(self, obj):
+        member = getattr(obj, "assignee_member", None)
+        name = getattr(member, "name", None)
+        if isinstance(name, str):
+            stripped = name.strip()
+            if stripped:
+                return stripped
+        assignee = getattr(obj, "assignee", None)
+        user_name = getattr(assignee, "name", None)
+        if isinstance(user_name, str):
+            stripped_user = user_name.strip()
+            if stripped_user:
+                return stripped_user
+        email = getattr(assignee, "email", None)
+        if isinstance(email, str):
+            stripped_email = email.strip()
+            if stripped_email:
+                return stripped_email
+        return None
+
+    def get_assignee_email(self, obj):
+        assignee = getattr(obj, "assignee", None)
+        email = getattr(assignee, "email", None)
+        if isinstance(email, str):
+            stripped = email.strip()
+            if stripped:
+                return stripped
+        return None
+
+    def get_delegated_to_id(self, obj):
+        member_id = getattr(obj, "delegated_to_member_id", None)
+        if member_id is not None:
+            return member_id
+        return getattr(obj, "delegated_to_id", None)
+
+    def get_delegated_to_name(self, obj):
+        member = getattr(obj, "delegated_to_member", None)
+        name = getattr(member, "name", None)
+        if isinstance(name, str):
+            stripped = name.strip()
+            if stripped:
+                return stripped
+        delegated = getattr(obj, "delegated_to", None)
+        user_name = getattr(delegated, "name", None)
+        if isinstance(user_name, str):
+            stripped_user = user_name.strip()
+            if stripped_user:
+                return stripped_user
+        email = getattr(delegated, "email", None)
+        if isinstance(email, str):
+            stripped_email = email.strip()
+            if stripped_email:
+                return stripped_email
+        return None
+
 
 class ResponsibilityDelegationCreateSchema(Schema):
     delegate_id = fields.Int(required=True, data_key="delegateId")
@@ -868,6 +961,7 @@ class ResponsibilityDelegationCreateSchema(Schema):
         data_key="allocatedValue",
         places=4,
     )
+    delegate_type = fields.Str(load_default=None, data_key="delegateType")
 
 
 class ResponsibilityTaskCreateSchema(Schema):
@@ -878,7 +972,9 @@ class ResponsibilityTaskCreateSchema(Schema):
     recurrence = fields.Str(required=True, data_key="recurrence")
     custom_weekdays = fields.List(fields.Int(), allow_none=True, data_key="customWeekdays")
     assignee_id = fields.Int(allow_none=True, data_key="assigneeId")
+    assignee_type = fields.Str(load_default=None, data_key="assigneeType")
     delegated_to_id = fields.Int(allow_none=True, data_key="delegatedToId")
+    delegated_to_type = fields.Str(load_default=None, data_key="delegatedToType")
     delegations = fields.List(
         fields.Nested(ResponsibilityDelegationCreateSchema),
         allow_none=True,
@@ -941,6 +1037,23 @@ class ResponsibilityTaskCreateSchema(Schema):
         action = normalized.get("action")
         if isinstance(action, str):
             normalized["action"] = action.strip().lower()
+
+        assignee_type = normalized.get("assigneeType")
+        if isinstance(assignee_type, str):
+            normalized["assigneeType"] = assignee_type.strip().lower().replace(" ", "_")
+
+        delegated_type = normalized.get("delegatedToType")
+        if isinstance(delegated_type, str):
+            normalized["delegatedToType"] = delegated_type.strip().lower().replace(" ", "_")
+
+        delegations_payload = normalized.get("delegations")
+        if isinstance(delegations_payload, list):
+            for entry in delegations_payload:
+                if not isinstance(entry, dict):
+                    continue
+                delegate_type = entry.get("delegateType")
+                if isinstance(delegate_type, str):
+                    entry["delegateType"] = delegate_type.strip().lower().replace(" ", "_")
 
         progress = normalized.get("progress")
         if isinstance(progress, str):

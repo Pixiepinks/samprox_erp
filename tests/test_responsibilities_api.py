@@ -53,6 +53,32 @@ class ResponsibilityApiTestCase(unittest.TestCase):
             name="Sumudu", email="sumudu@example.com", role=RoleEnum.production_manager
         )
         self.assistant_manager_three.set_password("Password!1")
+
+        TeamMember = self.app_module.TeamMember
+        TeamMemberStatus = self.app_module.TeamMemberStatus
+        PayCategory = self.app_module.PayCategory
+        today = date.today()
+        self.team_member_primary = TeamMember(
+            reg_number="TM001",
+            name="Kasun Worker",
+            join_date=today,
+            status=TeamMemberStatus.ACTIVE,
+            pay_category=PayCategory.FACTORY,
+        )
+        self.team_member_delegate_one = TeamMember(
+            reg_number="TM002",
+            name="Ishara Loader",
+            join_date=today,
+            status=TeamMemberStatus.ACTIVE,
+            pay_category=PayCategory.LOADING,
+        )
+        self.team_member_delegate_two = TeamMember(
+            reg_number="TM003",
+            name="Ruwan Helper",
+            join_date=today,
+            status=TeamMemberStatus.ACTIVE,
+            pay_category=PayCategory.LOADING,
+        )
         self.app_module.db.session.add_all(
             [
                 self.primary_manager,
@@ -60,6 +86,9 @@ class ResponsibilityApiTestCase(unittest.TestCase):
                 self.assistant_manager_one,
                 self.assistant_manager_two,
                 self.assistant_manager_three,
+                self.team_member_primary,
+                self.team_member_delegate_one,
+                self.team_member_delegate_two,
             ]
         )
         self.app_module.db.session.commit()
@@ -226,6 +255,69 @@ class ResponsibilityApiTestCase(unittest.TestCase):
         )
         self.assertIn("Delegated allocation assigned to you", delegate_email["html"])
         self.assertIn("Maximus — Your AICEO", delegate_email["html"])
+
+    def test_create_responsibility_accepts_team_member_assignee(self):
+        scheduled_for = date.today().isoformat()
+        payload = {
+            "title": "Packing supervision",
+            "description": "Ensure shift coverage.",
+            "scheduledFor": scheduled_for,
+            "recurrence": "does_not_repeat",
+            "assigneeId": self.team_member_primary.id,
+            "assigneeType": "team_member",
+            "delegatedToId": self.team_member_delegate_one.id,
+            "delegatedToType": "team_member",
+            "recipientEmail": "supervisor@example.com",
+            "action": "delegated",
+            "performanceUnit": "percentage_pct",
+            "performanceResponsible": "100",
+            "performanceActual": "80",
+            "delegations": [
+                {
+                    "delegateId": self.team_member_delegate_one.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "60",
+                },
+                {
+                    "delegateId": self.team_member_delegate_two.id,
+                    "delegateType": "team_member",
+                    "allocatedValue": "40",
+                },
+            ],
+        }
+
+        response = self.client.post(
+            "/api/responsibilities",
+            headers=self.auth_headers,
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.get_json()
+        self.assertEqual(data["assigneeId"], self.team_member_primary.id)
+        self.assertEqual(data["assigneeName"], "Kasun Worker")
+        self.assertEqual(data["delegatedToId"], self.team_member_delegate_one.id)
+        self.assertEqual(data["delegatedToName"], "Ishara Loader")
+        delegate_ids = {entry["delegateId"] for entry in data.get("delegations", [])}
+        self.assertSetEqual(
+            delegate_ids,
+            {self.team_member_delegate_one.id, self.team_member_delegate_two.id},
+        )
+
+        task = self.app_module.ResponsibilityTask.query.one()
+        self.assertIsNone(task.assignee_id)
+        self.assertEqual(task.assignee_member_id, self.team_member_primary.id)
+        self.assertIsNone(task.delegated_to_id)
+        self.assertEqual(task.delegated_to_member_id, self.team_member_delegate_one.id)
+        self.assertEqual(len(task.delegations), 2)
+        self.assertSetEqual(
+            {delegation.delegate_member_id for delegation in task.delegations},
+            {self.team_member_delegate_one.id, self.team_member_delegate_two.id},
+        )
+        self.assertTrue(all(delegation.delegate_id is None for delegation in task.delegations))
+
+        self.assertEqual(len(self.sent_emails), 1)
+        self.assertEqual(self.sent_emails[0]["to"], ["supervisor@example.com"])
 
     def test_create_responsibility_without_actual_metric_is_allowed(self):
         scheduled_for = date.today().isoformat()

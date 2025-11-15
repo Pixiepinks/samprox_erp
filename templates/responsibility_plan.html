@@ -1852,12 +1852,35 @@
                 payload.progress = clampProgressValue(payload.progress);
             }
 
+            const resolveAssignmentType = (value) => {
+                if (value === null || value === undefined) {
+                    return undefined;
+                }
+                const normalized = String(value).trim();
+                if (!normalized) {
+                    return undefined;
+                }
+                return responsibilityMemberLookup.has(normalized) ? "team_member" : "user";
+            };
+
+            const assigneeType = resolveAssignmentType(payload.assigneeId);
+            if (assigneeType) {
+                payload.assigneeType = assigneeType;
+            }
+
+            const delegatedType = resolveAssignmentType(payload.delegatedToId);
+            if (delegatedType) {
+                payload.delegatedToType = delegatedType;
+            }
+
             if (payload.assigneeId === "") {
                 delete payload.assigneeId;
+                delete payload.assigneeType;
             }
 
             if (payload.delegatedToId === "") {
                 delete payload.delegatedToId;
+                delete payload.delegatedToType;
             }
 
             const requestUrl = isEditingResponsibility

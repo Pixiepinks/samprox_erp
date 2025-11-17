@@ -655,6 +655,7 @@
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
         const responsibilityTeamMembers = new Map();
+        const responsibilityAssigneeLookup = new Map();
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
         let responsibilityEditingTaskId = null;

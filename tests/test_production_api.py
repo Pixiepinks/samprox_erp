@@ -431,6 +431,48 @@ class ProductionApiTestCase(unittest.TestCase):
         self.assertIn("MCH-0001", data["machine_codes"])
         self.assertIn("MCH-0002", data["machine_codes"])
 
+    def test_monthly_summary_excludes_blocked_machines_from_totals(self):
+        first_asset = self._create_machine()
+        second_asset = self._create_machine()
+        third_asset = self._create_machine()
+
+        def record_output(machine_code, date, hour_no, quantity):
+            response = self.client.post(
+                "/api/production/daily",
+                headers=self._auth_headers(self.pm_token),
+                json={
+                    "machine_code": machine_code,
+                    "date": date,
+                    "hour_no": hour_no,
+                    "quantity_tons": quantity,
+                },
+            )
+            self.assertIn(response.status_code, (200, 201))
+
+        record_output(first_asset["code"], "2024-05-01", 1, 2.0)
+        record_output(second_asset["code"], "2024-05-01", 2, 3.0)
+        record_output(third_asset["code"], "2024-05-01", 3, 5.5)
+
+        response = self.client.get(
+            "/api/production/monthly/summary",
+            headers=self._auth_headers(self.pm_token),
+            query_string={"period": "2024-05"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        data = response.get_json()
+        totals_by_day = {item["day"]: item for item in data["daily_totals"]}
+        may_first = totals_by_day[1]
+
+        self.assertAlmostEqual(may_first.get("MCH1", 0.0), 2.0)
+        self.assertAlmostEqual(may_first.get("MCH2", 0.0), 3.0)
+        self.assertAlmostEqual(may_first.get("MCH3", 0.0), 5.5)
+        self.assertAlmostEqual(may_first.get("total_tons", 0.0), 5.0)
+        self.assertAlmostEqual(data.get("total_production", 0.0), 5.0)
+        self.assertAlmostEqual(
+            data.get("average_day_production", 0.0), round(5.0 / data["days"], 3)
+        )
+
 
     def test_hourly_pulse_returns_hourly_series(self):
         first_asset = self._create_machine()

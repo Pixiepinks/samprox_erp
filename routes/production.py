@@ -895,7 +895,9 @@ def get_monthly_production_summary():
             value = round(machine_values.get(machine_filter, 0.0), 3)
             field_name = machine_field_map.get(canonical_code, canonical_code)
             payload[field_name] = value
-            day_total += value
+
+            if canonical_code.upper() not in SUMMARY_TOTALS_EXCLUDED_CODES:
+                day_total += value
 
         day_total = round(day_total, 3)
         payload["total_tons"] = day_total

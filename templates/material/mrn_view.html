@@ -230,12 +230,19 @@
         <article class="print-sheet">
             <header class="sheet-header">
                 <div class="company-block">
-                    <span class="company-name">Samprox International (Pvt) Ltd</span>
-                    <span>16/2, Sasanawardenarama Mawatha,</span>
-                    <span>Galawilawatta, Homagama</span>
+                    <span class="company-name">{{ company.name if company else "" }}</span>
+                    {% if company and company.address_lines %}
+                        {% for line in company.address_lines %}
+                            <span>{{ line }}</span>
+                        {% endfor %}
+                    {% endif %}
+                    {% if company and company.tagline %}
+                        <span>{{ company.tagline }}</span>
+                    {% endif %}
                 </div>
                 <div class="logo-block">
-                    <img src="{{ url_for('static', filename='profile_images/GRNLOGO.png') }}" alt="Company logo" />
+                    {% set logo_path = company.logo_path if company and company.logo_path else 'profile_images/GRNLOGO.png' %}
+                    <img src="{{ url_for('static', filename=logo_path) }}" alt="Company logo" />
                 </div>
             </header>
 

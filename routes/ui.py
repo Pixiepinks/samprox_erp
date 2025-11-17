@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, redirect, render_template, request, url_for
 from flask_jwt_extended import get_jwt, verify_jwt_in_request
 
 from material import (
@@ -6,6 +6,7 @@ from material import (
     get_mrn_detail,
     list_material_items,
 )
+from company_profiles import resolve_company_profile, select_company_key
 from schemas import MaterialItemSchema, MRNSchema
 
 from models import RoleEnum
@@ -130,7 +131,20 @@ def material_mrn_view_page(mrn_id: str):
         mrn = get_mrn_detail(mrn_id)
     except MaterialValidationError:
         abort(404)
-    return render_template("material/mrn_view.html", mrn=mrn)
+
+    company_key = request.args.get("company")
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive safety net for UI access
+        claims = None
+
+    selected_company_key = select_company_key(current_app.config, company_key, claims)
+    company = resolve_company_profile(current_app.config, selected_company_key)
+
+    return render_template("material/mrn_view.html", mrn=mrn, company=company)
 
 
 @bp.get("/material/mrn/<mrn_id>/edit")
@@ -157,7 +171,49 @@ def material_mrn_edit_page(mrn_id: str):
 @bp.get("/market")
 def market_page():
     """Render the market analysis page."""
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive safety net for UI access
+        claims = None
+
+    company_key = select_company_key(current_app.config, claims=claims)
+
+    if company_key == "rainbows-end-trading":
+        role = _current_role()
+        if role != RoleEnum.admin:
+            return render_template("403.html"), 403
+
+        company = resolve_company_profile(current_app.config, company_key)
+        return render_template("market_rainbows_end.html", company=company)
+
     return render_template("market.html")
+
+
+@bp.get("/market_rainbows_end.html")
+@bp.get("/market_rainbows_end")
+def market_rainbows_end_page():
+    """Render the Rainbows End Trading admin market page directly."""
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive safety net for UI access
+        claims = None
+
+    company_key = select_company_key(current_app.config, claims=claims)
+    if company_key != "rainbows-end-trading":
+        return redirect(url_for("ui.market_page"))
+
+    role = _current_role()
+    if role != RoleEnum.admin:
+        return render_template("403.html"), 403
+
+    company = resolve_company_profile(current_app.config, company_key)
+    return render_template("market_rainbows_end.html", company=company)
 
 
 @bp.get("/money")

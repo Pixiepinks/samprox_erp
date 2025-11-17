@@ -3,6 +3,51 @@ from datetime import timedelta
 from urllib.parse import urlparse, urlunparse
 
 DEFAULT_DATABASE_URL = "sqlite:///samprox.db"
+DEFAULT_COMPANY_PROFILES = [
+    {
+        "key": "samprox-international",
+        "name": "Samprox International (Pvt) Ltd",
+        "address_lines": [
+            "16/2, Sasanawardenarama Mawatha,",
+            "Galawilawatta, Homagama",
+        ],
+        "contact": None,
+        "tagline": "The Shape of Tomorrow",
+        "logo_path": "static/profile_images/GRNLOGO.png",
+    },
+    {
+        "key": "rainbows-end-trading",
+        "name": "Rainbows End Trading (Pvt) Ltd",
+        "address_lines": [],
+        "contact": None,
+        "tagline": "Import and distribute spareparts",
+        "logo_path": "static/profile_images/GRNLOGO.png",
+    },
+    {
+        "key": "rainbows-industrial",
+        "name": "Rainbows Industrial (Pvt) Ltd",
+        "address_lines": [],
+        "contact": None,
+        "tagline": "Welding Plant Import and selling",
+        "logo_path": "static/profile_images/GRNLOGO.png",
+    },
+    {
+        "key": "hello-homes",
+        "name": "Hello Homes (Pvt) Ltd",
+        "address_lines": [],
+        "contact": None,
+        "tagline": None,
+        "logo_path": "static/profile_images/GRNLOGO.png",
+    },
+    {
+        "key": "exsol-engineering",
+        "name": "Exsol Engineering (Pvt) Ltd",
+        "address_lines": [],
+        "contact": None,
+        "tagline": None,
+        "logo_path": "static/profile_images/GRNLOGO.png",
+    },
+]
 
 
 def _env_float(name: str, default: float) -> float:
@@ -121,6 +166,10 @@ def _env_sqlalchemy_database_uri() -> str | None:
     return uri if uri and uri.strip() else None
 
 
+def _default_company_profiles() -> list[dict]:
+    return [profile.copy() for profile in DEFAULT_COMPANY_PROFILES]
+
+
 class Config:
     SQLALCHEMY_DATABASE_URI = _env_sqlalchemy_database_uri() or current_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -152,6 +201,8 @@ class Config:
     MAIL_FORCE_IPV4 = _env_bool("MAIL_FORCE_IPV4", False)
     MAIL_MAX_DELIVERY_SECONDS = _env_float("MAIL_MAX_DELIVERY_SECONDS", 20.0)
     MAIL_DEFAULT_BCC = _env_list("MAIL_DEFAULT_BCC") or ["prakash@rainbowsholdings.com"]
+    COMPANY_PROFILES = _default_company_profiles()
+    COMPANY_KEY = _env_str("COMPANY_KEY")
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")
     COMPANY_ADDRESS = _env_str(
         "COMPANY_ADDRESS", "16/2, Sasanawardenarama Mawatha, Galawilawatta, Homagama"

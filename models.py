@@ -58,6 +58,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.Enum(RoleEnum), nullable=False, default=RoleEnum.production_manager)
     active = db.Column(db.Boolean, default=True)
+    company_key = db.Column(db.String(64), nullable=True, index=True)
 
     def set_password(self, pw): self.password_hash = generate_password_hash(pw)
     def check_password(self, pw): return check_password_hash(self.password_hash, pw)

@@ -43,6 +43,32 @@
             >Mechanism</a>
         </nav>
         <section class="section">
+            <div class="system-status system-status--full" aria-live="polite">
+                <div class="system-status__header">
+                    <div class="system-status__title">
+                        <span class="system-status__dot" id="system-status-dot" aria-hidden="true"></span>
+                        <div>
+                            <p class="system-status__label">System Status</p>
+                            <p class="system-status__value" id="system-status-value">Checking…</p>
+                        </div>
+                    </div>
+                    <button type="button" class="button button--ghost system-status__refresh" id="system-status-refresh">
+                        Refresh
+                    </button>
+                </div>
+                <div class="system-status__deadline">
+                    <div>
+                        <p class="system-status__label">Daily deadline</p>
+                        <p class="system-status__deadline-time" id="system-status-deadline">10:00 AM</p>
+                    </div>
+                    <p class="system-status__timestamp" id="system-status-timestamp">—</p>
+                </div>
+                <div class="system-status__list" id="system-status-list" role="status">
+                    <p class="system-status__label">Missing updates (yesterday)</p>
+                    <ul class="system-status__items" id="system-status-items"></ul>
+                </div>
+                <p class="system-status__footer">Keeping yesterday’s logs fresh unlocks today’s decisions.</p>
+            </div>
             <div class="section__row section__row--top">
                 <section class="production-chart" aria-labelledby="unit-economics-title">
                     <header class="production-chart__header">
@@ -111,32 +137,6 @@
                         </div>
                     </div>
                 </section>
-                <aside class="system-status" aria-live="polite">
-                    <div class="system-status__header">
-                        <div class="system-status__title">
-                            <span class="system-status__dot" id="system-status-dot" aria-hidden="true"></span>
-                            <div>
-                                <p class="system-status__label">System Status</p>
-                                <p class="system-status__value" id="system-status-value">Checking…</p>
-                            </div>
-                        </div>
-                        <button type="button" class="button button--ghost system-status__refresh" id="system-status-refresh">
-                            Refresh
-                        </button>
-                    </div>
-                    <div class="system-status__deadline">
-                        <div>
-                            <p class="system-status__label">Daily deadline</p>
-                            <p class="system-status__deadline-time" id="system-status-deadline">10:00 AM</p>
-                        </div>
-                        <p class="system-status__timestamp" id="system-status-timestamp">—</p>
-                    </div>
-                    <div class="system-status__list" id="system-status-list" role="status">
-                        <p class="system-status__label">Missing updates (yesterday)</p>
-                        <ul class="system-status__items" id="system-status-items"></ul>
-                    </div>
-                    <p class="system-status__footer">Keeping yesterday’s logs fresh unlocks today’s decisions.</p>
-                </aside>
             </div>
             <section class="production-chart" aria-labelledby="closing-stock-title">
                 <header class="production-chart__header">

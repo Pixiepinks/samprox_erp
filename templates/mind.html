@@ -573,9 +573,11 @@
 
         const normalizeStatusText = (value) => (value || "").toString().trim().toUpperCase();
 
+        const isOkStatus = (value) => normalizeStatusText(value).startsWith("OK");
+
         const getMissingSystemStatusCount = (payload) =>
             SYSTEM_STATUS_FIELDS.reduce(
-                (count, field) => count + (normalizeStatusText(payload?.[field.key]) === "OK" ? 0 : 1),
+                (count, field) => count + (isOkStatus(payload?.[field.key]) ? 0 : 1),
                 0,
             );
 
@@ -624,7 +626,7 @@
             systemStatusList.innerHTML = "";
 
             SYSTEM_STATUS_FIELDS.forEach((field) => {
-                const status = normalizeStatusText(payload?.[field.key]) === "OK" ? "OK" : "Missing";
+                const status = isOkStatus(payload?.[field.key]) ? "OK" : "Missing";
                 const item = document.createElement("li");
                 item.className = `system-status__item system-status__item--${status === "OK" ? "ok" : "missing"}`;
                 item.innerHTML = `

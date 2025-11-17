@@ -51,6 +51,7 @@ from routes import (
     material_api,
     production,
     responsibilities,
+    system,
     reports,
     team,
     ui,
@@ -195,6 +196,7 @@ def create_app():
     app.register_blueprint(machines.bp)
     app.register_blueprint(production.bp)
     app.register_blueprint(responsibilities.bp)
+    app.register_blueprint(system.bp)
     app.register_blueprint(market.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(team.bp)

@@ -43,73 +43,101 @@
             >Mechanism</a>
         </nav>
         <section class="section">
-            <section class="production-chart" aria-labelledby="unit-economics-title">
-                <header class="production-chart__header">
-                    <div>
-                        <h2 id="unit-economics-title">Unit Variables &amp; Profitability Overview</h2>
-                        <p>Average per-kg costs and contribution compared to the selling price.</p>
-                    </div>
-                    <div class="production-chart__controls">
-                        <label class="production-chart__select" for="unit-economics-start-date">
-                            <span>Start</span>
-                            <input
-                                type="date"
-                                id="unit-economics-start-date"
-                                name="unit-economics-start-date"
-                            />
-                        </label>
-                        <label class="production-chart__select" for="unit-economics-end-date">
-                            <span>End</span>
-                            <input
-                                type="date"
-                                id="unit-economics-end-date"
-                                name="unit-economics-end-date"
-                            />
-                        </label>
-                    </div>
-                </header>
-                <div class="production-chart__body">
-                    <div class="production-chart__summary" id="unit-economics-summary" aria-live="polite"></div>
-                    <div class="unit-economics__charts">
-                        <div class="unit-economics__chart unit-economics__chart--mix">
-                            <div class="production-chart__canvas unit-economics__canvas">
-                                <canvas
-                                    id="unit-economics-chart"
-                                    height="280"
-                                    aria-label="Average unit economics pie chart"
-                                    role="img"
-                                ></canvas>
-                                <p
-                                    class="unit-economics__empty-message"
-                                    id="unit-economics-chart-empty"
-                                    role="status"
-                                    hidden
-                                >
-                                    No unit economics data for the selected period.
-                                </p>
+            <div class="section__row section__row--top">
+                <section class="production-chart" aria-labelledby="unit-economics-title">
+                    <header class="production-chart__header">
+                        <div>
+                            <h2 id="unit-economics-title">Unit Variables &amp; Profitability Overview</h2>
+                            <p>Average per-kg costs and contribution compared to the selling price.</p>
+                        </div>
+                        <div class="production-chart__controls">
+                            <label class="production-chart__select" for="unit-economics-start-date">
+                                <span>Start</span>
+                                <input
+                                    type="date"
+                                    id="unit-economics-start-date"
+                                    name="unit-economics-start-date"
+                                />
+                            </label>
+                            <label class="production-chart__select" for="unit-economics-end-date">
+                                <span>End</span>
+                                <input
+                                    type="date"
+                                    id="unit-economics-end-date"
+                                    name="unit-economics-end-date"
+                                />
+                            </label>
+                        </div>
+                    </header>
+                    <div class="production-chart__body">
+                        <div class="production-chart__summary" id="unit-economics-summary" aria-live="polite"></div>
+                        <div class="unit-economics__charts">
+                            <div class="unit-economics__chart unit-economics__chart--mix">
+                                <div class="production-chart__canvas unit-economics__canvas">
+                                    <canvas
+                                        id="unit-economics-chart"
+                                        height="280"
+                                        aria-label="Average unit economics pie chart"
+                                        role="img"
+                                    ></canvas>
+                                    <p
+                                        class="unit-economics__empty-message"
+                                        id="unit-economics-chart-empty"
+                                        role="status"
+                                        hidden
+                                    >
+                                        No unit economics data for the selected period.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="unit-economics__chart unit-economics__chart--breakeven">
+                                <div class="production-chart__canvas unit-economics__canvas">
+                                    <canvas
+                                        id="breakeven-chart"
+                                        height="280"
+                                        aria-label="Breakeven stacked column chart"
+                                        role="img"
+                                    ></canvas>
+                                    <p
+                                        class="unit-economics__empty-message"
+                                        id="breakeven-chart-empty"
+                                        role="status"
+                                        hidden
+                                    >
+                                        No breakeven data for the selected period.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                        <div class="unit-economics__chart unit-economics__chart--breakeven">
-                            <div class="production-chart__canvas unit-economics__canvas">
-                                <canvas
-                                    id="breakeven-chart"
-                                    height="280"
-                                    aria-label="Breakeven stacked column chart"
-                                    role="img"
-                                ></canvas>
-                                <p
-                                    class="unit-economics__empty-message"
-                                    id="breakeven-chart-empty"
-                                    role="status"
-                                    hidden
-                                >
-                                    No breakeven data for the selected period.
-                                </p>
+                    </div>
+                </section>
+                <aside class="system-status" aria-live="polite">
+                    <div class="system-status__header">
+                        <div class="system-status__title">
+                            <span class="system-status__dot" id="system-status-dot" aria-hidden="true"></span>
+                            <div>
+                                <p class="system-status__label">System Status</p>
+                                <p class="system-status__value" id="system-status-value">Checking…</p>
                             </div>
                         </div>
+                        <button type="button" class="button button--ghost system-status__refresh" id="system-status-refresh">
+                            Refresh
+                        </button>
                     </div>
-                </div>
-            </section>
+                    <div class="system-status__deadline">
+                        <div>
+                            <p class="system-status__label">Daily deadline</p>
+                            <p class="system-status__deadline-time" id="system-status-deadline">10:00 AM</p>
+                        </div>
+                        <p class="system-status__timestamp" id="system-status-timestamp">—</p>
+                    </div>
+                    <div class="system-status__list" id="system-status-list" role="status">
+                        <p class="system-status__label">Missing updates (yesterday)</p>
+                        <ul class="system-status__items" id="system-status-items"></ul>
+                    </div>
+                    <p class="system-status__footer">Keeping yesterday’s logs fresh unlocks today’s decisions.</p>
+                </aside>
+            </div>
             <section class="production-chart" aria-labelledby="closing-stock-title">
                 <header class="production-chart__header">
                     <div>
@@ -401,6 +429,12 @@
         const closingStockPreviousDayMessage = document.getElementById("closing-stock-previous-day-message");
         const closingStockLastMonthMessage = document.getElementById("closing-stock-last-month-message");
         const closingStockDateInput = document.getElementById("closing-stock-date");
+        const systemStatusDot = document.getElementById("system-status-dot");
+        const systemStatusValue = document.getElementById("system-status-value");
+        const systemStatusDeadline = document.getElementById("system-status-deadline");
+        const systemStatusTimestamp = document.getElementById("system-status-timestamp");
+        const systemStatusList = document.getElementById("system-status-items");
+        const systemStatusRefreshButton = document.getElementById("system-status-refresh");
 
         const authHeaders = {
             Authorization: `Bearer ${token}`,
@@ -519,6 +553,129 @@
                 month: "short",
                 day: "numeric",
             });
+        };
+
+        const SYSTEM_STATUS_FIELDS = [
+            { key: "daily_production_entry", label: "Production entry" },
+            { key: "sales_actual_entry", label: "Sales entry" },
+            { key: "mrn_lines", label: "Material receipts" },
+            { key: "briquette_mix_entries", label: "Mix update" },
+            { key: "machine_idle_event", label: "Idle log" },
+            { key: "team_attendance_record", label: "Attendance" },
+        ];
+
+        const normalizeStatusText = (value) => (value || "").toString().trim().toUpperCase();
+
+        const setSystemStatusIndicator = (statusText) => {
+            if (!systemStatusValue || !systemStatusDot) {
+                return;
+            }
+
+            const normalized = normalizeStatusText(statusText);
+            const isUpdated = normalized === "UPDATED";
+
+            systemStatusValue.textContent = statusText || "Updated";
+            systemStatusValue.classList.toggle("system-status__value--alert", !isUpdated);
+            systemStatusDot.classList.toggle("system-status__dot--ok", isUpdated);
+            systemStatusDot.classList.toggle("system-status__dot--alert", !isUpdated);
+        };
+
+        const setSystemStatusTimestamp = (value) => {
+            if (!systemStatusTimestamp) {
+                return;
+            }
+
+            if (!value) {
+                systemStatusTimestamp.textContent = "—";
+                return;
+            }
+
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                systemStatusTimestamp.textContent = value;
+                return;
+            }
+
+            systemStatusTimestamp.textContent = parsed.toLocaleString(undefined, {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+            });
+        };
+
+        const renderSystemStatusList = (payload) => {
+            if (!systemStatusList) {
+                return;
+            }
+
+            systemStatusList.innerHTML = "";
+
+            SYSTEM_STATUS_FIELDS.forEach((field) => {
+                const status = normalizeStatusText(payload?.[field.key]) === "OK" ? "OK" : "Missing";
+                const item = document.createElement("li");
+                item.className = `system-status__item system-status__item--${status === "OK" ? "ok" : "missing"}`;
+                item.innerHTML = `
+                    <span class="system-status__item-icon">${status === "OK" ? "✓" : "✕"}</span>
+                    <span>${field.label}</span>
+                    <span class="system-status__item-status">(${status})</span>
+                `;
+                systemStatusList.appendChild(item);
+            });
+        };
+
+        const showSystemStatusLoading = () => {
+            setSystemStatusIndicator("Checking…");
+            setSystemStatusTimestamp(null);
+            if (systemStatusList) {
+                systemStatusList.innerHTML = "";
+                const loader = document.createElement("li");
+                loader.className = "system-status__item";
+                loader.textContent = "Pulling in the latest checks…";
+                systemStatusList.appendChild(loader);
+            }
+        };
+
+        const showSystemStatusError = (message) => {
+            setSystemStatusIndicator("Unavailable");
+            setSystemStatusTimestamp(null);
+            if (systemStatusList) {
+                systemStatusList.innerHTML = "";
+                const errorItem = document.createElement("li");
+                errorItem.className = "system-status__item system-status__item--missing";
+                errorItem.innerHTML = `
+                    <span class="system-status__item-icon">!</span>
+                    <span>${message}</span>
+                `;
+                systemStatusList.appendChild(errorItem);
+            }
+        };
+
+        const fetchSystemStatus = async () => {
+            if (!systemStatusValue || !systemStatusDot) {
+                return;
+            }
+
+            showSystemStatusLoading();
+
+            try {
+                const response = await fetch("/api/system/status", { headers: { ...authHeaders } });
+                if (!response.ok) {
+                    throw new Error("Unable to fetch system status");
+                }
+
+                const payload = await response.json();
+                const statusText = payload?.system_status || "UPDATED";
+
+                setSystemStatusIndicator(statusText);
+                renderSystemStatusList(payload || {});
+                if (payload?.deadline && systemStatusDeadline) {
+                    systemStatusDeadline.textContent = payload.deadline;
+                }
+                setSystemStatusTimestamp(payload?.last_checked);
+            } catch (error) {
+                console.error("Failed to refresh system status", error);
+                showSystemStatusError("Status check failed. Try again shortly.");
+            }
         };
 
         const getSelectedUnitEconomicsRange = () => {
@@ -3982,6 +4139,15 @@
             refreshMaterialChart();
             refreshLaborChart();
         };
+
+        if (systemStatusRefreshButton) {
+            systemStatusRefreshButton.addEventListener("click", () => {
+                fetchSystemStatus();
+            });
+        }
+
+        fetchSystemStatus();
+        setInterval(fetchSystemStatus, 5 * 60 * 1000);
 
         const initialClosingStockDate = initializeClosingStockDateInput();
         loadClosingStock(initialClosingStockDate);

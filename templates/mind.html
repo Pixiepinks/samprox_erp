@@ -477,6 +477,12 @@
             year: "numeric",
         });
         const COLOMBO_TIME_ZONE = "Asia/Colombo";
+        const colomboTimeFormatter = new Intl.DateTimeFormat("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+            timeZone: COLOMBO_TIME_ZONE,
+        });
 
         const isoToday = () => {
             const today = new Date();
@@ -603,13 +609,11 @@
                 return;
             }
 
-            systemStatusTimestamp.textContent = parsed.toLocaleString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-                hour12: true,
-                timeZone: COLOMBO_TIME_ZONE,
-                timeZoneName: "short",
-            });
+            const formatted = colomboTimeFormatter
+                .format(parsed)
+                .replace(":", ".")
+                .toUpperCase();
+            systemStatusTimestamp.textContent = formatted;
         };
 
         const renderSystemStatusList = (payload) => {

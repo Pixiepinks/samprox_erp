@@ -476,6 +476,7 @@
             day: "numeric",
             year: "numeric",
         });
+        const COLOMBO_TIME_ZONE = "Asia/Colombo";
 
         const isoToday = () => {
             const today = new Date();
@@ -566,6 +567,12 @@
 
         const normalizeStatusText = (value) => (value || "").toString().trim().toUpperCase();
 
+        const getMissingSystemStatusCount = (payload) =>
+            SYSTEM_STATUS_FIELDS.reduce(
+                (count, field) => count + (normalizeStatusText(payload?.[field.key]) === "OK" ? 0 : 1),
+                0,
+            );
+
         const setSystemStatusIndicator = (statusText) => {
             if (!systemStatusValue || !systemStatusDot) {
                 return;
@@ -600,6 +607,8 @@
                 hour: "numeric",
                 minute: "2-digit",
                 hour12: true,
+                timeZone: COLOMBO_TIME_ZONE,
+                timeZoneName: "short",
             });
         };
 
@@ -664,7 +673,8 @@
                 }
 
                 const payload = await response.json();
-                const statusText = payload?.system_status || "UPDATED";
+                const missingCount = getMissingSystemStatusCount(payload || {});
+                const statusText = missingCount === 0 ? "UPDATED" : "Out of date";
 
                 setSystemStatusIndicator(statusText);
                 renderSystemStatusList(payload || {});

@@ -870,6 +870,11 @@ body {
     overflow-x: auto;
 }
 
+.table-container--scrollable {
+    max-height: 45rem;
+    overflow-y: auto;
+}
+
 .team-table {
     width: 100%;
     border-collapse: collapse;

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Market | Rainbows End Trading</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">R</div>
+                <div class="brand__details">
+                    <p class="brand__name">{{ company.name }}</p>
+                    <p class="brand__section">Market - Admin only</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <section class="section">
+            <header class="section__header">
+                <h1>Daily sales capture</h1>
+                <p class="section__description">
+                    Record sales for Rainbows End Trading (Pvt) Ltd. Only administrators can view and update this page.
+                </p>
+            </header>
+
+            <article class="production-card sales-entry" aria-labelledby="rainbows-sales-entry-title">
+                <header class="production-card__header sales-entry__header">
+                    <div>
+                        <h2 id="rainbows-sales-entry-title">Add sales record</h2>
+                        <p class="sales-entry__subtitle">Enter daily sales details for quick tracking.</p>
+                    </div>
+                </header>
+                <form id="rainbows-sales-form" class="sales-entry__form" novalidate>
+                    <div class="sales-form__grid">
+                        <div class="sales-input">
+                            <label for="rainbows-sales-date">Date <span class="required">*</span></label>
+                            <input type="date" id="rainbows-sales-date" name="date" class="sales-input__control" required />
+                        </div>
+                        <div class="sales-input">
+                            <label for="rainbows-sales-person">Sales person name <span class="required">*</span></label>
+                            <input type="text" id="rainbows-sales-person" name="sales_person" class="sales-input__control" required />
+                        </div>
+                        <div class="sales-input">
+                            <label for="rainbows-customer-name">Customer name <span class="required">*</span></label>
+                            <input type="text" id="rainbows-customer-name" name="customer_name" class="sales-input__control" required />
+                        </div>
+                        <div class="sales-input">
+                            <label for="rainbows-sales-value">Daily sales value (Rs) <span class="required">*</span></label>
+                            <input type="number" id="rainbows-sales-value" name="sales_value" class="sales-input__control" min="0" step="0.01" required />
+                        </div>
+                    </div>
+                    <div class="sales-entry__actions">
+                        <button type="submit" class="button">Add entry</button>
+                    </div>
+                </form>
+                <p id="rainbows-sales-feedback" class="sales-entry__feedback" role="status" aria-live="polite"></p>
+            </article>
+
+            <article class="production-card sales-admin" aria-labelledby="rainbows-sales-table-title">
+                <header class="production-card__header sales-admin__header">
+                    <div>
+                        <h2 id="rainbows-sales-table-title">Sales log</h2>
+                        <p class="sales-admin__subtitle">Track submitted entries for Rainbows End Trading.</p>
+                    </div>
+                    <div class="sales-admin__actions">
+                        <button type="button" class="button button--ghost button--small" id="rainbows-clear-entries">Clear table</button>
+                    </div>
+                </header>
+                <div class="table-container sales-admin__table-container">
+                    <table class="sales-admin__table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Sales person</th>
+                                <th scope="col">Customer name</th>
+                                <th scope="col" class="text-right">Daily sales value (Rs)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rainbows-sales-table-body">
+                            <tr class="sales-table__empty" id="rainbows-sales-empty-row">
+                                <td colspan="4">No sales captured yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
+    </div>
+
+    <script>
+        const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+        const token = localStorage.getItem("samprox_token");
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+        const form = document.getElementById("rainbows-sales-form");
+        const tableBody = document.getElementById("rainbows-sales-table-body");
+        const emptyRow = document.getElementById("rainbows-sales-empty-row");
+        const feedbackEl = document.getElementById("rainbows-sales-feedback");
+        const clearButton = document.getElementById("rainbows-clear-entries");
+
+        if (userNameEl) {
+            userNameEl.textContent = user?.name || "Admin";
+        }
+        if (userRoleEl) {
+            userRoleEl.textContent = user?.role === "admin" ? "Administrator" : user?.role || "";
+        }
+
+        function handleUnauthorized() {
+            fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = "/";
+        }
+
+        if (!token) {
+            handleUnauthorized();
+        }
+
+        if (logoutButton) {
+            logoutButton.addEventListener("click", () => {
+                handleUnauthorized();
+            });
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+        }
+
+        function addRow(data) {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${data.date}</td>
+                <td>${data.salesPerson}</td>
+                <td>${data.customerName}</td>
+                <td class="text-right">${formatCurrency(Number(data.salesValue || 0))}</td>
+            `;
+            tableBody.appendChild(row);
+        }
+
+        function saveEntry(event) {
+            event.preventDefault();
+            feedbackEl.textContent = "";
+
+            const formData = new FormData(form);
+            const date = formData.get("date");
+            const salesPerson = formData.get("sales_person");
+            const customerName = formData.get("customer_name");
+            const salesValue = formData.get("sales_value");
+
+            if (!date || !salesPerson || !customerName || !salesValue) {
+                feedbackEl.textContent = "All fields are required.";
+                return;
+            }
+
+            if (emptyRow) {
+                emptyRow.remove();
+            }
+
+            addRow({ date, salesPerson, customerName, salesValue });
+            form.reset();
+            feedbackEl.textContent = "Entry added to the table.";
+        }
+
+        function clearEntries() {
+            tableBody.innerHTML = "";
+            if (emptyRow) {
+                tableBody.appendChild(emptyRow);
+            }
+            feedbackEl.textContent = "Table cleared.";
+        }
+
+        form?.addEventListener("submit", saveEntry);
+        clearButton?.addEventListener("click", clearEntries);
+    </script>
+</body>
+</html>

@@ -8,11 +8,12 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, current_app, jsonify, render_template, send_file
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, current_app, jsonify, render_template, request, send_file
+from flask_jwt_extended import get_jwt, jwt_required
 from sqlalchemy.orm import joinedload
 from xhtml2pdf import pisa
 
+from company_profiles import resolve_company_profile, select_company_key
 from models import (
     MaintenanceInternalStaffCost,
     MaintenanceJob,
@@ -72,8 +73,8 @@ def _format_date(value) -> str:
         return str(value)
 
 
-def _load_logo_data_uri() -> str | None:
-    logo_path = current_app.config.get("COMPANY_LOGO_PATH")
+def _load_logo_data_uri(logo_path: str | None = None) -> str | None:
+    logo_path = logo_path or current_app.config.get("COMPANY_LOGO_PATH")
     if logo_path:
         candidate = logo_path
         if not os.path.isabs(candidate):
@@ -209,11 +210,15 @@ def download_job_card(job_id: int):
     internal, internal_total = _internal_staff_context(job)
     overall_total = _quantize_currency(materials_total + outsourced_total + internal_total)
 
-    company_name = current_app.config.get("COMPANY_NAME", "SAMPROX ERP")
-    company_address = current_app.config.get("COMPANY_ADDRESS")
-    company_contact = current_app.config.get("COMPANY_CONTACT")
-    company_tagline = current_app.config.get("COMPANY_TAGLINE")
-    logo_data = _load_logo_data_uri()
+    claims = get_jwt()
+    requested_company = request.args.get("company")
+    company_key = select_company_key(current_app.config, requested_company, claims)
+    company_profile = resolve_company_profile(current_app.config, company_key)
+    company_name = company_profile.get("name", "SAMPROX ERP")
+    company_address = company_profile.get("address_lines")
+    company_contact = company_profile.get("contact")
+    company_tagline = company_profile.get("tagline")
+    logo_data = _load_logo_data_uri(company_profile.get("logo_path"))
 
     generated_at = datetime.now(_COLOMBO_TZ)
 

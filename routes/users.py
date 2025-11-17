@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy import asc, func
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import RoleEnum, User
+from company_profiles import available_company_keys
 
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -35,6 +36,24 @@ def _normalise_email(value: str | None) -> str:
     return (value or "").strip().lower()
 
 
+def _validate_company_key(value: Any) -> tuple[str | None, tuple[Any, int] | None]:
+    if value is None:
+        return None, None
+
+    key = value.strip() if isinstance(value, str) else None
+    if key is None:
+        return None, (jsonify({"msg": "Invalid company_key"}), 400)
+
+    if not key:
+        return None, None
+
+    allowed = available_company_keys(current_app.config)
+    if key not in allowed:
+        return None, (jsonify({"msg": "Invalid company_key"}), 400)
+
+    return key, None
+
+
 def _serialise_user(user: User) -> Dict[str, Any]:
     return {
         "id": user.id,
@@ -42,6 +61,7 @@ def _serialise_user(user: User) -> Dict[str, Any]:
         "email": user.email,
         "role": user.role.value,
         "active": bool(user.active),
+        "company_key": user.company_key,
     }
 
 
@@ -75,9 +95,13 @@ def create_user():
     password = payload.get("password") or ""
     role_value = payload.get("role")
     active = bool(payload.get("active", True))
+    company_key, company_error = _validate_company_key(payload.get("company_key"))
 
     if not name or not email or not password or not role_value:
         return jsonify({"msg": "Name, email, role, and password are required"}), 400
+
+    if company_error:
+        return company_error
 
     try:
         role = RoleEnum(role_value)
@@ -92,7 +116,13 @@ def create_user():
     if existing:
         return jsonify({"msg": "Email already registered"}), 400
 
-    user = User(name=name, email=email, role=role, active=active)
+    user = User(
+        name=name,
+        email=email,
+        role=role,
+        active=active,
+        company_key=company_key,
+    )
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
@@ -120,6 +150,10 @@ def update_user(user_id: int):
     role_value = payload.get("role") or user.role.value
     active = bool(payload.get("active", user.active))
     password = (payload.get("password") or "").strip()
+    company_raw = payload.get("company_key", user.company_key)
+    company_key, company_error = _validate_company_key(company_raw)
+    if company_raw is None:
+        company_key = user.company_key
 
     if not name or not email or not role_value:
         return jsonify({"msg": "Name, email, and role are required"}), 400
@@ -128,6 +162,9 @@ def update_user(user_id: int):
         role = RoleEnum(role_value)
     except ValueError:
         return jsonify({"msg": "Invalid role"}), 400
+
+    if company_error:
+        return company_error
 
     existing = (
         User.query.filter(func.lower(User.email) == email.lower(), User.id != user.id)
@@ -140,6 +177,7 @@ def update_user(user_id: int):
     user.email = email
     user.role = role
     user.active = active
+    user.company_key = company_key
 
     if password:
         user.set_password(password)

@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
@@ -23,9 +24,9 @@ bp = Blueprint("system", __name__, url_prefix="/api/system")
 def get_system_status():
     today = date.today()
     yesterday = today - timedelta(days=1)
-    deadline = time(10, 0)
-    now = datetime.now()
-    past_deadline = now.time() >= deadline
+    deadline = time(10, 0, tzinfo=ZoneInfo("Asia/Colombo"))
+    now = datetime.now(tz=ZoneInfo("Asia/Colombo"))
+    past_deadline = now.timetz() >= deadline
 
     def has_records(query):
         try:

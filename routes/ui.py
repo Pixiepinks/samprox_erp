@@ -192,6 +192,30 @@ def market_page():
     return render_template("market.html")
 
 
+@bp.get("/market_rainbows_end.html")
+@bp.get("/market_rainbows_end")
+def market_rainbows_end_page():
+    """Render the Rainbows End Trading admin market page directly."""
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive safety net for UI access
+        claims = None
+
+    company_key = select_company_key(current_app.config, claims=claims)
+    if company_key != "rainbows-end-trading":
+        return redirect(url_for("ui.market_page"))
+
+    role = _current_role()
+    if role != RoleEnum.admin:
+        return render_template("403.html"), 403
+
+    company = resolve_company_profile(current_app.config, company_key)
+    return render_template("market_rainbows_end.html", company=company)
+
+
 @bp.get("/money")
 def money_page():
     """Render the financial overview page."""

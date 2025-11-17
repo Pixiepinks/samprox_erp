@@ -655,6 +655,7 @@
         const responsibilitySubmitDefaultText =
             responsibilitySubmitButton?.textContent?.trim() || "Save responsibility";
         const responsibilityTeamMembers = new Map();
+        const responsibilityAssigneeLookup = new Map();
         let responsibilityTasks = [];
         let responsibilityAssignees = [];
         let responsibilityEditingTaskId = null;
@@ -1674,7 +1675,7 @@
 
             resetResponsibilityFormState();
 
-            const isEditing = Boolean(task);
+            const isEditing = Boolean(task && typeof task === "object");
             responsibilityEditingTaskId = isEditing ? task.id : null;
             responsibilityEditingTask = task;
 
@@ -1691,20 +1692,85 @@
                 responsibilityDescriptionInput.value = task.description || "";
                 responsibilityDetailInput.value = task.detail || "";
                 responsibilityDateInput.value = task.scheduledFor || "";
-                responsibilityRecurrenceSelect.value = task.recurrence || "does_not_repeat";
+
+                const recurrenceValue = task.recurrence || "does_not_repeat";
+                responsibilityRecurrenceSelect.value = recurrenceValue;
+                toggleCustomWeekdayFieldset();
+
+                const performanceUnit = task.performanceUnit || PERFORMANCE_DEFAULT_UNIT;
+                const performanceConfig = getPerformanceConfig(performanceUnit);
+                if (responsibilityPerformanceUnitSelect) {
+                    responsibilityPerformanceUnitSelect.value = performanceUnit;
+                }
+                updatePerformanceUnitState();
+                if (responsibilityPerformanceResponsibleInput) {
+                    responsibilityPerformanceResponsibleInput.value = task.performanceResponsible ?? "";
+                }
+                if (responsibilityPerformanceActualInput) {
+                    responsibilityPerformanceActualInput.value = task.performanceActual ?? "";
+                }
+                if (responsibilityPerformanceMetricInput) {
+                    responsibilityPerformanceMetricInput.value = formatPerformanceMetricDisplay(
+                        task.performanceMetric,
+                        performanceUnit,
+                        performanceConfig,
+                    );
+                }
+                updatePerformanceMetricDisplay();
+
+                if (responsibilityCustomWeekdays) {
+                    const selectedWeekdays = new Set(
+                        Array.isArray(task.customWeekdays)
+                            ? task.customWeekdays.map((value) => Number.parseInt(value, 10))
+                            : [],
+                    );
+                    responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
+                        const inputValue = Number.parseInt(checkbox.value, 10);
+                        checkbox.checked = selectedWeekdays.has(inputValue);
+                    });
+                }
+
                 responsibilityRecipientInput.value = task.recipientEmail || "";
                 if (responsibilityCcInput) {
                     responsibilityCcInput.value = task.ccEmail || "";
                 }
-                responsibilityProgressInput.value = String(task.progress ?? 0);
-                responsibilityAssigneeSelect.value = task.assigneeId ? String(task.assigneeId) : "";
-                responsibilityActionSelect.value = task.action || "";
-                responsibilityActionPreviousValue = task.action || "";
-                responsibilityActionNotesInput.value = task.actionNotes || "";
-                responsibilityActionPreviousNotes.clear();
-                if (task.action) {
-                    responsibilityActionPreviousNotes.set(task.action, task.actionNotes || "");
-                }
+
+                const ensureSelectOption = (select, taskData) => {
+                    if (!select || !taskData) {
+                        return;
+                    }
+                    const idCandidates = [taskData.assigneeId, taskData.assignee_id, taskData.assignee?.id];
+                    const candidateId = idCandidates.find(
+                        (value) => value !== null && value !== undefined && String(value).trim() !== "",
+                    );
+                    if (candidateId === undefined) {
+                        return;
+                    }
+                    const value = String(candidateId);
+                    let option = select.querySelector(`option[value="${value}"]`);
+                    const label =
+                        assignerNameFallback(taskData?.assignee) ||
+                        preferNonEmptyString(taskData?.assigneeNickname, taskData?.assigneeName, taskData?.assigneeEmail);
+                    if (!option) {
+                        option = document.createElement("option");
+                        option.value = value;
+                        option.textContent = label ? label.trim() : value;
+                        select.appendChild(option);
+                    } else if (!option.textContent?.trim()) {
+                        option.textContent = label ? label.trim() : value;
+                    }
+                    responsibilityAssigneeLookup.set(value, {
+                        id: value,
+                        name: option.textContent,
+                        type:
+                            taskData?.assigneeType ||
+                            (taskData?.assignee && typeof taskData.assignee === "object" ? "user" : undefined),
+                    });
+                    select.value = value;
+                };
+
+                ensureSelectOption(responsibilityAssigneeSelect, task);
+
                 clearResponsibilityDelegations();
                 const delegations = Array.isArray(task.delegations) ? task.delegations : [];
                 if (delegations.length > 0) {
@@ -1727,17 +1793,35 @@
                     });
                 }
 
-                updateDelegatedVisibility(task.action || "");
+                const actionValue = task.action || "done";
+                if (responsibilityActionSelect) {
+                    responsibilityActionSelect.value = actionValue;
+                }
+                responsibilityActionPreviousValue = actionValue;
+                updateDelegatedVisibility(actionValue);
 
-                if (task.recurrence === "custom") {
-                    responsibilityCustomDays.removeAttribute("hidden");
-                    responsibilityCustomWeekdays.querySelectorAll("input[type='checkbox']").forEach((checkbox) => {
-                        checkbox.checked = Array.isArray(task.customWeekdays)
-                            ? task.customWeekdays.includes(Number.parseInt(checkbox.value, 10))
-                            : false;
-                    });
-                } else {
-                    responsibilityCustomDays.setAttribute("hidden", "");
+                if (responsibilityProgressInput) {
+                    const progressValue = clampProgressValue(task?.progress);
+                    responsibilityProgressInput.value = String(progressValue);
+                    if (actionValue === "done" || actionValue === "deleted") {
+                        responsibilityProgressInput.readOnly = true;
+                        delete responsibilityProgressInput.dataset.progressPrevious;
+                    } else {
+                        responsibilityProgressInput.readOnly = false;
+                        delete responsibilityProgressInput.dataset.progressPrevious;
+                    }
+                }
+
+                if (responsibilityActionNotesInput) {
+                    responsibilityActionNotesInput.value = task.actionNotes || "";
+                }
+                if (responsibilityActionNotesTextarea) {
+                    responsibilityActionNotesTextarea.value = task.actionNotes || "";
+                }
+
+                responsibilityActionPreviousNotes.clear();
+                if (task.action) {
+                    responsibilityActionPreviousNotes.set(task.action, task.actionNotes || "");
                 }
             } else if (responsibilityForm) {
                 responsibilityRecurrenceSelect.value = "does_not_repeat";

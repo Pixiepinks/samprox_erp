@@ -60,14 +60,30 @@ def _current_user() -> User | None:
 def _has_rainbows_end_market_access() -> bool:
     """Grant special market access to the Rainbows End Trading outside manager."""
 
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive safety net
+        claims = None
+
+    if claims:
+        company_key = claims.get("company_key") or claims.get("company")
+        try:
+            role = RoleEnum(claims.get("role")) if claims.get("role") else None
+        except ValueError:
+            role = None
+        if company_key == "rainbows-end-trading" and role == RoleEnum.outside_manager:
+            return True
+
     user = _current_user()
     if not user:
         return False
 
-    if user.email.lower() != "shamal@rainbowsholdings.com":
-        return False
+    if user.company_key == "rainbows-end-trading" and user.role == RoleEnum.outside_manager:
+        return True
 
-    return user.company_key == "rainbows-end-trading"
+    return user.email.lower() == "shamal@rainbowsholdings.com"
 
 
 @bp.before_request

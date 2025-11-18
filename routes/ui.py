@@ -1,5 +1,5 @@
 from flask import Blueprint, abort, current_app, redirect, render_template, request, url_for
-from flask_jwt_extended import get_jwt, verify_jwt_in_request
+from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from material import (
     MaterialValidationError,
@@ -9,7 +9,7 @@ from material import (
 from company_profiles import resolve_company_profile, select_company_key
 from schemas import MaterialItemSchema, MRNSchema
 
-from models import RoleEnum
+from models import RoleEnum, User
 
 bp = Blueprint("ui", __name__)
 
@@ -37,6 +37,39 @@ def _current_role() -> RoleEnum | None:
         return None
 
 
+def _current_user() -> User | None:
+    """Return the current user model if a JWT identity is present."""
+
+    try:
+        verify_jwt_in_request(optional=True)
+    except Exception:  # pragma: no cover - defensive safety net
+        return None
+
+    identity = get_jwt_identity()
+    if not identity:
+        return None
+
+    try:
+        user_id = int(identity)
+    except (TypeError, ValueError):
+        return None
+
+    return User.query.get(user_id)
+
+
+def _has_rainbows_end_market_access() -> bool:
+    """Grant special market access to the Rainbows End Trading outside manager."""
+
+    user = _current_user()
+    if not user:
+        return False
+
+    if user.email.lower() != "shamal@rainbowsholdings.com":
+        return False
+
+    return user.company_key == "rainbows-end-trading"
+
+
 @bp.before_request
 def _enforce_role_page_restrictions():
     """Limit which UI routes specific roles are allowed to access."""
@@ -53,6 +86,8 @@ def _enforce_role_page_restrictions():
 
     if role == RoleEnum.outside_manager:
         allowed_endpoints = {"ui.login_page", "ui.responsibility_portal"}
+        if _has_rainbows_end_market_access():
+            allowed_endpoints.update({"ui.market_page", "ui.market_rainbows_end_page"})
         if endpoint in allowed_endpoints:
             return None
         return render_template("403.html"), 403
@@ -183,7 +218,7 @@ def market_page():
 
     if company_key == "rainbows-end-trading":
         role = _current_role()
-        if role != RoleEnum.admin:
+        if role != RoleEnum.admin and not _has_rainbows_end_market_access():
             return render_template("403.html"), 403
 
         company = resolve_company_profile(current_app.config, company_key)
@@ -209,7 +244,7 @@ def market_rainbows_end_page():
         return redirect(url_for("ui.market_page"))
 
     role = _current_role()
-    if role != RoleEnum.admin:
+    if role != RoleEnum.admin and not _has_rainbows_end_market_access():
         return render_template("403.html"), 403
 
     company = resolve_company_profile(current_app.config, company_key)

@@ -267,6 +267,13 @@ def market_rainbows_end_page():
     return render_template("market_rainbows_end.html", company=company)
 
 
+@bp.get("/movers")
+def movers_page():
+    """Render the logistics and movers overview page."""
+
+    return render_template("movers.html")
+
+
 @bp.get("/money")
 def money_page():
     """Render the financial overview page."""

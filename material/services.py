@@ -14,6 +14,7 @@ DEFAULT_MATERIAL_ITEM_NAMES = [
     "Saw Dust",
     "Wood Powder",
     "Peanut Husk",
+    "Briquettes",
 ]
 
 from sqlalchemy import String, cast, func, or_
@@ -866,12 +867,14 @@ def seed_material_defaults() -> None:
     """Ensure a baseline set of material items exists."""
 
     for name in DEFAULT_MATERIAL_ITEM_NAMES:
-        exists = (
-            MaterialItem.query.filter(func.lower(MaterialItem.name) == name.lower())
-            .with_entities(MaterialItem.id)
-            .first()
-        )
-        if not exists:
-            db.session.add(MaterialItem(name=name, is_active=True))
+        existing_item = MaterialItem.query.filter(
+            func.lower(MaterialItem.name) == name.lower()
+        ).first()
+        if existing_item:
+            if not existing_item.is_active:
+                existing_item.is_active = True
+            continue
+
+        db.session.add(MaterialItem(name=name, is_active=True))
 
     db.session.commit()

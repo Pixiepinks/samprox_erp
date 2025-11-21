@@ -14,6 +14,7 @@ DEFAULT_MATERIAL_ITEM_NAMES = [
     "Saw Dust",
     "Wood Powder",
     "Peanut Husk",
+    "Briquettes",
 ]
 
 from sqlalchemy import String, cast, func, or_

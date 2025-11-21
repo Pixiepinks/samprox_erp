@@ -488,6 +488,7 @@ class ReportsApiTestCase(unittest.TestCase):
             "Saw Dust",
             "Wood Powder",
             "Peanut Husk",
+            "Briquettes",
         ]
 
         items = {

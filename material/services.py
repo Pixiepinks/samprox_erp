@@ -866,6 +866,7 @@ def get_mrn_detail(mrn_id: Any) -> MRNHeader:
 def seed_material_defaults() -> None:
     """Ensure a baseline set of material items exists."""
 
+    changed = False
     for name in DEFAULT_MATERIAL_ITEM_NAMES:
         existing_item = MaterialItem.query.filter(
             func.lower(MaterialItem.name) == name.lower()
@@ -873,8 +874,11 @@ def seed_material_defaults() -> None:
         if existing_item:
             if not existing_item.is_active:
                 existing_item.is_active = True
+                changed = True
             continue
 
         db.session.add(MaterialItem(name=name, is_active=True))
+        changed = True
 
-    db.session.commit()
+    if changed:
+        db.session.commit()

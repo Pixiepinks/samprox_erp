@@ -10,6 +10,7 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import joinedload
 
 from extensions import db
+from material import seed_material_defaults
 from models import (
     Customer,
     CustomerPurchaseOrder,
@@ -43,6 +44,7 @@ def _current_user() -> User | None:
 
 
 def _load_dropdowns() -> dict[str, Iterable]:
+    seed_material_defaults()
     return {
         "customers": Customer.query.order_by(Customer.name.asc()).all(),
         "item_options": MaterialItem.query.filter_by(is_active=True).order_by(MaterialItem.name.asc()).all(),

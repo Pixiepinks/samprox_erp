@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ 'Edit' if is_edit_mode else 'Create' }} Customer PO | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Market | Customer POs</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('customer_pos.list_purchase_orders') }}">Back to list</a>
+            </div>
+        </header>
+        <section class="section">
+            <header class="section__header">
+                <div>
+                    <h1>{{ 'Edit' if is_edit_mode else 'Create' }} Customer PO</h1>
+                    <p class="section__description">Capture header details and item lines for the customer purchase order.</p>
+                </div>
+            </header>
+            <form class="production-card" method="post" action="{{ url_for('customer_pos.update_purchase_order', po_id=po.id) if is_edit_mode else url_for('customer_pos.create_purchase_order') }}" id="customer-po-form">
+                <div class="production-card__header">
+                    <div>
+                        <h2>Header</h2>
+                        <p class="sales-entry__subtitle">Customer, dates, and contact details.</p>
+                    </div>
+                    <div class="sales-report__actions">
+                        <button type="submit" class="button button--ghost" name="action" value="draft">Save as Draft</button>
+                        <button type="submit" class="button" name="action" value="confirm">Save &amp; Confirm</button>
+                    </div>
+                </div>
+                <div class="sales-entry__form">
+                    <div class="sales-form__grid">
+                        <div class="sales-input">
+                            <label for="customer_id">Customer <span class="required">*</span></label>
+                            <select id="customer_id" name="customer_id" class="sales-input__control" required>
+                                <option value="">Select customer</option>
+                                {% for customer in customers %}
+                                    <option value="{{ customer.id }}" {% if po.customer_id == customer.id %}selected{% endif %}>{{ customer.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="sales-input">
+                            <label for="customer_reference">Customer Reference</label>
+                            <input type="text" id="customer_reference" name="customer_reference" class="sales-input__control" value="{{ po.customer_reference or '' }}" />
+                        </div>
+                        <div class="sales-input">
+                            <label for="delivery_address">Delivery Address</label>
+                            <textarea id="delivery_address" name="delivery_address" class="sales-input__control" rows="3">{{ po.delivery_address or '' }}</textarea>
+                        </div>
+                        <div class="sales-input">
+                            <label for="delivery_date">Delivery Date</label>
+                            <input type="date" id="delivery_date" name="delivery_date" class="sales-input__control" value="{{ po.delivery_date.strftime('%Y-%m-%d') if po.delivery_date else '' }}" />
+                        </div>
+                    </div>
+                    <div class="sales-form__grid">
+                        <div class="sales-input">
+                            <label for="po_number">PO Number</label>
+                            <input type="text" id="po_number" class="sales-input__control" value="{{ po.po_number or 'Will be generated on save' }}" readonly />
+                        </div>
+                        <div class="sales-input">
+                            <label for="po_date">PO Date <span class="required">*</span></label>
+                            <input type="date" id="po_date" name="po_date" class="sales-input__control" value="{{ po.po_date.strftime('%Y-%m-%d') if po.po_date else '' }}" required />
+                        </div>
+                        <div class="sales-input">
+                            <label for="payment_terms">Payment Terms</label>
+                            <input type="text" id="payment_terms" name="payment_terms" class="sales-input__control" value="{{ po.payment_terms or '' }}" />
+                        </div>
+                        <div class="sales-input">
+                            <label for="sales_rep_id">Sales Representative</label>
+                            <select id="sales_rep_id" name="sales_rep_id" class="sales-input__control">
+                                <option value="">Select rep</option>
+                                {% for member in team_members %}
+                                    <option value="{{ member.id }}" {% if po.sales_rep_id == member.id %}selected{% endif %}>{{ member.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="sales-input">
+                            <label for="contact_person">Contact Person</label>
+                            <input type="text" id="contact_person" name="contact_person" class="sales-input__control" value="{{ po.contact_person or '' }}" />
+                        </div>
+                        <div class="sales-input">
+                            <label for="contact_phone">Contact Phone</label>
+                            <input type="text" id="contact_phone" name="contact_phone" class="sales-input__control" value="{{ po.contact_phone or '' }}" />
+                        </div>
+                        <div class="sales-input">
+                            <label for="contact_email">Contact Email</label>
+                            <input type="email" id="contact_email" name="contact_email" class="sales-input__control" value="{{ po.contact_email or '' }}" />
+                        </div>
+                        <div class="sales-input">
+                            <label for="status">Status</label>
+                            <select id="status" name="status" class="sales-input__control" {% if po.status and po.status.value in ['Fully Delivered', 'Cancelled'] %}disabled{% endif %}>
+                                {% for status in statuses %}
+                                    <option value="{{ status.value }}" {% if po.status == status %}selected{% endif %}>{{ status.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="production-card__header">
+                    <div>
+                        <h2>Items</h2>
+                        <p class="sales-entry__subtitle">Add ordered items with quantities and pricing.</p>
+                    </div>
+                    <div class="sales-report__actions">
+                        <button type="button" class="button button--ghost" id="add-row">Add Row</button>
+                        <button type="button" class="button button--ghost" id="copy-last-row">Copy Last Row</button>
+                        <button type="button" class="button button--secondary" id="clear-rows">Clear Items</button>
+                    </div>
+                </div>
+                <div class="table-container sales-admin__table-container">
+                    <table class="sales-admin__table" id="items-table">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Code</th>
+                                <th>Description</th>
+                                <th>Qty Ordered</th>
+                                <th>Unit</th>
+                                <th>Unit Price</th>
+                                <th>Discount %</th>
+                                <th>Line Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="item-rows">
+                            {% if po_items %}
+                                {% for line in po_items %}
+                                    <tr class="item-row">
+                                        <td>
+                                            <select name="item_id" class="sales-input__control item-select" required>
+                                                <option value="">Select item</option>
+                                                {% for master in item_options %}
+                                                    <option value="{{ master.id }}" {% if line.item_id == master.id %}selected{% endif %}>{{ master.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                        <td><input type="text" name="item_code" class="sales-input__control code-field" value="{{ line.item_code }}" readonly /></td>
+                                        <td><input type="text" name="description" class="sales-input__control" value="{{ line.description or '' }}" /></td>
+                                        <td><input type="number" name="qty_ordered" class="sales-input__control qty-field" step="0.001" min="0" value="{{ '%.3f'|format(line.qty_ordered) }}" required /></td>
+                                        <td><input type="text" name="unit" class="sales-input__control" value="{{ line.unit }}" required /></td>
+                                        <td><input type="number" name="unit_price" class="sales-input__control price-field" step="0.01" min="0" value="{{ '%.2f'|format(line.unit_price) }}" required /></td>
+                                        <td><input type="number" name="discount_percent" class="sales-input__control discount-field" step="0.01" min="0" value="{{ '%.2f'|format(line.discount_percent) }}" /></td>
+                                        <td><input type="text" class="sales-input__control line-total" value="{{ '%.2f'|format(line.line_total) }}" readonly /></td>
+                                        <td><button type="button" class="button button--secondary button--small remove-row">✕</button></td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr class="item-row">
+                                    <td>
+                                        <select name="item_id" class="sales-input__control item-select" required>
+                                            <option value="">Select item</option>
+                                            {% for master in item_options %}
+                                                <option value="{{ master.id }}">{{ master.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="item_code" class="sales-input__control code-field" readonly /></td>
+                                    <td><input type="text" name="description" class="sales-input__control" /></td>
+                                    <td><input type="number" name="qty_ordered" class="sales-input__control qty-field" step="0.001" min="0" /></td>
+                                    <td><input type="text" name="unit" class="sales-input__control" /></td>
+                                    <td><input type="number" name="unit_price" class="sales-input__control price-field" step="0.01" min="0" /></td>
+                                    <td><input type="number" name="discount_percent" class="sales-input__control discount-field" step="0.01" min="0" value="0" /></td>
+                                    <td><input type="text" class="sales-input__control line-total" readonly /></td>
+                                    <td><button type="button" class="button button--secondary button--small remove-row">✕</button></td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="sales-entry__summary" style="justify-content: flex-end; gap: 16px; flex-wrap: wrap;">
+                    <div class="sales-input">
+                        <label for="discount_amount">Discount Amount</label>
+                        <input type="number" id="discount_amount" name="discount_amount" class="sales-input__control" step="0.01" min="0" value="{{ '%.2f'|format(po.discount_amount or 0) }}" />
+                    </div>
+                    <div class="sales-input">
+                        <label for="vat_amount">VAT</label>
+                        <input type="number" id="vat_amount" name="vat_amount" class="sales-input__control" step="0.01" min="0" value="{{ '%.2f'|format(po.vat_amount or 0) }}" />
+                    </div>
+                    <div class="sales-input">
+                        <label for="other_charges">Other Charges</label>
+                        <input type="number" id="other_charges" name="other_charges" class="sales-input__control" step="0.01" min="0" value="{{ '%.2f'|format(po.other_charges or 0) }}" />
+                    </div>
+                    <div class="sales-input">
+                        <label for="advance_amount">Advance Amount</label>
+                        <input type="number" id="advance_amount" name="advance_amount" class="sales-input__control" step="0.01" min="0" value="{{ '%.2f'|format(po.advance_amount or 0) }}" />
+                    </div>
+                    <div class="sales-input">
+                        <label for="subtotal">Subtotal</label>
+                        <input type="text" id="subtotal" class="sales-input__control" value="{{ '%.2f'|format(po.subtotal_amount or 0) }}" readonly />
+                    </div>
+                    <div class="sales-input">
+                        <label for="grand_total">Grand Total</label>
+                        <input type="text" id="grand_total" class="sales-input__control" value="{{ '%.2f'|format(po.grand_total or 0) }}" readonly />
+                    </div>
+                    <div class="sales-input">
+                        <label for="outstanding_amount">Outstanding</label>
+                        <input type="text" id="outstanding_amount" class="sales-input__control" value="{{ '%.2f'|format(po.outstanding_amount or 0) }}" readonly />
+                    </div>
+                </div>
+                <div class="sales-form__grid">
+                    <div class="sales-input">
+                        <label for="internal_notes">Internal Notes</label>
+                        <textarea id="internal_notes" name="internal_notes" class="sales-input__control" rows="3">{{ po.internal_notes or '' }}</textarea>
+                    </div>
+                    <div class="sales-input">
+                        <label for="customer_notes">Notes to Customer</label>
+                        <textarea id="customer_notes" name="customer_notes" class="sales-input__control" rows="3">{{ po.customer_notes or '' }}</textarea>
+                    </div>
+                </div>
+            </form>
+        </section>
+    </div>
+    <script>
+        const itemsMaster = [
+            {% for master in item_options %}
+                { id: "{{ master.id }}", name: "{{ master.name }}" },
+            {% endfor %}
+        ];
+
+        function recalcRow(row) {
+            const qty = parseFloat(row.querySelector('.qty-field')?.value || '0');
+            const price = parseFloat(row.querySelector('.price-field')?.value || '0');
+            const discount = parseFloat(row.querySelector('.discount-field')?.value || '0');
+            const lineTotal = qty * price * (1 - discount / 100);
+            row.querySelector('.line-total').value = lineTotal.toFixed(2);
+            row.querySelector('.qty-field').classList.toggle('input-error', qty <= 0);
+            row.querySelector('.price-field').classList.toggle('input-error', price <= 0);
+        }
+
+        function recalcTotals() {
+            let subtotal = 0;
+            document.querySelectorAll('#item-rows .item-row').forEach((row) => {
+                recalcRow(row);
+                const lineVal = parseFloat(row.querySelector('.line-total').value || '0');
+                subtotal += lineVal;
+            });
+            const discountAmount = parseFloat(document.getElementById('discount_amount').value || '0');
+            const vatAmount = parseFloat(document.getElementById('vat_amount').value || '0');
+            const otherCharges = parseFloat(document.getElementById('other_charges').value || '0');
+            const advanceAmount = parseFloat(document.getElementById('advance_amount').value || '0');
+            const grandTotal = subtotal + vatAmount + otherCharges - discountAmount;
+            const outstanding = grandTotal - advanceAmount;
+            document.getElementById('subtotal').value = subtotal.toFixed(2);
+            document.getElementById('grand_total').value = grandTotal.toFixed(2);
+            document.getElementById('outstanding_amount').value = outstanding.toFixed(2);
+        }
+
+        function buildOptions(selectedId) {
+            const select = document.createElement('select');
+            select.name = 'item_id';
+            select.className = 'sales-input__control item-select';
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select item';
+            select.appendChild(placeholder);
+            itemsMaster.forEach((item) => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.name;
+                if (selectedId && selectedId === item.id) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+            return select;
+        }
+
+        function addRow(templateRow) {
+            const row = document.createElement('tr');
+            row.className = 'item-row';
+            row.innerHTML = `
+                <td></td>
+                <td><input type="text" name="item_code" class="sales-input__control code-field" readonly /></td>
+                <td><input type="text" name="description" class="sales-input__control" /></td>
+                <td><input type="number" name="qty_ordered" class="sales-input__control qty-field" step="0.001" min="0" /></td>
+                <td><input type="text" name="unit" class="sales-input__control" /></td>
+                <td><input type="number" name="unit_price" class="sales-input__control price-field" step="0.01" min="0" /></td>
+                <td><input type="number" name="discount_percent" class="sales-input__control discount-field" step="0.01" min="0" value="0" /></td>
+                <td><input type="text" class="sales-input__control line-total" readonly /></td>
+                <td><button type="button" class="button button--secondary button--small remove-row">✕</button></td>
+            `;
+            const selectCell = row.querySelector('td');
+            const select = buildOptions(templateRow?.querySelector('.item-select')?.value);
+            selectCell.appendChild(select);
+            document.getElementById('item-rows').appendChild(row);
+            attachRowEvents(row);
+        }
+
+        function attachRowEvents(row) {
+            const select = row.querySelector('.item-select');
+            select.addEventListener('change', () => {
+                const selected = itemsMaster.find((item) => item.id === select.value);
+                row.querySelector('.code-field').value = selected ? selected.name : '';
+                recalcTotals();
+            });
+            row.querySelectorAll('.qty-field, .price-field, .discount-field').forEach((input) => {
+                input.addEventListener('input', recalcTotals);
+            });
+            row.querySelector('.remove-row').addEventListener('click', () => {
+                row.remove();
+                recalcTotals();
+            });
+        }
+
+        document.getElementById('add-row').addEventListener('click', () => addRow());
+        document.getElementById('copy-last-row').addEventListener('click', () => {
+            const rows = document.querySelectorAll('#item-rows .item-row');
+            const template = rows.length ? rows[rows.length - 1] : undefined;
+            addRow(template);
+        });
+        document.getElementById('clear-rows').addEventListener('click', () => {
+            document.getElementById('item-rows').innerHTML = '';
+            addRow();
+            recalcTotals();
+        });
+
+        document.querySelectorAll('#item-rows .item-row').forEach((row) => {
+            attachRowEvents(row);
+        });
+
+        document.getElementById('discount_amount').addEventListener('input', recalcTotals);
+        document.getElementById('vat_amount').addEventListener('input', recalcTotals);
+        document.getElementById('other_charges').addEventListener('input', recalcTotals);
+        document.getElementById('advance_amount').addEventListener('input', recalcTotals);
+
+        recalcTotals();
+    </script>
+</body>
+</html>

@@ -1198,6 +1198,14 @@ class CustomerType(str, Enum):
     seasonal = "seasonal"
 
 
+class CustomerPurchaseOrderStatus(str, Enum):
+    draft = "Draft"
+    confirmed = "Confirmed"
+    partially_delivered = "Partially Delivered"
+    fully_delivered = "Fully Delivered"
+    cancelled = "Cancelled"
+
+
 def _enum_values(enum_cls):
     return [member.value for member in enum_cls]
 
@@ -1281,3 +1289,81 @@ class SalesActualEntry(db.Model):
     helper1 = db.relationship("TeamMember", foreign_keys=[helper1_id])
     helper2 = db.relationship("TeamMember", foreign_keys=[helper2_id])
     customer = db.relationship("Customer", backref=db.backref("sales_actuals", cascade="all,delete-orphan"))
+
+
+class CustomerPurchaseOrder(db.Model):
+    __tablename__ = "customer_purchase_orders"
+
+    id = db.Column(db.Integer, primary_key=True)
+    po_number = db.Column(db.String(40), unique=True, nullable=False)
+    po_date = db.Column(db.Date, nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False, index=True)
+    customer_reference = db.Column(db.String(120))
+    delivery_address = db.Column(db.Text)
+    delivery_date = db.Column(db.Date)
+    payment_terms = db.Column(db.String(120))
+    sales_rep_id = db.Column(db.Integer, db.ForeignKey("team_member.id"))
+    contact_person = db.Column(db.String(120))
+    contact_phone = db.Column(db.String(80))
+    contact_email = db.Column(db.String(120))
+    subtotal_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    discount_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    vat_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    other_charges = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    grand_total = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    advance_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    outstanding_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    status = db.Column(
+        db.Enum(
+            CustomerPurchaseOrderStatus,
+            values_callable=_enum_values,
+            name="customer_purchase_order_status",
+        ),
+        nullable=False,
+        default=CustomerPurchaseOrderStatus.draft,
+    )
+    internal_notes = db.Column(db.Text)
+    customer_notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False, index=True)
+
+    customer = db.relationship("Customer", backref=db.backref("customer_purchase_orders", cascade="all, delete-orphan"))
+    sales_rep = db.relationship("TeamMember")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    updated_by = db.relationship("User", foreign_keys=[updated_by_id])
+
+    items = db.relationship(
+        "CustomerPurchaseOrderItem",
+        back_populates="purchase_order",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class CustomerPurchaseOrderItem(db.Model):
+    __tablename__ = "customer_purchase_order_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_po_id = db.Column(
+        db.Integer,
+        db.ForeignKey("customer_purchase_orders.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_id = db.Column(GUID(), db.ForeignKey("material_items.id"), nullable=False)
+    item_code = db.Column(db.String(120), nullable=False)
+    item_name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    qty_ordered = db.Column(db.Numeric(14, 3), nullable=False)
+    unit = db.Column(db.String(40), nullable=False)
+    unit_price = db.Column(db.Numeric(14, 2), nullable=False)
+    discount_percent = db.Column(db.Numeric(6, 2), nullable=False, default=Decimal("0.00"))
+    line_total = db.Column(db.Numeric(14, 2), nullable=False)
+    qty_delivered = db.Column(db.Numeric(14, 3), nullable=False, default=Decimal("0.000"))
+    qty_balance = db.Column(db.Numeric(14, 3), nullable=False, default=Decimal("0.000"))
+
+    purchase_order = db.relationship("CustomerPurchaseOrder", back_populates="items")
+    item = db.relationship("MaterialItem")

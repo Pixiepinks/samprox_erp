@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Money | SAMPROX ERP</title>
+    <title>Movers | SAMPROX ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -16,7 +16,7 @@
                 <div class="brand__logo">S</div>
                 <div class="brand__details">
                     <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">Money Overview</p>
+                    <p class="brand__section">Movers Overview</p>
                 </div>
             </div>
             <div class="topbar__actions">
@@ -35,8 +35,8 @@
             <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
             <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
             <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
-            <a class="subnav__link" href="{{ url_for('ui.movers_page') }}">Movers</a>
-            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.money_page') }}">Money</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.movers_page') }}">Movers</a>
+            <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
             <a
                 class="subnav__link"
                 href="{{ url_for('ui.mechanism_page') }}"
@@ -46,35 +46,36 @@
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Financial performance snapshot</h1>
+                <h1>Logistics & mover coordination</h1>
             </header>
             <p class="section__description">
-                Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
-                insights here to control costs and prioritize high-value work.
+                Track vehicle availability, plan routes, and keep shipments moving efficiently. Use this page to
+                coordinate daily dispatches and monitor delivery performance.
             </p>
             <div class="section__grid">
                 <article class="tile">
-                    <h2 class="tile__title">Budget vs. actual</h2>
+                    <h2 class="tile__title">Fleet availability</h2>
                     <p class="tile__description">
-                        Compare planned spending against actuals across departments and job types.
+                        Keep an eye on which vehicles are online, under maintenance, or scheduled for upcoming jobs.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Job costing</h2>
+                    <h2 class="tile__title">Route planning</h2>
                     <p class="tile__description">
-                        Track labour, material, and machine time consumption to understand job margins.
+                        Organize pickups and drop-offs to minimize travel time and maximize load capacity.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Cash flow outlook</h2>
+                    <h2 class="tile__title">Delivery tracking</h2>
                     <p class="tile__description">
-                        Review upcoming receivables and payables to plan funding and investments.
+                        Monitor active consignments with status updates so exceptions can be handled quickly.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Capital planning</h2>
+                    <h2 class="tile__title">Vendor coordination</h2>
                     <p class="tile__description">
-                        Highlight equipment upgrades and large purchases to align with financial targets.
+                        Capture partner SLAs, contact points, and performance notes to align external movers with
+                        internal standards.
                     </p>
                 </article>
             </div>

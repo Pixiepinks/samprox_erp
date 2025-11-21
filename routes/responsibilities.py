@@ -8,7 +8,7 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_jwt_extended import get_jwt, jwt_required
 from marshmallow import ValidationError
 from sqlalchemy import asc, or_
@@ -533,6 +533,37 @@ def _compose_responsibility_email(
     return "\n".join(body_lines)
 
 
+def _format_date(value: date | None) -> str:
+    if not isinstance(value, date):
+        return "—"
+    return value.strftime("%B %d, %Y")
+
+
+def _format_action_label(action: ResponsibilityAction | str | None) -> str:
+    try:
+        if isinstance(action, ResponsibilityAction):
+            normalized = action
+        else:
+            normalized = ResponsibilityAction(action)
+        return normalized.value.replace("_", " ").title()
+    except Exception:
+        return "—"
+
+
+def _format_custom_weekdays(task: ResponsibilityTask) -> str:
+    weekdays = getattr(task, "custom_weekday_list", None) or []
+    if not weekdays:
+        return "—"
+    names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    labels: list[str] = []
+    for index in weekdays:
+        try:
+            labels.append(names[int(index)])
+        except (IndexError, TypeError, ValueError):
+            continue
+    return ", ".join(labels) if labels else "—"
+
+
 @bp.get("/assignees")
 @jwt_required()
 def list_assignees():
@@ -824,6 +855,174 @@ def _send_task_email(task: ResponsibilityTask) -> None:
         general_content,
         verb=general_verb,
         name_hint=general_name_hint,
+    )
+
+
+def _delegation_change_key(task: ResponsibilityTask) -> tuple[tuple[str | None, int | None, object], ...]:
+    entries: list[tuple[str | None, int | None, object]] = []
+    for delegation in getattr(task, "delegations", []) or []:
+        delegate_member_id = getattr(delegation, "delegate_member_id", None)
+        delegate_id = getattr(delegation, "delegate_id", None)
+        allocation = getattr(delegation, "allocated_value", None)
+        if delegate_member_id is not None:
+            try:
+                entries.append(("member", int(delegate_member_id), allocation))
+            except (TypeError, ValueError):
+                entries.append(("member", None, allocation))
+        elif delegate_id is not None:
+            try:
+                entries.append(("user", int(delegate_id), allocation))
+            except (TypeError, ValueError):
+                entries.append(("user", None, allocation))
+        else:
+            entries.append((None, None, allocation))
+    entries.sort(key=lambda value: (value[0] or "", value[1] or 0))
+    return tuple(entries)
+
+
+def _format_delegation_summary(task: ResponsibilityTask) -> str:
+    lines = _delegation_summary_lines(task)
+    cleaned = [line.lstrip("• ").strip() for line in lines if line.strip()]
+    return "; ".join(cleaned) if cleaned else "—"
+
+
+def _task_change_state(task: ResponsibilityTask) -> dict[str, tuple[object, str]]:
+    unit = _resolve_performance_unit(task)
+    action = getattr(task, "action", None)
+    progress = getattr(task, "progress", None)
+    responsible = getattr(task, "perf_responsible_value", None)
+    actual = getattr(task, "perf_actual_value", None)
+    metric = getattr(task, "perf_metric_value", None)
+    scheduled_for = getattr(task, "scheduled_for", None)
+    recurrence = getattr(task, "recurrence", None)
+    custom_weekdays = list(getattr(task, "custom_weekday_list", None) or [])
+
+    if getattr(task, "assignee_member_id", None) is not None:
+        assignee_key: tuple[str, int | None] = ("member", getattr(task, "assignee_member_id", None))
+    elif getattr(task, "assignee_id", None) is not None:
+        assignee_key = ("user", getattr(task, "assignee_id", None))
+    else:
+        assignee_key = (None, None)
+
+    delegations = _delegation_change_key(task)
+
+    detail = (getattr(task, "detail", None) or "").strip()
+    notes = (getattr(task, "action_notes", None) or "").strip()
+
+    progress_label = _format_progress_label(progress) or "—"
+    unit_label = _performance_unit_label(
+        unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else unit
+    )
+    responsible_display = format_performance_value(unit, responsible) or "—"
+    actual_display = format_performance_value(unit, actual) or "—"
+    metric_display = format_metric(unit, metric) or "—"
+
+    return {
+        "action": (action, _format_action_label(action)),
+        "progress": (progress, progress_label),
+        "unit": (unit, unit_label or "—"),
+        "responsible": (responsible, responsible_display),
+        "actual": (actual, actual_display),
+        "metric": (metric, metric_display),
+        "scheduled_for": (scheduled_for, _format_date(scheduled_for)),
+        "recurrence": (recurrence, _render_recurrence(task) or "—"),
+        "custom_weekdays": (tuple(custom_weekdays), _format_custom_weekdays(task)),
+        "assignee": (assignee_key, _task_assignee_name(task) or "—"),
+        "delegations": (delegations, _format_delegation_summary(task)),
+        "detail": (detail, detail or "—"),
+        "notes": (notes, notes or "—"),
+    }
+
+
+def _collect_task_changes(
+    before: dict[str, tuple[object, str]], after: dict[str, tuple[object, str]]
+) -> list[dict[str, str]]:
+    fields = [
+        ("action", "5D Action"),
+        ("progress", "Progress"),
+        ("unit", "Unit of measure"),
+        ("responsible", "Responsible target"),
+        ("actual", "Actual"),
+        ("metric", "Performance metric"),
+        ("scheduled_for", "First scheduled date"),
+        ("recurrence", "Recurrence"),
+        ("custom_weekdays", "Custom weekdays"),
+        ("assignee", "Assigned to"),
+        ("delegations", "Delegated team members"),
+        ("detail", "Detail"),
+        ("notes", "Notes"),
+    ]
+    changes: list[dict[str, str]] = []
+    for key, label in fields:
+        before_raw, before_display = before.get(key, (None, "—"))
+        after_raw, after_display = after.get(key, (None, "—"))
+        if before_raw == after_raw:
+            continue
+        changes.append(
+            {
+                "label": label,
+                "old": before_display or "—",
+                "new": after_display or "—",
+            }
+        )
+    return changes
+
+
+def _send_task_update_email(
+    task: ResponsibilityTask,
+    *,
+    changes: list[dict[str, str]],
+    detail_changed: bool,
+    notes_changed: bool,
+    updated_by: str,
+) -> None:
+    if not changes:
+        return
+
+    unit = _resolve_performance_unit(task)
+    unit_label = _performance_unit_label(
+        unit.value if isinstance(unit, ResponsibilityPerformanceUnit) else unit
+    )
+    responsible_display = format_performance_value(
+        unit, getattr(task, "perf_responsible_value", None)
+    )
+    actual_display = format_performance_value(
+        unit, getattr(task, "perf_actual_value", None)
+    )
+
+    progress_label = _format_progress_label(getattr(task, "progress", None)) or "—"
+
+    assignee_name = _task_assignee_name(task) or _task_delegated_name(task)
+    subject = f"Responsibility updated: {task.title} (No. {task.number})"
+
+    motivational_line = random.choice(MOTIVATIONAL_MESSAGES)
+
+    body = render_template(
+        "responsibility_updated_email.html",
+        assignee_name=assignee_name,
+        task_number=task.number,
+        title=task.title,
+        scheduled_for=_format_date(getattr(task, "scheduled_for", None)),
+        action=_format_action_label(getattr(task, "action", None)),
+        unit=unit_label or "—",
+        responsible_target=responsible_display or "—",
+        actual_value=actual_display or "—",
+        progress=progress_label,
+        changes=changes,
+        detail_updated=detail_changed,
+        detail_text=(getattr(task, "detail", None) or "").strip(),
+        notes_updated=notes_changed,
+        notes_text=(getattr(task, "action_notes", None) or "").strip(),
+        updated_by=updated_by or "A manager",
+        motivation=motivational_line,
+    )
+
+    _deliver_responsibility_email(
+        subject=subject,
+        recipient=getattr(task, "recipient_email", None),
+        body=body,
+        context="responsibility update notification",
+        cc=_split_email_addresses(getattr(task, "cc_email", None)),
     )
 
 
@@ -1145,6 +1344,8 @@ def update_task(task_id: int):
     except ValidationError as error:
         return jsonify({"errors": error.normalized_messages()}), 422
 
+    before_state = _task_change_state(task)
+
     performance_unit_value = data.get("performance_unit")
     try:
         performance_unit = ResponsibilityPerformanceUnit(performance_unit_value)
@@ -1271,6 +1472,11 @@ def update_task(task_id: int):
     task.perf_metric_value = performance_metric_value
     task.perf_input_type = performance_input_type
 
+    after_state = _task_change_state(task)
+    changes = _collect_task_changes(before_state, after_state)
+    detail_changed = any(change.get("label") == "Detail" for change in changes)
+    notes_changed = any(change.get("label") == "Notes" for change in changes)
+
     error_message = "Unable to update responsibility. Please try again."
     try:
         db.session.commit()
@@ -1279,15 +1485,27 @@ def update_task(task_id: int):
         current_app.logger.exception("Failed to update responsibility task.", exc_info=error)
         return jsonify({"msg": error_message}), 500
 
-    notification = {"sent": True}
-    try:
-        _send_task_email(task)
-    except Exception as error:  # pragma: no cover - defensive logging
-        current_app.logger.exception("Failed to send responsibility email")
-        notification = {
-            "sent": False,
-            "message": str(error),
-        }
+    notification: dict[str, object] = {"sent": False}
+    if changes:
+        updater = User.query.get(_current_user_id())
+        updater_name = _normalize_user_name(updater) or "A manager"
+        try:
+            _send_task_update_email(
+                task,
+                changes=changes,
+                detail_changed=detail_changed,
+                notes_changed=notes_changed,
+                updated_by=updater_name,
+            )
+            notification["sent"] = True
+        except Exception as error:  # pragma: no cover - defensive logging
+            current_app.logger.exception("Failed to send responsibility email")
+            notification = {
+                "sent": False,
+                "message": str(error),
+            }
+    else:
+        notification["message"] = "No changes detected; email not sent."
 
     response = task_schema.dump(task)
     response.update(_decorate_task_names(task))

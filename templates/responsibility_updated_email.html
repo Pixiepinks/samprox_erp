@@ -1,0 +1,29 @@
+Hi {{ assignee_name or "there" }},
+
+Your responsibility has been updated.
+
+Responsibility No: {{ task_number }}
+Title: {{ title }}
+Scheduled for: {{ scheduled_for }}
+Current 5D Action: {{ action }}
+Current Unit of measure: {{ unit }}
+Current Responsible target: {{ responsible_target }}
+Current Actual: {{ actual_value }}
+Current Progress (%): {{ progress }}
+
+{% if changes %}Updates made:
+{% for change in changes %}• {{ change.label }}: {{ change.old }} → {{ change.new }}
+{% endfor %}{% endif %}
+{% if detail_updated and detail_text %}
+Detail updated: {{ detail_text }}
+{% endif %}
+{% if notes_updated and notes_text %}
+Notes updated: {{ notes_text }}
+{% endif %}
+Updated by: {{ updated_by }}
+
+{{ motivation }}
+
+Regards,
+
+Maximus — Your AICEO

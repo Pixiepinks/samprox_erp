@@ -206,7 +206,7 @@ def list_purchase_orders():
         except ValueError:
             pass
 
-    query = CustomerPurchaseOrder.query.options(db.joinedload(CustomerPurchaseOrder.customer)).filter(
+    query = CustomerPurchaseOrder.query.options(joinedload(CustomerPurchaseOrder.customer)).filter(
         CustomerPurchaseOrder.is_deleted.is_(False)
     )
 

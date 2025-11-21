@@ -1,7 +1,7 @@
 """add customer purchase order tables
 
 Revision ID: 4f0b6c5c0d9b
-Revises: 1d2e3f4a5b6c_add_sourcing_type_to_mrn_headers
+Revises: 1d2e3f4a5b6c
 Create Date: 2024-06-01 00:00:00.000000
 """
 
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '4f0b6c5c0d9b'
-down_revision = '1d2e3f4a5b6c_add_sourcing_type_to_mrn_headers'
+down_revision = '1d2e3f4a5b6c'
 branch_labels = None
 depends_on = None
 

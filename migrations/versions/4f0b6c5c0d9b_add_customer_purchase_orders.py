@@ -7,7 +7,6 @@ Create Date: 2024-06-01 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '4f0b6c5c0d9b'
@@ -60,7 +59,7 @@ def upgrade():
         'customer_purchase_order_items',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('customer_po_id', sa.Integer(), nullable=False),
-        sa.Column('item_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('item_id', sa.String(length=36), nullable=False),
         sa.Column('item_code', sa.String(length=120), nullable=False),
         sa.Column('item_name', sa.String(length=255), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),

@@ -7,6 +7,7 @@ Create Date: 2024-07-01 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -20,7 +21,7 @@ STATUS_ENUM_NAME = "pettycashstatus"
 
 
 def upgrade():
-    petty_cash_status = sa.Enum(
+    petty_cash_status = postgresql.ENUM(
         "Draft",
         "Submitted",
         "Approved",
@@ -44,7 +45,7 @@ def upgrade():
         sa.Column("area_visited", sa.Text(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum(
+            postgresql.ENUM(
                 "Draft",
                 "Submitted",
                 "Approved",
@@ -174,7 +175,7 @@ def downgrade():
     op.drop_table("petty_cash_weekly_claims")
 
     bind = op.get_bind()
-    petty_cash_status = sa.Enum(
+    petty_cash_status = postgresql.ENUM(
         "Draft",
         "Submitted",
         "Approved",

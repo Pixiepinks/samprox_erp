@@ -51,6 +51,7 @@ from routes import (
     customer_pos,
     material_api,
     production,
+    petty_cash,
     responsibilities,
     system,
     reports,
@@ -197,6 +198,7 @@ def create_app():
     app.register_blueprint(machines.bp)
     app.register_blueprint(customer_pos.bp)
     app.register_blueprint(production.bp)
+    app.register_blueprint(petty_cash.bp)
     app.register_blueprint(responsibilities.bp)
     app.register_blueprint(system.bp)
     app.register_blueprint(market.bp)

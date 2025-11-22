@@ -45,38 +45,135 @@
             >Mechanism</a>
         </nav>
         <section class="section">
-            <header class="section__header">
-                <h1>Financial performance snapshot</h1>
-            </header>
-            <p class="section__description">
-                Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
-                insights here to control costs and prioritize high-value work.
-            </p>
-            <div class="section__grid">
-                <article class="tile">
-                    <h2 class="tile__title">Budget vs. actual</h2>
-                    <p class="tile__description">
-                        Compare planned spending against actuals across departments and job types.
-                    </p>
-                </article>
-                <article class="tile">
-                    <h2 class="tile__title">Job costing</h2>
-                    <p class="tile__description">
-                        Track labour, material, and machine time consumption to understand job margins.
-                    </p>
-                </article>
-                <article class="tile">
-                    <h2 class="tile__title">Cash flow outlook</h2>
-                    <p class="tile__description">
-                        Review upcoming receivables and payables to plan funding and investments.
-                    </p>
-                </article>
-                <article class="tile">
-                    <h2 class="tile__title">Capital planning</h2>
-                    <p class="tile__description">
-                        Highlight equipment upgrades and large purchases to align with financial targets.
-                    </p>
-                </article>
+            <div class="tab-switcher" role="tablist" aria-label="Money sections">
+                <button class="tab-switcher__button tab-switcher__button--active" data-tab="overview" role="tab" aria-selected="true">
+                    Overview
+                </button>
+                <button class="tab-switcher__button" data-tab="petty-cash" role="tab" aria-selected="false">
+                    Petty Cash
+                </button>
+            </div>
+
+            <div class="tab-panel tab-panel--active" id="tab-overview" role="tabpanel" aria-label="Financial overview">
+                <header class="section__header">
+                    <h1>Financial performance snapshot</h1>
+                </header>
+                <p class="section__description">
+                    Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
+                    insights here to control costs and prioritize high-value work.
+                </p>
+                <div class="section__grid">
+                    <article class="tile">
+                        <h2 class="tile__title">Budget vs. actual</h2>
+                        <p class="tile__description">
+                            Compare planned spending against actuals across departments and job types.
+                        </p>
+                    </article>
+                    <article class="tile">
+                        <h2 class="tile__title">Job costing</h2>
+                        <p class="tile__description">
+                            Track labour, material, and machine time consumption to understand job margins.
+                        </p>
+                    </article>
+                    <article class="tile">
+                        <h2 class="tile__title">Cash flow outlook</h2>
+                        <p class="tile__description">
+                            Review upcoming receivables and payables to plan funding and investments.
+                        </p>
+                    </article>
+                    <article class="tile">
+                        <h2 class="tile__title">Capital planning</h2>
+                        <p class="tile__description">
+                            Highlight equipment upgrades and large purchases to align with financial targets.
+                        </p>
+                    </article>
+                </div>
+            </div>
+
+            <div class="tab-panel" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
+                <header class="section__header">
+                    <div>
+                        <p class="eyebrow">New</p>
+                        <h1>Petty Cash – Weekly Travel Claims</h1>
+                        <p class="section__description">
+                            Capture weekly travel expenses directly inside the table. Edit each weekday cell inline and keep totals in sync automatically.
+                        </p>
+                    </div>
+                    <div class="status-pill" id="petty-status">Draft</div>
+                </header>
+
+                <div class="petty-card">
+                    <div class="form-grid">
+                        <label class="form-field">
+                            <span>Company</span>
+                            <input id="petty-company" type="text" readonly />
+                        </label>
+                        <label class="form-field">
+                            <span>Employee</span>
+                            <select id="petty-employee"></select>
+                        </label>
+                        <label class="form-field">
+                            <span>Week starting</span>
+                            <input id="petty-week-start" type="date" />
+                        </label>
+                        <label class="form-field">
+                            <span>Week ending</span>
+                            <input id="petty-week-end" type="date" readonly />
+                        </label>
+                        <label class="form-field">
+                            <span>Sheet No</span>
+                            <input id="petty-sheet" type="text" readonly />
+                        </label>
+                        <label class="form-field">
+                            <span>Vehicle No</span>
+                            <input id="petty-vehicle" type="text" placeholder="Enter vehicle number" />
+                        </label>
+                        <label class="form-field form-field--wide">
+                            <span>Area visited</span>
+                            <textarea id="petty-area" rows="2" placeholder="Enter locations covered"></textarea>
+                        </label>
+                    </div>
+
+                    <div class="petty-table-wrapper">
+                        <table class="petty-table">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Expense Type</th>
+                                    <th>MON</th>
+                                    <th>TUE</th>
+                                    <th>WED</th>
+                                    <th>THU</th>
+                                    <th>FRI</th>
+                                    <th>SAT</th>
+                                    <th>SUN</th>
+                                    <th>TOTAL</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="petty-lines"></tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="9" class="total-label">TOTAL EXPENSES</td>
+                                    <td colspan="2" class="total-value" id="petty-total">0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="petty-toolbar">
+                        <button class="button button--ghost" id="petty-add-row">+ Add Row</button>
+                        <div class="petty-actions">
+                            <button class="button button--secondary" id="petty-save">Save Draft</button>
+                            <button class="button" id="petty-submit">Submit for Approval</button>
+                            <button class="button" id="petty-approve">Approve</button>
+                            <button class="button button--danger" id="petty-reject">Reject</button>
+                            <button class="button" id="petty-paid">Mark as Paid</button>
+                        </div>
+                    </div>
+                    <p class="helper-text" id="petty-helper">Click any weekday cell to enter an amount. Empty cells are treated as 0.</p>
+                    <p class="helper-text helper-text--error" id="petty-error" hidden></p>
+                </div>
             </div>
         </section>
     </div>
@@ -138,6 +235,355 @@
                 window.location.href = "/";
             }
         });
+
+        const tabButtons = document.querySelectorAll(".tab-switcher__button");
+        const tabPanels = document.querySelectorAll(".tab-panel");
+
+        tabButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const target = button.dataset.tab;
+                tabButtons.forEach((btn) => {
+                    btn.classList.toggle("tab-switcher__button--active", btn.dataset.tab === target);
+                    btn.setAttribute("aria-selected", btn.dataset.tab === target);
+                });
+                tabPanels.forEach((panel) => {
+                    panel.classList.toggle("tab-panel--active", panel.id === `tab-${target}`);
+                });
+            });
+        });
+
+        const pettyState = {
+            claim: null,
+            employees: [],
+            company: null,
+        };
+
+        const pettyEls = {
+            company: document.getElementById("petty-company"),
+            employee: document.getElementById("petty-employee"),
+            weekStart: document.getElementById("petty-week-start"),
+            weekEnd: document.getElementById("petty-week-end"),
+            sheet: document.getElementById("petty-sheet"),
+            vehicle: document.getElementById("petty-vehicle"),
+            area: document.getElementById("petty-area"),
+            linesBody: document.getElementById("petty-lines"),
+            total: document.getElementById("petty-total"),
+            status: document.getElementById("petty-status"),
+            helper: document.getElementById("petty-helper"),
+            error: document.getElementById("petty-error"),
+            addRow: document.getElementById("petty-add-row"),
+            save: document.getElementById("petty-save"),
+            submit: document.getElementById("petty-submit"),
+            approve: document.getElementById("petty-approve"),
+            reject: document.getElementById("petty-reject"),
+            paid: document.getElementById("petty-paid"),
+        };
+
+        const managerRoles = ["admin", "finance_manager", "production_manager"];
+
+        function formatAmount(value) {
+            const num = Number(value || 0);
+            if (Number.isNaN(num)) return "0.00";
+            return num.toFixed(2);
+        }
+
+        function showError(message) {
+            pettyEls.error.textContent = message || "";
+            pettyEls.error.hidden = !message;
+        }
+
+        function authHeaders() {
+            return {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            };
+        }
+
+        async function fetchJson(url, options = {}) {
+            const response = await fetch(url, {
+                ...options,
+                headers: { ...authHeaders(), ...(options.headers || {}) },
+            });
+            let data;
+            try {
+                data = await response.json();
+            } catch (error) {
+                data = {};
+            }
+            return { ok: response.ok, data };
+        }
+
+        function updateStatusBadge(status) {
+            pettyEls.status.textContent = status || "Draft";
+        }
+
+        function renderHeader() {
+            const claim = pettyState.claim;
+            if (!claim) return;
+            pettyEls.company.value = (pettyState.company?.name || claim.company?.name || "").trim();
+            pettyEls.sheet.value = claim.sheet_no || "";
+            pettyEls.weekStart.value = claim.week_start_date;
+            pettyEls.weekEnd.value = claim.week_end_date;
+            pettyEls.vehicle.value = claim.vehicle_no || "";
+            pettyEls.area.value = claim.area_visited || "";
+            updateStatusBadge(claim.status);
+
+            const employees = [...pettyState.employees];
+            const hasCurrent = employees.some((emp) => emp.id === claim.employee.id);
+            if (!hasCurrent && claim.employee?.id) {
+                employees.unshift(claim.employee);
+            }
+
+            pettyEls.employee.innerHTML = "";
+            employees.forEach((emp) => {
+                const option = document.createElement("option");
+                option.value = emp.id;
+                option.textContent = emp.name;
+                if (emp.id === claim.employee.id) {
+                    option.selected = true;
+                }
+                pettyEls.employee.appendChild(option);
+            });
+
+            const locked = ["Approved", "Paid"].includes(claim.status);
+            [pettyEls.employee, pettyEls.weekStart, pettyEls.vehicle, pettyEls.area].forEach((field) => {
+                field.disabled = locked;
+            });
+        }
+
+        function buildAmountInput(line, field, locked) {
+            const input = document.createElement("input");
+            input.type = "number";
+            input.step = "0.01";
+            input.inputMode = "decimal";
+            input.value = formatAmount(line[field]);
+            input.className = "cell-input";
+            input.disabled = locked;
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    persistLineUpdate(line.id, { [field]: input.value });
+                }
+            });
+            input.addEventListener("blur", () => {
+                persistLineUpdate(line.id, { [field]: input.value });
+            });
+            return input;
+        }
+
+        function buildTextInput(line, locked) {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = line.expense_type || "";
+            input.className = "cell-input cell-input--text";
+            input.disabled = locked;
+            input.addEventListener("blur", () => {
+                persistLineUpdate(line.id, { expense_type: input.value });
+            });
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    input.blur();
+                }
+            });
+            return input;
+        }
+
+        function renderLines() {
+            const claim = pettyState.claim;
+            if (!claim) return;
+            pettyEls.linesBody.innerHTML = "";
+            const locked = ["Approved", "Paid"].includes(claim.status);
+
+            (claim.lines || []).forEach((line, index) => {
+                const row = document.createElement("tr");
+
+                const numberCell = document.createElement("td");
+                numberCell.textContent = index + 1;
+                row.appendChild(numberCell);
+
+                const expenseCell = document.createElement("td");
+                expenseCell.appendChild(buildTextInput(line, locked));
+                row.appendChild(expenseCell);
+
+                [
+                    "mon_amount",
+                    "tue_amount",
+                    "wed_amount",
+                    "thu_amount",
+                    "fri_amount",
+                    "sat_amount",
+                    "sun_amount",
+                ].forEach((field) => {
+                    const cell = document.createElement("td");
+                    cell.appendChild(buildAmountInput(line, field, locked));
+                    row.appendChild(cell);
+                });
+
+                const totalCell = document.createElement("td");
+                totalCell.className = "total-cell";
+                totalCell.textContent = formatAmount(line.row_total);
+                row.appendChild(totalCell);
+
+                const deleteCell = document.createElement("td");
+                if (!locked) {
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.className = "icon-button";
+                    deleteButton.textContent = "✕";
+                    deleteButton.title = "Delete row";
+                    deleteButton.addEventListener("click", () => deleteLine(line.id));
+                    deleteCell.appendChild(deleteButton);
+                }
+                row.appendChild(deleteCell);
+
+                pettyEls.linesBody.appendChild(row);
+            });
+
+            pettyEls.total.textContent = formatAmount(claim.total_expenses);
+
+            pettyEls.addRow.disabled = locked;
+            pettyEls.helper.textContent = locked
+                ? "This claim is locked because it has been approved or paid."
+                : "Click any weekday cell to enter an amount. Empty cells are treated as 0.";
+        }
+
+        function applyClaim(claim) {
+            pettyState.claim = claim;
+            renderHeader();
+            renderLines();
+        }
+
+        async function loadEmployees() {
+            const { ok, data } = await fetchJson("/api/petty-cash/employees");
+            if (ok && Array.isArray(data)) {
+                pettyState.employees = data;
+            }
+        }
+
+        async function loadCompany() {
+            const { ok, data } = await fetchJson("/api/petty-cash/company");
+            if (ok) {
+                pettyState.company = data;
+            }
+        }
+
+        async function initPettyCash() {
+            await Promise.all([loadEmployees(), loadCompany()]);
+            const { ok, data } = await fetchJson("/api/petty-cash/weekly-claims/init");
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to load petty cash claim.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        async function persistLineUpdate(lineId, payload) {
+            if (!pettyState.claim) return;
+            const claimId = pettyState.claim.id;
+            const { ok, data } = await fetchJson(
+                `/api/petty-cash/weekly-claims/${claimId}/lines/${lineId}`,
+                { method: "PUT", body: JSON.stringify(payload) }
+            );
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to save line update.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        async function deleteLine(lineId) {
+            if (!pettyState.claim) return;
+            const claimId = pettyState.claim.id;
+            const { ok, data } = await fetchJson(
+                `/api/petty-cash/weekly-claims/${claimId}/lines/${lineId}`,
+                { method: "DELETE" }
+            );
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to delete row.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        async function addLine() {
+            if (!pettyState.claim) return;
+            const { ok, data } = await fetchJson(
+                `/api/petty-cash/weekly-claims/${pettyState.claim.id}/lines`,
+                { method: "POST", body: JSON.stringify({}) }
+            );
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to add a new row.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        async function updateHeader(payload) {
+            if (!pettyState.claim) return;
+            const { ok, data } = await fetchJson(
+                `/api/petty-cash/weekly-claims/${pettyState.claim.id}`,
+                { method: "PUT", body: JSON.stringify(payload) }
+            );
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to update claim header.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        async function updateStatus(newStatus) {
+            if (!pettyState.claim) return;
+            const { ok, data } = await fetchJson(
+                `/api/petty-cash/weekly-claims/${pettyState.claim.id}/status`,
+                { method: "POST", body: JSON.stringify({ status: newStatus }) }
+            );
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to update status.");
+                return;
+            }
+            applyClaim(data.claim);
+            showError("");
+        }
+
+        pettyEls.employee.addEventListener("change", (event) => {
+            updateHeader({ employee_id: Number(event.target.value) });
+        });
+
+        pettyEls.weekStart.addEventListener("change", (event) => {
+            updateHeader({ week_start_date: event.target.value });
+        });
+
+        pettyEls.vehicle.addEventListener("blur", (event) => {
+            updateHeader({ vehicle_no: event.target.value });
+        });
+
+        pettyEls.area.addEventListener("blur", (event) => {
+            updateHeader({ area_visited: event.target.value });
+        });
+
+        pettyEls.addRow.addEventListener("click", addLine);
+        pettyEls.save.addEventListener("click", () => updateStatus("Draft"));
+        pettyEls.submit.addEventListener("click", () => updateStatus("Submitted"));
+        pettyEls.approve.addEventListener("click", () => updateStatus("Approved"));
+        pettyEls.reject.addEventListener("click", () => updateStatus("Rejected"));
+        pettyEls.paid.addEventListener("click", () => updateStatus("Paid"));
+
+        function toggleManagerActions() {
+            const isManager = managerRoles.includes(user?.role);
+            [pettyEls.approve, pettyEls.paid].forEach((btn) => {
+                btn.disabled = !isManager;
+                btn.title = isManager ? "" : "Only managers/finance can approve or mark as paid";
+            });
+        }
+
+        toggleManagerActions();
+        initPettyCash();
     </script>
 </body>
 </html>

@@ -144,10 +144,11 @@ def _serialize_claim(claim: PettyCashWeeklyClaim) -> dict[str, object]:
 def _require_claim_owner(claim: PettyCashWeeklyClaim, current_user: User | None) -> None:
     if current_user is None:
         raise PettyCashError("Not authenticated", 401)
-    if claim.created_by_id != current_user.id and current_user.role not in {
-        RoleEnum.admin,
-        RoleEnum.finance_manager,
-    }:
+    if (
+        claim.created_by_id != current_user.id
+        and claim.employee_id != current_user.id
+        and current_user.role not in {RoleEnum.admin, RoleEnum.finance_manager}
+    ):
         raise PettyCashError("You are not allowed to modify this claim", 403)
 
 

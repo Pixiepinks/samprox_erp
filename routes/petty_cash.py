@@ -56,24 +56,40 @@ def _decimal_or_zero(value: object) -> Decimal:
         raise PettyCashError("Amounts must be numeric.") from exc
 
 
-def _current_user() -> User | None:
-    identity = get_jwt_identity()
+def _extract_user_id(identity: object) -> int | None:
+    """Try to resolve a user id from flexible JWT identity formats."""
 
-    # JWT identities can be stored either as a plain user id or as a mapping
-    # containing the id. Support both formats so the petty cash UI works even
-    # when the token structure changes.
-    candidate_id = None
     if isinstance(identity, dict):
+        # Tokens may store the user id directly on the identity payload, inside a
+        # "sub" mapping, or with alternate keys such as "user_id". Handle all
+        # those shapes defensively so UI calls do not fail silently.
         for key in ("id", "user_id"):
             if identity.get(key) is not None:
-                candidate_id = identity.get(key)
-                break
+                try:
+                    return int(identity.get(key))
+                except (TypeError, ValueError):
+                    return None
+        if isinstance(identity.get("sub"), dict):
+            for key in ("id", "user_id"):
+                nested_value = identity["sub"].get(key)
+                if nested_value is not None:
+                    try:
+                        return int(nested_value)
+                    except (TypeError, ValueError):
+                        return None
     else:
-        candidate_id = identity
+        try:
+            return int(identity)
+        except (TypeError, ValueError):
+            return None
 
-    try:
-        user_id = int(candidate_id)
-    except (TypeError, ValueError):
+    return None
+
+
+def _current_user() -> User | None:
+    identity = get_jwt_identity()
+    user_id = _extract_user_id(identity)
+    if user_id is None:
         return None
 
     return User.query.get(user_id)

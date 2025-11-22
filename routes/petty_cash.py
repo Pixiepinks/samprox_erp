@@ -61,22 +61,29 @@ def _extract_user_id(identity: object) -> int | None:
 
     if isinstance(identity, dict):
         # Tokens may store the user id directly on the identity payload, inside a
-        # "sub" mapping, or with alternate keys such as "user_id". Handle all
-        # those shapes defensively so UI calls do not fail silently.
+        # "sub" mapping (either as an object or a scalar), or with alternate keys
+        # such as "user_id". Handle all those shapes defensively so UI calls do
+        # not fail silently.
         for key in ("id", "user_id"):
             if identity.get(key) is not None:
                 try:
                     return int(identity.get(key))
                 except (TypeError, ValueError):
                     return None
-        if isinstance(identity.get("sub"), dict):
+        sub_identity = identity.get("sub")
+        if isinstance(sub_identity, dict):
             for key in ("id", "user_id"):
-                nested_value = identity["sub"].get(key)
+                nested_value = sub_identity.get(key)
                 if nested_value is not None:
                     try:
                         return int(nested_value)
                     except (TypeError, ValueError):
                         return None
+        elif sub_identity is not None:
+            try:
+                return int(sub_identity)
+            except (TypeError, ValueError):
+                return None
     else:
         try:
             return int(identity)

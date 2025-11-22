@@ -51,6 +51,14 @@ class RoleEnum(str, Enum):
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
 
+
+class PettyCashStatus(str, Enum):
+    draft = "Draft"
+    submitted = "Submitted"
+    approved = "Approved"
+    rejected = "Rejected"
+    paid = "Paid"
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -1367,3 +1375,93 @@ class CustomerPurchaseOrderItem(db.Model):
 
     purchase_order = db.relationship("CustomerPurchaseOrder", back_populates="items")
     item = db.relationship("MaterialItem")
+
+
+class PettyCashWeeklyClaim(db.Model):
+    __tablename__ = "petty_cash_weekly_claims"
+
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    employee_name = db.Column(db.String(255), nullable=False)
+    company_id = db.Column(db.String(64), index=True)
+    sheet_no = db.Column(db.String(64), nullable=False, unique=True)
+    week_start_date = db.Column(db.Date, nullable=False, index=True)
+    week_end_date = db.Column(db.Date, nullable=False)
+    vehicle_no = db.Column(db.String(100))
+    area_visited = db.Column(db.Text)
+    status = db.Column(
+        db.Enum(PettyCashStatus, name="pettycashstatus"),
+        nullable=False,
+        default=PettyCashStatus.draft,
+    )
+    total_expenses = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    employee = db.relationship("User", foreign_keys=[employee_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    lines = db.relationship(
+        "PettyCashWeeklyLine",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+        order_by="PettyCashWeeklyLine.line_order",
+    )
+
+    def recalculate_totals(self) -> None:
+        total = Decimal("0")
+        for line in self.lines:
+            line_total = line.row_total or Decimal("0")
+            if not isinstance(line_total, Decimal):
+                try:
+                    line_total = Decimal(str(line_total))
+                except Exception:
+                    line_total = Decimal("0")
+            total += line_total
+        self.total_expenses = total
+
+
+class PettyCashWeeklyLine(db.Model):
+    __tablename__ = "petty_cash_weekly_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    claim_id = db.Column(
+        db.Integer,
+        db.ForeignKey("petty_cash_weekly_claims.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    line_order = db.Column(db.Integer, nullable=False, index=True)
+    expense_type = db.Column(db.String(255))
+    mon_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    tue_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    wed_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    thu_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    fri_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    sat_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    sun_amount = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+    row_total = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal("0.00"))
+
+    claim = db.relationship("PettyCashWeeklyClaim", back_populates="lines")
+
+    def recalculate_total(self) -> None:
+        amounts = [
+            self.mon_amount,
+            self.tue_amount,
+            self.wed_amount,
+            self.thu_amount,
+            self.fri_amount,
+            self.sat_amount,
+            self.sun_amount,
+        ]
+        total = Decimal("0")
+        for amount in amounts:
+            value = amount or Decimal("0")
+            if not isinstance(value, Decimal):
+                try:
+                    value = Decimal(str(value))
+                except Exception:
+                    value = Decimal("0")
+            total += value
+        self.row_total = total

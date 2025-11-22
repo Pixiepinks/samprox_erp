@@ -56,12 +56,49 @@ def _decimal_or_zero(value: object) -> Decimal:
         raise PettyCashError("Amounts must be numeric.") from exc
 
 
+def _extract_user_id(identity: object) -> int | None:
+    """Try to resolve a user id from flexible JWT identity formats."""
+
+    if isinstance(identity, dict):
+        # Tokens may store the user id directly on the identity payload, inside a
+        # "sub" mapping (either as an object or a scalar), or with alternate keys
+        # such as "user_id". Handle all those shapes defensively so UI calls do
+        # not fail silently.
+        for key in ("id", "user_id"):
+            if identity.get(key) is not None:
+                try:
+                    return int(identity.get(key))
+                except (TypeError, ValueError):
+                    return None
+        sub_identity = identity.get("sub")
+        if isinstance(sub_identity, dict):
+            for key in ("id", "user_id"):
+                nested_value = sub_identity.get(key)
+                if nested_value is not None:
+                    try:
+                        return int(nested_value)
+                    except (TypeError, ValueError):
+                        return None
+        elif sub_identity is not None:
+            try:
+                return int(sub_identity)
+            except (TypeError, ValueError):
+                return None
+    else:
+        try:
+            return int(identity)
+        except (TypeError, ValueError):
+            return None
+
+    return None
+
+
 def _current_user() -> User | None:
     identity = get_jwt_identity()
-    try:
-        user_id = int(identity)
-    except (TypeError, ValueError):
+    user_id = _extract_user_id(identity)
+    if user_id is None:
         return None
+
     return User.query.get(user_id)
 
 
@@ -107,10 +144,11 @@ def _serialize_claim(claim: PettyCashWeeklyClaim) -> dict[str, object]:
 def _require_claim_owner(claim: PettyCashWeeklyClaim, current_user: User | None) -> None:
     if current_user is None:
         raise PettyCashError("Not authenticated", 401)
-    if claim.created_by_id != current_user.id and current_user.role not in {
-        RoleEnum.admin,
-        RoleEnum.finance_manager,
-    }:
+    if (
+        claim.created_by_id != current_user.id
+        and claim.employee_id != current_user.id
+        and current_user.role not in {RoleEnum.admin, RoleEnum.finance_manager}
+    ):
         raise PettyCashError("You are not allowed to modify this claim", 403)
 
 

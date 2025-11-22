@@ -141,13 +141,23 @@ def _serialize_claim(claim: PettyCashWeeklyClaim) -> dict[str, object]:
     }
 
 
+def _has_full_petty_cash_access(user: User | None) -> bool:
+    return user is not None and user.role in {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
+        RoleEnum.outside_manager,
+    }
+
+
 def _require_claim_owner(claim: PettyCashWeeklyClaim, current_user: User | None) -> None:
     if current_user is None:
         raise PettyCashError("Not authenticated", 401)
     if (
         claim.created_by_id != current_user.id
         and claim.employee_id != current_user.id
-        and current_user.role not in {RoleEnum.admin, RoleEnum.finance_manager}
+        and not _has_full_petty_cash_access(current_user)
     ):
         raise PettyCashError("You are not allowed to modify this claim", 403)
 
@@ -196,7 +206,9 @@ def _resequence_lines(claim: PettyCashWeeklyClaim) -> None:
         line.line_order = index
 
 
-def _claim_is_locked(claim: PettyCashWeeklyClaim) -> bool:
+def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:
+    if _has_full_petty_cash_access(user):
+        return False
     return claim.status in {PettyCashStatus.approved, PettyCashStatus.paid}
 
 
@@ -301,7 +313,7 @@ def update_claim(claim_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -377,7 +389,7 @@ def add_line(claim_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     next_order = (max([line.line_order for line in claim.lines]) if claim.lines else 0) + 1
@@ -413,7 +425,7 @@ def update_line(claim_id: int, line_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -444,7 +456,7 @@ def delete_line(claim_id: int, line_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     db.session.delete(line)

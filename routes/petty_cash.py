@@ -58,10 +58,24 @@ def _decimal_or_zero(value: object) -> Decimal:
 
 def _current_user() -> User | None:
     identity = get_jwt_identity()
+
+    # JWT identities can be stored either as a plain user id or as a mapping
+    # containing the id. Support both formats so the petty cash UI works even
+    # when the token structure changes.
+    candidate_id = None
+    if isinstance(identity, dict):
+        for key in ("id", "user_id"):
+            if identity.get(key) is not None:
+                candidate_id = identity.get(key)
+                break
+    else:
+        candidate_id = identity
+
     try:
-        user_id = int(identity)
+        user_id = int(candidate_id)
     except (TypeError, ValueError):
         return None
+
     return User.query.get(user_id)
 
 

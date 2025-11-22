@@ -44,7 +44,15 @@ def upgrade():
         sa.Column("area_visited", sa.Text(), nullable=True),
         sa.Column(
             "status",
-            petty_cash_status,
+            sa.Enum(
+                "Draft",
+                "Submitted",
+                "Approved",
+                "Rejected",
+                "Paid",
+                name=STATUS_ENUM_NAME,
+                create_type=False,
+            ),
             nullable=False,
             server_default="Draft",
         ),

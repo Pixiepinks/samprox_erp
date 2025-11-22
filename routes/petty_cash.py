@@ -56,12 +56,49 @@ def _decimal_or_zero(value: object) -> Decimal:
         raise PettyCashError("Amounts must be numeric.") from exc
 
 
+def _extract_user_id(identity: object) -> int | None:
+    """Try to resolve a user id from flexible JWT identity formats."""
+
+    if isinstance(identity, dict):
+        # Tokens may store the user id directly on the identity payload, inside a
+        # "sub" mapping (either as an object or a scalar), or with alternate keys
+        # such as "user_id". Handle all those shapes defensively so UI calls do
+        # not fail silently.
+        for key in ("id", "user_id"):
+            if identity.get(key) is not None:
+                try:
+                    return int(identity.get(key))
+                except (TypeError, ValueError):
+                    return None
+        sub_identity = identity.get("sub")
+        if isinstance(sub_identity, dict):
+            for key in ("id", "user_id"):
+                nested_value = sub_identity.get(key)
+                if nested_value is not None:
+                    try:
+                        return int(nested_value)
+                    except (TypeError, ValueError):
+                        return None
+        elif sub_identity is not None:
+            try:
+                return int(sub_identity)
+            except (TypeError, ValueError):
+                return None
+    else:
+        try:
+            return int(identity)
+        except (TypeError, ValueError):
+            return None
+
+    return None
+
+
 def _current_user() -> User | None:
     identity = get_jwt_identity()
-    try:
-        user_id = int(identity)
-    except (TypeError, ValueError):
+    user_id = _extract_user_id(identity)
+    if user_id is None:
         return None
+
     return User.query.get(user_id)
 
 
@@ -104,13 +141,24 @@ def _serialize_claim(claim: PettyCashWeeklyClaim) -> dict[str, object]:
     }
 
 
+def _has_full_petty_cash_access(user: User | None) -> bool:
+    return user is not None and user.role in {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
+        RoleEnum.outside_manager,
+    }
+
+
 def _require_claim_owner(claim: PettyCashWeeklyClaim, current_user: User | None) -> None:
     if current_user is None:
         raise PettyCashError("Not authenticated", 401)
-    if claim.created_by_id != current_user.id and current_user.role not in {
-        RoleEnum.admin,
-        RoleEnum.finance_manager,
-    }:
+    if (
+        claim.created_by_id != current_user.id
+        and claim.employee_id != current_user.id
+        and not _has_full_petty_cash_access(current_user)
+    ):
         raise PettyCashError("You are not allowed to modify this claim", 403)
 
 
@@ -158,7 +206,9 @@ def _resequence_lines(claim: PettyCashWeeklyClaim) -> None:
         line.line_order = index
 
 
-def _claim_is_locked(claim: PettyCashWeeklyClaim) -> bool:
+def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:
+    if _has_full_petty_cash_access(user):
+        return False
     return claim.status in {PettyCashStatus.approved, PettyCashStatus.paid}
 
 
@@ -263,7 +313,7 @@ def update_claim(claim_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -339,7 +389,7 @@ def add_line(claim_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     next_order = (max([line.line_order for line in claim.lines]) if claim.lines else 0) + 1
@@ -375,7 +425,7 @@ def update_line(claim_id: int, line_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
@@ -406,7 +456,7 @@ def delete_line(claim_id: int, line_id: int):
     except PettyCashError as exc:
         return jsonify({"msg": exc.message}), exc.status_code
 
-    if _claim_is_locked(claim):
+    if _claim_is_locked(claim, user):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     db.session.delete(line)

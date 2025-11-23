@@ -306,6 +306,14 @@
                 ...options,
                 headers: { ...authHeaders(), ...(options.headers || {}) },
             });
+
+            if (response.status === 401) {
+                localStorage.removeItem("samprox_token");
+                localStorage.removeItem("samprox_user");
+                window.location.replace("/");
+                return { ok: false, data: {} };
+            }
+
             let data;
             try {
                 data = await response.json();

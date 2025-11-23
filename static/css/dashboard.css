@@ -1094,6 +1094,13 @@ body {
     overflow-y: auto;
 }
 
+.table-container--scrollable .team-table thead th {
+    position: sticky;
+    top: 0;
+    background-color: #e2e8f0;
+    z-index: 1;
+}
+
 .team-table {
     width: 100%;
     border-collapse: collapse;

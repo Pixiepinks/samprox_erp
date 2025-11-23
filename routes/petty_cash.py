@@ -270,7 +270,10 @@ def init_claim():
         sheet_no=sheet_no,
         week_start_date=week_start,
         week_end_date=week_end,
-        status=PettyCashStatus.draft,
+        # Store the actual enum value (e.g. "Draft") so it matches the
+        # PostgreSQL enum definition, avoiding lowercase values like "draft"
+        # that the database rejects.
+        status=PettyCashStatus.draft.value,
         created_by_id=current.id,
     )
     db.session.add(claim)

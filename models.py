@@ -59,6 +59,47 @@ class PettyCashStatus(str, Enum):
     rejected = "Rejected"
     paid = "Paid"
 
+
+class Company(db.Model):
+    __tablename__ = "companies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), nullable=False, unique=True)
+    name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self) -> str:  # pragma: no cover - representation helper
+        return f"<Company {self.key}>"
+
+
+def generate_financial_year_months(fin_year: int) -> list[dict[str, int | str]]:
+    """
+    Build the ordered months for a financial year (April–March).
+
+    ``fin_year`` represents the starting calendar year (e.g. 2025 for
+    April 2025–March 2026).
+    """
+
+    months: list[dict[str, int | str]] = []
+    for m in range(4, 13):
+        months.append(
+            {
+                "year": fin_year,
+                "month": m,
+                "label": date(fin_year, m, 1).strftime("%b %Y"),
+            }
+        )
+    for m in range(1, 4):
+        next_year = fin_year + 1
+        months.append(
+            {
+                "year": next_year,
+                "month": m,
+                "label": date(next_year, m, 1).strftime("%b %Y"),
+            }
+        )
+    return months
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -1469,3 +1510,46 @@ class PettyCashWeeklyLine(db.Model):
                     value = Decimal("0")
             total += value
         self.row_total = total
+
+
+class FinancialStatementLine(db.Model):
+    __tablename__ = "financial_statement_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    statement_type = db.Column(db.String(50), nullable=False)
+    line_key = db.Column(db.String(100), nullable=False)
+    label = db.Column(db.String(255), nullable=False)
+    display_order = db.Column(db.Integer, nullable=False, default=0)
+    level = db.Column(db.Integer, nullable=False, default=0)
+    is_section = db.Column(db.Boolean, nullable=False, default=False)
+    is_subtotal = db.Column(db.Boolean, nullable=False, default=False)
+    is_calculated = db.Column(db.Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("statement_type", "line_key", name="uq_statement_line_key"),
+    )
+
+
+class FinancialStatementValue(db.Model):
+    __tablename__ = "financial_statement_values"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    statement_type = db.Column(db.String(50), nullable=False)
+    line_key = db.Column(db.String(100), nullable=False)
+    amount = db.Column(db.Numeric(18, 2), nullable=False, default=Decimal("0"))
+
+    company = db.relationship("Company", backref="financial_values")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "company_id",
+            "year",
+            "month",
+            "statement_type",
+            "line_key",
+            name="uq_financial_statement_value",
+        ),
+    )

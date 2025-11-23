@@ -1,5 +1,19 @@
-from flask import Blueprint, abort, current_app, redirect, render_template, request, url_for
+import re
+from datetime import date
+from decimal import Decimal
+
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
+from sqlalchemy import func, tuple_
 
 from material import (
     MaterialValidationError,
@@ -9,7 +23,15 @@ from material import (
 from company_profiles import resolve_company_profile, select_company_key
 from schemas import MaterialItemSchema, MRNSchema
 
-from models import RoleEnum, User
+from extensions import db
+from models import (
+    Company,
+    FinancialStatementLine,
+    FinancialStatementValue,
+    RoleEnum,
+    User,
+    generate_financial_year_months,
+)
 
 bp = Blueprint("ui", __name__)
 
@@ -84,6 +106,102 @@ def _has_rainbows_end_market_access() -> bool:
         return True
 
     return user.email.lower() == "shamal@rainbowsholdings.com"
+
+
+def _current_financial_year(today: date | None = None) -> int:
+    reference = today or date.today()
+    return reference.year if reference.month >= 4 else reference.year - 1
+
+
+def _financial_year_options() -> list[int]:
+    current_fy = _current_financial_year()
+    start_year = 2023
+    end_year = current_fy + 2
+    return list(range(start_year, end_year + 1))
+
+
+def _slugify(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value or "")
+    return cleaned.strip("_").lower()
+
+
+def _load_financials_context(
+    *,
+    company_id: str | int | None = None,
+    statement_type: str = "income",
+    financial_year: int | None = None,
+) -> dict[str, object]:
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    statement = statement_type if statement_type in allowed_statement_types else "income"
+    year = financial_year or _current_financial_year()
+
+    companies = Company.query.order_by(Company.name.asc()).all()
+    selected_company_id: int | None = None
+    is_group = False
+
+    if str(company_id) == "group":
+        is_group = True
+    elif company_id:
+        try:
+            selected_company_id = int(company_id)
+        except (TypeError, ValueError):
+            selected_company_id = None
+    elif companies:
+        selected_company_id = companies[0].id
+
+    months = generate_financial_year_months(year)
+    lines = (
+        FinancialStatementLine.query.filter_by(statement_type=statement)
+        .order_by(FinancialStatementLine.display_order.asc())
+        .all()
+    )
+
+    pairs = [(m["year"], m["month"]) for m in months]
+    values_map: dict[tuple[int, int, str], Decimal] = {}
+
+    if pairs and lines:
+        month_filter = tuple_(FinancialStatementValue.year, FinancialStatementValue.month).in_(pairs)
+
+        if is_group:
+            query = (
+                db.session.query(
+                    FinancialStatementValue.year,
+                    FinancialStatementValue.month,
+                    FinancialStatementValue.line_key,
+                    func.coalesce(func.sum(FinancialStatementValue.amount), 0),
+                )
+                .filter(FinancialStatementValue.statement_type == statement)
+                .filter(month_filter)
+                .group_by(
+                    FinancialStatementValue.year,
+                    FinancialStatementValue.month,
+                    FinancialStatementValue.line_key,
+                )
+            )
+            for year_value, month_value, line_key, amount in query:
+                values_map[(int(year_value), int(month_value), line_key)] = Decimal(amount or 0)
+        elif selected_company_id:
+            records = (
+                FinancialStatementValue.query.filter_by(
+                    company_id=selected_company_id, statement_type=statement
+                )
+                .filter(month_filter)
+                .all()
+            )
+            for record in records:
+                values_map[(record.year, record.month, record.line_key)] = Decimal(record.amount or 0)
+
+    return {
+        "companies": companies,
+        "selected_company_id": selected_company_id,
+        "is_group": is_group,
+        "statement_type": statement,
+        "financial_year": year,
+        "financial_year_options": _financial_year_options(),
+        "financial_months": months,
+        "financial_lines": lines,
+        "financial_values_map": values_map,
+    }
 
 
 @bp.before_request
@@ -277,7 +395,209 @@ def movers_page():
 @bp.get("/money")
 def money_page():
     """Render the financial overview page."""
-    return render_template("money.html")
+    context = _load_financials_context()
+    context.update({"active_tab": "overview"})
+    return render_template("money.html", **context)
+
+
+@bp.get("/money/financials")
+def financials_page():
+    """Render the manual financials capture UI."""
+
+    company_id = request.args.get("company_id")
+    statement_type = request.args.get("statement_type", "income")
+    financial_year = request.args.get("financial_year")
+    try:
+        parsed_year = int(financial_year) if financial_year else None
+    except (TypeError, ValueError):
+        parsed_year = None
+
+    context = _load_financials_context(
+        company_id=company_id, statement_type=statement_type, financial_year=parsed_year
+    )
+    context.update({"active_tab": "financials"})
+    return render_template("money.html", **context)
+
+
+@bp.post("/money/financials/save")
+def save_financials():
+    statement_type = request.form.get("statement_type", "income")
+    financial_year_raw = request.form.get("financial_year")
+    company_id_raw = request.form.get("company_id")
+
+    try:
+        financial_year = int(financial_year_raw) if financial_year_raw else _current_financial_year()
+    except (TypeError, ValueError):
+        financial_year = _current_financial_year()
+
+    if company_id_raw == "group" or not company_id_raw:
+        flash("Select a specific company to save financials.", "error")
+        return redirect(
+            url_for(
+                "ui.financials_page",
+                company_id=company_id_raw,
+                statement_type=statement_type,
+                financial_year=financial_year,
+            )
+        )
+
+    try:
+        company_id = int(company_id_raw)
+    except (TypeError, ValueError):
+        flash("Invalid company selection.", "error")
+        return redirect(
+            url_for(
+                "ui.financials_page",
+                company_id=company_id_raw,
+                statement_type=statement_type,
+                financial_year=financial_year,
+            )
+        )
+
+    company = Company.query.get(company_id)
+    if not company:
+        flash("Selected company was not found.", "error")
+        return redirect(
+            url_for(
+                "ui.financials_page",
+                company_id=company_id_raw,
+                statement_type=statement_type,
+                financial_year=financial_year,
+            )
+        )
+
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    statement = statement_type if statement_type in allowed_statement_types else "income"
+    allowed_pairs = {(m["year"], m["month"]) for m in generate_financial_year_months(financial_year)}
+
+    updates_made = 0
+    for key, raw_value in request.form.items():
+        match = re.match(r"values\[(\d{4})\]\[(\d{1,2})\]\[(.+)\]", key)
+        if not match:
+            continue
+        year, month, line_key = match.groups()
+        try:
+            year_int = int(year)
+            month_int = int(month)
+        except ValueError:
+            continue
+
+        if (year_int, month_int) not in allowed_pairs:
+            continue
+
+        try:
+            amount = Decimal(raw_value or "0")
+        except Exception:
+            amount = Decimal("0")
+
+        existing = FinancialStatementValue.query.filter_by(
+            company_id=company.id,
+            year=year_int,
+            month=month_int,
+            statement_type=statement,
+            line_key=line_key,
+        ).first()
+
+        if existing:
+            if existing.amount != amount:
+                existing.amount = amount
+                updates_made += 1
+        else:
+            db.session.add(
+                FinancialStatementValue(
+                    company_id=company.id,
+                    year=year_int,
+                    month=month_int,
+                    statement_type=statement,
+                    line_key=line_key,
+                    amount=amount,
+                )
+            )
+            updates_made += 1
+
+    if updates_made:
+        db.session.commit()
+        flash("Financial data saved successfully.", "success")
+    else:
+        flash("No changes to save.", "info")
+
+    return redirect(
+        url_for(
+            "ui.financials_page",
+            company_id=company.id,
+            statement_type=statement,
+            financial_year=financial_year,
+        )
+    )
+
+
+@bp.post("/money/financials/new-line")
+def create_financial_line():
+    statement_type = request.form.get("statement_type", "income")
+    label = (request.form.get("label") or "").strip()
+    line_key_input = (request.form.get("line_key") or "").strip()
+    level_raw = request.form.get("level")
+    display_order_raw = request.form.get("display_order")
+    is_section = bool(request.form.get("is_section"))
+    is_subtotal = bool(request.form.get("is_subtotal"))
+
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    if statement_type not in allowed_statement_types:
+        statement_type = "income"
+
+    try:
+        level = int(level_raw) if level_raw is not None else 0
+    except (TypeError, ValueError):
+        level = 0
+
+    existing_max = (
+        db.session.query(func.max(FinancialStatementLine.display_order))
+        .filter(FinancialStatementLine.statement_type == statement_type)
+        .scalar()
+    )
+    default_order = (existing_max or 0) + 10
+
+    try:
+        display_order = int(display_order_raw) if display_order_raw else default_order
+    except (TypeError, ValueError):
+        display_order = default_order
+
+    if not label:
+        flash("Label is required to create a new line.", "error")
+        return redirect(url_for("ui.financials_page", statement_type=statement_type))
+
+    line_key = line_key_input or _slugify(label) or f"line_{display_order}"
+
+    exists = FinancialStatementLine.query.filter_by(
+        statement_type=statement_type, line_key=line_key
+    ).first()
+    if exists:
+        flash("A line with this key already exists for the statement.", "error")
+        return redirect(url_for("ui.financials_page", statement_type=statement_type))
+
+    db.session.add(
+        FinancialStatementLine(
+            statement_type=statement_type,
+            line_key=line_key,
+            label=label,
+            display_order=display_order,
+            level=level,
+            is_section=is_section,
+            is_subtotal=is_subtotal,
+            is_calculated=False,
+        )
+    )
+    db.session.commit()
+    flash("New statement line created.", "success")
+
+    return redirect(
+        url_for(
+            "ui.financials_page",
+            statement_type=statement_type,
+            company_id=request.form.get("company_id"),
+            financial_year=request.form.get("financial_year"),
+        )
+    )
 
 
 @bp.get("/manufacturing")

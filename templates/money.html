@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 </head>
-<body>
+<body data-active-tab="{{ active_tab or 'overview' }}">
     <div class="page">
         <header class="topbar">
             <div class="brand">
@@ -45,16 +45,35 @@
             >Mechanism</a>
         </nav>
         <section class="section">
+            {% set current_tab = active_tab or 'overview' %}
             <div class="tab-switcher" role="tablist" aria-label="Money sections">
-                <button class="tab-switcher__button tab-switcher__button--active" data-tab="overview" role="tab" aria-selected="true">
+                <button
+                    class="tab-switcher__button {% if current_tab == 'overview' %}tab-switcher__button--active{% endif %}"
+                    data-tab="overview"
+                    role="tab"
+                    aria-selected="{{ 'true' if current_tab == 'overview' else 'false' }}"
+                >
                     Overview
                 </button>
-                <button class="tab-switcher__button" data-tab="petty-cash" role="tab" aria-selected="false">
+                <button
+                    class="tab-switcher__button {% if current_tab == 'petty-cash' %}tab-switcher__button--active{% endif %}"
+                    data-tab="petty-cash"
+                    role="tab"
+                    aria-selected="{{ 'true' if current_tab == 'petty-cash' else 'false' }}"
+                >
                     Petty Cash
+                </button>
+                <button
+                    class="tab-switcher__button {% if current_tab == 'financials' %}tab-switcher__button--active{% endif %}"
+                    data-tab="financials"
+                    role="tab"
+                    aria-selected="{{ 'true' if current_tab == 'financials' else 'false' }}"
+                >
+                    Financials
                 </button>
             </div>
 
-            <div class="tab-panel tab-panel--active" id="tab-overview" role="tabpanel" aria-label="Financial overview">
+            <div class="tab-panel {% if current_tab == 'overview' %}tab-panel--active{% endif %}" id="tab-overview" role="tabpanel" aria-label="Financial overview">
                 <header class="section__header">
                     <h1>Financial performance snapshot</h1>
                 </header>
@@ -90,7 +109,7 @@
                 </div>
             </div>
 
-            <div class="tab-panel" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
+            <div class="tab-panel {% if current_tab == 'petty-cash' %}tab-panel--active{% endif %}" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
                 <header class="section__header">
                     <div>
                         <p class="eyebrow">New</p>
@@ -175,6 +194,184 @@
                     <p class="helper-text helper-text--error" id="petty-error" hidden></p>
                 </div>
             </div>
+
+            <div class="tab-panel {% if current_tab == 'financials' %}tab-panel--active{% endif %}" id="tab-financials" role="tabpanel" aria-label="Financial statements capture">
+                <header class="section__header">
+                    <div>
+                        <p class="eyebrow">New</p>
+                        <h1>Financial Statements</h1>
+                        <p class="section__description">
+                            Capture IFRS-format financial statements for each company or view the consolidated group.
+                            Enter monthly amounts for the April–March financial year.
+                        </p>
+                    </div>
+                </header>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="alert-stack">
+                            {% for category, message in messages %}
+                                <div class="alert alert--{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                <form class="financials-filter" method="get" action="{{ url_for('ui.financials_page') }}">
+                    <label class="form-field">
+                        <span>Company</span>
+                        <select name="company_id" id="financial-company">
+                            <option value="group" {% if is_group %}selected{% endif %}>Group (All Companies)</option>
+                            {% for company in companies %}
+                                <option value="{{ company.id }}" {% if not is_group and company.id == selected_company_id %}selected{% endif %}>
+                                    {{ company.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Statement</span>
+                        <select name="statement_type" id="financial-statement">
+                            <option value="income" {% if statement_type == 'income' %}selected{% endif %}>Income Statement</option>
+                            <option value="sofp" {% if statement_type == 'sofp' %}selected{% endif %}>Statement of Financial Position</option>
+                            <option value="cashflow" {% if statement_type == 'cashflow' %}selected{% endif %}>Cash Flow Statement</option>
+                            <option value="equity" {% if statement_type == 'equity' %}selected{% endif %}>Statement of Changes in Equity</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        <span>Financial Year</span>
+                        <select name="financial_year" id="financial-year">
+                            {% for year_option in financial_year_options %}
+                                <option value="{{ year_option }}" {% if financial_year == year_option %}selected{% endif %}>
+                                    {{ year_option }}–{{ year_option + 1 }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <div class="financials-filter__actions">
+                        <button class="button" type="submit">Load</button>
+                    </div>
+                </form>
+
+                {% if financial_lines %}
+                    <form class="financials-card" method="post" action="{{ url_for('ui.save_financials') }}">
+                        <input type="hidden" name="company_id" value="{{ 'group' if is_group else selected_company_id or '' }}" />
+                        <input type="hidden" name="statement_type" value="{{ statement_type }}" />
+                        <input type="hidden" name="financial_year" value="{{ financial_year }}" />
+
+                        <div class="financials-table-wrapper">
+                            <table class="financials-table">
+                                <thead>
+                                    <tr>
+                                        <th class="financials-label-column">Line Item</th>
+                                        {% for month in financial_months %}
+                                            <th class="financials-month-column">{{ month.label }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for line in financial_lines %}
+                                        {% set row_classes = [] %}
+                                        {% if line.is_section %}
+                                            {% set _ = row_classes.append('financials-row--section') %}
+                                        {% endif %}
+                                        {% if line.is_subtotal %}
+                                            {% set _ = row_classes.append('financials-row--subtotal') %}
+                                        {% endif %}
+                                        <tr class="financials-row {{ ' '.join(row_classes) }}">
+                                            <th class="financials-label" style="padding-left: {{ (line.level or 0) * 16 }}px">
+                                                {{ line.label }}
+                                            </th>
+                                            {% for month in financial_months %}
+                                                {% set existing_value = (financial_values_map or {}).get((month.year, month.month, line.line_key)) %}
+                                                {% set display_value = '' if existing_value is none else '%.2f' % existing_value %}
+                                                <td class="financials-cell">
+                                                    {% if line.is_section %}
+                                                        <span class="financials-section-spacer">—</span>
+                                                    {% else %}
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            inputmode="decimal"
+                                                            class="financial-cell"
+                                                            name="values[{{ month.year }}][{{ month.month }}][{{ line.line_key }}]"
+                                                            value="{{ display_value }}"
+                                                            data-year="{{ month.year }}"
+                                                            data-month="{{ month.month }}"
+                                                            data-line-key="{{ line.line_key }}"
+                                                            {% if line.is_calculated %}readonly{% endif %}
+                                                        />
+                                                    {% endif %}
+                                                </td>
+                                            {% endfor %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="financials-actions">
+                            {% if is_group %}
+                                <p class="helper-text">Select a company (not Group) to save edits.</p>
+                            {% endif %}
+                            <button class="button" type="submit" {% if is_group %}disabled{% endif %}>Save</button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="helper-text">No statement lines found. Add a report line to begin capturing data.</p>
+                {% endif %}
+
+                <div class="financials-new-line">
+                    <button class="button button--ghost" type="button" id="financials-new-line-toggle">Create New Report Line</button>
+                    <form class="financials-new-line__form" id="financials-new-line-form" method="post" action="{{ url_for('ui.create_financial_line') }}" hidden>
+                        <input type="hidden" name="company_id" value="{{ 'group' if is_group else selected_company_id or '' }}" />
+                        <input type="hidden" name="financial_year" value="{{ financial_year }}" />
+
+                        <div class="financials-new-line__grid">
+                            <label class="form-field">
+                                <span>Statement</span>
+                                <select name="statement_type" id="new-line-statement">
+                                    <option value="income" {% if statement_type == 'income' %}selected{% endif %}>Income Statement</option>
+                                    <option value="sofp" {% if statement_type == 'sofp' %}selected{% endif %}>Statement of Financial Position</option>
+                                    <option value="cashflow" {% if statement_type == 'cashflow' %}selected{% endif %}>Cash Flow Statement</option>
+                                    <option value="equity" {% if statement_type == 'equity' %}selected{% endif %}>Statement of Changes in Equity</option>
+                                </select>
+                            </label>
+                            <label class="form-field">
+                                <span>Label</span>
+                                <input name="label" id="new-line-label" type="text" placeholder="e.g. Revenue" required />
+                            </label>
+                            <label class="form-field">
+                                <span>Line Key</span>
+                                <input name="line_key" id="new-line-key" type="text" placeholder="e.g. revenue" />
+                            </label>
+                            <label class="form-field">
+                                <span>Level</span>
+                                <input name="level" type="number" min="0" step="1" value="0" />
+                            </label>
+                            <label class="form-field">
+                                <span>Display Order</span>
+                                <input name="display_order" type="number" step="1" min="0" />
+                            </label>
+                            <label class="form-field form-field--checkbox">
+                                <span class="form-field__checkbox">
+                                    <input type="checkbox" name="is_section" />
+                                    <span>Section Header</span>
+                                </span>
+                            </label>
+                            <label class="form-field form-field--checkbox">
+                                <span class="form-field__checkbox">
+                                    <input type="checkbox" name="is_subtotal" />
+                                    <span>Subtotal</span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="financials-new-line__actions">
+                            <button class="button button--secondary" type="submit">Add Line</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </section>
     </div>
     <script>
@@ -238,17 +435,24 @@
 
         const tabButtons = document.querySelectorAll(".tab-switcher__button");
         const tabPanels = document.querySelectorAll(".tab-panel");
+        const initialTab = document.body.dataset.activeTab || "overview";
+
+        function activateTab(target) {
+            tabButtons.forEach((btn) => {
+                const isTarget = btn.dataset.tab === target;
+                btn.classList.toggle("tab-switcher__button--active", isTarget);
+                btn.setAttribute("aria-selected", isTarget);
+            });
+            tabPanels.forEach((panel) => {
+                panel.classList.toggle("tab-panel--active", panel.id === `tab-${target}`);
+            });
+        }
+
+        activateTab(initialTab);
 
         tabButtons.forEach((button) => {
             button.addEventListener("click", () => {
-                const target = button.dataset.tab;
-                tabButtons.forEach((btn) => {
-                    btn.classList.toggle("tab-switcher__button--active", btn.dataset.tab === target);
-                    btn.setAttribute("aria-selected", btn.dataset.tab === target);
-                });
-                tabPanels.forEach((panel) => {
-                    panel.classList.toggle("tab-panel--active", panel.id === `tab-${target}`);
-                });
+                activateTab(button.dataset.tab);
             });
         });
 
@@ -636,6 +840,41 @@
         pettyEls.approve.addEventListener("click", () => updateStatus("Approved"));
         pettyEls.reject.addEventListener("click", () => updateStatus("Rejected"));
         pettyEls.paid.addEventListener("click", () => updateStatus("Paid"));
+
+        const financialsNewLineToggle = document.getElementById("financials-new-line-toggle");
+        const financialsNewLineForm = document.getElementById("financials-new-line-form");
+        const financialsLineLabel = document.getElementById("new-line-label");
+        const financialsLineKey = document.getElementById("new-line-key");
+        let lineKeyTouched = false;
+
+        function slugify(value) {
+            return (value || "")
+                .toString()
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "");
+        }
+
+        if (financialsNewLineToggle && financialsNewLineForm) {
+            financialsNewLineToggle.addEventListener("click", () => {
+                financialsNewLineForm.hidden = !financialsNewLineForm.hidden;
+            });
+        }
+
+        if (financialsLineKey) {
+            financialsLineKey.addEventListener("input", () => {
+                lineKeyTouched = true;
+            });
+        }
+
+        if (financialsLineLabel && financialsLineKey) {
+            financialsLineLabel.addEventListener("input", () => {
+                if (!lineKeyTouched) {
+                    financialsLineKey.value = slugify(financialsLineLabel.value);
+                }
+            });
+        }
 
         function toggleManagerActions() {
             const isManager = managerRoles.includes(user?.role);

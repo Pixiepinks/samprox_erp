@@ -1101,6 +1101,30 @@ body {
     z-index: 1;
 }
 
+.table-container--scrollable .team-table.responsibility-table th:nth-child(1),
+.table-container--scrollable .team-table.responsibility-table td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    background-color: #ffffff;
+    z-index: 2;
+    box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.35);
+}
+
+.table-container--scrollable .team-table.responsibility-table th:nth-child(2),
+.table-container--scrollable .team-table.responsibility-table td:nth-child(2) {
+    position: sticky;
+    left: 8rem;
+    background-color: #ffffff;
+    z-index: 2;
+    box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.35);
+}
+
+.table-container--scrollable .team-table.responsibility-table thead th:nth-child(1),
+.table-container--scrollable .team-table.responsibility-table thead th:nth-child(2) {
+    background-color: #e2e8f0;
+    z-index: 3;
+}
+
 .team-table {
     width: 100%;
     border-collapse: collapse;

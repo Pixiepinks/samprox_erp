@@ -15,11 +15,14 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 from config import Config, current_database_url
 from extensions import db, migrate, jwt, mail
 from models import (
+    Company,
     Customer,
     CustomerCategory,
     CustomerCreditTerm,
     CustomerTransportMode,
     CustomerType,
+    FinancialStatementLine,
+    FinancialStatementValue,
     MaterialItem,
     MachineAsset,
     MachineIdleEvent,

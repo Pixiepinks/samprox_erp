@@ -7,7 +7,7 @@ import uuid
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
-from company_profiles import resolve_company_profile, select_company_key
+from company_profiles import available_company_keys, resolve_company_profile, select_company_key
 from extensions import db
 from models import (
     PettyCashStatus,
@@ -221,11 +221,30 @@ def company_profile():
     return jsonify({"key": profile.get("key"), "name": profile.get("name")})
 
 
+@bp.get("/companies")
+@jwt_required()
+def list_companies():
+    claims = get_jwt() or {}
+    selected = select_company_key(current_app.config, None, claims)
+
+    options = []
+    for key in available_company_keys(current_app.config):
+        profile = resolve_company_profile(current_app.config, key)
+        options.append({"key": profile.get("key"), "name": profile.get("name")})
+
+    if selected and not any(option.get("key") == selected for option in options):
+        profile = resolve_company_profile(current_app.config, selected)
+        options.insert(0, {"key": profile.get("key"), "name": profile.get("name")})
+
+    return jsonify(options)
+
+
 @bp.get("/employees")
 @jwt_required()
 def list_employees():
     claims = get_jwt() or {}
-    company_key = claims.get("company_key")
+    requested_key = request.args.get("company")
+    company_key = select_company_key(current_app.config, requested_key, claims)
     query = User.query.filter_by(active=True)
     if company_key:
         query = query.filter(User.company_key == company_key)
@@ -341,6 +360,11 @@ def update_claim(claim_id: int):
 
     if "area_visited" in payload:
         claim.area_visited = (payload.get("area_visited") or "").strip()
+
+    if "company_id" in payload:
+        claims = get_jwt() or {}
+        company_key = select_company_key(current_app.config, payload.get("company_id"), claims)
+        claim.company_id = company_key
 
     db.session.commit()
     db.session.refresh(claim)

@@ -106,7 +106,7 @@
                     <div class="form-grid">
                         <label class="form-field">
                             <span>Company</span>
-                            <input id="petty-company" type="text" readonly />
+                            <select id="petty-company"></select>
                         </label>
                         <label class="form-field">
                             <span>Employee</span>
@@ -255,7 +255,7 @@
         const pettyState = {
             claim: null,
             employees: [],
-            company: null,
+            companies: [],
         };
 
         let addRowPending = false;
@@ -330,7 +330,27 @@
         function renderHeader() {
             const claim = pettyState.claim;
             if (!claim) return;
-            pettyEls.company.value = (pettyState.company?.name || claim.company?.name || "").trim();
+
+            const selectedCompany = claim.company?.key;
+            pettyEls.company.innerHTML = "";
+            pettyState.companies.forEach((company) => {
+                const option = document.createElement("option");
+                option.value = company.key;
+                option.textContent = company.name;
+                if (company.key === selectedCompany) {
+                    option.selected = true;
+                }
+                pettyEls.company.appendChild(option);
+            });
+
+            if (!pettyEls.company.options.length && claim.company?.name) {
+                const fallback = document.createElement("option");
+                fallback.value = selectedCompany || "";
+                fallback.textContent = claim.company.name;
+                fallback.selected = true;
+                pettyEls.company.appendChild(fallback);
+            }
+
             pettyEls.sheet.value = claim.sheet_no || "";
             pettyEls.weekStart.value = claim.week_start_date;
             pettyEls.weekEnd.value = claim.week_end_date;
@@ -464,28 +484,33 @@
             renderLines();
         }
 
-        async function loadEmployees() {
-            const { ok, data } = await fetchJson("/api/petty-cash/employees");
+        async function loadEmployees(companyKey) {
+            const query = companyKey ? `?company=${encodeURIComponent(companyKey)}` : "";
+            const { ok, data } = await fetchJson(`/api/petty-cash/employees${query}`);
             if (ok && Array.isArray(data)) {
                 pettyState.employees = data;
+                if (pettyState.claim) {
+                    renderHeader();
+                }
             }
         }
 
-        async function loadCompany() {
-            const { ok, data } = await fetchJson("/api/petty-cash/company");
-            if (ok) {
-                pettyState.company = data;
+        async function loadCompanies() {
+            const { ok, data } = await fetchJson("/api/petty-cash/companies");
+            if (ok && Array.isArray(data)) {
+                pettyState.companies = data;
             }
         }
 
         async function initPettyCash() {
-            await Promise.all([loadEmployees(), loadCompany()]);
+            await loadCompanies();
             const { ok, data } = await fetchJson("/api/petty-cash/weekly-claims/init");
             if (!ok || !data.claim) {
                 showError(data.msg || "Unable to load petty cash claim.");
                 return;
             }
             applyClaim(data.claim);
+            await loadEmployees(data.claim.company?.key);
             showError("");
         }
 
@@ -585,6 +610,12 @@
 
         pettyEls.employee.addEventListener("change", (event) => {
             updateHeader({ employee_id: Number(event.target.value) });
+        });
+
+        pettyEls.company.addEventListener("change", (event) => {
+            const companyKey = event.target.value;
+            updateHeader({ company_id: companyKey });
+            loadEmployees(companyKey);
         });
 
         pettyEls.weekStart.addEventListener("change", (event) => {

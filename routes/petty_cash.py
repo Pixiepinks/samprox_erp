@@ -270,10 +270,10 @@ def init_claim():
         sheet_no=sheet_no,
         week_start_date=week_start,
         week_end_date=week_end,
-        # Store the actual enum value (e.g. "Draft") so it matches the
-        # PostgreSQL enum definition, avoiding lowercase values like "draft"
-        # that the database rejects.
-        status=PettyCashStatus.draft.value,
+        # Use the enum member itself so SQLAlchemy writes the canonical title-
+        # case value (e.g. "Draft") expected by the PostgreSQL enum instead of
+        # a lowercase string that would be rejected.
+        status=PettyCashStatus.draft,
         created_by_id=current.id,
     )
     db.session.add(claim)

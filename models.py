@@ -1390,7 +1390,11 @@ class PettyCashWeeklyClaim(db.Model):
     vehicle_no = db.Column(db.String(100))
     area_visited = db.Column(db.Text)
     status = db.Column(
-        db.Enum(PettyCashStatus, name="pettycashstatus"),
+        db.Enum(
+            PettyCashStatus,
+            values_callable=_enum_values,
+            name="pettycashstatus",
+        ),
         nullable=False,
         default=PettyCashStatus.draft,
     )

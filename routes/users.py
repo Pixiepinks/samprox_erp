@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import RoleEnum, User
-from company_profiles import available_company_keys
+from company_profiles import available_company_keys, resolve_company_profile
 
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
@@ -63,6 +63,25 @@ def _serialise_user(user: User) -> Dict[str, Any]:
         "active": bool(user.active),
         "company_key": user.company_key,
     }
+
+
+@bp.get("/companies")
+@jwt_required()
+def list_companies():
+    """Return available companies for assigning users."""
+
+    _, error = _require_admin()
+    if error:
+        return error
+
+    keys = available_company_keys(current_app.config)
+    companies: list[Dict[str, Any]] = []
+
+    for key in keys:
+        profile = resolve_company_profile(current_app.config, key)
+        companies.append({"key": key, "name": profile.get("name") or key})
+
+    return jsonify(companies)
 
 
 @bp.get("")

@@ -355,6 +355,13 @@ class JobSchema(Schema):
     updated_at = fields.DateTime()
     progress_pct = fields.Method("get_progress")
 
+    def get_status_code(self, obj):
+        status = getattr(obj, "status", None)
+        try:
+            return status.value if hasattr(status, "value") else str(status)
+        except Exception:
+            return None
+
     def get_progress(self, obj):
         return obj.progress_pct
 

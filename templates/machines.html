@@ -5424,10 +5424,8 @@
                 if (!canManageProductionJobs) return;
                 hideJobAlerts();
                 clearFieldErrors();
-                if (currentMaintenanceJob) {
-                    showError("This job has already been submitted to Maintenance.");
-                    return;
-                }
+
+                const jobId = jobIdInput?.value?.trim() || currentMaintenanceJob?.id;
 
                 const jobCategory = jobCategorySelect?.value?.trim();
                 let hasValidationError = false;
@@ -5449,7 +5447,7 @@
                     return;
                 }
 
-                if (jobCodeInput && !jobCodeInput.value) {
+                if (!jobId && jobCodeInput && !jobCodeInput.value) {
                     await fetchNextJobCode();
                 }
 
@@ -5469,9 +5467,15 @@
                 };
 
                 submitToMaintenanceButton.disabled = true;
+                const isUpdate = Boolean(jobId);
+                const endpoint = isUpdate
+                    ? `/api/maintenance-jobs/${jobId}`
+                    : "/api/maintenance-jobs";
+                const method = isUpdate ? "PATCH" : "POST";
+
                 try {
-                    const result = await fetchJson("/api/maintenance-jobs", {
-                        method: "POST",
+                    const result = await fetchJson(endpoint, {
+                        method,
                         body: JSON.stringify(payload),
                     });
                     const job = result?.job || result;
@@ -5479,15 +5483,19 @@
                     populateJobForm(job);
                     syncSectionState(job);
                     selectedJobId = job?.id;
-                    const baseSuccessMessage = "Job submitted to Maintenance Manager.";
-                    if (notification && notification.sent === false) {
-                        const detail = notification.message
-                            ? `${notification.message} Please notify them manually.`
-                            : "The email notification could not be sent. Please notify them manually.";
-                        showWarning(creationWarning, `${baseSuccessMessage} ${detail}`);
+                    if (isUpdate) {
+                        showSuccess(creationSuccess, "Maintenance job updated successfully.");
                     } else {
-                        const detail = notification?.message ? ` ${notification.message}` : "";
-                        showSuccess(creationSuccess, `${baseSuccessMessage}${detail}`);
+                        const baseSuccessMessage = "Job submitted to Maintenance Manager.";
+                        if (notification && notification.sent === false) {
+                            const detail = notification.message
+                                ? `${notification.message} Please notify them manually.`
+                                : "The email notification could not be sent. Please notify them manually.";
+                            showWarning(creationWarning, `${baseSuccessMessage} ${detail}`);
+                        } else {
+                            const detail = notification?.message ? ` ${notification.message}` : "";
+                            showSuccess(creationSuccess, `${baseSuccessMessage}${detail}`);
+                        }
                     }
                     try {
                         await refreshJobsSummary({

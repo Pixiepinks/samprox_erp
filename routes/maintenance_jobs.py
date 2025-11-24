@@ -16,7 +16,12 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from maintenance_status import get_status_badge_class, get_status_color, get_status_label
+from maintenance_status import (
+    get_status_badge_class,
+    get_status_code,
+    get_status_color,
+    get_status_label,
+)
 from models import (
     MachineAsset,
     MachinePart,

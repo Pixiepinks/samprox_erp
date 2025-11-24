@@ -961,6 +961,34 @@
             trialState.totals = totals;
         }
 
+        function updateTrialTotalsDisplay() {
+            if (!trialBalanceGrid) return;
+
+            trialState.months.forEach((month) => {
+                const totals = trialState.totals[month.month_index] || { debit: 0, credit: 0 };
+                const debitCell = trialBalanceGrid.querySelector(
+                    `[data-total-month="${month.month_index}"][data-total-field="debit"]`
+                );
+                const creditCell = trialBalanceGrid.querySelector(
+                    `[data-total-month="${month.month_index}"][data-total-field="credit"]`
+                );
+                const differenceCell = trialBalanceGrid.querySelector(
+                    `[data-difference-month="${month.month_index}"]`
+                );
+
+                if (debitCell) debitCell.textContent = trialNumber(totals.debit).toFixed(2);
+                if (creditCell) creditCell.textContent = trialNumber(totals.credit).toFixed(2);
+
+                if (differenceCell) {
+                    const difference = trialNumber(totals.debit) - trialNumber(totals.credit);
+                    const balanced = Math.abs(difference) < 0.005;
+                    differenceCell.textContent = `Diff: ${difference.toFixed(2)}`;
+                    differenceCell.title = balanced ? "" : "Debits and credits do not balance for this month.";
+                    differenceCell.classList.toggle("trial-balance__total--warn", !balanced);
+                }
+            });
+        }
+
         function accountCacheKey(query = "") {
             const companyKey = trialBalanceCard?.dataset.company || "";
             return `${companyKey.toLowerCase()}::${(query || "").toLowerCase()}`;
@@ -1191,8 +1219,12 @@
                 .map((month) => {
                     const t = trialState.totals[month.month_index] || { debit: 0, credit: 0 };
                     return `
-                        <td class="trial-balance__total">${trialNumber(t.debit).toFixed(2)}</td>
-                        <td class="trial-balance__total">${trialNumber(t.credit).toFixed(2)}</td>
+                        <td class="trial-balance__total" data-total-month="${month.month_index}" data-total-field="debit">${trialNumber(
+                            t.debit
+                        ).toFixed(2)}</td>
+                        <td class="trial-balance__total" data-total-month="${month.month_index}" data-total-field="credit">${trialNumber(
+                            t.credit
+                        ).toFixed(2)}</td>
                     `;
                 })
                 .join("");
@@ -1206,7 +1238,7 @@
                         ? "trial-balance__difference"
                         : "trial-balance__difference trial-balance__total--warn";
                     const warning = balanced ? "" : "Debits and credits do not balance for this month.";
-                    return `<td colspan="2" class="${className}" title="${warning}">Diff: ${difference.toFixed(2)}</td>`;
+                    return `<td colspan="2" class="${className}" data-difference-month="${month.month_index}" title="${warning}">Diff: ${difference.toFixed(2)}</td>`;
                 })
                 .join("");
 
@@ -1260,7 +1292,7 @@
                     trialState.lines[idx].months[monthIdx] = trialState.lines[idx].months[monthIdx] || { debit: 0, credit: 0 };
                     trialState.lines[idx].months[monthIdx][field] = value;
                     calculateTrialTotals();
-                    renderTrialBalance();
+                    updateTrialTotalsDisplay();
                 });
             });
 

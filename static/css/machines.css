@@ -1281,6 +1281,7 @@ body {
     padding: 0.85rem 1rem;
     border-bottom: 1px solid rgba(148, 163, 184, 0.2);
     font-size: 0.95rem;
+    white-space: nowrap;
 }
 
 .data-table tbody tr:hover,
@@ -1294,6 +1295,8 @@ body {
     --jobs-table-sticky-first-width: 8rem;
     --jobs-table-sticky-second-width: 14rem;
     --jobs-table-row-height: 3.5rem;
+    width: max-content;
+    min-width: max(100%, 1200px);
 }
 
 .jobs-table tbody tr {

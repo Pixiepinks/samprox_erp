@@ -16,6 +16,7 @@ new_status_length = sa.String(length=50)
 
 def upgrade():
     with op.batch_alter_table("maintenance_job") as batch_op:
+        batch_op.alter_column("status", server_default=None)
         batch_op.alter_column(
             "status",
             existing_type=old_status_type,
@@ -30,6 +31,9 @@ def upgrade():
     )
     op.execute(sa.text("UPDATE maintenance_job SET status = 'SUBMITTED' WHERE status = 'NEW'"))
 
+    with op.batch_alter_table("maintenance_job") as batch_op:
+        batch_op.alter_column("status", server_default="SUBMITTED")
+
 
 def downgrade():
     downgrade_enum = sa.Enum("NEW", "IN_PROGRESS", "COMPLETED", name="maintenancejobstatus")
@@ -37,9 +41,11 @@ def downgrade():
     op.execute(sa.text("UPDATE maintenance_job SET status = 'IN_PROGRESS' WHERE status = 'IN_PROGRESS'"))
     op.execute(sa.text("UPDATE maintenance_job SET status = 'NEW' WHERE status = 'SUBMITTED'"))
     with op.batch_alter_table("maintenance_job") as batch_op:
+        batch_op.alter_column("status", server_default=None)
         batch_op.alter_column(
             "status",
             existing_type=new_status_length,
             type_=downgrade_enum,
             nullable=False,
+            server_default="NEW",
         )

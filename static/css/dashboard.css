@@ -548,7 +548,7 @@ body {
     position: sticky;
     top: 0;
     background: #f8fafc;
-    z-index: 1;
+    z-index: 2;
     text-align: right;
     font-weight: 700;
     color: #0f172a;
@@ -557,12 +557,22 @@ body {
 .financials-label-column {
     text-align: left !important;
     min-width: 240px;
+    position: sticky;
+    left: 0;
+    background: #f8fafc;
+    box-shadow: 4px 0 12px rgba(15, 23, 42, 0.05);
+    z-index: 3;
 }
 
 .financials-label {
     text-align: left;
     font-weight: 600;
     color: #0f172a;
+    position: sticky;
+    left: 0;
+    background: #fff;
+    box-shadow: 4px 0 12px rgba(15, 23, 42, 0.05);
+    z-index: 1;
 }
 
 .financials-month-column {
@@ -571,6 +581,7 @@ body {
 
 .financials-row--section .financials-label {
     font-weight: 700;
+    background: rgba(15, 23, 42, 0.03);
 }
 
 .financials-row--section {
@@ -578,6 +589,10 @@ body {
 }
 
 .financials-row--subtotal {
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.financials-row--subtotal .financials-label {
     background: rgba(59, 130, 246, 0.06);
 }
 

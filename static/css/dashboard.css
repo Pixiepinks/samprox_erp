@@ -2256,6 +2256,26 @@ body.modal-open {
     color: #475569;
 }
 
+.status-blue {
+    background: #e0f2fe;
+    color: #1d4ed8;
+}
+
+.status-amber {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-green {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-red {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 .admin-controls {
     display: inline-flex;
     flex-wrap: wrap;

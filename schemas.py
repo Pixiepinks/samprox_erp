@@ -15,6 +15,7 @@ from models import (
     ResponsibilityPerformanceUnit,
     User,
 )
+from maintenance_status import get_status_code, get_status_color, get_status_label
 from responsibility_performance import (
     calculate_metric,
     format_metric,
@@ -343,6 +344,7 @@ class JobSchema(Schema):
     title = fields.Str()
     description = fields.Str()
     status = fields.Str()
+    status_code = fields.Method("get_status_code")
     priority = fields.Str()
     location = fields.Str()
     expected_completion_date = fields.Date(allow_none=True)
@@ -437,17 +439,16 @@ class MaintenanceJobSchema(Schema):
     internal_staff_costs = fields.Nested(MaintenanceInternalStaffCostSchema, many=True)
 
     status_label = fields.Method("get_status_label")
+    status_color = fields.Method("get_status_color")
+
+    def get_status_code(self, obj):
+        return get_status_code(getattr(obj, "status", None))
 
     def get_status_label(self, obj):
-        status = getattr(obj, "status", None)
-        if isinstance(status, MaintenanceJobStatus):
-            return status.value
-        if isinstance(status, str):
-            try:
-                return MaintenanceJobStatus(status).value
-            except ValueError:
-                return status
-        return status
+        return get_status_label(getattr(obj, "status", None))
+
+    def get_status_color(self, obj):
+        return get_status_color(getattr(obj, "status", None))
 
     def get_part_ids(self, obj):
         try:

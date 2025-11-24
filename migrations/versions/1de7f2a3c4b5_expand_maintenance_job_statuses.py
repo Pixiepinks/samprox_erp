@@ -15,10 +15,6 @@ new_status_length = sa.String(length=50)
 
 
 def upgrade():
-    op.execute(
-        sa.text("UPDATE maintenance_job SET status = 'COMPLETED_VERIFIED' WHERE status = 'COMPLETED'")
-    )
-    op.execute(sa.text("UPDATE maintenance_job SET status = 'SUBMITTED' WHERE status = 'NEW'"))
     with op.batch_alter_table("maintenance_job") as batch_op:
         batch_op.alter_column(
             "status",
@@ -28,6 +24,11 @@ def upgrade():
         )
 
     op.execute(sa.text("DROP TYPE IF EXISTS maintenancejobstatus"))
+
+    op.execute(
+        sa.text("UPDATE maintenance_job SET status = 'COMPLETED_VERIFIED' WHERE status = 'COMPLETED'")
+    )
+    op.execute(sa.text("UPDATE maintenance_job SET status = 'SUBMITTED' WHERE status = 'NEW'"))
 
 
 def downgrade():

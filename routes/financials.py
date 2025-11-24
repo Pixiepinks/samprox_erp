@@ -4,10 +4,12 @@ from typing import Any, Dict
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
+from sqlalchemy import or_
 
 from extensions import db
 from models import (
     Company,
+    ChartOfAccount,
     FinancialTrialBalanceLine,
     IFRS_TRIAL_BALANCE_CATEGORIES,
     generate_financial_year_months,
@@ -55,6 +57,39 @@ def _decimal_from_value(value: Any) -> Decimal:
         return Decimal("0")
 
 
+def _load_account_maps(company_id: int | None) -> tuple[dict[str, ChartOfAccount], dict[str, ChartOfAccount], dict[int, ChartOfAccount]]:
+    query = ChartOfAccount.query.filter(ChartOfAccount.is_active.is_(True))
+    if company_id:
+        query = query.filter(
+            or_(ChartOfAccount.company_id == company_id, ChartOfAccount.company_id.is_(None))
+        )
+    else:
+        query = query.filter(ChartOfAccount.company_id.is_(None))
+
+    accounts = query.all()
+    company_accounts = {acc.account_code: acc for acc in accounts if acc.company_id}
+    global_accounts = {acc.account_code: acc for acc in accounts if not acc.company_id}
+    account_by_id = {acc.id: acc for acc in accounts}
+    return company_accounts, global_accounts, account_by_id
+
+
+def _resolve_account(
+    account_id: int | None,
+    account_code: str,
+    company_accounts: dict[str, ChartOfAccount],
+    global_accounts: dict[str, ChartOfAccount],
+    account_by_id: dict[int, ChartOfAccount],
+) -> ChartOfAccount | None:
+    if account_id and account_id in account_by_id:
+        return account_by_id[account_id]
+
+    code = (account_code or "").strip()
+    if not code:
+        return None
+
+    return company_accounts.get(code) or global_accounts.get(code)
+
+
 @bp.get("/trial-balance")
 @jwt_required()
 def get_trial_balance():  # type: ignore[override]
@@ -81,20 +116,35 @@ def get_trial_balance():  # type: ignore[override]
     if company_filter:
         query = query.filter_by(company_id=company_filter)
 
+    company_accounts, global_accounts, account_by_id = _load_account_maps(company_filter)
+
     lines_map: dict[tuple[str, str, str, str], Dict[str, Any]] = {}
 
     for record in query.all():
         idx = month_lookup.get((record.calendar_year, record.calendar_month))
         if not idx:
             continue
-        key = (record.account_code, record.account_name, record.ifrs_category, record.ifrs_subcategory)
+        account = _resolve_account(
+            None,
+            record.account_code,
+            company_accounts,
+            global_accounts,
+            account_by_id,
+        )
+        account_code = account.account_code if account else record.account_code
+        account_name = account.account_name if account else record.account_name
+        ifrs_category = account.ifrs_category if account else record.ifrs_category
+        ifrs_subcategory = account.ifrs_subcategory if account else record.ifrs_subcategory
+
+        key = (account_code, account_name, ifrs_category, ifrs_subcategory)
         if key not in lines_map:
             lines_map[key] = {
                 "id": record.id,
-                "account_code": record.account_code,
-                "account_name": record.account_name,
-                "ifrs_category": record.ifrs_category,
-                "ifrs_subcategory": record.ifrs_subcategory,
+                "account_id": account.id if account else None,
+                "account_code": account_code,
+                "account_name": account_name,
+                "ifrs_category": ifrs_category,
+                "ifrs_subcategory": ifrs_subcategory,
                 "months": _empty_months(),
             }
         lines_map[key]["months"][idx] = {
@@ -172,19 +222,41 @@ def save_trial_balance():  # type: ignore[override]
         return jsonify({"error": "Lines payload must be a list."}), 400
 
     months = generate_financial_year_months(start_year)
+    company_accounts, global_accounts, account_by_id = _load_account_maps(company.id)
 
-    def _build_rows() -> list[FinancialTrialBalanceLine]:
+    def _has_amounts(months_payload: dict[str, dict[str, Any]]) -> bool:
+        for idx, month in enumerate(months, start=1):
+            month_data = months_payload.get(str(idx), {}) if isinstance(months_payload, dict) else {}
+            debit = _decimal_from_value(month_data.get("debit"))
+            credit = _decimal_from_value(month_data.get("credit"))
+            if debit != Decimal("0") or credit != Decimal("0"):
+                return True
+        return False
+
+    def _build_rows() -> tuple[list[FinancialTrialBalanceLine], list[str]]:
         new_rows: list[FinancialTrialBalanceLine] = []
-        for line in lines:
-            account_code = (line.get("account_code") or "").strip()
-            account_name = (line.get("account_name") or "").strip()
-            ifrs_category = (line.get("ifrs_category") or "").strip()
-            ifrs_subcategory = (line.get("ifrs_subcategory") or "").strip()
+        errors: list[str] = []
 
-            if not account_name:
+        for position, line in enumerate(lines, start=1):
+            account_id = line.get("account_id") if isinstance(line, dict) else None
+            account_code = (line.get("account_code") or "").strip() if isinstance(line, dict) else ""
+            account_name = (line.get("account_name") or "").strip() if isinstance(line, dict) else ""
+            months_payload = line.get("months") or {} if isinstance(line, dict) else {}
+
+            if not account_id and not account_code and not account_name and not _has_amounts(months_payload):
                 continue
 
-            months_payload = line.get("months") or {}
+            account = _resolve_account(
+                account_id,
+                account_code,
+                company_accounts,
+                global_accounts,
+                account_by_id,
+            )
+
+            if not account:
+                errors.append("Row %s: account code not found in chart of accounts." % position)
+                continue
 
             for idx, month in enumerate(months, start=1):
                 month_data = months_payload.get(str(idx), {}) if isinstance(months_payload, dict) else {}
@@ -198,17 +270,19 @@ def save_trial_balance():  # type: ignore[override]
                         month_index=idx,
                         calendar_year=int(month["year"]),
                         calendar_month=int(month["month"]),
-                        account_code=account_code,
-                        account_name=account_name,
-                        ifrs_category=ifrs_category,
-                        ifrs_subcategory=ifrs_subcategory,
+                        account_code=account.account_code,
+                        account_name=account.account_name,
+                        ifrs_category=account.ifrs_category,
+                        ifrs_subcategory=account.ifrs_subcategory,
                         debit_amount=debit,
                         credit_amount=credit,
                     )
                 )
-        return new_rows
+        return new_rows, errors
 
-    new_rows = _build_rows()
+    new_rows, validation_errors = _build_rows()
+    if validation_errors:
+        return jsonify({"error": validation_errors[0]}), 400
 
     try:
         db.session.query(FinancialTrialBalanceLine).filter_by(

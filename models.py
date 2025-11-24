@@ -72,6 +72,24 @@ class Company(db.Model):
         return f"<Company {self.key}>"
 
 
+class ChartOfAccount(db.Model):
+    __tablename__ = "chart_of_accounts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True)
+    account_code = db.Column(db.String(20), nullable=False)
+    account_name = db.Column(db.String(255), nullable=False)
+    ifrs_category = db.Column(db.String(50), nullable=False)
+    ifrs_subcategory = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, server_default="1")
+
+    company = db.relationship("Company", backref="chart_of_accounts")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "account_code", name="uq_chart_account_company_code"),
+    )
+
+
 def generate_financial_year_months(fin_year: int) -> list[dict[str, int | str]]:
     """
     Build the ordered months for a financial year (April–March).

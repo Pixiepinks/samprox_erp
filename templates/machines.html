@@ -3197,7 +3197,14 @@
         }
 
         function syncSectionState(job) {
-            const productionLocked = !canManageProductionJobs || (job && job.prod_submitted_at);
+            const creatorRole = typeof job?.created_by?.role === "string" ? job.created_by.role : "";
+            const normalizedCreatorRole = creatorRole.toLowerCase().replace(/[\s-]+/g, "_");
+            const wasSubmittedByProduction = Boolean(job?.prod_submitted_at);
+            const adminCanEditSubmittedJob =
+                user?.role === "admin" &&
+                (normalizedCreatorRole === "production_manager" || wasSubmittedByProduction);
+            const productionLocked =
+                !canManageProductionJobs || (job && job.prod_submitted_at && !adminCanEditSubmittedJob);
             const maintenanceLocked = !canManageMaintenanceJobs || !job || job.status === "COMPLETED";
 
             setProductionFieldsDisabled(productionLocked);
@@ -4609,7 +4616,9 @@
             const partDisplay = job.part ? job.part.name || job.part.part_number || "—" : "—";
 
             row.innerHTML = `
-                <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">${job.job_code}</td>
+                <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">
+                    <button type="button" class="button button--ghost button--small" data-job-action="edit-job">${job.job_code}</button>
+                </td>
                 <td data-label="Job category" class="jobs-table__sticky-col">${job.job_category || job.title || "—"}</td>
                 <td data-label="Status">${statusText}</td>
                 <td data-label="Priority">${job.priority || "—"}</td>
@@ -4628,6 +4637,26 @@
                 <td data-label="Download"><button type="button" class="button button--ghost button--small" data-job-action="download-pdf">Download PDF</button></td>
                 <td data-label="Update status">${updateStatusCell}</td>
             `;
+
+            const codeButton = row.querySelector('[data-job-action="edit-job"]');
+            if (codeButton) {
+                codeButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    if (user?.role === "admin") {
+                        openModal("maintenance-job-modal");
+                        selectJob(job.id);
+                        const focusTarget =
+                            jobForm?.querySelector(
+                                "input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+                            ) || maintenanceSection?.querySelector(
+                                "input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+                            );
+                        focusTarget?.focus();
+                    } else {
+                        selectJob(job.id);
+                    }
+                });
+            }
 
             const updateButton = row.querySelector('[data-job-action="update-status"]');
             if (updateButton) {

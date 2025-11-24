@@ -20,7 +20,11 @@ from material import (
     get_mrn_detail,
     list_material_items,
 )
-from company_profiles import resolve_company_profile, select_company_key
+from company_profiles import (
+    available_company_keys,
+    resolve_company_profile,
+    select_company_key,
+)
 from schemas import MaterialItemSchema, MRNSchema
 
 from extensions import db
@@ -120,6 +124,34 @@ def _financial_year_options() -> list[int]:
     return list(range(start_year, end_year + 1))
 
 
+def _ensure_company_records() -> None:
+    """Ensure configured company profiles exist as ``Company`` rows.
+
+    The petty cash UI already relies on ``COMPANY_PROFILES``. When teams add new
+    companies via configuration, mirror those entries into the ``companies``
+    table so the financial statements dropdown stays in sync.
+    """
+
+    configured_keys = available_company_keys(current_app.config)
+    if not configured_keys:
+        return
+
+    existing = {company.key: company for company in Company.query.all()}
+    created = False
+
+    for key in configured_keys:
+        if key in existing:
+            continue
+
+        profile = resolve_company_profile(current_app.config, key)
+        company = Company(key=profile.get("key"), name=profile.get("name") or key)
+        db.session.add(company)
+        created = True
+
+    if created:
+        db.session.commit()
+
+
 def _slugify(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9]+", "_", value or "")
     return cleaned.strip("_").lower()
@@ -134,6 +166,8 @@ def _load_financials_context(
     allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
     statement = statement_type if statement_type in allowed_statement_types else "income"
     year = financial_year or _current_financial_year()
+
+    _ensure_company_records()
 
     companies = Company.query.order_by(Company.name.asc()).all()
     selected_company_id: int | None = None

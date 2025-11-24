@@ -142,38 +142,71 @@ def _coerce_optional_int(value, field_label: str) -> Optional[int]:
     return number or None
 
 
-def _resolve_asset_and_part(payload: dict) -> tuple[Optional[int], Optional[int], Optional[MachineAsset], Optional[MachinePart], Optional[str]]:
+def _coerce_part_id_list(value: Optional[object]) -> list[int]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        raw_values = list(value)
+    else:
+        raw_values = [value]
+    part_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_values:
+        try:
+            number = _coerce_optional_int(raw, "part selection")
+        except ValueError:
+            raise
+        if number is None or number in seen:
+            continue
+        seen.add(number)
+        part_ids.append(number)
+    return part_ids
+
+
+def _resolve_asset_and_parts(
+    payload: dict,
+) -> tuple[
+    Optional[int],
+    list[int],
+    Optional[MachineAsset],
+    list[MachinePart],
+    Optional[str],
+]:
     try:
         asset_id = _coerce_optional_int(payload.get("asset_id"), "asset selection")
-        part_id = _coerce_optional_int(payload.get("part_id"), "part selection")
+        part_ids = _coerce_part_id_list(payload.get("part_ids", payload.get("part_id")))
     except ValueError as exc:
-        return None, None, None, None, str(exc)
+        return None, [], None, [], str(exc)
 
-    asset = None
+    asset: Optional[MachineAsset] = None
     if asset_id is not None:
         asset = MachineAsset.query.get(asset_id)
         if not asset:
-            return None, None, None, None, "Selected asset could not be found."
+            return None, [], None, [], "Selected asset could not be found."
 
-    part = None
-    if part_id is not None:
-        part = MachinePart.query.get(part_id)
-        if not part:
-            return None, None, None, None, "Selected part could not be found."
+    parts: list[MachinePart] = []
+    if part_ids:
+        parts = MachinePart.query.filter(MachinePart.id.in_(part_ids)).all()
+        if len(parts) != len(part_ids):
+            return None, [], None, [], "One or more selected parts could not be found."
 
-    if part and asset and part.asset_id != asset.id:
-        return None, None, None, None, "Selected part does not belong to the chosen asset."
+    part_asset_ids = {part.asset_id for part in parts if part.asset_id is not None}
+    if len(part_asset_ids) > 1:
+        return None, [], None, [], "Selected parts must belong to the same asset."
 
-    if asset and part is None:
+    if asset and part_asset_ids and (asset.id not in part_asset_ids):
+        return None, [], None, [], "Selected part does not belong to the chosen asset."
+
+    if parts and asset is None and part_asset_ids:
+        asset_id = parts[0].asset_id
+        asset = parts[0].asset or MachineAsset.query.get(asset_id)
+
+    if asset and not parts:
         parts_count = MachinePart.query.filter_by(asset_id=asset.id).count()
         if parts_count > 0:
-            return None, None, None, None, "Select a part for the chosen asset."
+            return None, [], None, [], "Select at least one part for the chosen asset."
 
-    if part and asset is None:
-        asset_id = part.asset_id
-        asset = part.asset or MachineAsset.query.get(part.asset_id)
-
-    return asset_id, part_id, asset, part, None
+    return asset_id, part_ids, asset, parts, None
 
 
 def _find_user_by_email(email: Optional[str]) -> Optional[User]:
@@ -361,6 +394,7 @@ def list_jobs():
         .options(joinedload(MaintenanceJob.assigned_to))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
+        .options(joinedload(MaintenanceJob.parts))
         .options(joinedload(MaintenanceJob.materials))
         .options(
             joinedload(MaintenanceJob.outsourced_services).joinedload(
@@ -612,6 +646,7 @@ def get_job(job_id: int):
         .options(joinedload(MaintenanceJob.assigned_to))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
+        .options(joinedload(MaintenanceJob.parts))
         .options(
             joinedload(MaintenanceJob.outsourced_services).joinedload(
                 MaintenanceOutsourcedService.supplier
@@ -639,7 +674,7 @@ def create_job():
     if not job_category:
         return jsonify({"msg": "Job category is required."}), 400
 
-    asset_id, part_id, asset, part, asset_error = _resolve_asset_and_part(payload)
+    asset_id, part_ids, asset, parts, asset_error = _resolve_asset_and_parts(payload)
     if asset_error:
         return jsonify({"msg": asset_error}), 400
 
@@ -690,13 +725,14 @@ def create_job():
         status=MaintenanceJobStatus.IN_PROGRESS,
         prod_submitted_at=datetime.utcnow(),
         asset_id=asset_id,
-        part_id=part_id,
+        part_id=part_ids[0] if part_ids else None,
     )
 
     if asset_id is not None and asset is not None:
         job.asset = asset
-    if part_id is not None and part is not None:
-        job.part = part
+    if parts:
+        job.parts = parts
+        job.part = parts[0]
 
     maint_user = _find_user_by_email(maint_email)
     if maint_user:
@@ -718,10 +754,12 @@ def create_job():
         asset_label_parts = [value for value in [job.asset.code, job.asset.name] if value]
         asset_label = " — ".join(asset_label_parts) if asset_label_parts else "N/A"
         body_lines.append(f"Asset: {asset_label}")
-    if job.part:
-        part_label_parts = [value for value in [job.part.part_number, job.part.name] if value]
-        part_label = " — ".join(part_label_parts) if part_label_parts else "N/A"
-        body_lines.append(f"Part: {part_label}")
+    if job.parts:
+        part_labels = []
+        for part in job.parts:
+            part_label_parts = [value for value in [part.part_number, part.name] if value]
+            part_labels.append(" — ".join(part_label_parts) if part_label_parts else "N/A")
+        body_lines.append(f"Part(s): {', '.join(part_labels)}")
     if job.expected_completion:
         body_lines.append(
             f"Expected completion: {job.expected_completion.strftime('%Y-%m-%d')}"
@@ -754,6 +792,7 @@ def update_job(job_id: int):
         .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
+        .options(joinedload(MaintenanceJob.parts))
         .get_or_404(job_id)
     )
 
@@ -809,14 +848,15 @@ def update_job(job_id: int):
             job.job_category = category_value
             job.title = category_value
 
-        if "asset_id" in payload or "part_id" in payload:
-            asset_id, part_id, asset, part, asset_error = _resolve_asset_and_part(payload)
+        if "asset_id" in payload or "part_id" in payload or "part_ids" in payload:
+            asset_id, part_ids, asset, parts, asset_error = _resolve_asset_and_parts(payload)
             if asset_error:
                 return jsonify({"msg": asset_error}), 400
             job.asset_id = asset_id
-            job.part_id = part_id
+            job.part_id = part_ids[0] if part_ids else None
             job.asset = asset if asset_id is not None else None
-            job.part = part if part_id is not None else None
+            job.parts = parts
+            job.part = parts[0] if parts else None
 
         db.session.commit()
         return jsonify(job_schema.dump(job))
@@ -1057,10 +1097,12 @@ def update_job(job_id: int):
         asset_label_parts = [value for value in [job.asset.code, job.asset.name] if value]
         asset_label = " — ".join(asset_label_parts) if asset_label_parts else "N/A"
         body_lines.append(f"Asset: {asset_label}")
-    if job.part:
-        part_label_parts = [value for value in [job.part.part_number, job.part.name] if value]
-        part_label = " — ".join(part_label_parts) if part_label_parts else "N/A"
-        body_lines.append(f"Part: {part_label}")
+    if job.parts:
+        part_labels = []
+        for part in job.parts:
+            part_label_parts = [value for value in [part.part_number, part.name] if value]
+            part_labels.append(" — ".join(part_label_parts) if part_label_parts else "N/A")
+        body_lines.append(f"Part(s): {', '.join(part_labels)}")
     if duration_text:
         body_lines.append(duration_text)
     if job.maintenance_notes:

@@ -418,6 +418,7 @@ class MaintenanceJobSchema(Schema):
     assigned_to = fields.Nested(UserSchema, allow_none=True)
     asset_id = fields.Int(allow_none=True)
     part_id = fields.Int(allow_none=True)
+    part_ids = fields.Method("get_part_ids")
     asset = fields.Nested(
         "MachineAssetSchema", only=("id", "code", "name"), allow_none=True
     )
@@ -425,6 +426,11 @@ class MaintenanceJobSchema(Schema):
         "MachinePartSchema",
         only=("id", "name", "part_number", "asset_id"),
         allow_none=True,
+    )
+    parts = fields.Nested(
+        "MachinePartSchema",
+        only=("id", "name", "part_number", "asset_id"),
+        many=True,
     )
     materials = fields.Nested(MaintenanceMaterialSchema, many=True)
     outsourced_services = fields.Nested(MaintenanceOutsourcedServiceSchema, many=True)
@@ -442,6 +448,12 @@ class MaintenanceJobSchema(Schema):
             except ValueError:
                 return status
         return status
+
+    def get_part_ids(self, obj):
+        try:
+            return [part.id for part in obj.parts if part and part.id is not None]
+        except AttributeError:
+            return []
 
 
 class MachinePartReplacementSchema(Schema):

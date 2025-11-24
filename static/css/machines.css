@@ -1368,6 +1368,18 @@ body {
     left: var(--jobs-table-sticky-first-width);
 }
 
+.jobs-table__part-name {
+    max-width: 16rem;
+    width: 16rem;
+}
+
+.jobs-table__part-name .jobs-table__truncate {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .jobs-table thead .jobs-table__sticky-col {
     background: rgba(15, 23, 42, 0.04);
     z-index: 7;

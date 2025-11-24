@@ -1433,6 +1433,7 @@
         const canManageParts = canManageAssets || ["maintenance_manager"].includes(user?.role);
         const canManageProductionJobs = ["production_manager", "admin"].includes(user?.role);
         const canManageMaintenanceJobs = ["maintenance_manager", "admin"].includes(user?.role);
+        const canUpdateMaintenanceStatus = canManageProductionJobs && !canManageMaintenanceJobs;
         const canLogIdle = ["production_manager", "maintenance_manager", "admin"].includes(user?.role);
         const canAddSuppliers = ["production_manager", "admin"].includes(user?.role);
 
@@ -2326,9 +2327,16 @@
             }
         }
 
-        function setMaintenanceFieldsDisabled(disabled) {
+        function setMaintenanceFieldsDisabled(disabled, { allowStatus = false } = {}) {
             if (!maintenanceSection) return;
+            const shouldAllowStatusUpdate = allowStatus && canUpdateMaintenanceStatus;
+
             maintenanceSection.querySelectorAll("input, textarea, select").forEach((element) => {
+                if (shouldAllowStatusUpdate && maintenanceStatusSelect && element === maintenanceStatusSelect) {
+                    element.disabled = false;
+                    return;
+                }
+
                 if (element) element.disabled = disabled;
             });
             if (addMaterialRowButton) addMaterialRowButton.disabled = disabled || !canManageMaintenanceJobs;
@@ -2338,7 +2346,8 @@
             if (addInternalStaffRowButton) addInternalStaffRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (removeInternalStaffRowButton) removeInternalStaffRowButton.disabled = disabled || !canManageMaintenanceJobs;
             if (submitToProductionButton) {
-                submitToProductionButton.disabled = disabled || !canManageMaintenanceJobs;
+                const shouldEnableSubmit = shouldAllowStatusUpdate || canManageMaintenanceJobs;
+                submitToProductionButton.disabled = disabled || !shouldEnableSubmit;
             }
         }
 
@@ -3246,9 +3255,11 @@
             const statusCode = job?.status_code || job?.status || "";
             const maintenanceLocked =
                 !canManageMaintenanceJobs || !job || statusCode === "COMPLETED_VERIFIED";
+            const allowProductionStatus =
+                canUpdateMaintenanceStatus && Boolean(job) && statusCode !== "COMPLETED_VERIFIED";
 
             setProductionFieldsDisabled(productionLocked);
-            setMaintenanceFieldsDisabled(maintenanceLocked);
+            setMaintenanceFieldsDisabled(maintenanceLocked, { allowStatus: allowProductionStatus });
 
             if (!job && canManageProductionJobs) {
                 setProductionFieldsDisabled(false);
@@ -5564,7 +5575,7 @@
 
         if (submitToProductionButton) {
             submitToProductionButton.addEventListener("click", async () => {
-                if (!canManageMaintenanceJobs) return;
+                if (!canManageMaintenanceJobs && !canManageProductionJobs) return;
                 hideJobAlerts();
                 const jobId = jobIdInput?.value;
                 if (!jobId) {

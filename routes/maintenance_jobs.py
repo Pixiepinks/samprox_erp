@@ -802,13 +802,14 @@ def update_job(job_id: int):
 
     payload = request.get_json() or {}
 
-    admin_can_edit_production = (
-        role == RoleEnum.admin
-        and getattr(job.created_by, "role", None) == RoleEnum.production_manager
+    admin_can_edit_production = role == RoleEnum.admin
+    production_can_edit = (
+        role == RoleEnum.production_manager
+        and job.status == MaintenanceJobStatus.NEW
     )
 
     if role in {RoleEnum.production_manager, RoleEnum.admin} and (
-        job.status == MaintenanceJobStatus.NEW or admin_can_edit_production
+        admin_can_edit_production or production_can_edit
     ):
         # allow minor updates before submission
         updatable_fields = {"priority", "location", "description", "expected_completion", "maint_email", "job_date"}

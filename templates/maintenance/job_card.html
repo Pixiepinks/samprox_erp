@@ -261,7 +261,12 @@
                 <th>Job Finished</th>
                 <td>{{ format_date(job.job_finished_date) }}</td>
                 <th>Current Status</th>
-                <td>{{ status_label or '—' }}</td>
+                {% set color = status_color or job.status_color %}
+                {% set badge_class = 'status-badge' %}
+                {% if color %}
+                    {% set badge_class = badge_class + ' status-' + color %}
+                {% endif %}
+                <td><span class="{{ badge_class }}">{{ status_label or '—' }}</span></td>
             </tr>
         </tbody>
     </table>

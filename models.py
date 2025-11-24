@@ -193,9 +193,17 @@ class Job(db.Model):
 
 
 class MaintenanceJobStatus(str, Enum):
-    NEW = "NEW"
+    SUBMITTED = "SUBMITTED"
+    FORWARDED_TO_MAINTENANCE = "FORWARDED_TO_MAINTENANCE"
+    RETURNED_TO_PRODUCTION = "RETURNED_TO_PRODUCTION"
+    NOT_YET_STARTED = "NOT_YET_STARTED"
     IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
+    AWAITING_PARTS = "AWAITING_PARTS"
+    ON_HOLD = "ON_HOLD"
+    TESTING = "TESTING"
+    COMPLETED_MAINTENANCE = "COMPLETED_MAINTENANCE"
+    COMPLETED_VERIFIED = "COMPLETED_VERIFIED"
+    REOPENED = "REOPENED"
 
 
 maintenance_job_part = db.Table(
@@ -227,7 +235,7 @@ class MaintenanceJob(db.Model):
     location = db.Column(db.String(120))
     description = db.Column(db.Text)
     expected_completion = db.Column(db.Date)
-    status = db.Column(db.Enum(MaintenanceJobStatus), nullable=False, default=MaintenanceJobStatus.NEW)
+    status = db.Column(db.String(50), nullable=False, default=MaintenanceJobStatus.SUBMITTED.value)
     prod_email = db.Column(db.String(255))
     maint_email = db.Column(db.String(255))
     prod_submitted_at = db.Column(db.DateTime)

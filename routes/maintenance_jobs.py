@@ -16,6 +16,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from extensions import db
+from maintenance_status import get_status_badge_class, get_status_color, get_status_label
 from models import (
     MachineAsset,
     MachinePart,
@@ -41,8 +42,27 @@ RESEND_DEFAULT_SENDER = "Samprox ERP <no-reply@samprox.lk>"
 _CODE_PATTERN = re.compile(r"(\d+)$")
 _ALLOWED_PRIORITIES = {"Normal", "Urgent", "Critical"}
 _COLOMBO_TZ = ZoneInfo("Asia/Colombo")
-_PENDING_STATUS_VALUES = {"NEW", "IN_PROGRESS", "ON_HOLD"}
-_COMPLETED_STATUS_VALUES = {"COMPLETED"}
+_PENDING_STATUS_VALUES = {
+    MaintenanceJobStatus.SUBMITTED.value,
+    MaintenanceJobStatus.FORWARDED_TO_MAINTENANCE.value,
+    MaintenanceJobStatus.NOT_YET_STARTED.value,
+    MaintenanceJobStatus.IN_PROGRESS.value,
+    MaintenanceJobStatus.AWAITING_PARTS.value,
+    MaintenanceJobStatus.ON_HOLD.value,
+    MaintenanceJobStatus.TESTING.value,
+    MaintenanceJobStatus.COMPLETED_MAINTENANCE.value,
+    MaintenanceJobStatus.RETURNED_TO_PRODUCTION.value,
+    MaintenanceJobStatus.REOPENED.value,
+}
+_COMPLETED_STATUS_VALUES = {MaintenanceJobStatus.COMPLETED_VERIFIED.value}
+_MAINTENANCE_EDITABLE_STATUSES = {
+    MaintenanceJobStatus.NOT_YET_STARTED,
+    MaintenanceJobStatus.IN_PROGRESS,
+    MaintenanceJobStatus.AWAITING_PARTS,
+    MaintenanceJobStatus.ON_HOLD,
+    MaintenanceJobStatus.TESTING,
+    MaintenanceJobStatus.COMPLETED_MAINTENANCE,
+}
 
 
 def _current_role() -> Optional[RoleEnum]:
@@ -98,6 +118,13 @@ def _status_value(status) -> str:
     if status is None:
         return ""
     return str(status)
+
+
+def _maybe_forward_to_maintenance(job: MaintenanceJob, *, role: Optional[RoleEnum] = None) -> None:
+    current_status = get_status_code(job.status)
+    if role in {RoleEnum.admin, RoleEnum.maintenance_manager} and current_status == MaintenanceJobStatus.SUBMITTED.value:
+        job.status = MaintenanceJobStatus.FORWARDED_TO_MAINTENANCE.value
+        db.session.commit()
 
 
 def _quantize(value: Decimal, pattern: str) -> Decimal:
@@ -435,6 +462,9 @@ def list_jobs():
         query = query.limit(limit)
 
     jobs = query.all()
+    role = _current_role()
+    for job in jobs:
+        _maybe_forward_to_maintenance(job, role=role)
     return jsonify(jobs_schema.dump(jobs))
 
 
@@ -659,6 +689,7 @@ def get_job(job_id: int):
         )
         .get_or_404(job_id)
     )
+    _maybe_forward_to_maintenance(job, role=_current_role())
     return jsonify(job_schema.dump(job))
 
 
@@ -722,7 +753,7 @@ def create_job():
         maint_email=maint_email,
         prod_email=prod_email,
         created_by_id=user_id,
-        status=MaintenanceJobStatus.IN_PROGRESS,
+        status=MaintenanceJobStatus.SUBMITTED.value,
         prod_submitted_at=datetime.utcnow(),
         asset_id=asset_id,
         part_id=part_ids[0] if part_ids else None,
@@ -802,10 +833,11 @@ def update_job(job_id: int):
 
     payload = request.get_json() or {}
 
+    job_status_code = get_status_code(job.status)
     admin_can_edit_production = role == RoleEnum.admin
     production_can_edit = (
         role == RoleEnum.production_manager
-        and job.status == MaintenanceJobStatus.NEW
+        and job_status_code == MaintenanceJobStatus.SUBMITTED.value
     )
 
     if role in {RoleEnum.production_manager, RoleEnum.admin} and (
@@ -874,6 +906,18 @@ def update_job(job_id: int):
         job.job_finished_date = _parse_date(payload.get("job_finished_date"), "job_finished_date")
     except ValueError as exc:
         return jsonify({"msg": str(exc)}), 400
+
+    requested_status_raw = payload.get("status")
+    requested_status = None
+    if requested_status_raw not in (None, ""):
+        try:
+            requested_status = MaintenanceJobStatus(str(requested_status_raw))
+        except ValueError:
+            return jsonify({"msg": "Invalid maintenance status."}), 400
+        if requested_status not in _MAINTENANCE_EDITABLE_STATUSES:
+            return jsonify({"msg": "Status cannot be set by maintenance."}), 400
+
+    send_to_production = bool(payload.get("send_to_production"))
 
     job.maintenance_notes = (payload.get("maintenance_notes") or None)
 
@@ -1059,8 +1103,11 @@ def update_job(job_id: int):
         total_cost += cost_decimal
 
     job.total_cost = total_cost
-    job.maint_submitted_at = datetime.utcnow()
-    job.status = MaintenanceJobStatus.COMPLETED
+    if requested_status:
+        job.status = requested_status.value
+    if send_to_production:
+        job.status = MaintenanceJobStatus.RETURNED_TO_PRODUCTION.value
+        job.maint_submitted_at = datetime.utcnow()
     if "prod_email" in payload:
         job.prod_email = (payload.get("prod_email") or None)
 
@@ -1073,6 +1120,9 @@ def update_job(job_id: int):
         job.assigned_to_id = actor_id
 
     db.session.commit()
+
+    if not send_to_production:
+        return jsonify(job_schema.dump(job))
 
     duration_text = ""
     if job.job_started_date and job.job_finished_date:
@@ -1087,10 +1137,11 @@ def update_job(job_id: int):
         except Exception:
             total_cost_value = Decimal("0")
 
+    status_label = get_status_label(job.status) or "Maintenance job update"
     body_lines = [
         "Hello,",
         "",
-        f"Maintenance job {job.job_code} has been completed.",
+        f"Maintenance job {job.job_code} status: {status_label}.",
         f"Job category: {job.job_category}",
         f"Total cost: {total_cost_value:.2f}",
     ]
@@ -1133,9 +1184,20 @@ def reopen_job(job_id: int):
         return jsonify({"msg": "Only Production Managers can reopen jobs."}), 403
 
     job = MaintenanceJob.query.get_or_404(job_id)
-    job.status = MaintenanceJobStatus.NEW
-    job.prod_submitted_at = None
-    job.maint_submitted_at = None
-    job.assigned_to_id = None
+    job.status = MaintenanceJobStatus.REOPENED.value
+    job.prod_submitted_at = job.prod_submitted_at or datetime.utcnow()
+    db.session.commit()
+    return jsonify(job_schema.dump(job))
+
+
+@bp.post("/<int:job_id>/verify")
+@jwt_required()
+def verify_job(job_id: int):
+    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+        return jsonify({"msg": "Only Production Managers can confirm completion."}), 403
+
+    job = MaintenanceJob.query.get_or_404(job_id)
+    job.status = MaintenanceJobStatus.COMPLETED_VERIFIED.value
+    job.prod_submitted_at = job.prod_submitted_at or datetime.utcnow()
     db.session.commit()
     return jsonify(job_schema.dump(job))

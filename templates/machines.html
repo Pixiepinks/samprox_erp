@@ -921,6 +921,19 @@
                                                 <textarea id="maintenance-notes" name="maintenance_notes" rows="3"></textarea>
                                             </div>
                                             <div class="input-group">
+                                                <label for="maintenance-status">Maintenance status</label>
+                                                <select id="maintenance-status" name="status">
+                                                    <option value="">Select status</option>
+                                                    <option value="NOT_YET_STARTED">Not Yet Started</option>
+                                                    <option value="IN_PROGRESS">In Progress</option>
+                                                    <option value="AWAITING_PARTS">Awaiting Parts</option>
+                                                    <option value="ON_HOLD">On Hold</option>
+                                                    <option value="TESTING">Testing</option>
+                                                    <option value="COMPLETED_MAINTENANCE">Completed (Maintenance)</option>
+                                                </select>
+                                                <p class="form__hint">Only maintenance managers can change this.</p>
+                                            </div>
+                                            <div class="input-group">
                                                 <label for="production-email">Email of Production Manager</label>
                                                 <input id="production-email" name="prod_email" type="email" placeholder="production@example.com" />
                                             </div>
@@ -1494,6 +1507,7 @@
         const productionEmailInput = document.getElementById("production-email");
         const jobStartInput = document.getElementById("job-start");
         const jobFinishInput = document.getElementById("job-finish");
+        const maintenanceStatusSelect = document.getElementById("maintenance-status");
         const maintenanceNotesInput = document.getElementById("maintenance-notes");
         const submitToMaintenanceButton = document.getElementById("submit-to-maintenance");
         const submitToProductionButton = document.getElementById("submit-to-production");
@@ -3156,6 +3170,7 @@
                 if (productionEmailInput) productionEmailInput.value = user?.email || "";
                 if (jobStartInput) jobStartInput.value = "";
                 if (jobFinishInput) jobFinishInput.value = "";
+                if (maintenanceStatusSelect) maintenanceStatusSelect.value = "";
                 if (maintenanceNotesInput) maintenanceNotesInput.value = "";
                 if (jobAssetSelect) jobAssetSelect.value = "";
                 if (jobAssetSearchInput) jobAssetSearchInput.value = "";
@@ -3191,6 +3206,9 @@
             }
             if (jobStartInput) jobStartInput.value = job.job_started_date || "";
             if (jobFinishInput) jobFinishInput.value = job.job_finished_date || "";
+            if (maintenanceStatusSelect) {
+                maintenanceStatusSelect.value = job.status_code || job.status || "";
+            }
             if (maintenanceNotesInput) maintenanceNotesInput.value = job.maintenance_notes || "";
             const assetIdValue = job.asset_id != null ? String(job.asset_id) : "";
             const assetForSelect = job.asset && job.asset.id != null ? job.asset : assetIdValue ? { id: Number(assetIdValue), code: job.asset?.code, name: job.asset?.name } : null;
@@ -3225,7 +3243,9 @@
                 (normalizedCreatorRole === "production_manager" || wasSubmittedByProduction);
             const productionLocked =
                 !canManageProductionJobs || (job && job.prod_submitted_at && !adminCanEditSubmittedJob);
-            const maintenanceLocked = !canManageMaintenanceJobs || !job || job.status === "COMPLETED";
+            const statusCode = job?.status_code || job?.status || "";
+            const maintenanceLocked =
+                !canManageMaintenanceJobs || !job || statusCode === "COMPLETED_VERIFIED";
 
             setProductionFieldsDisabled(productionLocked);
             setMaintenanceFieldsDisabled(maintenanceLocked);
@@ -4624,10 +4644,20 @@
             }
         }
 
+        function renderStatusBadge(job) {
+            const label = job.status_label || job.status || "—";
+            const color = job.status_color || "";
+            const code = job.status_code || job.status || "";
+            const colorClass = color ? ` status-${color}` : "";
+            const badgeClass = `status-badge${colorClass}`;
+            const safeTitle = code || label;
+            return `<span class="${badgeClass}" title="${safeTitle}">${label}</span>`;
+        }
+
         function createJobRow(job) {
             const row = document.createElement("tr");
             row.dataset.jobId = job.id;
-            const statusText = job.status_label || job.status || "—";
+            const statusBadge = renderStatusBadge(job);
             const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
             const updateStatusCell = canManageMaintenanceJobs
                 ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
@@ -4644,7 +4674,7 @@
                     <button type="button" class="button button--ghost button--small" data-job-action="edit-job">${job.job_code}</button>
                 </td>
                 <td data-label="Job category" class="jobs-table__sticky-col">${job.job_category || job.title || "—"}</td>
-                <td data-label="Status">${statusText}</td>
+                <td data-label="Status">${statusBadge}</td>
                 <td data-label="Priority">${job.priority || "—"}</td>
                 <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
                 <td data-label="Asset name">${assetName}</td>
@@ -5197,7 +5227,7 @@
             if (jobDetailsTotalsCost) jobDetailsTotalsCost.textContent = formatCurrency(combinedTotal);
 
             if (jobDetailsUpdates) {
-                const updates = [];
+            const updates = [];
                 if (job.created_at) {
                     updates.push(["Created", formatDate(job.created_at, true)]);
                 }
@@ -5213,23 +5243,30 @@
                 if (job.updated_at && job.updated_at !== job.created_at) {
                     updates.push(["Last updated", formatDate(job.updated_at, true)]);
                 }
-                updates.push(["Status", statusText]);
+                updates.push({ label: "Status", value: statusText, html: renderStatusBadge(job) });
 
                 if (updates.length === 0) {
                     jobDetailsUpdates.textContent = "No updates recorded for this job yet.";
                 } else {
                     const list = document.createElement("ul");
                     list.className = "job-details__updates-list";
-                    updates.forEach(([label, value]) => {
-                        const item = document.createElement("li");
+                    updates.forEach((update) => {
+                        const label = update?.label || "";
+                        const value = update?.value;
+                        const valueHtml = update?.html;
+                        const listItem = document.createElement("li");
                         const labelSpan = document.createElement("span");
                         labelSpan.className = "job-details__updates-label";
                         labelSpan.textContent = `${label}:`;
                         const valueSpan = document.createElement("span");
                         valueSpan.className = "job-details__updates-value";
-                        valueSpan.textContent = value || "—";
-                        item.append(labelSpan, valueSpan);
-                        list.appendChild(item);
+                        if (valueHtml) {
+                            valueSpan.innerHTML = valueHtml;
+                        } else {
+                            valueSpan.textContent = value || "—";
+                        }
+                        listItem.append(labelSpan, valueSpan);
+                        list.appendChild(listItem);
                     });
                     jobDetailsUpdates.innerHTML = "";
                     jobDetailsUpdates.appendChild(list);
@@ -5562,11 +5599,13 @@
                 const payload = {
                     job_started_date: jobStartInput?.value || null,
                     job_finished_date: jobFinishInput?.value || null,
+                    status: maintenanceStatusSelect?.value || null,
                     maintenance_notes: maintenanceNotesInput?.value?.trim() || null,
                     prod_email: productionEmailInput?.value?.trim() || null,
                     materials,
                     outsourced_services: outsourcedServices,
                     internal_staff_costs: internalStaffCosts,
+                    send_to_production: true,
                 };
 
                 submitToProductionButton.disabled = true;

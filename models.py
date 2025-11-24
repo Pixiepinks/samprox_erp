@@ -198,6 +198,23 @@ class MaintenanceJobStatus(str, Enum):
     COMPLETED = "COMPLETED"
 
 
+maintenance_job_part = db.Table(
+    "maintenance_job_part",
+    db.Column(
+        "job_id",
+        db.Integer,
+        db.ForeignKey("maintenance_job.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    db.Column(
+        "part_id",
+        db.Integer,
+        db.ForeignKey("machine_part.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
+
 class MaintenanceJob(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     job_code = db.Column(db.String(40), unique=True, nullable=False)
@@ -233,6 +250,11 @@ class MaintenanceJob(db.Model):
 
     part_id = db.Column(db.Integer, db.ForeignKey("machine_part.id"))
     part = db.relationship("MachinePart", foreign_keys=[part_id])
+    parts = db.relationship(
+        "MachinePart",
+        secondary=maintenance_job_part,
+        backref="maintenance_jobs",
+    )
 
     materials = db.relationship(
         "MaintenanceMaterial",

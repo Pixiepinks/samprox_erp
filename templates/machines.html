@@ -817,8 +817,8 @@
                                             <div class="input-group" data-field-group="part_id">
                                                 <label for="job-part">Part name (CKD) <span class="required" data-part-required hidden>*</span></label>
                                                 <input id="job-part-search" type="search" placeholder="Search parts" data-select-filter="job-part" aria-describedby="job-part-hint" autocomplete="off" />
-                                                <select id="job-part" name="part_id">
-                                                    <option value="">Select a part</option>
+                                                <select id="job-part" name="part_ids" multiple>
+                                                    <option value="">Select one or more parts</option>
                                                 </select>
                                                 <p class="form__hint" id="job-part-hint">Select an asset to filter parts.</p>
                                                 <p class="form__error" data-field-error="part_id" hidden></p>
@@ -1581,7 +1581,7 @@
                 setFieldError("asset_id", "");
                 if (jobPartSearchInput) jobPartSearchInput.value = "";
                 const assetId = jobAssetSelect.value || null;
-                Promise.resolve(refreshPartOptionsForAsset(assetId, { presetValue: "" })).catch(() => {});
+                Promise.resolve(refreshPartOptionsForAsset(assetId, { presetValues: [] })).catch(() => {});
             });
         }
 
@@ -1697,14 +1697,15 @@
             if (!select) return;
             const normalized = (query || "").toString().toLowerCase().trim();
             Array.from(select.options).forEach((option, index) => {
-                if (index === 0) {
+                if (index === 0 && !select.multiple) {
                     option.hidden = false;
                     return;
                 }
                 const label = (option.dataset.label || option.textContent || "").toLowerCase();
-                option.hidden = Boolean(normalized) && !label.includes(normalized);
+                const shouldHide = Boolean(normalized) && !label.includes(normalized) && !(select.multiple && option.selected);
+                option.hidden = shouldHide;
             });
-            if (!normalized) return;
+            if (!normalized || select.multiple) return;
             const selectedOption = select.selectedOptions[0];
             if (selectedOption && selectedOption.hidden) {
                 select.value = "";
@@ -2077,20 +2078,34 @@
                 jobPartHint.textContent = "No CKD parts are registered for the selected asset.";
                 jobPartHint.hidden = false;
             } else {
-                jobPartHint.textContent = "";
-                jobPartHint.hidden = true;
+                jobPartHint.textContent = "Select one or more parts for the chosen asset.";
+                jobPartHint.hidden = false;
             }
         }
 
-        function fillPartSelect(parts, { selectedValue = "", assetId = null } = {}) {
+        function getSelectedPartIds() {
+            if (!jobPartSelect) return [];
+            return Array.from(jobPartSelect.selectedOptions || [])
+                .map((option) => option.value)
+                .filter((value) => value && value !== "");
+        }
+
+        function fillPartSelect(parts, { selectedValues = [], assetId = null } = {}) {
             if (!jobPartSelect) return;
             const searchQuery = jobPartSearchInput?.value?.trim().toLowerCase() || "";
+            const selectedSet = new Set(
+                Array.isArray(selectedValues)
+                    ? selectedValues.map((value) => String(value)).filter(Boolean)
+                    : [],
+            );
             jobPartSelect.innerHTML = "";
             const placeholder = document.createElement("option");
             placeholder.value = "";
             placeholder.dataset.label = "";
+            placeholder.disabled = true;
+            placeholder.selected = false;
             if (Array.isArray(parts) && parts.length > 0) {
-                placeholder.textContent = "Select a part";
+                placeholder.textContent = "Select one or more parts";
             } else if (assetId) {
                 placeholder.textContent = "No parts available for this asset";
             } else {
@@ -2106,12 +2121,11 @@
                 const partName = part.part_name || part.name || "";
                 option.textContent = partNumber ? `${partNumber} — ${partName}` : partName;
                 option.dataset.label = option.textContent.toLowerCase();
+                option.selected = selectedSet.has(option.value);
                 jobPartSelect.appendChild(option);
             });
 
-            if (selectedValue && jobPartSelect.querySelector(`option[value="${selectedValue}"]`)) {
-                jobPartSelect.value = String(selectedValue);
-            } else {
+            if (!selectedSet.size) {
                 jobPartSelect.value = "";
             }
 
@@ -2120,7 +2134,7 @@
             }
         }
 
-        async function refreshPartOptionsForAsset(assetId, { presetValue = "" } = {}) {
+        async function refreshPartOptionsForAsset(assetId, { presetValues = [] } = {}) {
             if (!jobPartSelect) return;
             const requestId = ++latestPartFilterRequest;
             if (jobPartSearchInput) jobPartSearchInput.disabled = true;
@@ -2140,7 +2154,7 @@
                 const filteredParts = assetId
                     ? parts.filter((part) => String(part.asset_id) === String(assetId))
                     : parts.slice();
-                fillPartSelect(filteredParts, { selectedValue: presetValue, assetId });
+                fillPartSelect(filteredParts, { selectedValues: presetValues, assetId });
                 updatePartRequirement(assetId, filteredParts);
                 updatePartHint(assetId, filteredParts);
                 const disableSelect = assetId ? filteredParts.length === 0 : parts.length === 0;
@@ -3185,10 +3199,16 @@
                 jobAssetSelect.value = assetIdValue;
             }
             if (jobAssetSearchInput) jobAssetSearchInput.value = "";
-            const partIdValue = job.part_id != null ? String(job.part_id) : "";
+            const partIds = Array.isArray(job.part_ids) && job.part_ids.length
+                ? job.part_ids.map((value) => String(value))
+                : Array.isArray(job.parts) && job.parts.length
+                ? job.parts.map((part) => String(part.id))
+                : job.part_id != null
+                ? [String(job.part_id)]
+                : [];
             if (jobPartSearchInput) jobPartSearchInput.value = "";
             Promise.resolve(
-                refreshPartOptionsForAsset(assetIdValue || null, { presetValue: partIdValue })
+                refreshPartOptionsForAsset(assetIdValue || null, { presetValues: partIds })
             ).catch(() => {});
             setMaterials(job.materials || []);
             updateMaterialsTotal();
@@ -4613,7 +4633,11 @@
                 ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
                 : '—';
             const assetName = job.asset?.name || "—";
-            const partDisplay = job.part ? job.part.name || job.part.part_number || "—" : "—";
+            const partDisplay = Array.isArray(job.parts) && job.parts.length
+                ? job.parts.map((part) => formatPartLabel(part) || part.name || part.part_number || "—").join(", ")
+                : job.part
+                ? job.part.name || job.part.part_number || "—"
+                : "—";
 
             row.innerHTML = `
                 <td data-label="Code" class="jobs-table__sticky-col jobs-table__sticky-col--first">
@@ -4985,18 +5009,27 @@
 
             if (jobDetailsPart) {
                 jobDetailsPart.innerHTML = "";
-                const part = job.part;
-                if (part && part.id != null) {
-                    const link = document.createElement("a");
-                    link.href = "#";
-                    link.dataset.jobDetailsLink = "part";
-                    if (part.asset_id != null) {
-                        link.dataset.assetId = String(part.asset_id);
-                    }
-                    link.dataset.partId = String(part.id);
-                    link.dataset.partLabel = part.name || part.part_number || "";
-                    link.textContent = formatPartLabel(part) || part.name || part.part_number || `Part #${part.id}`;
-                    jobDetailsPart.appendChild(link);
+                const parts = Array.isArray(job.parts) && job.parts.length
+                    ? job.parts
+                    : job.part
+                    ? [job.part]
+                    : [];
+                if (parts.length) {
+                    parts.forEach((part, index) => {
+                        if (index > 0) {
+                            jobDetailsPart.appendChild(document.createTextNode(", "));
+                        }
+                        const link = document.createElement("a");
+                        link.href = "#";
+                        link.dataset.jobDetailsLink = "part";
+                        if (part.asset_id != null) {
+                            link.dataset.assetId = String(part.asset_id);
+                        }
+                        link.dataset.partId = String(part.id);
+                        link.dataset.partLabel = part.name || part.part_number || "";
+                        link.textContent = formatPartLabel(part) || part.name || part.part_number || `Part #${part.id}`;
+                        jobDetailsPart.appendChild(link);
+                    });
                 } else {
                     jobDetailsPart.textContent = "—";
                 }
@@ -5404,10 +5437,10 @@
                 }
 
                 const assetIdValue = jobAssetSelect?.value?.trim() || "";
-                const partIdValue = jobPartSelect?.value?.trim() || "";
+                const selectedPartIds = getSelectedPartIds();
 
-                if (isPartSelectionRequired && !partIdValue) {
-                    setFieldError("part_id", "Select a part for the chosen asset.");
+                if (isPartSelectionRequired && selectedPartIds.length === 0) {
+                    setFieldError("part_id", "Select at least one part for the chosen asset.");
                     hasValidationError = true;
                 }
 
@@ -5432,7 +5465,7 @@
                     maint_email: maintenanceEmailInput?.value?.trim() || null,
                     prod_email: productionEmailInput?.value?.trim() || user?.email || null,
                     asset_id: assetIdValue || null,
-                    part_id: partIdValue || null,
+                    part_ids: selectedPartIds,
                 };
 
                 submitToMaintenanceButton.disabled = true;

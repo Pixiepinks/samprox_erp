@@ -236,6 +236,7 @@
                             <option value="sofp" {% if statement_type == 'sofp' %}selected{% endif %}>Statement of Financial Position</option>
                             <option value="cashflow" {% if statement_type == 'cashflow' %}selected{% endif %}>Cash Flow Statement</option>
                             <option value="equity" {% if statement_type == 'equity' %}selected{% endif %}>Statement of Changes in Equity</option>
+                            <option value="trial_balance" {% if statement_type == 'trial_balance' %}selected{% endif %}>Trial Balance</option>
                         </select>
                     </label>
                     <label class="form-field">
@@ -253,7 +254,26 @@
                     </div>
                 </form>
 
-                {% if financial_lines %}
+                {% if is_trial_balance %}
+                    <div
+                        class="trial-balance-card"
+                        id="trial-balance-card"
+                        data-company="{{ 'group' if is_group else selected_company_id or '' }}"
+                        data-year="{{ financial_year }}"
+                        data-group="{{ 'true' if is_group else 'false' }}"
+                    >
+                        <div class="trial-balance__toolbar">
+                            <p class="helper-text">Capture monthly debit/credit balances for the April–March year.</p>
+                            <div class="trial-balance__actions">
+                                <button class="button button--ghost" type="button" id="trial-balance-add-row">+ Add Row</button>
+                                <button class="button" type="button" id="trial-balance-save" {% if is_group %}disabled{% endif %}>Save</button>
+                            </div>
+                        </div>
+                        <div id="trial-balance-grid" class="trial-balance-grid" aria-live="polite"></div>
+                        <div class="helper-text" id="trial-balance-status"></div>
+                    </div>
+                    <div id="trial-balance-categories" data-categories='{{ trial_balance_categories | tojson }}' hidden></div>
+                {% elif financial_lines %}
                     <form class="financials-card" method="post" action="{{ url_for('ui.save_financials') }}">
                         <input type="hidden" name="company_id" value="{{ 'group' if is_group else selected_company_id or '' }}" />
                         <input type="hidden" name="statement_type" value="{{ statement_type }}" />
@@ -312,7 +332,7 @@
 
                         <div class="financials-actions">
                             {% if is_group %}
-                                <p class="helper-text">Select a company (not Group) to save edits.</p>
+                                <p class="helper-text">Select a company (not Group) to save financials.</p>
                             {% endif %}
                             <button class="button" type="submit" {% if is_group %}disabled{% endif %}>Save</button>
                         </div>
@@ -335,6 +355,7 @@
                                     <option value="sofp" {% if statement_type == 'sofp' %}selected{% endif %}>Statement of Financial Position</option>
                                     <option value="cashflow" {% if statement_type == 'cashflow' %}selected{% endif %}>Cash Flow Statement</option>
                                     <option value="equity" {% if statement_type == 'equity' %}selected{% endif %}>Statement of Changes in Equity</option>
+                                    <option value="trial_balance" {% if statement_type == 'trial_balance' %}selected{% endif %}>Trial Balance</option>
                                 </select>
                             </label>
                             <label class="form-field">
@@ -874,6 +895,329 @@
                     financialsLineKey.value = slugify(financialsLineLabel.value);
                 }
             });
+        }
+
+        const trialBalanceCard = document.getElementById("trial-balance-card");
+        const trialBalanceGrid = document.getElementById("trial-balance-grid");
+        const trialBalanceSave = document.getElementById("trial-balance-save");
+        const trialBalanceAddRow = document.getElementById("trial-balance-add-row");
+        const trialBalanceCategoriesEl = document.getElementById("trial-balance-categories");
+        const trialBalanceStatus = document.getElementById("trial-balance-status");
+
+        const trialState = {
+            months: [],
+            lines: [],
+            totals: {},
+            categories: trialBalanceCategoriesEl
+                ? JSON.parse(trialBalanceCategoriesEl.dataset.categories || "{}")
+                : {},
+        };
+
+        function trialBalanceYearLabel() {
+            if (!trialBalanceCard) return "";
+            const startYear = Number(trialBalanceCard.dataset.year || 0);
+            return startYear ? `${startYear}-${startYear + 1}` : "";
+        }
+
+        function resetTrialStatus(message = "") {
+            if (trialBalanceStatus) {
+                trialBalanceStatus.textContent = message;
+            }
+        }
+
+        function trialNumber(value) {
+            const num = Number(value);
+            return Number.isFinite(num) ? num : 0;
+        }
+
+        function trialEmptyMonths() {
+            const months = {};
+            for (let i = 1; i <= 12; i += 1) {
+                months[i] = { debit: 0, credit: 0 };
+            }
+            return months;
+        }
+
+        function calculateTrialTotals() {
+            const totals = {};
+            for (let i = 1; i <= 12; i += 1) {
+                totals[i] = { debit: 0, credit: 0 };
+            }
+            trialState.lines.forEach((line) => {
+                Object.entries(line.months || {}).forEach(([idx, values]) => {
+                    const monthIdx = Number(idx);
+                    const debit = trialNumber(values.debit);
+                    const credit = trialNumber(values.credit);
+                    totals[monthIdx].debit += debit;
+                    totals[monthIdx].credit += credit;
+                });
+            });
+            trialState.totals = totals;
+        }
+
+        function renderTrialBalance() {
+            if (!trialBalanceGrid) return;
+            calculateTrialTotals();
+
+            const monthHeaders = trialState.months
+                .map(
+                    (month) =>
+                        `<th class="trial-balance__month" colspan="2" title="As at ${month.label}">${month.label}</th>`
+                )
+                .join("");
+
+            const monthSubHeaders = trialState.months
+                .map(
+                    () =>
+                        `<th class="trial-balance__subhead trial-balance__subhead--debit">Debit</th><th class="trial-balance__subhead trial-balance__subhead--credit">Credit</th>`
+                )
+                .join("");
+
+            const categoryOptions = Object.keys(trialState.categories || {})
+                .map((cat) => `<option value="${cat}">${cat}</option>`)
+                .join("");
+
+            const bodyRows = trialState.lines
+                .map((line, index) => {
+                    const monthCells = trialState.months
+                        .map((month) => {
+                            const mIdx = month.month_index;
+                            const monthValues = line.months?.[mIdx] || { debit: 0, credit: 0 };
+                            const debitValue = trialNumber(monthValues.debit).toFixed(2);
+                            const creditValue = trialNumber(monthValues.credit).toFixed(2);
+                            return `
+                                <td class="trial-balance__cell">
+                                    <input type="number" class="trial-input trial-input--debit" data-index="${index}" data-month="${mIdx}" data-field="debit" value="${debitValue}" step="0.01" />
+                                </td>
+                                <td class="trial-balance__cell">
+                                    <input type="number" class="trial-input trial-input--credit" data-index="${index}" data-month="${mIdx}" data-field="credit" value="${creditValue}" step="0.01" />
+                                </td>
+                            `;
+                        })
+                        .join("");
+
+                    const subCategories = trialState.categories?.[line.ifrs_category] || [];
+                    const subOptions = subCategories
+                        .map(
+                            (sub) =>
+                                `<option value="${sub}" ${sub === line.ifrs_subcategory ? "selected" : ""}>${sub}</option>`
+                        )
+                        .join("");
+
+                    return `
+                        <tr class="trial-balance__row">
+                            <td class="trial-balance__sticky">${index + 1}</td>
+                            <td class="trial-balance__sticky"><input class="trial-text" data-index="${index}" data-field="account_code" value="${line.account_code || ""}" /></td>
+                            <td class="trial-balance__sticky"><input class="trial-text" data-index="${index}" data-field="account_name" value="${line.account_name || ""}" /></td>
+                            <td class="trial-balance__sticky">
+                                <select class="trial-select" data-index="${index}" data-field="ifrs_category">
+                                    <option value="">Select</option>
+                                    ${categoryOptions.replace(
+                                        `value="${line.ifrs_category}"`,
+                                        `value="${line.ifrs_category}" selected`
+                                    )}
+                                </select>
+                            </td>
+                            <td class="trial-balance__sticky">
+                                <select class="trial-select" data-index="${index}" data-field="ifrs_subcategory">
+                                    <option value="">Select</option>
+                                    ${subOptions}
+                                </select>
+                            </td>
+                            ${monthCells}
+                            <td class="trial-balance__action">
+                                <button class="button button--danger button--small" data-action="delete-row" data-index="${index}">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                })
+                .join("");
+
+            const totalsRow = trialState.months
+                .map((month) => {
+                    const t = trialState.totals[month.month_index] || { debit: 0, credit: 0 };
+                    return `
+                        <td class="trial-balance__total">${trialNumber(t.debit).toFixed(2)}</td>
+                        <td class="trial-balance__total">${trialNumber(t.credit).toFixed(2)}</td>
+                    `;
+                })
+                .join("");
+
+            const diffRow = trialState.months
+                .map((month) => {
+                    const t = trialState.totals[month.month_index] || { debit: 0, credit: 0 };
+                    const difference = trialNumber(t.debit) - trialNumber(t.credit);
+                    const balanced = Math.abs(difference) < 0.005;
+                    const className = balanced
+                        ? "trial-balance__difference"
+                        : "trial-balance__difference trial-balance__total--warn";
+                    const warning = balanced ? "" : "Debits and credits do not balance for this month.";
+                    return `<td colspan="2" class="${className}" title="${warning}">Diff: ${difference.toFixed(2)}</td>`;
+                })
+                .join("");
+
+            trialBalanceGrid.innerHTML = `
+                <div class="trial-balance__scroller">
+                    <table class="trial-balance__table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2" class="trial-balance__sticky">Line</th>
+                                <th rowspan="2" class="trial-balance__sticky">Account Code</th>
+                                <th rowspan="2" class="trial-balance__sticky">Account Name</th>
+                                <th rowspan="2" class="trial-balance__sticky">IFRS Category</th>
+                                <th rowspan="2" class="trial-balance__sticky">IFRS Sub-category</th>
+                                ${monthHeaders}
+                                <th rowspan="2" class="trial-balance__action">Actions</th>
+                            </tr>
+                            <tr>${monthSubHeaders}</tr>
+                        </thead>
+                        <tbody>
+                            ${bodyRows || '<tr><td colspan="40" class="trial-balance__empty">Add a row to begin capturing balances.</td></tr>'}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="5" class="trial-balance__totals-label">Monthly Totals</th>
+                                ${totalsRow}
+                                <th class="trial-balance__action"></th>
+                            </tr>
+                            <tr>
+                                <th colspan="5" class="trial-balance__totals-label">Difference</th>
+                                ${diffRow}
+                                <th class="trial-balance__action"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+
+            trialBalanceGrid.querySelectorAll(".trial-input").forEach((input) => {
+                input.addEventListener("input", (event) => {
+                    const target = event.target;
+                    const idx = Number(target.dataset.index);
+                    const monthIdx = Number(target.dataset.month);
+                    const field = target.dataset.field;
+                    if (!Number.isInteger(idx) || !Number.isInteger(monthIdx)) return;
+                    const value = trialNumber(target.value);
+                    trialState.lines[idx].months[monthIdx] = trialState.lines[idx].months[monthIdx] || { debit: 0, credit: 0 };
+                    trialState.lines[idx].months[monthIdx][field] = value;
+                    calculateTrialTotals();
+                    renderTrialBalance();
+                });
+            });
+
+            trialBalanceGrid.querySelectorAll(".trial-select").forEach((select) => {
+                select.addEventListener("change", (event) => {
+                    const target = event.target;
+                    const idx = Number(target.dataset.index);
+                    const field = target.dataset.field;
+                    if (!Number.isInteger(idx)) return;
+                    trialState.lines[idx][field] = target.value;
+                    if (field === "ifrs_category") {
+                        trialState.lines[idx].ifrs_subcategory = "";
+                    }
+                    renderTrialBalance();
+                });
+            });
+
+            trialBalanceGrid.querySelectorAll(".trial-text").forEach((input) => {
+                input.addEventListener("input", (event) => {
+                    const target = event.target;
+                    const idx = Number(target.dataset.index);
+                    const field = target.dataset.field;
+                    if (!Number.isInteger(idx)) return;
+                    trialState.lines[idx][field] = target.value;
+                });
+            });
+
+            trialBalanceGrid.querySelectorAll("[data-action='delete-row']").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const idx = Number(button.dataset.index);
+                    if (!Number.isInteger(idx)) return;
+                    if (!confirm("Delete this trial balance row?")) return;
+                    trialState.lines.splice(idx, 1);
+                    renderTrialBalance();
+                });
+            });
+        }
+
+        async function loadTrialBalance() {
+            if (!trialBalanceCard) return;
+            resetTrialStatus("Loading trial balance…");
+            const companyId = trialBalanceCard.dataset.company;
+            const yearLabel = trialBalanceYearLabel();
+            const params = new URLSearchParams({ company_id: companyId || "", financial_year: yearLabel });
+            const { ok, data } = await fetchJson(`/api/financial-statements/trial-balance?${params.toString()}`);
+            if (!ok) {
+                resetTrialStatus(data.error || "Unable to load trial balance.");
+                return;
+            }
+            trialState.months = data.months || [];
+            trialState.lines = (data.lines || []).map((line) => ({
+                ...line,
+                months: Object.fromEntries(
+                    Object.entries(line.months || {}).map(([idx, vals]) => [Number(idx), { debit: trialNumber(vals.debit), credit: trialNumber(vals.credit) }])
+                ),
+            }));
+            trialState.categories = data.ifrs_categories || trialState.categories;
+            calculateTrialTotals();
+            renderTrialBalance();
+            resetTrialStatus("");
+        }
+
+        async function saveTrialBalance() {
+            if (!trialBalanceCard || !trialBalanceSave) return;
+            const companyId = trialBalanceCard.dataset.company;
+            const isGroup = trialBalanceCard.dataset.group === "true";
+            if (isGroup) {
+                resetTrialStatus("Select a specific company to save trial balance.");
+                return;
+            }
+
+            const payload = {
+                company_id: companyId,
+                financial_year: trialBalanceYearLabel(),
+                lines: trialState.lines.map((line) => ({
+                    account_code: line.account_code || "",
+                    account_name: line.account_name || "",
+                    ifrs_category: line.ifrs_category || "",
+                    ifrs_subcategory: line.ifrs_subcategory || "",
+                    months: Object.fromEntries(
+                        Object.entries(line.months || {}).map(([idx, vals]) => [idx, { debit: trialNumber(vals.debit), credit: trialNumber(vals.credit) }])
+                    ),
+                })),
+            };
+
+            resetTrialStatus("Saving trial balance…");
+            const { ok, data } = await fetchJson("/api/financial-statements/trial-balance", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            if (!ok) {
+                resetTrialStatus(data.error || "Failed to save trial balance.");
+                return;
+            }
+            resetTrialStatus("Trial balance saved.");
+        }
+
+        function addTrialRow() {
+            trialState.lines.push({
+                account_code: "",
+                account_name: "",
+                ifrs_category: "",
+                ifrs_subcategory: "",
+                months: trialEmptyMonths(),
+            });
+            renderTrialBalance();
+        }
+
+        if (trialBalanceCard) {
+            loadTrialBalance();
+            if (trialBalanceSave) {
+                trialBalanceSave.addEventListener("click", saveTrialBalance);
+            }
+            if (trialBalanceAddRow) {
+                trialBalanceAddRow.addEventListener("click", addTrialRow);
+            }
         }
 
         function toggleManagerActions() {

@@ -762,6 +762,23 @@ body {
     padding: 0.45rem 0.5rem;
 }
 
+.trial-balance__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.trial-text--readonly {
+    background: #f8fafc;
+    color: #475569;
+    cursor: not-allowed;
+}
+
+.trial-balance__error {
+    color: #b91c1c;
+    font-size: 0.85rem;
+}
+
 .trial-input--debit {
     border-color: rgba(37, 99, 235, 0.6);
 }

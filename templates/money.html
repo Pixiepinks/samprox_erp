@@ -897,12 +897,14 @@
             });
         }
 
+
         const trialBalanceCard = document.getElementById("trial-balance-card");
         const trialBalanceGrid = document.getElementById("trial-balance-grid");
         const trialBalanceSave = document.getElementById("trial-balance-save");
         const trialBalanceAddRow = document.getElementById("trial-balance-add-row");
         const trialBalanceCategoriesEl = document.getElementById("trial-balance-categories");
         const trialBalanceStatus = document.getElementById("trial-balance-status");
+        const trialAccountCache = new Map();
 
         const trialState = {
             months: [],
@@ -930,6 +932,10 @@
             return Number.isFinite(num) ? num : 0;
         }
 
+        function escapeHtml(value) {
+            return (value || "").replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char] || char));
+        }
+
         function trialEmptyMonths() {
             const months = {};
             for (let i = 1; i <= 12; i += 1) {
@@ -955,6 +961,148 @@
             trialState.totals = totals;
         }
 
+        function accountCacheKey(query = "") {
+            const companyKey = trialBalanceCard?.dataset.company || "";
+            return `${companyKey.toLowerCase()}::${(query || "").toLowerCase()}`;
+        }
+
+        function cacheAccounts(query, accounts) {
+            trialAccountCache.set(accountCacheKey(query), accounts);
+        }
+
+        function cachedAccounts(query = "") {
+            return trialAccountCache.get(accountCacheKey(query));
+        }
+
+        function findAccountInCache(predicate) {
+            for (const accounts of trialAccountCache.values()) {
+                const match = accounts.find(predicate);
+                if (match) return match;
+            }
+            return null;
+        }
+
+        async function fetchAccounts(query = "") {
+            const cached = cachedAccounts(query);
+            if (cached) return cached;
+
+            const params = new URLSearchParams();
+            if (query) params.set("query", query);
+            const companyParam = trialBalanceCard?.dataset.company;
+            if (companyParam && companyParam !== "group") params.set("company_id", companyParam);
+
+            const { ok, data } = await fetchJson(`/api/chart-of-accounts?${params.toString()}`);
+            if (ok && Array.isArray(data)) {
+                cacheAccounts(query, data);
+                return data;
+            }
+            return [];
+        }
+
+        async function primeAccountCache() {
+            await fetchAccounts("");
+        }
+
+        function accountLabel(account) {
+            return `${account.account_code} – ${account.account_name} (${account.ifrs_category} / ${account.ifrs_subcategory})`;
+        }
+
+        function renderAccountOptions(datalist, accounts, kind) {
+            if (!datalist) return;
+            datalist.innerHTML = accounts
+                .map((account) => {
+                    const value = kind === "name" ? account.account_name : account.account_code;
+                    return `<option value="${escapeHtml(value)}" label="${escapeHtml(accountLabel(account))}"></option>`;
+                })
+                .join("");
+        }
+
+        async function populateAccountOptions(datalist, query, kind) {
+            const accounts = await fetchAccounts(query || "");
+            renderAccountOptions(datalist, accounts, kind);
+        }
+
+        function applyAccountToLine(index, account) {
+            const line = trialState.lines[index];
+            if (!line) return;
+            line.account_id = account.id;
+            line.account_code = account.account_code;
+            line.account_name = account.account_name;
+            line.ifrs_category = account.ifrs_category;
+            line.ifrs_subcategory = account.ifrs_subcategory;
+            line.error = "";
+        }
+
+        function flagInvalidAccount(index, message) {
+            const line = trialState.lines[index];
+            if (!line) return;
+            line.account_id = null;
+            line.ifrs_category = "";
+            line.ifrs_subcategory = "";
+            line.error = message;
+        }
+
+        function reconcileTrialLinesWithAccounts() {
+            trialState.lines.forEach((line, index) => {
+                const account =
+                    (line.account_id && findAccountInCache((acct) => acct.id === line.account_id)) ||
+                    (line.account_code &&
+                        findAccountInCache((acct) => acct.account_code === line.account_code));
+
+                if (account) {
+                    applyAccountToLine(index, account);
+                } else if (line.account_code) {
+                    flagInvalidAccount(index, "Account code not found in Chart of Accounts.");
+                }
+            });
+        }
+
+        function lineHasAmounts(line) {
+            return Object.values(line.months || {}).some(
+                (vals) => trialNumber(vals.debit) !== 0 || trialNumber(vals.credit) !== 0
+            );
+        }
+
+        async function resolveAccountFromInput(value, kind) {
+            const searchValue = (value || "").trim();
+            if (!searchValue) return null;
+            const cached = findAccountInCache((acct) =>
+                (kind === "name" ? acct.account_name : acct.account_code).toLowerCase() === searchValue.toLowerCase()
+            );
+            if (cached) return cached;
+
+            const accounts = await fetchAccounts(searchValue);
+            return (
+                accounts.find(
+                    (acct) =>
+                        (kind === "name" ? acct.account_name : acct.account_code).toLowerCase() ===
+                        searchValue.toLowerCase()
+                ) || null
+            );
+        }
+
+        async function applyAccountFromInput(index, value, kind) {
+            const line = trialState.lines[index];
+            if (!line) return;
+
+            const account = await resolveAccountFromInput(value, kind);
+            if (!account) {
+                if (kind === "code") {
+                    line.account_code = value;
+                    line.account_name = "";
+                } else {
+                    line.account_name = value;
+                    line.account_code = "";
+                }
+                flagInvalidAccount(index, value ? "Account code not found in Chart of Accounts." : "");
+                renderTrialBalance();
+                return;
+            }
+
+            applyAccountToLine(index, account);
+            renderTrialBalance();
+        }
+
         function renderTrialBalance() {
             if (!trialBalanceGrid) return;
             calculateTrialTotals();
@@ -971,10 +1119,6 @@
                     () =>
                         `<th class="trial-balance__subhead trial-balance__subhead--debit">Debit</th><th class="trial-balance__subhead trial-balance__subhead--credit">Credit</th>`
                 )
-                .join("");
-
-            const categoryOptions = Object.keys(trialState.categories || {})
-                .map((cat) => `<option value="${cat}">${cat}</option>`)
                 .join("");
 
             const bodyRows = trialState.lines
@@ -996,37 +1140,47 @@
                         })
                         .join("");
 
-                    const subCategories = trialState.categories?.[line.ifrs_category] || [];
-                    const subOptions = subCategories
-                        .map(
-                            (sub) =>
-                                `<option value="${sub}" ${sub === line.ifrs_subcategory ? "selected" : ""}>${sub}</option>`
-                        )
-                        .join("");
+                    const accountCodeListId = `coa-code-${index}`;
+                    const accountNameListId = `coa-name-${index}`;
+                    const errorMessage = line.error
+                        ? `<div class="trial-balance__error">${escapeHtml(line.error)}</div>`
+                        : "";
 
                     return `
                         <tr class="trial-balance__row">
                             <td class="trial-balance__sticky">${index + 1}</td>
-                            <td class="trial-balance__sticky"><input class="trial-text" data-index="${index}" data-field="account_code" value="${line.account_code || ""}" /></td>
-                            <td class="trial-balance__sticky"><input class="trial-text" data-index="${index}" data-field="account_name" value="${line.account_name || ""}" /></td>
                             <td class="trial-balance__sticky">
-                                <select class="trial-select" data-index="${index}" data-field="ifrs_category">
-                                    <option value="">Select</option>
-                                    ${categoryOptions.replace(
-                                        `value="${line.ifrs_category}"`,
-                                        `value="${line.ifrs_category}" selected`
-                                    )}
-                                </select>
+                                <div class="trial-balance__field">
+                                    <input
+                                        class="trial-text trial-account-code"
+                                        list="${accountCodeListId}"
+                                        data-index="${index}"
+                                        placeholder="Search account code"
+                                        value="${escapeHtml(line.account_code || "")}">
+                                    <datalist id="${accountCodeListId}" class="trial-account-datalist" data-kind="code"></datalist>
+                                    ${errorMessage}
+                                </div>
                             </td>
                             <td class="trial-balance__sticky">
-                                <select class="trial-select" data-index="${index}" data-field="ifrs_subcategory">
-                                    <option value="">Select</option>
-                                    ${subOptions}
-                                </select>
+                                <div class="trial-balance__field">
+                                    <input
+                                        class="trial-text trial-account-name"
+                                        list="${accountNameListId}"
+                                        data-index="${index}"
+                                        placeholder="Search account name"
+                                        value="${escapeHtml(line.account_name || "")}">
+                                    <datalist id="${accountNameListId}" class="trial-account-datalist" data-kind="name"></datalist>
+                                </div>
+                            </td>
+                            <td class="trial-balance__sticky">
+                                <input class="trial-text trial-text--readonly" value="${escapeHtml(line.ifrs_category || "")}" readonly />
+                            </td>
+                            <td class="trial-balance__sticky">
+                                <input class="trial-text trial-text--readonly" value="${escapeHtml(line.ifrs_subcategory || "")}" readonly />
                             </td>
                             ${monthCells}
                             <td class="trial-balance__action">
-                                <button class="button button--danger button--small" data-action="delete-row" data-index="${index}">Delete</button>
+                                <button class="button button--ghost" type="button" data-action="delete-row" data-index="${index}">Delete</button>
                             </td>
                         </tr>
                     `;
@@ -1090,6 +1244,11 @@
                 </div>
             `;
 
+            trialBalanceGrid.querySelectorAll(".trial-account-datalist").forEach((datalist) => {
+                const kind = datalist.dataset.kind || "code";
+                populateAccountOptions(datalist, "", kind);
+            });
+
             trialBalanceGrid.querySelectorAll(".trial-input").forEach((input) => {
                 input.addEventListener("input", (event) => {
                     const target = event.target;
@@ -1105,27 +1264,50 @@
                 });
             });
 
-            trialBalanceGrid.querySelectorAll(".trial-select").forEach((select) => {
-                select.addEventListener("change", (event) => {
-                    const target = event.target;
-                    const idx = Number(target.dataset.index);
-                    const field = target.dataset.field;
-                    if (!Number.isInteger(idx)) return;
-                    trialState.lines[idx][field] = target.value;
-                    if (field === "ifrs_category") {
-                        trialState.lines[idx].ifrs_subcategory = "";
+            trialBalanceGrid.querySelectorAll(".trial-account-code").forEach((input) => {
+                input.addEventListener("input", () => {
+                    const idx = Number(input.dataset.index);
+                    const datalist = input.getAttribute("list") ? document.getElementById(input.getAttribute("list")) : null;
+                    if (datalist) {
+                        populateAccountOptions(datalist, input.value, "code");
                     }
-                    renderTrialBalance();
+                    const line = trialState.lines[idx];
+                    if (!line) return;
+                    line.account_code = input.value;
+                    line.account_id = null;
+                    line.ifrs_category = "";
+                    line.ifrs_subcategory = "";
+                    line.error = "";
+                });
+
+                input.addEventListener("change", () => {
+                    const idx = Number(input.dataset.index);
+                    if (!Number.isInteger(idx)) return;
+                    applyAccountFromInput(idx, input.value, "code");
                 });
             });
 
-            trialBalanceGrid.querySelectorAll(".trial-text").forEach((input) => {
-                input.addEventListener("input", (event) => {
-                    const target = event.target;
-                    const idx = Number(target.dataset.index);
-                    const field = target.dataset.field;
+            trialBalanceGrid.querySelectorAll(".trial-account-name").forEach((input) => {
+                input.addEventListener("input", () => {
+                    const idx = Number(input.dataset.index);
+                    const datalist = input.getAttribute("list") ? document.getElementById(input.getAttribute("list")) : null;
+                    if (datalist) {
+                        populateAccountOptions(datalist, input.value, "name");
+                    }
+                    const line = trialState.lines[idx];
+                    if (!line) return;
+                    line.account_name = input.value;
+                    line.account_id = null;
+                    line.account_code = line.account_code || "";
+                    line.ifrs_category = "";
+                    line.ifrs_subcategory = "";
+                    line.error = "";
+                });
+
+                input.addEventListener("change", () => {
+                    const idx = Number(input.dataset.index);
                     if (!Number.isInteger(idx)) return;
-                    trialState.lines[idx][field] = target.value;
+                    applyAccountFromInput(idx, input.value, "name");
                 });
             });
 
@@ -1151,17 +1333,53 @@
                 resetTrialStatus(data.error || "Unable to load trial balance.");
                 return;
             }
+
+            await primeAccountCache();
+
             trialState.months = data.months || [];
             trialState.lines = (data.lines || []).map((line) => ({
                 ...line,
+                account_id: line.account_id || null,
+                error: "",
                 months: Object.fromEntries(
                     Object.entries(line.months || {}).map(([idx, vals]) => [Number(idx), { debit: trialNumber(vals.debit), credit: trialNumber(vals.credit) }])
                 ),
             }));
             trialState.categories = data.ifrs_categories || trialState.categories;
+            reconcileTrialLinesWithAccounts();
             calculateTrialTotals();
             renderTrialBalance();
             resetTrialStatus("");
+        }
+
+        async function ensureResolvedAccounts() {
+            const invalidLines = [];
+            for (let i = 0; i < trialState.lines.length; i += 1) {
+                const line = trialState.lines[i];
+                if (!line) continue;
+                const hasCode = (line.account_code || "").trim().length > 0;
+                const hasName = (line.account_name || "").trim().length > 0;
+                if (line.account_id || (!hasCode && !hasName && !lineHasAmounts(line))) continue;
+
+                const account = await resolveAccountFromInput(
+                    hasCode ? line.account_code : line.account_name,
+                    hasCode ? "code" : "name"
+                );
+
+                if (account) {
+                    applyAccountToLine(i, account);
+                } else {
+                    flagInvalidAccount(i, "Account code not found in Chart of Accounts.");
+                    invalidLines.push(i);
+                }
+            }
+
+            if (invalidLines.length) {
+                renderTrialBalance();
+                return false;
+            }
+
+            return true;
         }
 
         async function saveTrialBalance() {
@@ -1173,10 +1391,17 @@
                 return;
             }
 
+            const accountsResolved = await ensureResolvedAccounts();
+            if (!accountsResolved) {
+                resetTrialStatus("Account code not found in Chart of Accounts.");
+                return;
+            }
+
             const payload = {
                 company_id: companyId,
                 financial_year: trialBalanceYearLabel(),
                 lines: trialState.lines.map((line) => ({
+                    account_id: line.account_id || null,
                     account_code: line.account_code || "",
                     account_name: line.account_name || "",
                     ifrs_category: line.ifrs_category || "",
@@ -1201,10 +1426,12 @@
 
         function addTrialRow() {
             trialState.lines.push({
+                account_id: null,
                 account_code: "",
                 account_name: "",
                 ifrs_category: "",
                 ifrs_subcategory: "",
+                error: "",
                 months: trialEmptyMonths(),
             });
             renderTrialBalance();
@@ -1219,7 +1446,6 @@
                 trialBalanceAddRow.addEventListener("click", addTrialRow);
             }
         }
-
         function toggleManagerActions() {
             const isManager = managerRoles.includes(user?.role);
             [pettyEls.approve, pettyEls.paid].forEach((btn) => {

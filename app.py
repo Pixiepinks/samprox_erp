@@ -24,6 +24,7 @@ from models import (
     FinancialStatementLine,
     FinancialStatementValue,
     FinancialTrialBalanceLine,
+    ChartOfAccount,
     MaterialItem,
     MachineAsset,
     MachineIdleEvent,
@@ -57,6 +58,7 @@ from routes import (
     production,
     petty_cash,
     responsibilities,
+    chart_of_accounts,
     system,
     reports,
     team,
@@ -200,6 +202,7 @@ def create_app():
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)
     app.register_blueprint(material_api.bp)
+    app.register_blueprint(chart_of_accounts.bp)
     app.register_blueprint(financials.bp)
     app.register_blueprint(machines.bp)
     app.register_blueprint(customer_pos.bp)

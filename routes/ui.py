@@ -32,6 +32,7 @@ from models import (
     Company,
     FinancialStatementLine,
     FinancialStatementValue,
+    IFRS_TRIAL_BALANCE_CATEGORIES,
     RoleEnum,
     User,
     generate_financial_year_months,
@@ -163,7 +164,7 @@ def _load_financials_context(
     statement_type: str = "income",
     financial_year: int | None = None,
 ) -> dict[str, object]:
-    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity", "trial_balance"}
     statement = statement_type if statement_type in allowed_statement_types else "income"
     year = financial_year or _current_financial_year()
 
@@ -235,6 +236,8 @@ def _load_financials_context(
         "financial_months": months,
         "financial_lines": lines,
         "financial_values_map": values_map,
+        "is_trial_balance": statement == "trial_balance",
+        "trial_balance_categories": IFRS_TRIAL_BALANCE_CATEGORIES,
     }
 
 
@@ -500,7 +503,7 @@ def save_financials():
             )
         )
 
-    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity", "trial_balance"}
     statement = statement_type if statement_type in allowed_statement_types else "income"
     allowed_pairs = {(m["year"], m["month"]) for m in generate_financial_year_months(financial_year)}
 
@@ -575,7 +578,7 @@ def create_financial_line():
     is_section = bool(request.form.get("is_section"))
     is_subtotal = bool(request.form.get("is_subtotal"))
 
-    allowed_statement_types = {"income", "sofp", "cashflow", "equity"}
+    allowed_statement_types = {"income", "sofp", "cashflow", "equity", "trial_balance"}
     if statement_type not in allowed_statement_types:
         statement_type = "income"
 

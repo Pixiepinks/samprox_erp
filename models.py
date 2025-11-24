@@ -100,6 +100,25 @@ def generate_financial_year_months(fin_year: int) -> list[dict[str, int | str]]:
         )
     return months
 
+
+IFRS_TRIAL_BALANCE_CATEGORIES: dict[str, list[str]] = {
+    "Asset": ["Current Asset", "Non-current Asset"],
+    "Liability": ["Current Liability", "Non-current Liability"],
+    "Equity": ["Share Capital", "Share Premium", "Retained Earnings", "Other Reserves"],
+    "Income": ["Operating Revenue", "Other Income", "Finance Income"],
+    "Expense": [
+        "Cost of Sales",
+        "Distribution Expense",
+        "Administrative Expense",
+        "Staff Cost",
+        "Depreciation & Amortisation",
+        "Finance Cost",
+        "Tax Expense",
+        "Other Expense",
+    ],
+    "OCI": ["Other Comprehensive Income – Gain", "Other Comprehensive Income – Loss"],
+}
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -1551,5 +1570,40 @@ class FinancialStatementValue(db.Model):
             "statement_type",
             "line_key",
             name="uq_financial_statement_value",
+        ),
+    )
+
+
+class FinancialTrialBalanceLine(db.Model):
+    __tablename__ = "financial_trial_balance_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    financial_year = db.Column(db.String(9), nullable=False)
+    month_index = db.Column(db.SmallInteger, nullable=False)
+    calendar_year = db.Column(db.Integer, nullable=False)
+    calendar_month = db.Column(db.Integer, nullable=False)
+    account_code = db.Column(db.String(50), nullable=False)
+    account_name = db.Column(db.String(255), nullable=False)
+    ifrs_category = db.Column(db.String(50), nullable=False)
+    ifrs_subcategory = db.Column(db.String(100), nullable=False)
+    debit_amount = db.Column(db.Numeric(18, 2), nullable=False, default=Decimal("0"))
+    credit_amount = db.Column(db.Numeric(18, 2), nullable=False, default=Decimal("0"))
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(
+        db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    company = db.relationship("Company", backref="trial_balance_lines")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "company_id",
+            "financial_year",
+            "month_index",
+            "account_code",
+            "ifrs_category",
+            "ifrs_subcategory",
+            name="uq_trial_balance_month_account",
         ),
     )

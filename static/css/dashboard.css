@@ -651,6 +651,153 @@ body {
     justify-content: flex-end;
 }
 
+.trial-balance-card {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    padding: 1.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.trial-balance__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
+.trial-balance__actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.trial-balance__scroller {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.trial-balance__table {
+    width: 100%;
+    min-width: 1200px;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+.trial-balance__table th,
+.trial-balance__table td {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 0.65rem 0.5rem;
+    text-align: right;
+}
+
+.trial-balance__table thead th {
+    background: #f8fafc;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.trial-balance__sticky {
+    position: sticky;
+    left: 0;
+    background: #fff;
+    text-align: left !important;
+    min-width: 140px;
+    box-shadow: 4px 0 12px rgba(15, 23, 42, 0.08);
+    z-index: 3;
+}
+
+.trial-balance__sticky:nth-child(2) {
+    left: 60px;
+}
+
+.trial-balance__sticky:nth-child(3) {
+    left: 200px;
+}
+
+.trial-balance__sticky:nth-child(4) {
+    left: 360px;
+}
+
+.trial-balance__sticky:nth-child(5) {
+    left: 520px;
+}
+
+.trial-balance__month {
+    text-align: center;
+}
+
+.trial-balance__subhead {
+    font-size: 0.9rem;
+}
+
+.trial-balance__subhead--debit {
+    color: #1d4ed8;
+}
+
+.trial-balance__subhead--credit {
+    color: #15803d;
+}
+
+.trial-balance__cell {
+    min-width: 110px;
+}
+
+.trial-balance__action {
+    position: sticky;
+    right: 0;
+    background: #fff;
+    box-shadow: -4px 0 12px rgba(15, 23, 42, 0.08);
+    z-index: 3;
+}
+
+.trial-input,
+.trial-text,
+.trial-select {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.7);
+    padding: 0.45rem 0.5rem;
+}
+
+.trial-input--debit {
+    border-color: rgba(37, 99, 235, 0.6);
+}
+
+.trial-input--credit {
+    border-color: rgba(22, 163, 74, 0.6);
+}
+
+.trial-balance__totals-label {
+    text-align: left;
+    background: #f8fafc;
+    position: sticky;
+    left: 0;
+    z-index: 3;
+}
+
+.trial-balance__total {
+    font-weight: 700;
+}
+
+.trial-balance__total--warn {
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
+.trial-balance__difference {
+    font-weight: 700;
+    text-align: center;
+}
+
+.trial-balance__empty {
+    text-align: center;
+    padding: 1.5rem;
+    color: #475569;
+}
+
 .form-feedback {
     margin: 0;
     color: #0f172a;

@@ -23,6 +23,7 @@ from models import (
     CustomerType,
     FinancialStatementLine,
     FinancialStatementValue,
+    FinancialTrialBalanceLine,
     MaterialItem,
     MachineAsset,
     MachineIdleEvent,
@@ -61,6 +62,7 @@ from routes import (
     team,
     ui,
     users,
+    financials,
 )
 
 
@@ -198,6 +200,7 @@ def create_app():
     app.register_blueprint(labor.bp)
     app.register_blueprint(materials.bp)
     app.register_blueprint(material_api.bp)
+    app.register_blueprint(financials.bp)
     app.register_blueprint(machines.bp)
     app.register_blueprint(customer_pos.bp)
     app.register_blueprint(production.bp)

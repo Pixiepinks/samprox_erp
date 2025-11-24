@@ -17,6 +17,7 @@ from . import (
     reports,
     team,
     ui,
+    financials,
     users,
 )
 
@@ -39,5 +40,6 @@ __all__ = [
     "reports",
     "team",
     "ui",
+    "financials",
     "users",
 ]

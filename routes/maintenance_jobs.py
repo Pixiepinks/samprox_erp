@@ -751,6 +751,7 @@ def create_job():
 def update_job(job_id: int):
     job = (
         MaintenanceJob.query.options(joinedload(MaintenanceJob.materials))
+        .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.asset))
         .options(joinedload(MaintenanceJob.part))
         .get_or_404(job_id)
@@ -762,7 +763,14 @@ def update_job(job_id: int):
 
     payload = request.get_json() or {}
 
-    if role in {RoleEnum.production_manager, RoleEnum.admin} and job.status == MaintenanceJobStatus.NEW:
+    admin_can_edit_production = (
+        role == RoleEnum.admin
+        and getattr(job.created_by, "role", None) == RoleEnum.production_manager
+    )
+
+    if role in {RoleEnum.production_manager, RoleEnum.admin} and (
+        job.status == MaintenanceJobStatus.NEW or admin_can_edit_production
+    ):
         # allow minor updates before submission
         updatable_fields = {"priority", "location", "description", "expected_completion", "maint_email", "job_date"}
         for field in updatable_fields:

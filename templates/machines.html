@@ -119,7 +119,7 @@
                                                 <th scope="col" rowspan="2">Priority</th>
                                                 <th scope="col" rowspan="2">Assigned</th>
                                                 <th scope="col" rowspan="2">Asset name</th>
-                                                <th scope="col" rowspan="2">Part name (CKD)</th>
+                                                <th scope="col" rowspan="2" class="jobs-table__part-name">Part name (CKD)</th>
                                                 <th scope="col" colspan="4" class="jobs-table__group">Dates</th>
                                                 <th scope="col" colspan="4" class="jobs-table__group">Costs</th>
                                                 <th scope="col" rowspan="2">More</th>
@@ -4648,7 +4648,9 @@
                 <td data-label="Priority">${job.priority || "—"}</td>
                 <td data-label="Assigned">${job.assigned_to ? job.assigned_to.name : "—"}</td>
                 <td data-label="Asset name">${assetName}</td>
-                <td data-label="Part name (CKD)">${partDisplay}</td>
+                <td data-label="Part name (CKD)" class="jobs-table__part-name">
+                    <span class="jobs-table__truncate">${partDisplay}</span>
+                </td>
                 <td data-label="Job Date">${formatDate(job.job_date)}</td>
                 <td data-label="Expected completion">${formatDate(job.expected_completion)}</td>
                 <td data-label="Job started date">${formatDate(job.job_started_date)}</td>
@@ -4663,6 +4665,14 @@
             `;
 
             const codeButton = row.querySelector('[data-job-action="edit-job"]');
+            const partCell = row.querySelector(".jobs-table__part-name");
+            const partCellText = partCell?.querySelector(".jobs-table__truncate");
+            if (partCell) {
+                partCell.title = partDisplay;
+            }
+            if (partCellText) {
+                partCellText.title = partDisplay;
+            }
             if (codeButton) {
                 codeButton.addEventListener("click", (event) => {
                     event.stopPropagation();

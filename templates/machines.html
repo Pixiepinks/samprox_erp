@@ -4659,7 +4659,7 @@
             row.dataset.jobId = job.id;
             const statusBadge = renderStatusBadge(job);
             const { materialsTotal, outsourcedTotal, internalTotal, combinedTotal } = getJobCostSummary(job);
-            const updateStatusCell = canManageMaintenanceJobs
+            const updateStatusCell = canManageMaintenanceJobs || canManageProductionJobs
                 ? '<button type="button" class="button button--ghost button--small" data-job-action="update-status">Update status</button>'
                 : '—';
             const assetName = job.asset?.name || "—";

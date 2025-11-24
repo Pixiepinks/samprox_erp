@@ -1108,11 +1108,14 @@ def update_job(job_id: int):
         total_cost += cost_decimal
 
     job.total_cost = total_cost
-    if requested_status:
-        job.status = requested_status.value
     if send_to_production:
-        job.status = MaintenanceJobStatus.RETURNED_TO_PRODUCTION.value
+        if requested_status:
+            job.status = requested_status.value
+        else:
+            job.status = MaintenanceJobStatus.RETURNED_TO_PRODUCTION.value
         job.maint_submitted_at = datetime.utcnow()
+    elif requested_status:
+        job.status = requested_status.value
     if "prod_email" in payload:
         job.prod_email = (payload.get("prod_email") or None)
 

@@ -730,7 +730,7 @@ def jobs_summary():
             MaintenanceJob.job_code.label("job_code"),
             TeamMember.reg_number.label("employee_code"),
             TeamMember.name.label("employee_name"),
-            TeamMember.role.label("employee_role"),
+            TeamMember.position.label("employee_role"),
         )
         .join(
             MaintenanceJob,

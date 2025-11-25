@@ -12,8 +12,8 @@ import requests
 from requests import exceptions as requests_exceptions
 from flask import Blueprint, jsonify, request, url_for, current_app
 from flask_jwt_extended import get_jwt, jwt_required
-from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy import and_, asc, desc, func, or_, select
+from sqlalchemy.orm import aliased, joinedload
 
 from extensions import db
 from maintenance_status import (
@@ -420,8 +420,33 @@ def get_next_code():
 @bp.get("")
 @jwt_required()
 def list_jobs():
+    materials_cost = (
+        select(func.coalesce(func.sum(MaintenanceMaterial.cost), 0))
+        .where(MaintenanceMaterial.maintenance_job_id == MaintenanceJob.id)
+        .correlate(MaintenanceJob)
+        .scalar_subquery()
+    )
+    outsourced_cost = (
+        select(func.coalesce(func.sum(MaintenanceOutsourcedService.cost), 0))
+        .where(MaintenanceOutsourcedService.maintenance_job_id == MaintenanceJob.id)
+        .correlate(MaintenanceJob)
+        .scalar_subquery()
+    )
+    internal_cost = (
+        select(func.coalesce(func.sum(MaintenanceInternalStaffCost.cost), 0))
+        .where(MaintenanceInternalStaffCost.maintenance_job_id == MaintenanceJob.id)
+        .correlate(MaintenanceJob)
+        .scalar_subquery()
+    )
+
+    assigned_alias = aliased(User)
+    asset_alias = aliased(MachineAsset)
+    part_alias = aliased(MachinePart)
+
     query = (
-        MaintenanceJob.query.order_by(MaintenanceJob.created_at.desc())
+        MaintenanceJob.query.outerjoin(assigned_alias, MaintenanceJob.assigned_to)
+        .outerjoin(asset_alias, MaintenanceJob.asset)
+        .outerjoin(part_alias, MaintenanceJob.part)
         .options(joinedload(MaintenanceJob.created_by))
         .options(joinedload(MaintenanceJob.assigned_to))
         .options(joinedload(MaintenanceJob.asset))
@@ -457,6 +482,73 @@ def list_jobs():
         query = query.filter(MaintenanceJob.job_date >= start_date)
     if end_date:
         query = query.filter(MaintenanceJob.job_date <= end_date)
+
+    status_param = request.args.get("status", type=str)
+    if status_param:
+        statuses = [item.strip().upper() for item in status_param.split(",") if item.strip()]
+        if statuses:
+            query = query.filter(MaintenanceJob.status.in_(statuses))
+
+    priority_param = request.args.get("priority", type=str)
+    if priority_param:
+        query = query.filter(MaintenanceJob.priority.ilike(priority_param.strip()))
+
+    assigned_param = request.args.get("assigned", type=str)
+    if assigned_param:
+        assigned_term = f"%{assigned_param.strip()}%"
+        query = query.filter(
+            or_(assigned_alias.name.ilike(assigned_term), assigned_alias.email.ilike(assigned_term))
+        )
+
+    asset_param = request.args.get("asset", type=str)
+    if asset_param:
+        asset_term = f"%{asset_param.strip()}%"
+        query = query.filter(asset_alias.name.ilike(asset_term))
+
+    category_param = request.args.get("job_category", type=str)
+    if category_param:
+        query = query.filter(MaintenanceJob.job_category.ilike(f"%{category_param.strip()}%"))
+
+    search_term = request.args.get("search", type=str)
+    if search_term:
+        like_term = f"%{search_term.strip()}%"
+        query = query.filter(
+            or_(
+                MaintenanceJob.job_code.ilike(like_term),
+                MaintenanceJob.job_category.ilike(like_term),
+                MaintenanceJob.priority.ilike(like_term),
+                MaintenanceJob.description.ilike(like_term),
+                asset_alias.name.ilike(like_term),
+                part_alias.part_name.ilike(like_term),
+                part_alias.part_number.ilike(like_term),
+                assigned_alias.name.ilike(like_term),
+                assigned_alias.email.ilike(like_term),
+            )
+        )
+
+    sort_by = request.args.get("sort_by", "created_at")
+    sort_dir = request.args.get("sort_dir", "desc").lower()
+    sort_fields = {
+        "job_code": MaintenanceJob.job_code,
+        "job_category": MaintenanceJob.job_category,
+        "status": MaintenanceJob.status,
+        "priority": MaintenanceJob.priority,
+        "assigned": assigned_alias.name,
+        "asset": asset_alias.name,
+        "part": func.coalesce(part_alias.part_name, part_alias.part_number, ""),
+        "job_date": MaintenanceJob.job_date,
+        "expected_completion": MaintenanceJob.expected_completion,
+        "job_started_date": MaintenanceJob.job_started_date,
+        "job_finished_date": MaintenanceJob.job_finished_date,
+        "materials_cost": materials_cost,
+        "outsourced_cost": outsourced_cost,
+        "internal_cost": internal_cost,
+        "total_cost": MaintenanceJob.total_cost,
+        "created_at": MaintenanceJob.created_at,
+    }
+    sort_column = sort_fields.get(sort_by, MaintenanceJob.created_at)
+    sorter = asc if sort_dir == "asc" else desc
+    query = query.order_by(sorter(sort_column), MaintenanceJob.id.desc())
 
     limit = request.args.get("limit", type=int)
     offset = request.args.get("offset", type=int)

@@ -104,6 +104,47 @@
                                             </p>
                                         </article>
                                     </div>
+                                    <div class="jobs-controls" role="group" aria-label="Filter and search maintenance jobs">
+                                        <div class="jobs-filters">
+                                            <label class="jobs-filter">
+                                                <span class="jobs-filter__label">Status</span>
+                                                <select id="jobs-filter-status" name="status">
+                                                    <option value="">All statuses</option>
+                                                </select>
+                                            </label>
+                                            <label class="jobs-filter">
+                                                <span class="jobs-filter__label">Priority</span>
+                                                <select id="jobs-filter-priority" name="priority">
+                                                    <option value="">All priorities</option>
+                                                    <option value="Normal">Normal</option>
+                                                    <option value="Urgent">Urgent</option>
+                                                    <option value="Critical">Critical</option>
+                                                </select>
+                                            </label>
+                                            <label class="jobs-filter">
+                                                <span class="jobs-filter__label">Assigned</span>
+                                                <input type="text" id="jobs-filter-assigned" name="assigned" placeholder="Name or email" autocomplete="off" />
+                                            </label>
+                                            <label class="jobs-filter">
+                                                <span class="jobs-filter__label">Asset</span>
+                                                <input type="text" id="jobs-filter-asset" name="asset" placeholder="Asset name" autocomplete="off" />
+                                            </label>
+                                            <label class="jobs-filter">
+                                                <span class="jobs-filter__label">Category</span>
+                                                <input type="text" id="jobs-filter-category" name="job_category" placeholder="Job category" autocomplete="off" />
+                                            </label>
+                                        </div>
+                                        <label class="jobs-search" for="jobs-search-input">
+                                            <span class="visually-hidden">Search jobs</span>
+                                            <input
+                                                id="jobs-search-input"
+                                                type="search"
+                                                name="search"
+                                                placeholder="Search jobs"
+                                                autocomplete="off"
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="alert alert--error" id="jobs-error" hidden></div>
                                 <div class="empty-state" id="jobs-empty" hidden>
@@ -113,13 +154,48 @@
                                     <table class="jobs-table" aria-describedby="jobs-empty">
                                         <thead>
                                             <tr>
-                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col jobs-table__sticky-col--first">Code</th>
-                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col">Job category</th>
-                                                <th scope="col" rowspan="2">Status</th>
-                                                <th scope="col" rowspan="2">Priority</th>
-                                                <th scope="col" rowspan="2">Assigned</th>
-                                                <th scope="col" rowspan="2">Asset name</th>
-                                                <th scope="col" rowspan="2" class="jobs-table__part-name">Part name (CKD)</th>
+                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col jobs-table__sticky-col--first">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="job_code">
+                                                        <span>Code</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2" class="jobs-table__sticky-col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="job_category">
+                                                        <span>Job category</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="status">
+                                                        <span>Status</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="priority">
+                                                        <span>Priority</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="assigned">
+                                                        <span>Assigned</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="asset">
+                                                        <span>Asset name</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col" rowspan="2" class="jobs-table__part-name">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="part">
+                                                        <span>Part name (CKD)</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
                                                 <th scope="col" colspan="4" class="jobs-table__group">Dates</th>
                                                 <th scope="col" colspan="4" class="jobs-table__group">Costs</th>
                                                 <th scope="col" rowspan="2">More</th>
@@ -127,14 +203,54 @@
                                                 <th scope="col" rowspan="2">Update status</th>
                                             </tr>
                                             <tr>
-                                                <th scope="col">Job Date</th>
-                                                <th scope="col">Expected completion</th>
-                                                <th scope="col">Job started date</th>
-                                                <th scope="col">Job finished date</th>
-                                                <th scope="col">Materials used (Cost)</th>
-                                                <th scope="col">Outsourced party cost</th>
-                                                <th scope="col">Internal staff cost</th>
-                                                <th scope="col">Total cost</th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="job_date">
+                                                        <span>Job Date</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="expected_completion">
+                                                        <span>Expected completion</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="job_started_date">
+                                                        <span>Job started date</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="job_finished_date">
+                                                        <span>Job finished date</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="materials_cost">
+                                                        <span>Materials used (Cost)</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="outsourced_cost">
+                                                        <span>Outsourced party cost</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="internal_cost">
+                                                        <span>Internal staff cost</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
+                                                <th scope="col">
+                                                    <button type="button" class="jobs-sort" data-jobs-sort="total_cost">
+                                                        <span>Total cost</span>
+                                                        <span class="jobs-sort__icon" aria-hidden="true"></span>
+                                                    </button>
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody id="jobs-table-body"></tbody>
@@ -1546,6 +1662,13 @@
         const jobsKpiTotalJobsBreakdown = document.querySelector("[data-kpi-total-jobs-breakdown]");
         const jobsKpiHoursTotal = document.querySelector("[data-kpi-hours-total]");
         const jobsKpiHoursBreakdown = document.querySelector("[data-kpi-hours-breakdown]");
+        const jobsFilterStatus = document.getElementById("jobs-filter-status");
+        const jobsFilterPriority = document.getElementById("jobs-filter-priority");
+        const jobsFilterAssigned = document.getElementById("jobs-filter-assigned");
+        const jobsFilterAsset = document.getElementById("jobs-filter-asset");
+        const jobsFilterCategory = document.getElementById("jobs-filter-category");
+        const jobsSearchInput = document.getElementById("jobs-search-input");
+        const jobsSortButtons = document.querySelectorAll("[data-jobs-sort]");
         const jobDetailsModal = document.getElementById("job-details-modal");
         const jobDetailsTitle = document.getElementById("job-details-modal-title");
         const jobDetailsError = document.getElementById("job-details-error");
@@ -4114,6 +4237,33 @@
         let jobsLoading = false;
         let jobsNeedsReset = false;
         let jobsScrollObserver = null;
+        let jobsFilterTimer = null;
+        let jobsSearchTimer = null;
+        const JOB_STATUS_OPTIONS = [
+            { value: "SUBMITTED", label: "Submitted" },
+            { value: "FORWARDED_TO_MAINTENANCE", label: "To Maintenance" },
+            { value: "RETURNED_TO_PRODUCTION", label: "To Production" },
+            { value: "NOT_YET_STARTED", label: "Not Yet Started" },
+            { value: "IN_PROGRESS", label: "In Progress" },
+            { value: "AWAITING_PARTS", label: "Awaiting Parts" },
+            { value: "ON_HOLD", label: "On Hold" },
+            { value: "TESTING", label: "Testing" },
+            { value: "COMPLETED_MAINTENANCE", label: "Completed (Maintenance)" },
+            { value: "COMPLETED_VERIFIED", label: "Completed (Production Verified)" },
+            { value: "REOPENED", label: "Reopened" },
+        ];
+        const jobsFilters = {
+            status: "",
+            priority: "",
+            assigned: "",
+            asset: "",
+            job_category: "",
+        };
+        const jobsSortState = {
+            field: "created_at",
+            direction: "desc",
+        };
+        let jobsSearchTerm = "";
         const jobsPeriodState = {
             startDate: null,
             endDate: null,
@@ -4138,6 +4288,59 @@
             if (jobsPeriodResetButton) {
                 jobsPeriodResetButton.disabled = isLoading;
             }
+        }
+
+        function populateJobsStatusFilter() {
+            if (!jobsFilterStatus) return;
+            const fragment = document.createDocumentFragment();
+            JOB_STATUS_OPTIONS.forEach((option) => {
+                const element = document.createElement("option");
+                element.value = option.value;
+                element.textContent = option.label;
+                fragment.appendChild(element);
+            });
+            jobsFilterStatus.appendChild(fragment);
+        }
+
+        function syncJobSortButtons() {
+            if (!jobsSortButtons || jobsSortButtons.length === 0) return;
+            jobsSortButtons.forEach((button) => {
+                const sortKey = button.dataset.jobsSort;
+                const isActive = sortKey === jobsSortState.field;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+                const icon = button.querySelector(".jobs-sort__icon");
+                if (icon) {
+                    icon.dataset.direction = isActive ? jobsSortState.direction : "";
+                }
+            });
+        }
+
+        function requestJobsReload() {
+            if (jobsFilterTimer) {
+                clearTimeout(jobsFilterTimer);
+            }
+            jobsFilterTimer = window.setTimeout(() => {
+                loadJobs({ reset: true });
+            }, 250);
+        }
+
+        function applyJobsTextFilter(key, value) {
+            if (!(key in jobsFilters)) return;
+            jobsFilters[key] = value ? value.trim() : "";
+            requestJobsReload();
+        }
+
+        function setJobsSort(field) {
+            if (!field) return;
+            if (jobsSortState.field === field) {
+                jobsSortState.direction = jobsSortState.direction === "asc" ? "desc" : "asc";
+            } else {
+                jobsSortState.field = field;
+                jobsSortState.direction = field === "created_at" ? "desc" : "asc";
+            }
+            syncJobSortButtons();
+            loadJobs({ reset: true });
         }
 
         function setJobsPeriodError(message) {
@@ -4822,11 +5025,21 @@
                 const params = new URLSearchParams();
                 params.set("limit", JOBS_PAGE_SIZE);
                 params.set("offset", jobsOffset);
+                params.set("sort_by", jobsSortState.field || "created_at");
+                params.set("sort_dir", jobsSortState.direction || "desc");
                 if (jobsPeriodState.startDate) {
                     params.set("start_date", jobsPeriodState.startDate);
                 }
                 if (jobsPeriodState.endDate) {
                     params.set("end_date", jobsPeriodState.endDate);
+                }
+                Object.entries(jobsFilters).forEach(([key, value]) => {
+                    if (value) {
+                        params.set(key, value);
+                    }
+                });
+                if (jobsSearchTerm) {
+                    params.set("search", jobsSearchTerm);
                 }
                 const jobs = await fetchJson(`/api/maintenance-jobs?${params.toString()}`);
 
@@ -4853,6 +5066,7 @@
                     jobsError.textContent = error.message || "Unable to load jobs";
                     jobsError.hidden = false;
                 }
+                jobsHasMore = false;
             } finally {
                 jobsLoading = false;
                 setJobsLoadingState(false);
@@ -4863,6 +5077,58 @@
         if (jobsLoadMoreButton) {
             jobsLoadMoreButton.addEventListener("click", () => {
                 loadJobs();
+            });
+        }
+
+        if (jobsSortButtons && jobsSortButtons.length) {
+            jobsSortButtons.forEach((button) => {
+                button.addEventListener("click", () => {
+                    setJobsSort(button.dataset.jobsSort);
+                });
+            });
+        }
+
+        if (jobsFilterStatus) {
+            jobsFilterStatus.addEventListener("change", (event) => {
+                jobsFilters.status = event.target.value;
+                loadJobs({ reset: true });
+            });
+        }
+
+        if (jobsFilterPriority) {
+            jobsFilterPriority.addEventListener("change", (event) => {
+                jobsFilters.priority = event.target.value;
+                loadJobs({ reset: true });
+            });
+        }
+
+        if (jobsFilterAssigned) {
+            jobsFilterAssigned.addEventListener("input", (event) => {
+                applyJobsTextFilter("assigned", event.target.value);
+            });
+        }
+
+        if (jobsFilterAsset) {
+            jobsFilterAsset.addEventListener("input", (event) => {
+                applyJobsTextFilter("asset", event.target.value);
+            });
+        }
+
+        if (jobsFilterCategory) {
+            jobsFilterCategory.addEventListener("input", (event) => {
+                applyJobsTextFilter("job_category", event.target.value);
+            });
+        }
+
+        if (jobsSearchInput) {
+            jobsSearchInput.addEventListener("input", (event) => {
+                jobsSearchTerm = event.target.value ? event.target.value.trim() : "";
+                if (jobsSearchTimer) {
+                    clearTimeout(jobsSearchTimer);
+                }
+                jobsSearchTimer = window.setTimeout(() => {
+                    loadJobs({ reset: true });
+                }, 250);
             });
         }
 
@@ -4930,6 +5196,8 @@
             jobsScrollSentinel.hidden = true;
         }
         syncJobsControls();
+        populateJobsStatusFilter();
+        syncJobSortButtons();
 
         function showJobDetailsLoading() {
             if (jobDetailsError) {

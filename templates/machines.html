@@ -2719,7 +2719,7 @@
             });
         }
 
-        function getEmployeeLabel(employee) {
+        function getEmployeeCode(employee) {
             if (!employee) return "";
             const code =
                 employee.regNumber ||
@@ -2728,6 +2728,12 @@
                 employee.employee_code ||
                 employee.code ||
                 "";
+            return code ? String(code) : "";
+        }
+
+        function getEmployeeLabel(employee) {
+            if (!employee) return "";
+            const code = getEmployeeCode(employee);
             const name =
                 employee.name ||
                 employee.full_name ||
@@ -2802,7 +2808,39 @@
                         selectedValue: select.value,
                         fallbackLabel,
                     });
-                });
+            });
+        }
+
+        function getEmployeeCodeFromLabel(labelText = "") {
+            if (!labelText) return "";
+            const [code] = labelText.split("—");
+            return code ? code.trim() : "";
+        }
+
+        function getSelectedEmployeeCode(select) {
+            if (!select) return "";
+            const selectedValue = select.value || "";
+            if (selectedValue) {
+                const matched = activeEmployees.find((employee) => String(employee?.id) === selectedValue);
+                const matchedCode = getEmployeeCode(matched);
+                if (matchedCode) return matchedCode;
+            }
+            const selectedOption = select.options[select.selectedIndex];
+            const labelText = selectedOption?.textContent || select.dataset.fallbackLabel || "";
+            return getEmployeeCodeFromLabel(labelText);
+        }
+
+        function getHourlyRateForEmployeeCode(code) {
+            switch (code) {
+                case "E023":
+                    return 1250;
+                case "E022":
+                    return 425;
+                case "E026":
+                    return 400;
+                default:
+                    return null;
+            }
         }
 
         function updateInternalStaffRowCost(row) {
@@ -2825,7 +2863,30 @@
                 if (Number.isFinite(computed)) {
                     costInput.value = computed.toFixed(2);
                 }
+            } else {
+                costInput.value = "";
             }
+        }
+
+        function applyInternalStaffHourlyRate(row, { onlyWhenEmpty = false } = {}) {
+            if (!row) return;
+            const employeeSelect = row.querySelector("select[data-internal-employee]");
+            const rateInput = row.querySelector('td:nth-child(5) input');
+            if (!employeeSelect || !rateInput) return;
+            const employeeCode = getSelectedEmployeeCode(employeeSelect);
+            const mappedRate = getHourlyRateForEmployeeCode(employeeCode);
+            const shouldApplyRate = !onlyWhenEmpty || rateInput.value === "" || rateInput.dataset.autoRate === "true";
+
+            if (mappedRate != null && shouldApplyRate) {
+                rateInput.value = mappedRate;
+                rateInput.dataset.autoRate = "true";
+            } else if (mappedRate == null && !onlyWhenEmpty) {
+                rateInput.value = "";
+                rateInput.dataset.autoRate = "false";
+            }
+
+            updateInternalStaffRowCost(row);
+            updateInternalStaffTotal();
         }
 
         function addInternalStaffRow(entry = {}) {
@@ -2857,6 +2918,7 @@
                 hideJobAlerts();
                 const selectedOption = employeeSelect.options[employeeSelect.selectedIndex];
                 employeeSelect.dataset.fallbackLabel = selectedOption ? selectedOption.textContent : "";
+                applyInternalStaffHourlyRate(row);
             });
             employeeCell.appendChild(employeeSelect);
 
@@ -2915,6 +2977,7 @@
             }
             rateInput.addEventListener("input", () => {
                 hideJobAlerts();
+                rateInput.dataset.autoRate = "false";
                 updateInternalStaffRowCost(row);
                 updateInternalStaffTotal();
             });
@@ -2944,8 +3007,8 @@
             row.appendChild(costCell);
 
             internalStaffTableBody.appendChild(row);
-            updateInternalStaffRowCost(row);
-            updateInternalStaffTotal();
+            const onlyWhenEmpty = entry.hourly_rate != null;
+            applyInternalStaffHourlyRate(row, { onlyWhenEmpty });
         }
 
         function updateInternalStaffTotal() {

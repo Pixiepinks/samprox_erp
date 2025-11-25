@@ -715,7 +715,7 @@ def jobs_summary():
                 "engaged_hours": _hours_number(_as_decimal(row.engaged_hours))
                 if row.engaged_hours is not None
                 else None,
-                "cost": _currency_number(row.cost),
+                "cost": _currency_number(_as_decimal(row.cost)),
             }
         )
 
@@ -730,7 +730,7 @@ def jobs_summary():
             MaintenanceJob.job_code.label("job_code"),
             TeamMember.reg_number.label("employee_code"),
             TeamMember.name.label("employee_name"),
-            TeamMember.role.label("employee_role"),
+            TeamMember.position.label("employee_role"),
         )
         .join(
             MaintenanceJob,

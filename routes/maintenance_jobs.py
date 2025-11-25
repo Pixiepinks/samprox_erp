@@ -715,7 +715,7 @@ def jobs_summary():
                 "engaged_hours": _hours_number(_as_decimal(row.engaged_hours))
                 if row.engaged_hours is not None
                 else None,
-                "cost": _currency_number(row.cost),
+                "cost": _currency_number(_as_decimal(row.cost)),
             }
         )
 

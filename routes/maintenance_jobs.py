@@ -624,26 +624,59 @@ def jobs_summary():
         ):
             overdue_count += 1
 
-    materials_total = _as_decimal(
-        db.session.execute(
-            select(func.coalesce(func.sum(MaintenanceMaterial.cost), 0)).join(
-                MaintenanceJob,
-                MaintenanceMaterial.maintenance_job_id == MaintenanceJob.id,
-            )
-            .where(MaintenanceJob.job_date >= start_date)
-            .where(MaintenanceJob.job_date <= end_date)
-        ).scalar()
-    )
-
-    outsourced_rows = db.session.execute(
+    materials_rows = db.session.execute(
         select(
-            MaintenanceOutsourcedService.cost.label("cost"),
-            MaintenanceOutsourcedService.service_date.label("service_date"),
+            MaintenanceMaterial.id.label("id"),
+            MaintenanceMaterial.material_name.label("material_name"),
+            MaintenanceMaterial.units.label("units"),
+            MaintenanceMaterial.cost.label("cost"),
+            MaintenanceJob.job_code.label("job_code"),
             MaintenanceJob.job_date.label("job_date"),
         )
         .join(
             MaintenanceJob,
+            MaintenanceMaterial.maintenance_job_id == MaintenanceJob.id,
+        )
+        .where(MaintenanceJob.job_date >= start_date)
+        .where(MaintenanceJob.job_date <= end_date)
+    ).all()
+
+    materials_total = Decimal("0")
+    material_details: list[dict] = []
+
+    for row in materials_rows:
+        cost = _as_decimal(row.cost)
+        materials_total += cost
+        material_details.append(
+            {
+                "id": row.id,
+                "job_code": row.job_code,
+                "job_date": row.job_date.isoformat() if row.job_date else None,
+                "item": row.material_name,
+                "units": row.units,
+                "cost": _currency_number(cost),
+            }
+        )
+
+    outsourced_rows = db.session.execute(
+        select(
+            MaintenanceOutsourcedService.id.label("id"),
+            MaintenanceOutsourcedService.cost.label("cost"),
+            MaintenanceOutsourcedService.service_date.label("service_date"),
+            MaintenanceJob.job_date.label("job_date"),
+            MaintenanceJob.job_code.label("job_code"),
+            MaintenanceOutsourcedService.service_description.label("service_description"),
+            MaintenanceOutsourcedService.engaged_hours.label("engaged_hours"),
+            ServiceSupplier.name.label("supplier_name"),
+        )
+        .join(
+            MaintenanceJob,
             MaintenanceOutsourcedService.maintenance_job_id == MaintenanceJob.id,
+        )
+        .join(
+            ServiceSupplier,
+            MaintenanceOutsourcedService.supplier_id == ServiceSupplier.id,
+            isouter=True,
         )
         .where(
             or_(
@@ -662,6 +695,7 @@ def jobs_summary():
     ).all()
 
     outsourced_total = Decimal("0")
+    outsourced_details: list[dict] = []
     for row in outsourced_rows:
         service_date = row.service_date or row.job_date
         if not service_date:
@@ -670,14 +704,33 @@ def jobs_summary():
             continue
         outsourced_total += _as_decimal(row.cost)
 
+        outsourced_details.append(
+            {
+                "id": row.id,
+                "job_code": row.job_code,
+                "job_date": row.job_date.isoformat() if row.job_date else None,
+                "service_date": service_date.isoformat() if service_date else None,
+                "supplier": row.supplier_name,
+                "description": row.service_description,
+                "engaged_hours": _hours_number(_as_decimal(row.engaged_hours))
+                if row.engaged_hours is not None
+                else None,
+                "cost": _currency_number(row.cost),
+            }
+        )
+
     internal_rows = db.session.execute(
         select(
+            MaintenanceInternalStaffCost.id.label("id"),
             MaintenanceInternalStaffCost.cost.label("cost"),
             MaintenanceInternalStaffCost.hourly_rate.label("hourly_rate"),
             MaintenanceInternalStaffCost.engaged_hours.label("engaged_hours"),
             MaintenanceInternalStaffCost.service_date.label("service_date"),
             MaintenanceJob.job_date.label("job_date"),
+            MaintenanceJob.job_code.label("job_code"),
             TeamMember.reg_number.label("employee_code"),
+            TeamMember.name.label("employee_name"),
+            TeamMember.role.label("employee_role"),
         )
         .join(
             MaintenanceJob,
@@ -708,6 +761,7 @@ def jobs_summary():
     internal_hours_total = Decimal("0")
     internal_hours_e023 = Decimal("0")
     internal_hours_other = Decimal("0")
+    internal_details: list[dict] = []
 
     for row in internal_rows:
         service_date = row.service_date or row.job_date
@@ -728,6 +782,21 @@ def jobs_summary():
             cost = _as_decimal(row.hourly_rate) * hours
         internal_total += cost
 
+        internal_details.append(
+            {
+                "id": row.id,
+                "job_code": row.job_code,
+                "job_date": row.job_date.isoformat() if row.job_date else None,
+                "service_date": service_date.isoformat() if service_date else None,
+                "employee": row.employee_name,
+                "employee_code": row.employee_code,
+                "role": row.employee_role,
+                "engaged_hours": _hours_number(hours),
+                "hourly_rate": _currency_number(row.hourly_rate) if row.hourly_rate is not None else None,
+                "cost": _currency_number(cost),
+            }
+        )
+
     grand_total = materials_total + outsourced_total + internal_total
 
     available_start = min_job_date or start_date
@@ -747,6 +816,11 @@ def jobs_summary():
             "outsourced": _currency_number(outsourced_total),
             "internal": _currency_number(internal_total),
             "grand": _currency_number(grand_total),
+        },
+        "details": {
+            "material": material_details,
+            "outsourced": outsourced_details,
+            "internal": internal_details,
         },
         "jobs": {
             "initiated": jobs_initiated,

@@ -86,7 +86,32 @@
                                             <p class="jobs-kpi-card__label">Total Cost</p>
                                             <p class="jobs-kpi-card__value" data-kpi-total-cost>Rs. 0.00</p>
                                             <p class="jobs-kpi-card__meta" data-kpi-total-cost-breakdown>
-                                                Material Rs. 0.00 | Outsourced Rs. 0.00 | Internal Rs. 0.00
+                                                <button
+                                                    type="button"
+                                                    class="jobs-kpi-card__link"
+                                                    data-cost-breakdown="material"
+                                                    data-cost-breakdown-label="Material"
+                                                >
+                                                    Material Rs. 0.00
+                                                </button>
+                                                <span aria-hidden="true">|</span>
+                                                <button
+                                                    type="button"
+                                                    class="jobs-kpi-card__link"
+                                                    data-cost-breakdown="outsourced"
+                                                    data-cost-breakdown-label="Outsourced"
+                                                >
+                                                    Outsourced Rs. 0.00
+                                                </button>
+                                                <span aria-hidden="true">|</span>
+                                                <button
+                                                    type="button"
+                                                    class="jobs-kpi-card__link"
+                                                    data-cost-breakdown="internal"
+                                                    data-cost-breakdown-label="Internal"
+                                                >
+                                                    Internal Rs. 0.00
+                                                </button>
                                             </p>
                                         </article>
                                         <article class="jobs-kpi-card" role="listitem">
@@ -1205,6 +1230,31 @@
                 </footer>
             </div>
         </div>
+        <div class="modal" id="cost-details-modal" role="dialog" aria-modal="true" aria-labelledby="cost-details-title" data-modal hidden>
+            <div class="modal__backdrop" data-modal-close></div>
+            <div class="modal__window" role="document">
+                <header class="modal__header" data-modal-handle>
+                    <h2 class="modal__title" id="cost-details-title">Cost details</h2>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Close">&times;</button>
+                </header>
+                <div class="modal__body cost-details-modal__body">
+                    <p class="modal__subtitle" id="cost-details-period" hidden></p>
+                    <div class="alert alert--error" id="cost-details-error" hidden></div>
+                    <div class="table-wrapper" id="cost-details-table" hidden>
+                        <table class="jobs-table job-details__table cost-details__table">
+                            <thead id="cost-details-head"></thead>
+                            <tbody id="cost-details-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state" id="cost-details-empty" hidden>
+                        <p>No cost records found for this period.</p>
+                    </div>
+                </div>
+                <footer class="modal__footer">
+                    <button type="button" class="button button--ghost" data-modal-close>Close</button>
+                </footer>
+            </div>
+        </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script>
@@ -1676,6 +1726,15 @@
         const jobsKpiTotalJobsBreakdown = document.querySelector("[data-kpi-total-jobs-breakdown]");
         const jobsKpiHoursTotal = document.querySelector("[data-kpi-hours-total]");
         const jobsKpiHoursBreakdown = document.querySelector("[data-kpi-hours-breakdown]");
+        const costBreakdownButtons = document.querySelectorAll("[data-cost-breakdown]");
+        const costDetailsModal = document.getElementById("cost-details-modal");
+        const costDetailsTitle = document.getElementById("cost-details-title");
+        const costDetailsPeriod = document.getElementById("cost-details-period");
+        const costDetailsHead = document.getElementById("cost-details-head");
+        const costDetailsBody = document.getElementById("cost-details-body");
+        const costDetailsTable = document.getElementById("cost-details-table");
+        const costDetailsEmpty = document.getElementById("cost-details-empty");
+        const costDetailsError = document.getElementById("cost-details-error");
         const jobsFilterStatus = document.getElementById("jobs-filter-status");
         const jobsFilterPriority = document.getElementById("jobs-filter-priority");
         const jobsFilterAssigned = document.getElementById("jobs-filter-assigned");
@@ -4317,6 +4376,12 @@
             defaultStart: null,
             defaultEnd: null,
         };
+        let jobsCostDetails = {
+            material: [],
+            outsourced: [],
+            internal: [],
+        };
+        let jobsCostPeriodLabel = "";
         let machineIdleParetoRequest = 0;
 
         function setJobsLoadingState(isLoading) {
@@ -4793,6 +4858,160 @@
             }
         }
 
+        const COST_DETAIL_CONFIG = {
+            material: {
+                title: "Material cost details",
+                columns: [
+                    { key: "job_code", label: "Job code" },
+                    { key: "job_date", label: "Job date", render: (row) => formatDate(row.job_date) },
+                    { key: "item", label: "Item" },
+                    { key: "units", label: "Units" },
+                    { key: "cost", label: "Cost", render: (row) => formatCurrency(row.cost) },
+                ],
+            },
+            outsourced: {
+                title: "Outsourced cost details",
+                columns: [
+                    { key: "job_code", label: "Job code" },
+                    {
+                        key: "service_date",
+                        label: "Service date",
+                        render: (row) => formatDate(row.service_date || row.job_date),
+                    },
+                    { key: "supplier", label: "Party" },
+                    { key: "description", label: "Description" },
+                    {
+                        key: "engaged_hours",
+                        label: "Hours/Qty",
+                        render: (row) => (row.engaged_hours != null ? row.engaged_hours : "—"),
+                    },
+                    { key: "cost", label: "Cost", render: (row) => formatCurrency(row.cost) },
+                ],
+            },
+            internal: {
+                title: "Internal staff cost details",
+                columns: [
+                    { key: "job_code", label: "Job code" },
+                    {
+                        key: "service_date",
+                        label: "Service date",
+                        render: (row) => formatDate(row.service_date || row.job_date),
+                    },
+                    { key: "employee", label: "Employee" },
+                    { key: "role", label: "Role" },
+                    {
+                        key: "engaged_hours",
+                        label: "Hours",
+                        render: (row) => formatHours(row.engaged_hours),
+                    },
+                    {
+                        key: "hourly_rate",
+                        label: "Rate",
+                        render: (row) => (row.hourly_rate != null ? formatCurrency(row.hourly_rate) : "—"),
+                    },
+                    { key: "cost", label: "Cost", render: (row) => formatCurrency(row.cost) },
+                ],
+            },
+        };
+
+        function setCostBreakdownTotals(totals) {
+            if (!costBreakdownButtons || costBreakdownButtons.length === 0) return;
+            const material = formatCurrency(totals?.material);
+            const outsourced = formatCurrency(totals?.outsourced);
+            const internal = formatCurrency(totals?.internal);
+            const formatted = { material, outsourced, internal };
+
+            costBreakdownButtons.forEach((button) => {
+                const type = button.dataset.costBreakdown;
+                const label = button.dataset.costBreakdownLabel || "";
+                const amount = formatted[type] || formatCurrency(0);
+                const prefix = label ? `${label} ` : "";
+                button.textContent = `${prefix}${amount}`;
+            });
+        }
+
+        function setJobsCostDetails(summary) {
+            const details = summary?.details || {};
+            jobsCostDetails = {
+                material: Array.isArray(details.material) ? details.material : [],
+                outsourced: Array.isArray(details.outsourced) ? details.outsourced : [],
+                internal: Array.isArray(details.internal) ? details.internal : [],
+            };
+            const period = summary?.period || {};
+            jobsCostPeriodLabel = formatPeriodLabel(period.start_date, period.end_date);
+        }
+
+        function formatPeriodLabel(startDate, endDate) {
+            const startLabel = startDate ? formatDate(startDate) : "";
+            const endLabel = endDate ? formatDate(endDate) : "";
+            if (startLabel && endLabel) return `${startLabel} to ${endLabel}`;
+            if (startLabel) return `From ${startLabel}`;
+            if (endLabel) return `Up to ${endLabel}`;
+            return "";
+        }
+
+        function renderCostDetails(type) {
+            const config = COST_DETAIL_CONFIG[type];
+            if (!config) {
+                if (costDetailsError) {
+                    costDetailsError.textContent = "Unable to show cost breakdown.";
+                    costDetailsError.hidden = false;
+                }
+                return;
+            }
+
+            if (costDetailsError) {
+                costDetailsError.hidden = true;
+                costDetailsError.textContent = "";
+            }
+
+            const records = Array.isArray(jobsCostDetails?.[type]) ? jobsCostDetails[type] : [];
+            const columns = Array.isArray(config.columns) ? config.columns : [];
+
+            costDetailsTitle.textContent = config.title;
+            if (costDetailsPeriod) {
+                costDetailsPeriod.textContent = jobsCostPeriodLabel ? `Period: ${jobsCostPeriodLabel}` : "";
+                costDetailsPeriod.hidden = !jobsCostPeriodLabel;
+            }
+
+            if (costDetailsHead) {
+                costDetailsHead.innerHTML = "";
+                const headerRow = document.createElement("tr");
+                headerRow.innerHTML = columns
+                    .map((column) => `<th scope="col">${column.label}</th>`)
+                    .join("");
+                costDetailsHead.appendChild(headerRow);
+            }
+
+            if (costDetailsBody) {
+                costDetailsBody.innerHTML = "";
+            }
+
+            if (!records.length) {
+                if (costDetailsTable) costDetailsTable.hidden = true;
+                if (costDetailsEmpty) costDetailsEmpty.hidden = false;
+                openModal("cost-details-modal");
+                return;
+            }
+
+            if (costDetailsTable) costDetailsTable.hidden = false;
+            if (costDetailsEmpty) costDetailsEmpty.hidden = true;
+
+            records.forEach((record) => {
+                const row = document.createElement("tr");
+                row.innerHTML = columns
+                    .map((column) => {
+                        const rawValue = column.render ? column.render(record) : record[column.key];
+                        const value = rawValue === 0 ? 0 : rawValue || "—";
+                        return `<td data-label="${column.label}">${value}</td>`;
+                    })
+                    .join("");
+                costDetailsBody?.appendChild(row);
+            });
+
+            openModal("cost-details-modal");
+        }
+
         function updateJobsKpis(summary) {
             const totals = summary?.totals || {};
             const jobs = summary?.jobs || {};
@@ -4801,12 +5020,8 @@
             if (jobsKpiTotalCost) {
                 jobsKpiTotalCost.textContent = formatCurrency(totals.grand);
             }
-            if (jobsKpiTotalCostBreakdown) {
-                const material = formatCurrency(totals.material);
-                const outsourced = formatCurrency(totals.outsourced);
-                const internal = formatCurrency(totals.internal);
-                jobsKpiTotalCostBreakdown.textContent = `Material ${material} | Outsourced ${outsourced} | Internal ${internal}`;
-            }
+            setJobsCostDetails(summary);
+            setCostBreakdownTotals(totals);
             if (jobsKpiTotalJobs) {
                 const initiated = Number(jobs.initiated || 0);
                 jobsKpiTotalJobs.textContent = initiated.toLocaleString();
@@ -5176,6 +5391,14 @@
                 jobsSearchTimer = window.setTimeout(() => {
                     loadJobs({ reset: true });
                 }, 250);
+            });
+        }
+
+        if (costBreakdownButtons && costBreakdownButtons.length) {
+            costBreakdownButtons.forEach((button) => {
+                button.addEventListener("click", () => {
+                    renderCostDetails(button.dataset.costBreakdown);
+                });
             });
         }
 

@@ -5066,6 +5066,7 @@
                     jobsError.textContent = error.message || "Unable to load jobs";
                     jobsError.hidden = false;
                 }
+                jobsHasMore = false;
             } finally {
                 jobsLoading = false;
                 setJobsLoadingState(false);

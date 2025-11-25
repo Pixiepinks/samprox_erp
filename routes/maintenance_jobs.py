@@ -1007,6 +1007,8 @@ def update_job(job_id: int):
     requested_status_raw = payload.get("status")
     requested_status = None
     if requested_status_raw not in (None, ""):
+        if role != RoleEnum.maintenance_manager:
+            return jsonify({"msg": "Only Maintenance Managers can update maintenance statuses."}), 403
         try:
             requested_status = MaintenanceJobStatus(str(requested_status_raw))
         except ValueError:
@@ -1280,10 +1282,17 @@ def update_job(job_id: int):
 @bp.post("/<int:job_id>/reopen")
 @jwt_required()
 def reopen_job(job_id: int):
-    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+    if not require_role(RoleEnum.production_manager):
         return jsonify({"msg": "Only Production Managers can reopen jobs."}), 403
 
     job = MaintenanceJob.query.get_or_404(job_id)
+    current_status = get_status_code(job.status)
+    if current_status not in {
+        MaintenanceJobStatus.COMPLETED_MAINTENANCE.value,
+        MaintenanceJobStatus.COMPLETED_VERIFIED.value,
+    }:
+        return jsonify({"msg": "Job can only be reopened after maintenance completion."}), 400
+
     job.status = MaintenanceJobStatus.REOPENED.value
     job.prod_submitted_at = job.prod_submitted_at or datetime.utcnow()
     db.session.commit()
@@ -1293,10 +1302,14 @@ def reopen_job(job_id: int):
 @bp.post("/<int:job_id>/verify")
 @jwt_required()
 def verify_job(job_id: int):
-    if not require_role(RoleEnum.production_manager, RoleEnum.admin):
+    if not require_role(RoleEnum.production_manager):
         return jsonify({"msg": "Only Production Managers can confirm completion."}), 403
 
     job = MaintenanceJob.query.get_or_404(job_id)
+    current_status = get_status_code(job.status)
+    if current_status != MaintenanceJobStatus.COMPLETED_MAINTENANCE.value:
+        return jsonify({"msg": "Only jobs completed by maintenance can be confirmed."}), 400
+
     job.status = MaintenanceJobStatus.COMPLETED_VERIFIED.value
     job.prod_submitted_at = job.prod_submitted_at or datetime.utcnow()
     db.session.commit()

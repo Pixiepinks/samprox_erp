@@ -1043,11 +1043,19 @@
                                                     <option value="NOT_YET_STARTED">Not Yet Started</option>
                                                     <option value="IN_PROGRESS">In Progress</option>
                                                     <option value="AWAITING_PARTS">Awaiting Parts</option>
-                                                    <option value="ON_HOLD">On Hold</option>
-                                                    <option value="TESTING">Testing</option>
-                                                    <option value="COMPLETED_MAINTENANCE">Completed (Maintenance)</option>
-                                                </select>
-                                                <p class="form__hint">Only maintenance managers can change this.</p>
+                                                <option value="ON_HOLD">On Hold</option>
+                                                <option value="TESTING">Testing</option>
+                                                <option value="COMPLETED_MAINTENANCE">Completed (Maintenance)</option>
+                                            </select>
+                                            <p class="form__hint">Only maintenance managers can change this.</p>
+                                            </div>
+                                            <div class="input-group" id="production-review-actions" hidden>
+                                                <label>Production review</label>
+                                                <div class="button-group button-group--inline">
+                                                    <button type="button" class="button" id="confirm-completion-button">Confirm Completed</button>
+                                                    <button type="button" class="button button--ghost" id="reopen-job-button">Reopen / Problem not solved</button>
+                                                </div>
+                                                <p class="form__hint">Production can only confirm completion or reopen jobs returned from maintenance.</p>
                                             </div>
                                             <div class="input-group">
                                                 <label for="production-email">Email of Production Manager</label>
@@ -1545,11 +1553,14 @@
             });
         });
 
+        const isProductionManager = user?.role === "production_manager";
+        const isMaintenanceManager = user?.role === "maintenance_manager";
         const canManageAssets = ["production_manager", "admin"].includes(user?.role);
-        const canManageParts = canManageAssets || ["maintenance_manager"].includes(user?.role);
-        const canManageProductionJobs = ["production_manager", "admin"].includes(user?.role);
-        const canManageMaintenanceJobs = ["maintenance_manager", "admin"].includes(user?.role);
-        const canUpdateMaintenanceStatus = canManageProductionJobs && !canManageMaintenanceJobs;
+        const canManageParts = canManageAssets || isMaintenanceManager;
+        const canManageProductionJobs = isProductionManager || user?.role === "admin";
+        const canManageMaintenanceJobs = isMaintenanceManager || user?.role === "admin";
+        const canUpdateMaintenanceStatus = isMaintenanceManager;
+        const canReviewMaintenanceCompletion = isProductionManager;
         const canLogIdle = ["production_manager", "maintenance_manager", "admin"].includes(user?.role);
         const canAddSuppliers = ["production_manager", "admin"].includes(user?.role);
 
@@ -1626,6 +1637,9 @@
         const jobFinishInput = document.getElementById("job-finish");
         const maintenanceStatusSelect = document.getElementById("maintenance-status");
         const maintenanceNotesInput = document.getElementById("maintenance-notes");
+        const productionReviewActions = document.getElementById("production-review-actions");
+        const confirmCompletionButton = document.getElementById("confirm-completion-button");
+        const reopenJobButton = document.getElementById("reopen-job-button");
         const submitToMaintenanceButton = document.getElementById("submit-to-maintenance");
         const submitToProductionButton = document.getElementById("submit-to-production");
         const addMaterialRowButton = document.getElementById("add-material-row");
@@ -2471,6 +2485,37 @@
             if (submitToProductionButton) {
                 const shouldEnableSubmit = shouldAllowStatusUpdate || canManageMaintenanceJobs;
                 submitToProductionButton.disabled = disabled || !shouldEnableSubmit;
+            }
+        }
+
+        function updateProductionReviewActions(job) {
+            if (!productionReviewActions) return;
+            const statusCode = job?.status_code || job?.status || "";
+            const canSeeActions =
+                canReviewMaintenanceCompletion &&
+                (statusCode === "COMPLETED_MAINTENANCE" || statusCode === "COMPLETED_VERIFIED");
+
+            productionReviewActions.hidden = !canSeeActions;
+
+            if (confirmCompletionButton) {
+                const canConfirm = canSeeActions && statusCode === "COMPLETED_MAINTENANCE";
+                confirmCompletionButton.hidden = !canConfirm;
+                confirmCompletionButton.disabled = !canConfirm;
+            }
+
+            if (reopenJobButton) {
+                const canReopen = canSeeActions;
+                reopenJobButton.hidden = !canReopen;
+                reopenJobButton.disabled = !canReopen;
+            }
+        }
+
+        function setReviewButtonsDisabled(disabled) {
+            if (confirmCompletionButton && !confirmCompletionButton.hidden) {
+                confirmCompletionButton.disabled = disabled;
+            }
+            if (reopenJobButton && !reopenJobButton.hidden) {
+                reopenJobButton.disabled = disabled;
             }
         }
 
@@ -3378,11 +3423,12 @@
             const statusCode = job?.status_code || job?.status || "";
             const maintenanceLocked =
                 !canManageMaintenanceJobs || !job || statusCode === "COMPLETED_VERIFIED";
-            const allowProductionStatus =
+            const allowMaintenanceStatus =
                 canUpdateMaintenanceStatus && Boolean(job) && statusCode !== "COMPLETED_VERIFIED";
 
             setProductionFieldsDisabled(productionLocked);
-            setMaintenanceFieldsDisabled(maintenanceLocked, { allowStatus: allowProductionStatus });
+            setMaintenanceFieldsDisabled(maintenanceLocked, { allowStatus: allowMaintenanceStatus });
+            updateProductionReviewActions(job);
 
             if (!job && canManageProductionJobs) {
                 setProductionFieldsDisabled(false);
@@ -3423,6 +3469,7 @@
             setMaterials([]);
             setProductionFieldsDisabled(false);
             setMaintenanceFieldsDisabled(true);
+            updateProductionReviewActions(null);
             setInternalStaffCosts([]);
             if (productionEmailInput) productionEmailInput.value = user?.email || "";
             fetchNextJobCode();
@@ -5922,6 +5969,76 @@
                     showError(error.message || "Unable to submit maintenance details.");
                 } finally {
                     submitToProductionButton.disabled = false;
+                }
+            });
+        }
+
+        if (confirmCompletionButton) {
+            confirmCompletionButton.addEventListener("click", async () => {
+                if (!canReviewMaintenanceCompletion) return;
+                hideJobAlerts();
+                const jobId = jobIdInput?.value;
+                if (!jobId) {
+                    showError("Select a maintenance job before confirming completion.");
+                    return;
+                }
+
+                setReviewButtonsDisabled(true);
+                try {
+                    const job = await fetchJson(`/api/maintenance-jobs/${jobId}/verify`, { method: "POST" });
+                    populateJobForm(job);
+                    syncSectionState(job);
+                    selectedJobId = job?.id;
+                    showSuccess(maintenanceSuccess, "Completion confirmed by Production.");
+                    try {
+                        await refreshJobsSummary({
+                            startDate: jobsPeriodState.startDate,
+                            endDate: jobsPeriodState.endDate,
+                            updateInputs: true,
+                        });
+                    } catch (summaryError) {
+                        console.error("Failed to refresh maintenance job metrics", summaryError);
+                    }
+                    await loadJobs({ reset: true });
+                } catch (error) {
+                    showError(error.message || "Unable to confirm completion.");
+                } finally {
+                    setReviewButtonsDisabled(false);
+                }
+            });
+        }
+
+        if (reopenJobButton) {
+            reopenJobButton.addEventListener("click", async () => {
+                if (!canReviewMaintenanceCompletion) return;
+                hideJobAlerts();
+                const jobId = jobIdInput?.value;
+                if (!jobId) {
+                    showError("Select a maintenance job before reopening it.");
+                    return;
+                }
+
+                setReviewButtonsDisabled(true);
+                try {
+                    const job = await fetchJson(`/api/maintenance-jobs/${jobId}/reopen`, { method: "POST" });
+                    populateJobForm(job);
+                    syncSectionState(job);
+                    selectedJobId = job?.id;
+                    showWarning(maintenanceWarning, "Job reopened and sent back to Maintenance.");
+                    try {
+                        await refreshJobsSummary({
+                            startDate: jobsPeriodState.startDate,
+                            endDate: jobsPeriodState.endDate,
+                            updateInputs: true,
+                        });
+                    } catch (summaryError) {
+                        console.error("Failed to refresh maintenance job metrics", summaryError);
+                    }
+                    await loadJobs({ reset: true });
+                } catch (error) {
+                    showError(error.message || "Unable to reopen the job.");
+                } finally {
+                    setReviewButtonsDisabled(false);
                 }
             });
         }

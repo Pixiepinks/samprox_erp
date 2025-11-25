@@ -1239,6 +1239,22 @@ body {
     font-weight: 500;
 }
 
+.jobs-kpi-card__link {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #0ea5e9;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+}
+
+.jobs-kpi-card__link:hover,
+.jobs-kpi-card__link:focus-visible {
+    text-decoration: underline;
+    color: #0284c7;
+}
+
 .jobs-controls {
     display: flex;
     flex-wrap: wrap;

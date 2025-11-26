@@ -65,6 +65,9 @@ def supplier_search():
 @bp.get("/suppliers/<supplier_id>")
 @jwt_required()
 def supplier_detail(supplier_id: str):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return jsonify({"msg": "You do not have permission to view suppliers."}), 403
+
     try:
         supplier = get_supplier_detail(supplier_id)
     except MaterialValidationError as exc:

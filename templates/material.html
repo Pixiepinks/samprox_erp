@@ -1270,8 +1270,11 @@
 
         function closeSupplierModal() {
             if (supplierModal) {
-                supplierModal.classList.remove("active");
+                supplierModal.classList.remove("modal--open");
+                supplierModal.setAttribute("hidden", "");
+                supplierModal.setAttribute("aria-hidden", "true");
             }
+            document.body.classList.remove("modal-open");
             activeSupplierId = null;
         }
 
@@ -1292,7 +1295,10 @@
 
             resetSupplierModalState();
             activeSupplierId = supplierId;
-            supplierModal.classList.add("active");
+            supplierModal.classList.add("modal--open");
+            supplierModal.removeAttribute("hidden");
+            supplierModal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
             supplierModalSaveButton.disabled = true;
             if (!supplierId) {
                 setSupplierModalError("Unable to load this supplier.");

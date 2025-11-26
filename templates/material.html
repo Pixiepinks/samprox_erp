@@ -589,7 +589,7 @@
             credit_period: document.getElementById("supplier-credit-period"),
             email: document.getElementById("supplier-email"),
             address: document.getElementById("supplier-address"),
-            tax_id: document.getElementById("supplier-tax"),
+            tax_id: document.getElementById("supplier-tax-id"),
         };
         const vehicleRequirementHelper = document.getElementById("vehicle-no-1-helper");
         const supplierTouchedFields = new Set();
@@ -1523,6 +1523,8 @@
             if (values.category === "Raw Material" && !values.vehicle_no_1) {
                 errors.vehicle_no_1 = "Vehicle number is required for Raw Material suppliers.";
             }
+
+            return errors;
         }
 
         function evaluateSupplierForm({ force = false } = {}) {

@@ -1234,7 +1234,6 @@
                 supplierModalAlert.hidden = true;
                 supplierModalAlert.textContent = "";
             }
-            return errors;
         }
 
         function evaluateSupplierForm({ force = false } = {}) {
@@ -1522,7 +1521,6 @@
             if (values.category === "Raw Material" && !values.vehicle_no_1) {
                 errors.vehicle_no_1 = "Vehicle number is required for Raw Material suppliers.";
             }
-            return errors;
         }
 
         function evaluateSupplierForm({ force = false } = {}) {

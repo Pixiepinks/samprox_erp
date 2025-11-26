@@ -503,15 +503,17 @@
             user = null;
         }
 
+        const userRole = typeof user?.role === "string" ? user.role.toLowerCase() : "";
+
         if (!token || !user) {
             window.location.href = "/";
         }
 
-        if (user?.role === "outside_manager" && window.location.pathname !== "/responsibility_portal") {
+        if (userRole === "outside_manager" && window.location.pathname !== "/responsibility_portal") {
             window.location.replace("/responsibility_portal");
         }
 
-        if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
+        if (userRole === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
 
@@ -533,9 +535,9 @@
         const mechanismLink = document.getElementById("mechanism-link");
 
         userNameEl.textContent = user?.name || "Unknown";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
+        userRoleEl.textContent = roleLabels[userRole] || "";
         if (mechanismLink) {
-            if (user?.role === "admin") {
+            if (userRole === "admin") {
                 mechanismLink.hidden = false;
             } else {
                 mechanismLink.remove();
@@ -600,7 +602,7 @@
             "Maintenance Material",
         ]);
         const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
-        const canEditSuppliers = user?.role === "admin" || user?.role === "production_manager";
+        const canEditSuppliers = userRole === "admin" || userRole === "production_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");

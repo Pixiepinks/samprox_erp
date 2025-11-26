@@ -153,6 +153,7 @@
                                 <th scope="col">Primary phone</th>
                                 <th scope="col">Vehicle No 1</th>
                                 <th scope="col">Credit period</th>
+                                <th scope="col" id="supplier-actions-header" hidden>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="supplier-table-body"></tbody>
@@ -380,14 +381,108 @@
                         <p class="modal__label">Unit cost of briquette (per Kg)</p>
                         <p class="modal__hint" id="briquette-unit-cost">Rs 0.0000</p>
                     </div>
-                    <p class="modal__feedback" id="briquette-mix-feedback" hidden></p>
-                    <p class="modal__feedback modal__feedback--error" id="briquette-mix-error" hidden></p>
-                    <div class="modal__actions">
-                        <button type="button" class="button button--ghost" id="briquette-mix-cancel">Cancel</button>
-                        <button type="submit" class="button" id="briquette-mix-save">Save mix</button>
-                    </div>
-                </form>
+                <p class="modal__feedback" id="briquette-mix-feedback" hidden></p>
+                <p class="modal__feedback modal__feedback--error" id="briquette-mix-error" hidden></p>
+                <div class="modal__actions">
+                    <button type="button" class="button button--ghost" id="briquette-mix-cancel">Cancel</button>
+                    <button type="submit" class="button" id="briquette-mix-save">Save mix</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div
+        id="supplier-modal"
+        class="modal-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="supplier-modal-title"
+    >
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="supplier-modal-title">Edit supplier</h2>
+                <button type="button" class="modal-close" id="close-supplier-modal" aria-label="Close">×</button>
             </div>
+            <form id="supplier-form" novalidate>
+                <div class="modal-form-grid">
+                    <div class="field field--full">
+                        <label for="supplier-name">Supplier Name<span class="text-red"> *</span></label>
+                        <input id="supplier-name" name="name" type="text" required />
+                        <p class="error-text" data-error-for="modal_name"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-registration">Supplier Registration No</label>
+                        <input id="supplier-registration" type="text" name="supplier_reg_no" readonly />
+                    </div>
+                    <div class="field">
+                        <label for="supplier-id-no">Supplier ID No<span class="text-red"> *</span></label>
+                        <input id="supplier-id-no" name="supplier_id_no" type="text" required />
+                        <p class="error-text" data-error-for="modal_supplier_id_no"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-category">Category<span class="text-red"> *</span></label>
+                        <select id="supplier-category" name="category" required>
+                            <option value="" hidden>Select category</option>
+                            <option value="Raw Material">Raw Material</option>
+                            <option value="Packing Material">Packing Material</option>
+                            <option value="Repair Material">Repair Material</option>
+                            <option value="Maintenance Material">Maintenance Material</option>
+                        </select>
+                        <p class="error-text" data-error-for="modal_category"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-primary-phone">Primary Phone<span class="text-red"> *</span></label>
+                        <input id="supplier-primary-phone" name="primary_phone" type="text" required />
+                        <p class="error-text" data-error-for="modal_primary_phone"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-secondary-phone">Secondary Phone</label>
+                        <input id="supplier-secondary-phone" name="secondary_phone" type="text" />
+                    </div>
+                    <div class="field">
+                        <label for="supplier-vehicle-1">Vehicle No 1</label>
+                        <input id="supplier-vehicle-1" name="vehicle_no_1" type="text" />
+                        <p class="helper" id="vehicle-no-1-helper" hidden>Required for Raw Material suppliers.</p>
+                        <p class="error-text" data-error-for="modal_vehicle_no_1"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-vehicle-2">Vehicle No 2</label>
+                        <input id="supplier-vehicle-2" name="vehicle_no_2" type="text" />
+                    </div>
+                    <div class="field">
+                        <label for="supplier-vehicle-3">Vehicle No 3</label>
+                        <input id="supplier-vehicle-3" name="vehicle_no_3" type="text" />
+                    </div>
+                    <div class="field">
+                        <label for="supplier-credit-period">Credit Period<span class="text-red"> *</span></label>
+                        <select id="supplier-credit-period" name="credit_period" required>
+                            <option value="" hidden>Select credit period</option>
+                            <option value="Cash">Cash</option>
+                            <option value="3 Days">3 Days</option>
+                            <option value="7 Days">7 Days</option>
+                            <option value="1 Month">1 Month</option>
+                        </select>
+                        <p class="error-text" data-error-for="modal_credit_period"></p>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-email">Email</label>
+                        <input id="supplier-email" name="email" type="email" />
+                    </div>
+                    <div class="field field--full">
+                        <label for="supplier-address">Address</label>
+                        <textarea id="supplier-address" name="address" rows="2"></textarea>
+                    </div>
+                    <div class="field">
+                        <label for="supplier-tax">Tax ID</label>
+                        <input id="supplier-tax" name="tax_id" type="text" />
+                    </div>
+                </div>
+                <div id="supplier-modal-alert" class="alert" style="display: none;"></div>
+                <div class="actions">
+                    <button type="button" class="button-secondary" id="cancel-supplier">Cancel</button>
+                    <button type="submit" class="button-primary" id="save-supplier" disabled>Save changes</button>
+                </div>
+            </form>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" integrity="sha384-8FmKpVzVfU6Ly3OJUokHknsE+Fjr12JOP5tBxOBE31AyGdSzZsv/CrKHr2TRVsyG" crossorigin="anonymous"></script>
@@ -465,6 +560,41 @@
         const supplierSearchForm = document.getElementById("supplier-search-form");
         const supplierSearchInput = document.getElementById("supplier-search-input");
         const supplierClearButton = document.getElementById("supplier-clear-button");
+        const supplierActionsHeader = document.getElementById("supplier-actions-header");
+        const supplierModal = document.getElementById("supplier-modal");
+        const supplierModalForm = document.getElementById("supplier-form");
+        const supplierModalTitle = document.getElementById("supplier-modal-title");
+        const supplierModalAlert = document.getElementById("supplier-modal-alert");
+        const supplierModalClose = document.getElementById("close-supplier-modal");
+        const supplierModalCancel = document.getElementById("cancel-supplier");
+        const supplierModalSaveButton = document.getElementById("save-supplier");
+        const supplierRegistrationInput = document.getElementById("supplier-registration");
+        const supplierFieldElements = {
+            name: document.getElementById("supplier-name"),
+            supplier_id_no: document.getElementById("supplier-id-no"),
+            category: document.getElementById("supplier-category"),
+            primary_phone: document.getElementById("supplier-primary-phone"),
+            secondary_phone: document.getElementById("supplier-secondary-phone"),
+            vehicle_no_1: document.getElementById("supplier-vehicle-1"),
+            vehicle_no_2: document.getElementById("supplier-vehicle-2"),
+            vehicle_no_3: document.getElementById("supplier-vehicle-3"),
+            credit_period: document.getElementById("supplier-credit-period"),
+            email: document.getElementById("supplier-email"),
+            address: document.getElementById("supplier-address"),
+            tax_id: document.getElementById("supplier-tax"),
+        };
+        const vehicleRequirementHelper = document.getElementById("vehicle-no-1-helper");
+        const supplierTouchedFields = new Set();
+        let supplierServerErrors = {};
+        let activeSupplierId = null;
+        const supplierCategories = new Set([
+            "Raw Material",
+            "Packing Material",
+            "Repair Material",
+            "Maintenance Material",
+        ]);
+        const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
+        const canEditSuppliers = user?.role === "admin" || user?.role === "production_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
@@ -995,6 +1125,10 @@
                 return;
             }
 
+            if (supplierActionsHeader) {
+                supplierActionsHeader.hidden = !canEditSuppliers;
+            }
+
             items.forEach((item) => {
                 const row = document.createElement("tr");
 
@@ -1022,6 +1156,23 @@
                 creditCell.textContent = item.creditPeriod || "—";
                 row.appendChild(creditCell);
 
+                if (canEditSuppliers) {
+                    const actionCell = document.createElement("td");
+                    if (item.id) {
+                        const editButton = document.createElement("button");
+                        editButton.type = "button";
+                        editButton.className = "button button--secondary";
+                        editButton.textContent = "Edit";
+                        editButton.addEventListener("click", () => {
+                            openSupplierEditor(item.id);
+                        });
+                        actionCell.appendChild(editButton);
+                    } else {
+                        actionCell.textContent = "—";
+                    }
+                    row.appendChild(actionCell);
+                }
+
                 supplierTableBody.appendChild(row);
             });
 
@@ -1031,7 +1182,7 @@
 
         async function loadSuppliers(query = "") {
             if (!supplierTableBody || !supplierEmptyState) {
-                return;
+                return [];
             }
 
             supplierEmptyState.hidden = false;
@@ -1053,15 +1204,312 @@
                 const data = await response.json();
                 if (!Array.isArray(data)) {
                     renderSupplierRows([]);
-                    return;
+                    return [];
                 }
                 renderSupplierRows(data);
+                return data;
             } catch (error) {
                 console.error(error);
                 supplierEmptyState.hidden = false;
                 supplierEmptyState.textContent =
                     "Unable to load suppliers right now. Please try again.";
+                return [];
             }
+        }
+
+        function setSupplierModalError(message) {
+            if (!supplierModalAlert) {
+                return;
+            }
+            if (message) {
+                supplierModalAlert.style.display = "block";
+                supplierModalAlert.textContent = message;
+            } else {
+                supplierModalAlert.style.display = "none";
+                supplierModalAlert.textContent = "";
+            }
+        }
+
+        function updateVehicleRequirement(categoryValue) {
+            const isRaw = categoryValue === "Raw Material";
+            const vehicleField = supplierFieldElements.vehicle_no_1;
+            if (vehicleField) {
+                if (isRaw) {
+                    vehicleField.setAttribute("required", "required");
+                } else {
+                    vehicleField.removeAttribute("required");
+                }
+            }
+            if (vehicleRequirementHelper) {
+                if (isRaw) {
+                    vehicleRequirementHelper.removeAttribute("hidden");
+                } else {
+                    vehicleRequirementHelper.setAttribute("hidden", "");
+                }
+            }
+        }
+
+        function updateSupplierFieldErrors(errors, { force = false } = {}) {
+            const mapping = {
+                name: "modal_name",
+                primary_phone: "modal_primary_phone",
+                category: "modal_category",
+                supplier_id_no: "modal_supplier_id_no",
+                credit_period: "modal_credit_period",
+                vehicle_no_1: "modal_vehicle_no_1",
+            };
+
+            Object.entries(mapping).forEach(([field, key]) => {
+                const node = supplierModalForm?.querySelector(`[data-error-for='${key}']`);
+                if (!node) {
+                    return;
+                }
+                const message = errors[field];
+                if (message && (force || supplierTouchedFields.has(field))) {
+                    node.textContent = message;
+                } else {
+                    node.textContent = "";
+                }
+            });
+        }
+
+        function updateSupplierSaveButton(errors) {
+            if (!supplierModalSaveButton) {
+                return;
+            }
+            supplierModalSaveButton.disabled = Object.keys(errors).length > 0;
+        }
+
+        function getSupplierFormValues() {
+            return {
+                name: (supplierFieldElements.name?.value || "").trim(),
+                supplier_id_no: (supplierFieldElements.supplier_id_no?.value || "").trim(),
+                category: supplierFieldElements.category?.value || "",
+                primary_phone: (supplierFieldElements.primary_phone?.value || "").trim(),
+                secondary_phone: (supplierFieldElements.secondary_phone?.value || "").trim(),
+                vehicle_no_1: (supplierFieldElements.vehicle_no_1?.value || "").trim(),
+                vehicle_no_2: (supplierFieldElements.vehicle_no_2?.value || "").trim(),
+                vehicle_no_3: (supplierFieldElements.vehicle_no_3?.value || "").trim(),
+                credit_period: supplierFieldElements.credit_period?.value || "",
+                email: (supplierFieldElements.email?.value || "").trim(),
+                address: (supplierFieldElements.address?.value || "").trim(),
+                tax_id: (supplierFieldElements.tax_id?.value || "").trim(),
+            };
+        }
+
+        function validateSupplierFormValues(values) {
+            const errors = {};
+            if (!values.name) {
+                errors.name = "Supplier name is required.";
+            }
+            if (!values.primary_phone) {
+                errors.primary_phone = "Primary phone is required.";
+            }
+            if (!values.category) {
+                errors.category = "Category is required.";
+            } else if (!supplierCategories.has(values.category)) {
+                errors.category = "Select a valid category.";
+            }
+            if (!values.supplier_id_no) {
+                errors.supplier_id_no = "Supplier ID number is required.";
+            }
+            if (!values.credit_period) {
+                errors.credit_period = "Credit period is required.";
+            } else if (!supplierCreditPeriods.has(values.credit_period)) {
+                errors.credit_period = "Select a valid credit period.";
+            }
+            if (values.category === "Raw Material" && !values.vehicle_no_1) {
+                errors.vehicle_no_1 = "Vehicle number is required for Raw Material suppliers.";
+            }
+            return errors;
+        }
+
+        function evaluateSupplierForm({ force = false } = {}) {
+            const values = getSupplierFormValues();
+            const clientErrors = validateSupplierFormValues(values);
+            const combinedErrors = { ...clientErrors, ...supplierServerErrors };
+            updateSupplierFieldErrors(combinedErrors, { force });
+            updateSupplierSaveButton(combinedErrors);
+            return { values, errors: combinedErrors, clientErrors };
+        }
+
+        function populateSupplierForm(record) {
+            supplierFieldElements.name.value = record?.name || "";
+            supplierFieldElements.supplier_id_no.value = record?.supplierIdNo || "";
+            supplierFieldElements.category.value = record?.category || "";
+            supplierFieldElements.primary_phone.value = record?.primaryPhone || record?.phone || "";
+            supplierFieldElements.secondary_phone.value = record?.secondaryPhone || "";
+            supplierFieldElements.vehicle_no_1.value = record?.vehicleNo1 || "";
+            supplierFieldElements.vehicle_no_2.value = record?.vehicleNo2 || "";
+            supplierFieldElements.vehicle_no_3.value = record?.vehicleNo3 || "";
+            supplierFieldElements.credit_period.value = record?.creditPeriod || "";
+            supplierFieldElements.email.value = record?.email || "";
+            supplierFieldElements.address.value = record?.address || "";
+            supplierFieldElements.tax_id.value = record?.taxId || "";
+
+            if (supplierRegistrationInput) {
+                supplierRegistrationInput.value = record?.supplierRegNo || "";
+            }
+
+            updateVehicleRequirement(record?.category || "");
+            evaluateSupplierForm({ force: true });
+        }
+
+        function closeSupplierModal() {
+            if (supplierModal) {
+                supplierModal.classList.remove("active");
+            }
+            activeSupplierId = null;
+        }
+
+        function resetSupplierModalState() {
+            supplierTouchedFields.clear();
+            supplierServerErrors = {};
+            setSupplierModalError("");
+            if (supplierModalTitle) {
+                supplierModalTitle.textContent = "Edit supplier";
+            }
+            updateSupplierFieldErrors({}, { force: true });
+        }
+
+        async function openSupplierEditor(supplierId) {
+            if (!canEditSuppliers || !supplierModal) {
+                return;
+            }
+
+            resetSupplierModalState();
+            activeSupplierId = supplierId;
+            supplierModal.classList.add("active");
+            supplierModalSaveButton.disabled = true;
+            if (!supplierId) {
+                setSupplierModalError("Unable to load this supplier.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/material/suppliers/${supplierId}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
+                    setSupplierModalError(message);
+                    return;
+                }
+                populateSupplierForm(data);
+                supplierModalSaveButton.disabled = false;
+                supplierFieldElements.name?.focus();
+            } catch (error) {
+                setSupplierModalError("Unable to load supplier.");
+            }
+        }
+
+        if (supplierModalClose) {
+            supplierModalClose.addEventListener("click", closeSupplierModal);
+        }
+
+        if (supplierModalCancel) {
+            supplierModalCancel.addEventListener("click", closeSupplierModal);
+        }
+
+        if (supplierModal) {
+            supplierModal.addEventListener("click", (event) => {
+                if (event.target === supplierModal) {
+                    closeSupplierModal();
+                }
+            });
+        }
+
+        Object.entries(supplierFieldElements).forEach(([field, element]) => {
+            if (!element) {
+                return;
+            }
+            const handler = () => {
+                supplierTouchedFields.add(field);
+                if (field in supplierServerErrors) {
+                    delete supplierServerErrors[field];
+                }
+                if (field === "category") {
+                    updateVehicleRequirement(element.value);
+                }
+                evaluateSupplierForm();
+            };
+            const eventName = element.tagName === "SELECT" ? "change" : "input";
+            element.addEventListener(eventName, handler);
+            element.addEventListener("blur", handler);
+        });
+
+        if (supplierModalForm) {
+            supplierModalForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                setSupplierModalError("");
+                supplierTouchedFields.add("name");
+                supplierTouchedFields.add("supplier_id_no");
+                supplierTouchedFields.add("category");
+                supplierTouchedFields.add("primary_phone");
+                supplierTouchedFields.add("credit_period");
+                supplierTouchedFields.add("vehicle_no_1");
+
+                const { values, clientErrors } = evaluateSupplierForm({ force: true });
+                if (Object.keys(clientErrors).length > 0) {
+                    return;
+                }
+
+                if (!activeSupplierId) {
+                    setSupplierModalError("No supplier selected.");
+                    return;
+                }
+
+                supplierModalSaveButton.disabled = true;
+                const payload = {
+                    name: values.name,
+                    supplier_id_no: values.supplier_id_no,
+                    category: values.category,
+                    primary_phone: values.primary_phone,
+                    credit_period: values.credit_period,
+                    secondary_phone: values.secondary_phone,
+                    vehicle_no_1: values.vehicle_no_1,
+                    vehicle_no_2: values.vehicle_no_2,
+                    vehicle_no_3: values.vehicle_no_3,
+                    email: values.email,
+                    address: values.address,
+                    tax_id: values.tax_id,
+                };
+
+                try {
+                    const response = await fetch(`/api/material/suppliers/${activeSupplierId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const fieldErrors = data?.errors || {};
+                        supplierServerErrors = { ...fieldErrors };
+                        Object.keys(fieldErrors).forEach((field) => supplierTouchedFields.add(field));
+                        evaluateSupplierForm({ force: true });
+                        const message =
+                            fieldErrors.supplier_reg_no || data?.msg || "Unable to save supplier.";
+                        if (message) {
+                            setSupplierModalError(message);
+                        }
+                        return;
+                    }
+
+                    const currentQuery = supplierSearchInput ? supplierSearchInput.value : "";
+                    await loadSuppliers(currentQuery || "");
+                    closeSupplierModal();
+                } catch (error) {
+                    setSupplierModalError("Network error. Please try again.");
+                } finally {
+                    evaluateSupplierForm();
+                }
+            });
         }
 
         function formatDate(value) {

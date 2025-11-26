@@ -1731,6 +1731,12 @@
             });
         }
 
+        if (briquetteFireCutInput) {
+            briquetteFireCutInput.addEventListener("input", () => {
+                updateDerivedMaterialValues();
+            });
+        }
+
         if (briquetteModalForm) {
             briquetteModalForm.addEventListener("submit", async (event) => {
                 event.preventDefault();

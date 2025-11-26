@@ -1088,8 +1088,14 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
     else:
         sawdust = _quantize(Decimal("0"), TON_QUANT)
 
+    if total_output < dryer_tons + wood_powder + peanut_husk:
+        raise ValueError(
+            "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs."
+        )
+
     wood_shaving = _quantize(
-        max(total_output - dryer_tons - wood_powder - peanut_husk, Decimal("0")), TON_QUANT
+        max(total_output - dryer_tons - wood_powder - peanut_husk, Decimal("0")),
+        TON_QUANT,
     )
 
     consumption_today = {

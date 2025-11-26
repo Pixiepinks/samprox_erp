@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt, jwt_required
 
 from material import (
     DEFAULT_BRIQUETTE_ENTRY_LIMIT,
@@ -13,6 +14,7 @@ from material import (
     create_item,
     create_mrn,
     create_supplier,
+    get_supplier_detail,
     get_briquette_mix_detail,
     get_next_mrn_number,
     get_next_supplier_registration_no,
@@ -23,7 +25,9 @@ from material import (
     search_suppliers,
     update_mrn,
     update_briquette_mix,
+    update_supplier,
 )
+from models import RoleEnum
 from schemas import MRNSchema, MaterialItemSchema, SupplierSchema
 
 bp = Blueprint("material", __name__, url_prefix="/api/material")
@@ -36,6 +40,17 @@ mrn_schema = MRNSchema()
 mrn_list_schema = MRNSchema(many=True)
 
 
+def require_role(*roles: RoleEnum) -> bool:
+    """Return ``True`` if the current JWT belongs to one of the roles."""
+
+    claims = get_jwt()
+    try:
+        current_role = RoleEnum(claims.get("role"))
+    except (ValueError, TypeError):
+        return False
+    return current_role in roles
+
+
 @bp.get("/suppliers")
 def supplier_search():
     query = request.args.get("search")
@@ -45,6 +60,17 @@ def supplier_search():
         limit = 20
     suppliers = search_suppliers(query, limit=limit)
     return jsonify(suppliers_schema.dump(suppliers))
+
+
+@bp.get("/suppliers/<supplier_id>")
+@jwt_required()
+def supplier_detail(supplier_id: str):
+    try:
+        supplier = get_supplier_detail(supplier_id)
+    except MaterialValidationError as exc:
+        status = 404 if exc.errors.get("id") == "Supplier not found." else 400
+        return jsonify({"errors": exc.errors}), status
+    return jsonify(supplier_schema.dump(supplier))
 
 
 @bp.get("/suppliers/next-registration-number")
@@ -61,6 +87,21 @@ def supplier_create():
     except MaterialValidationError as exc:
         return jsonify({"errors": exc.errors}), 400
     return jsonify(supplier_schema.dump(supplier)), 201
+
+
+@bp.put("/suppliers/<supplier_id>")
+@jwt_required()
+def supplier_update(supplier_id: str):
+    if not require_role(RoleEnum.admin, RoleEnum.production_manager):
+        return jsonify({"msg": "You do not have permission to edit suppliers."}), 403
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        supplier = update_supplier(supplier_id, payload)
+    except MaterialValidationError as exc:
+        status = 404 if exc.errors.get("id") == "Supplier not found." else 400
+        return jsonify({"errors": exc.errors}), status
+    return jsonify(supplier_schema.dump(supplier))
 
 
 @bp.get("/items")

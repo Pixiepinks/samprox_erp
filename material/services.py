@@ -239,6 +239,93 @@ def create_supplier(payload: Dict[str, Any]) -> Supplier:
     return supplier
 
 
+def get_supplier_detail(supplier_id: str) -> Supplier:
+    """Return supplier for ``supplier_id`` or raise a validation error."""
+
+    try:
+        supplier_uuid = uuid.UUID(str(supplier_id))
+    except (ValueError, TypeError):
+        raise MaterialValidationError({"id": "Invalid supplier id."})
+
+    supplier = Supplier.query.get(supplier_uuid)
+    if not supplier:
+        raise MaterialValidationError({"id": "Supplier not found."})
+    return supplier
+
+
+def update_supplier(supplier_id: str, payload: Dict[str, Any]) -> Supplier:
+    """Update an existing supplier with ``payload`` values."""
+
+    supplier = get_supplier_detail(supplier_id)
+
+    errors: Dict[str, str] = {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        errors["name"] = "Supplier name is required."
+
+    primary_phone_raw = payload.get("primary_phone")
+    primary_phone = (
+        (primary_phone_raw or "").strip() if isinstance(primary_phone_raw, str) else str(primary_phone_raw or "").strip()
+    )
+    if not primary_phone:
+        errors["primary_phone"] = "Primary phone is required."
+
+    secondary_phone = _strip_or_none(payload.get("secondary_phone"))
+
+    category = (payload.get("category") or "").strip()
+    if not category:
+        errors["category"] = "Category is required."
+    elif category not in SUPPLIER_CATEGORIES:
+        errors["category"] = "Invalid category."
+
+    vehicle_no_1 = _strip_or_none(payload.get("vehicle_no_1"))
+    vehicle_no_2 = _strip_or_none(payload.get("vehicle_no_2"))
+    vehicle_no_3 = _strip_or_none(payload.get("vehicle_no_3"))
+
+    if category == "Raw Material" and not vehicle_no_1:
+        errors["vehicle_no_1"] = "Vehicle number is required for Raw Material suppliers."
+
+    supplier_id_no = (payload.get("supplier_id_no") or "").strip()
+    if not supplier_id_no:
+        errors["supplier_id_no"] = "Supplier ID number is required."
+
+    credit_period = (payload.get("credit_period") or "").strip()
+    if not credit_period:
+        errors["credit_period"] = "Credit period is required."
+    elif credit_period not in CREDIT_PERIOD_OPTIONS:
+        errors["credit_period"] = "Invalid credit period."
+
+    email = _strip_or_none(payload.get("email"))
+    address = _strip_or_none(payload.get("address"))
+    tax_id = _strip_or_none(payload.get("tax_id"))
+
+    if errors:
+        raise MaterialValidationError(errors)
+
+    supplier.name = name
+    supplier.primary_phone = primary_phone
+    supplier.secondary_phone = secondary_phone
+    supplier.category = category
+    supplier.vehicle_no_1 = vehicle_no_1
+    supplier.vehicle_no_2 = vehicle_no_2
+    supplier.vehicle_no_3 = vehicle_no_3
+    supplier.supplier_id_no = supplier_id_no
+    supplier.credit_period = credit_period
+    supplier.email = email
+    supplier.address = address
+    supplier.tax_id = tax_id
+
+    db.session.add(supplier)
+    try:
+        db.session.commit()
+    except IntegrityError as exc:  # pragma: no cover - database error branch
+        db.session.rollback()
+        if _is_unique_violation(exc, "suppliers", "name"):
+            raise MaterialValidationError({"name": "A supplier with this name already exists."}) from exc
+        raise
+    return supplier
+
+
 def list_material_items(*, search: Optional[str] = None, limit: Optional[int] = None) -> list[MaterialItem]:
     """Return active material items, optionally filtered by ``search``."""
 

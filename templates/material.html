@@ -1234,6 +1234,195 @@
                 supplierModalAlert.hidden = true;
                 supplierModalAlert.textContent = "";
             }
+            return errors;
+        }
+
+        function evaluateSupplierForm({ force = false } = {}) {
+            const values = getSupplierFormValues();
+            const clientErrors = validateSupplierFormValues(values);
+            const combinedErrors = { ...clientErrors, ...supplierServerErrors };
+            updateSupplierFieldErrors(combinedErrors, { force });
+            updateSupplierSaveButton(combinedErrors);
+            return { values, errors: combinedErrors, clientErrors };
+        }
+
+        function populateSupplierForm(record) {
+            supplierFieldElements.name.value = record?.name || "";
+            supplierFieldElements.supplier_id_no.value = record?.supplierIdNo || "";
+            supplierFieldElements.category.value = record?.category || "";
+            supplierFieldElements.primary_phone.value = record?.primaryPhone || record?.phone || "";
+            supplierFieldElements.secondary_phone.value = record?.secondaryPhone || "";
+            supplierFieldElements.vehicle_no_1.value = record?.vehicleNo1 || "";
+            supplierFieldElements.vehicle_no_2.value = record?.vehicleNo2 || "";
+            supplierFieldElements.vehicle_no_3.value = record?.vehicleNo3 || "";
+            supplierFieldElements.credit_period.value = record?.creditPeriod || "";
+            supplierFieldElements.email.value = record?.email || "";
+            supplierFieldElements.address.value = record?.address || "";
+            supplierFieldElements.tax_id.value = record?.taxId || "";
+
+            if (supplierRegistrationInput) {
+                supplierRegistrationInput.value = record?.supplierRegNo || "";
+            }
+
+            updateVehicleRequirement(record?.category || "");
+            evaluateSupplierForm({ force: true });
+        }
+
+        function closeSupplierModal() {
+            if (supplierModal) {
+                supplierModal.classList.remove("active");
+            }
+            activeSupplierId = null;
+        }
+
+        function resetSupplierModalState() {
+            supplierTouchedFields.clear();
+            supplierServerErrors = {};
+            setSupplierModalError("");
+            if (supplierModalTitle) {
+                supplierModalTitle.textContent = "Edit supplier";
+            }
+            updateSupplierFieldErrors({}, { force: true });
+        }
+
+        async function openSupplierEditor(supplierId) {
+            if (!canEditSuppliers || !supplierModal) {
+                return;
+            }
+
+            resetSupplierModalState();
+            activeSupplierId = supplierId;
+            supplierModal.classList.add("active");
+            supplierModalSaveButton.disabled = true;
+            if (!supplierId) {
+                setSupplierModalError("Unable to load this supplier.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/material/suppliers/${supplierId}`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
+                    setSupplierModalError(message);
+                    return;
+                }
+                populateSupplierForm(data);
+                supplierModalSaveButton.disabled = false;
+                supplierFieldElements.name?.focus();
+            } catch (error) {
+                setSupplierModalError("Unable to load supplier.");
+            }
+        }
+
+        if (supplierModalClose) {
+            supplierModalClose.addEventListener("click", closeSupplierModal);
+        }
+
+        if (supplierModalCancel) {
+            supplierModalCancel.addEventListener("click", closeSupplierModal);
+        }
+
+        if (supplierModal) {
+            supplierModal.addEventListener("click", (event) => {
+                if (event.target === supplierModal) {
+                    closeSupplierModal();
+                }
+            });
+        }
+
+        Object.entries(supplierFieldElements).forEach(([field, element]) => {
+            if (!element) {
+                return;
+            }
+            const handler = () => {
+                supplierTouchedFields.add(field);
+                if (field in supplierServerErrors) {
+                    delete supplierServerErrors[field];
+                }
+                if (field === "category") {
+                    updateVehicleRequirement(element.value);
+                }
+                evaluateSupplierForm();
+            };
+            const eventName = element.tagName === "SELECT" ? "change" : "input";
+            element.addEventListener(eventName, handler);
+            element.addEventListener("blur", handler);
+        });
+
+        if (supplierModalForm) {
+            supplierModalForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                setSupplierModalError("");
+                supplierTouchedFields.add("name");
+                supplierTouchedFields.add("supplier_id_no");
+                supplierTouchedFields.add("category");
+                supplierTouchedFields.add("primary_phone");
+                supplierTouchedFields.add("credit_period");
+                supplierTouchedFields.add("vehicle_no_1");
+
+                const { values, clientErrors } = evaluateSupplierForm({ force: true });
+                if (Object.keys(clientErrors).length > 0) {
+                    return;
+                }
+
+                if (!activeSupplierId) {
+                    setSupplierModalError("No supplier selected.");
+                    return;
+                }
+
+                supplierModalSaveButton.disabled = true;
+                const payload = {
+                    name: values.name,
+                    supplier_id_no: values.supplier_id_no,
+                    category: values.category,
+                    primary_phone: values.primary_phone,
+                    credit_period: values.credit_period,
+                    secondary_phone: values.secondary_phone,
+                    vehicle_no_1: values.vehicle_no_1,
+                    vehicle_no_2: values.vehicle_no_2,
+                    vehicle_no_3: values.vehicle_no_3,
+                    email: values.email,
+                    address: values.address,
+                    tax_id: values.tax_id,
+                };
+
+                try {
+                    const response = await fetch(`/api/material/suppliers/${activeSupplierId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const fieldErrors = data?.errors || {};
+                        supplierServerErrors = { ...fieldErrors };
+                        Object.keys(fieldErrors).forEach((field) => supplierTouchedFields.add(field));
+                        evaluateSupplierForm({ force: true });
+                        const message =
+                            fieldErrors.supplier_reg_no || data?.msg || "Unable to save supplier.";
+                        if (message) {
+                            setSupplierModalError(message);
+                        }
+                        return;
+                    }
+
+                    const currentQuery = supplierSearchInput ? supplierSearchInput.value : "";
+                    await loadSuppliers(currentQuery || "");
+                    closeSupplierModal();
+                } catch (error) {
+                    setSupplierModalError("Network error. Please try again.");
+                } finally {
+                    evaluateSupplierForm();
+                }
+            });
         }
 
         function updateVehicleRequirement(categoryValue) {

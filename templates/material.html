@@ -503,15 +503,17 @@
             user = null;
         }
 
+        const userRole = typeof user?.role === "string" ? user.role.toLowerCase() : "";
+
         if (!token || !user) {
             window.location.href = "/";
         }
 
-        if (user?.role === "outside_manager" && window.location.pathname !== "/responsibility_portal") {
+        if (userRole === "outside_manager" && window.location.pathname !== "/responsibility_portal") {
             window.location.replace("/responsibility_portal");
         }
 
-        if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
+        if (userRole === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
 
@@ -533,9 +535,9 @@
         const mechanismLink = document.getElementById("mechanism-link");
 
         userNameEl.textContent = user?.name || "Unknown";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
+        userRoleEl.textContent = roleLabels[userRole] || "";
         if (mechanismLink) {
-            if (user?.role === "admin") {
+            if (userRole === "admin") {
                 mechanismLink.hidden = false;
             } else {
                 mechanismLink.remove();
@@ -600,7 +602,7 @@
             "Maintenance Material",
         ]);
         const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
-        const canEditSuppliers = user?.role === "admin" || user?.role === "production_manager";
+        const canEditSuppliers = userRole === "admin" || userRole === "production_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
@@ -1234,7 +1236,6 @@
                 supplierModalAlert.hidden = true;
                 supplierModalAlert.textContent = "";
             }
-            return errors;
         }
 
         function evaluateSupplierForm({ force = false } = {}) {
@@ -1270,8 +1271,11 @@
 
         function closeSupplierModal() {
             if (supplierModal) {
-                supplierModal.classList.remove("active");
+                supplierModal.classList.remove("modal--open");
+                supplierModal.setAttribute("hidden", "");
+                supplierModal.setAttribute("aria-hidden", "true");
             }
+            document.body.classList.remove("modal-open");
             activeSupplierId = null;
         }
 
@@ -1292,7 +1296,10 @@
 
             resetSupplierModalState();
             activeSupplierId = supplierId;
-            supplierModal.classList.add("active");
+            supplierModal.classList.add("modal--open");
+            supplierModal.removeAttribute("hidden");
+            supplierModal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
             supplierModalSaveButton.disabled = true;
             if (!supplierId) {
                 setSupplierModalError("Unable to load this supplier.");
@@ -1516,7 +1523,6 @@
             if (values.category === "Raw Material" && !values.vehicle_no_1) {
                 errors.vehicle_no_1 = "Vehicle number is required for Raw Material suppliers.";
             }
-            return errors;
         }
 
         function evaluateSupplierForm({ force = false } = {}) {

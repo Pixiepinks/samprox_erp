@@ -921,9 +921,8 @@ def _serialize_mix_entry(
     wood_shaving_value = material_decimals.get("wood_shaving", Decimal("0"))
     wood_powder_value = material_decimals.get("wood_powder", Decimal("0"))
     peanut_husk_value = material_decimals.get("peanut_husk", Decimal("0"))
-    fire_cut_value = material_decimals.get("fire_cut", Decimal("0"))
     dry_material_value = _quantize(
-        dryer_tons + wood_shaving_value + wood_powder_value + peanut_husk_value + fire_cut_value,
+        dryer_tons + wood_shaving_value + wood_powder_value + peanut_husk_value,
         TON_QUANT,
     )
 
@@ -1089,13 +1088,13 @@ def update_briquette_mix(target_date: date, payload: Dict[str, object]) -> Dict[
     else:
         sawdust = _quantize(Decimal("0"), TON_QUANT)
 
-    if total_output < dryer_tons + wood_powder + peanut_husk + fire_cut:
+    if total_output < dryer_tons + wood_powder + peanut_husk:
         raise ValueError(
             "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs."
         )
 
     wood_shaving = _quantize(
-        max(total_output - dryer_tons - wood_powder - peanut_husk - fire_cut, Decimal("0")),
+        max(total_output - dryer_tons - wood_powder - peanut_husk, Decimal("0")),
         TON_QUANT,
     )
 

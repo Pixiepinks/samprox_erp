@@ -178,11 +178,11 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
         mix_data = response.get_json()
 
         self.assertAlmostEqual(mix_data["sawdust_ton"], 1.25, places=3)
-        self.assertAlmostEqual(mix_data["wood_shaving_ton"], 2.15, places=3)
+        self.assertAlmostEqual(mix_data["wood_shaving_ton"], 2.2, places=3)
         self.assertAlmostEqual(mix_data["dry_material_ton"], 3.0, places=3)
         self.assertAlmostEqual(mix_data["dryer_actual_running_hours"], 1.0, places=1)
-        self.assertAlmostEqual(mix_data["total_material_cost"], 34764.5, places=2)
-        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 11.5882, places=4)
+        self.assertAlmostEqual(mix_data["total_material_cost"], 35254.5, places=2)
+        self.assertAlmostEqual(mix_data["unit_cost_per_kg"], 11.7515, places=4)
 
         breakdown = {item["key"]: item for item in mix_data["cost_breakdown"]}
         self.assertIn("wood_powder", breakdown)
@@ -197,8 +197,8 @@ class BriquetteProductionApiTestCase(unittest.TestCase):
             None,
         )
         self.assertIsNotNone(day_entry)
-        self.assertAlmostEqual(day_entry["total_material_cost"], 34764.5, places=2)
-        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 11.5882, places=4)
+        self.assertAlmostEqual(day_entry["total_material_cost"], 35254.5, places=2)
+        self.assertAlmostEqual(day_entry["unit_cost_per_kg"], 11.7515, places=4)
 
     def test_mix_detail_returns_default_dry_factor(self):
         response = self.client.get(

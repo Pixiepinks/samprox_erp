@@ -2889,6 +2889,13 @@
             updateInternalStaffTotal();
         }
 
+        function applyInternalStaffHourlyRates({ onlyWhenEmpty = false } = {}) {
+            if (!internalStaffTableBody) return;
+            internalStaffTableBody.querySelectorAll("tr").forEach((row) => {
+                applyInternalStaffHourlyRate(row, { onlyWhenEmpty });
+            });
+        }
+
         function addInternalStaffRow(entry = {}) {
             if (!internalStaffTableBody) return;
             const row = document.createElement("tr");
@@ -3032,6 +3039,7 @@
             }
             updateInternalStaffDateConstraints();
             updateInternalStaffEmployeeOptions();
+            applyInternalStaffHourlyRates({ onlyWhenEmpty: true });
             updateInternalStaffTotal();
         }
 
@@ -7570,6 +7578,7 @@
                 activeEmployees = [];
             }
             updateInternalStaffEmployeeOptions();
+            applyInternalStaffHourlyRates({ onlyWhenEmpty: true });
         }
 
         async function loadSuppliers() {

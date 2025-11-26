@@ -1227,8 +1227,9 @@
                 : 0;
 
             const woodShavingRaw = totalOutput - dryerTons - woodPowder - peanutHusk;
-            if (Number.isFinite(woodShavingRaw)) {
-                briquetteComputedWoodShavingTon = Number(woodShavingRaw.toFixed(3));
+            const woodShavingClamped = Math.max(woodShavingRaw, 0);
+            if (Number.isFinite(woodShavingClamped)) {
+                briquetteComputedWoodShavingTon = Number(woodShavingClamped.toFixed(3));
                 if (briquetteWoodShavingInput) {
                     briquetteWoodShavingInput.value = briquetteComputedWoodShavingTon.toFixed(3);
                 }
@@ -1239,7 +1240,7 @@
                 }
             }
 
-            const dryMaterialRaw = dryerTons + woodShavingRaw + woodPowder + peanutHusk;
+            const dryMaterialRaw = dryerTons + woodShavingClamped + woodPowder + peanutHusk;
             if (Number.isFinite(dryMaterialRaw)) {
                 briquetteComputedDryMaterialTon = Number(dryMaterialRaw.toFixed(3));
                 if (briquetteDryMaterialInput) {
@@ -1744,18 +1745,6 @@
                 clearBriquetteModalFeedback();
 
                 updateDerivedMaterialValues();
-                if (Number.isFinite(briquetteComputedWoodShavingTon)) {
-                    if (Math.round(briquetteComputedWoodShavingTon * 1000) < 0) {
-                        setBriquetteModalFeedback(
-                            "Invalid mix: Wood shaving quantity cannot be negative. Please check inputs.",
-                            { isError: true },
-                        );
-                        if (briquetteSaveButton) {
-                            briquetteSaveButton.disabled = false;
-                        }
-                        return;
-                    }
-                }
 
                 const woodShavingForPayload = Number.isFinite(briquetteComputedWoodShavingTon)
                     ? briquetteComputedWoodShavingTon.toFixed(3)

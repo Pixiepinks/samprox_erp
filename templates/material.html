@@ -1219,6 +1219,7 @@
         function updateDerivedMaterialValues() {
             const woodPowder = parseTonInput(briquetteWoodPowderInput);
             const peanutHusk = parseTonInput(briquettePeanutHuskInput);
+            const fireCut = parseTonInput(briquetteFireCutInput);
             const dryerTons = Number.isFinite(briquetteDryerProductionTon)
                 ? briquetteDryerProductionTon
                 : 0;
@@ -1226,7 +1227,7 @@
                 ? briquetteTotalOutputTon
                 : 0;
 
-            const woodShavingRaw = totalOutput - dryerTons - woodPowder - peanutHusk;
+            const woodShavingRaw = totalOutput - dryerTons - woodPowder - peanutHusk - fireCut;
             const woodShavingClamped = Math.max(woodShavingRaw, 0);
             if (Number.isFinite(woodShavingClamped)) {
                 briquetteComputedWoodShavingTon = Number(woodShavingClamped.toFixed(3));
@@ -1240,7 +1241,7 @@
                 }
             }
 
-            const dryMaterialRaw = dryerTons + woodShavingClamped + woodPowder + peanutHusk;
+            const dryMaterialRaw = dryerTons + woodShavingClamped + woodPowder + peanutHusk + fireCut;
             if (Number.isFinite(dryMaterialRaw)) {
                 briquetteComputedDryMaterialTon = Number(dryMaterialRaw.toFixed(3));
                 if (briquetteDryMaterialInput) {
@@ -1727,6 +1728,12 @@
 
         if (briquettePeanutHuskInput) {
             briquettePeanutHuskInput.addEventListener("input", () => {
+                updateDerivedMaterialValues();
+            });
+        }
+
+        if (briquetteFireCutInput) {
+            briquetteFireCutInput.addEventListener("input", () => {
                 updateDerivedMaterialValues();
             });
         }

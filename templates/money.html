@@ -417,6 +417,10 @@
             window.location.replace("/machines");
         }
 
+        if (user?.role === "Sales" && window.location.pathname !== "/money") {
+            window.location.replace("/money");
+        }
+
         const roleLabels = {
             admin: "Admin",
             production_manager: "Production Manager",
@@ -424,12 +428,17 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            Sales: "Sales",
         };
+
+        const isSales = user?.role === "Sales";
 
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
         const mechanismLink = document.getElementById("mechanism-link");
+        const primaryNavLink = document.querySelector(".topbar__actions .button--ghost");
+        const subnavLinks = document.querySelectorAll(".subnav__link");
 
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
@@ -439,6 +448,33 @@
             } else {
                 mechanismLink.remove();
             }
+        }
+
+        if (isSales) {
+            if (primaryNavLink) {
+                primaryNavLink.textContent = "Money";
+                primaryNavLink.href = "/money";
+            }
+
+            subnavLinks.forEach((link) => {
+                if (!link.getAttribute("href")?.startsWith("/money")) {
+                    link.remove();
+                }
+            });
+
+            document.body.dataset.activeTab = "petty-cash";
+
+            document.querySelectorAll(".tab-switcher__button").forEach((btn) => {
+                if (btn.dataset.tab !== "petty-cash") {
+                    btn.remove();
+                }
+            });
+
+            document.querySelectorAll(".tab-panel").forEach((panel) => {
+                if (panel.id !== "tab-petty-cash") {
+                    panel.remove();
+                }
+            });
         }
 
         logoutButton.addEventListener("click", async () => {

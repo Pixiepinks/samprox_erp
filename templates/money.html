@@ -128,7 +128,56 @@
                     <div class="status-pill" id="petty-status">Draft</div>
                 </header>
 
-                <div class="petty-card">
+                <div class="petty-review" id="petty-review" hidden>
+                    <div class="petty-review__filters">
+                        <label class="form-field">
+                            <span>Week starting</span>
+                            <input id="petty-filter-week" type="date" required />
+                        </label>
+                        <label class="form-field">
+                            <span>Status</span>
+                            <select id="petty-filter-status">
+                                <option value="ALL">All</option>
+                                <option value="Submitted">Submitted</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Rejected">Rejected</option>
+                            </select>
+                        </label>
+                        <label class="form-field">
+                            <span>Employee (optional)</span>
+                            <select id="petty-filter-employee">
+                                <option value="">All employees</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="petty-review__body">
+                        <div class="petty-review__list">
+                            <table class="petty-table petty-table--compact">
+                                <thead>
+                                    <tr>
+                                        <th>Sheet</th>
+                                        <th>Employee</th>
+                                        <th>Status</th>
+                                        <th>Total</th>
+                                        <th>Submitted</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="petty-claims-rows"></tbody>
+                            </table>
+                            <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
+                        </div>
+
+                        <div class="petty-review__details">
+                            <p class="helper-text" id="petty-detail-placeholder">Select a claim to view details.</p>
+                            <div id="petty-card-host"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="petty-card" id="petty-card">
                     <div class="form-grid">
                         <label class="form-field">
                             <span>Company</span>
@@ -527,6 +576,13 @@
             claim: null,
             employees: [],
             companies: [],
+            claims: [],
+            readOnly: false,
+            filters: {
+                weekStart: "",
+                status: "Submitted",
+                employeeId: "",
+            },
         };
 
         const pettyEls = {
@@ -547,9 +603,35 @@
             approve: document.getElementById("petty-approve"),
             reject: document.getElementById("petty-reject"),
             paid: document.getElementById("petty-paid"),
+            review: document.getElementById("petty-review"),
+            card: document.getElementById("petty-card"),
+            cardHost: document.getElementById("petty-card-host"),
+            detailPlaceholder: document.getElementById("petty-detail-placeholder"),
+            filterWeek: document.getElementById("petty-filter-week"),
+            filterStatus: document.getElementById("petty-filter-status"),
+            filterEmployee: document.getElementById("petty-filter-employee"),
+            claimsRows: document.getElementById("petty-claims-rows"),
+            claimsEmpty: document.getElementById("petty-claims-empty"),
         };
 
         const managerRoles = ["admin", "finance_manager", "production_manager"];
+
+        function startOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(d.setDate(diff));
+            monday.setHours(0, 0, 0, 0);
+            return monday;
+        }
+
+        function formatDateInput(date) {
+            if (!date) return "";
+            const year = date.getFullYear();
+            const month = `${date.getMonth() + 1}`.padStart(2, "0");
+            const day = `${date.getDate()}`.padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        }
 
         function formatAmount(value) {
             const num = Number(value || 0);
@@ -560,6 +642,18 @@
         function showError(message) {
             pettyEls.error.textContent = message || "";
             pettyEls.error.hidden = !message;
+        }
+
+        function setReadOnlyMode(readOnly) {
+            pettyState.readOnly = readOnly;
+            if (pettyEls.save) pettyEls.save.hidden = readOnly;
+            if (pettyEls.submit) pettyEls.submit.hidden = readOnly;
+            [pettyEls.approve, pettyEls.reject, pettyEls.paid].forEach((btn) => {
+                if (!btn) return;
+                const isManager = managerRoles.includes(user?.role);
+                btn.disabled = !isManager;
+                btn.title = isManager ? "" : "Only managers/finance can approve or mark as paid";
+            });
         }
 
         function authHeaders() {
@@ -589,6 +683,45 @@
                 data = {};
             }
             return { ok: response.ok, data };
+        }
+
+        function renderClaimsTable() {
+            if (!pettyEls.claimsRows || !pettyEls.claimsEmpty) return;
+            pettyEls.claimsRows.innerHTML = "";
+            if (!pettyState.claims.length) {
+                pettyEls.claimsEmpty.textContent = "No claims found for the selected filters.";
+                pettyEls.claimsEmpty.hidden = false;
+                return;
+            }
+            pettyEls.claimsEmpty.hidden = true;
+
+            const dateString = (value) => {
+                if (!value) return "";
+                const dt = new Date(value);
+                return `${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+            };
+
+            pettyState.claims.forEach((claim) => {
+                const row = document.createElement("tr");
+                row.dataset.claimId = claim.id;
+                row.className = "clickable-row";
+                row.addEventListener("click", () => selectClaim(claim.id));
+
+                [
+                    claim.sheet_no || claim.id,
+                    claim.employee_name,
+                    claim.status,
+                    formatAmount(claim.total_amount),
+                    dateString(claim.submitted_at),
+                    dateString(claim.updated_at),
+                ].forEach((text) => {
+                    const cell = document.createElement("td");
+                    cell.textContent = text || "";
+                    row.appendChild(cell);
+                });
+
+                pettyEls.claimsRows.appendChild(row);
+            });
         }
 
         function updateStatusBadge(status) {
@@ -643,8 +776,8 @@
                 pettyEls.employee.appendChild(option);
             });
 
-            const locked = ["Approved", "Paid"].includes(claim.status);
-            [pettyEls.employee, pettyEls.weekStart, pettyEls.vehicle, pettyEls.area].forEach((field) => {
+            const locked = pettyState.readOnly || ["Approved", "Paid"].includes(claim.status);
+            [pettyEls.employee, pettyEls.weekStart, pettyEls.vehicle, pettyEls.area, pettyEls.company].forEach((field) => {
                 field.disabled = locked;
             });
         }
@@ -705,7 +838,7 @@
             const claim = pettyState.claim;
             if (!claim) return;
             pettyEls.linesBody.innerHTML = "";
-            const locked = ["Approved", "Paid"].includes(claim.status);
+            const locked = pettyState.readOnly || ["Approved", "Paid"].includes(claim.status);
 
             (claim.lines || []).forEach((line, index) => {
                 const row = document.createElement("tr");
@@ -764,6 +897,24 @@
             renderLines();
         }
 
+        async function selectClaim(claimId) {
+            const { ok, data } = await fetchJson(`/api/petty-cash/weekly-claims/${claimId}`);
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to load claim.");
+                return;
+            }
+
+            if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
+                pettyEls.cardHost.appendChild(pettyEls.card);
+            }
+            if (pettyEls.detailPlaceholder) {
+                pettyEls.detailPlaceholder.hidden = true;
+            }
+            setReadOnlyMode(true);
+            applyClaim(data.claim);
+            showError("");
+        }
+
         async function loadEmployees(companyKey) {
             const query = companyKey ? `?company=${encodeURIComponent(companyKey)}` : "";
             const { ok, data } = await fetchJson(`/api/petty-cash/employees${query}`);
@@ -771,6 +922,18 @@
                 pettyState.employees = data;
                 if (pettyState.claim) {
                     renderHeader();
+                }
+                if (pettyEls.filterEmployee) {
+                    pettyEls.filterEmployee.innerHTML = "<option value=\"\">All employees</option>";
+                    pettyState.employees.forEach((emp) => {
+                        const option = document.createElement("option");
+                        option.value = emp.id;
+                        option.textContent = emp.name;
+                        if (String(emp.id) === String(pettyState.filters.employeeId)) {
+                            option.selected = true;
+                        }
+                        pettyEls.filterEmployee.appendChild(option);
+                    });
                 }
             }
         }
@@ -782,8 +945,55 @@
             }
         }
 
+        async function loadClaimsList() {
+            if (!pettyEls.filterWeek) return;
+            const weekValue = pettyEls.filterWeek.value;
+            if (!weekValue) {
+                pettyState.claims = [];
+                renderClaimsTable();
+                return;
+            }
+
+            const params = new URLSearchParams({
+                week_start: weekValue,
+                status: pettyEls.filterStatus?.value || "ALL",
+            });
+            if (pettyEls.filterEmployee?.value) {
+                params.append("employee_id", pettyEls.filterEmployee.value);
+            }
+
+            const { ok, data } = await fetchJson(`/api/petty-cash/weekly-claims?${params.toString()}`);
+            if (!ok || !data.claims) {
+                showError(data.msg || "Unable to load weekly claims.");
+                return;
+            }
+            pettyState.claims = data.claims;
+            renderClaimsTable();
+        }
+
         async function initPettyCash() {
             await loadCompanies();
+            await loadEmployees();
+
+            const isManagerView = managerRoles.includes(user?.role) && !isSales;
+            if (isManagerView && pettyEls.review) {
+                pettyEls.review.hidden = false;
+                if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
+                    pettyEls.cardHost.appendChild(pettyEls.card);
+                }
+                if (pettyEls.card) {
+                    pettyEls.card.hidden = true;
+                }
+                const monday = startOfWeek(new Date());
+                pettyState.filters.weekStart = formatDateInput(monday);
+                if (pettyEls.filterWeek) pettyEls.filterWeek.value = pettyState.filters.weekStart;
+                if (pettyEls.filterStatus) pettyEls.filterStatus.value = pettyState.filters.status;
+                setReadOnlyMode(true);
+                await loadClaimsList();
+                return;
+            }
+
+            setReadOnlyMode(false);
             const { ok, data } = await fetchJson("/api/petty-cash/weekly-claims/init");
             if (!ok || !data.claim) {
                 showError(data.msg || "Unable to load petty cash claim.");
@@ -795,6 +1005,7 @@
         }
 
         async function persistLineUpdate(lineId, payload) {
+            if (pettyState.readOnly) return;
             if (!pettyState.claim) return;
             const claimId = pettyState.claim.id;
             const { ok, data } = await fetchJson(
@@ -806,10 +1017,14 @@
                 return;
             }
             applyClaim(data.claim);
+            if (pettyEls.card) {
+                pettyEls.card.hidden = false;
+            }
             showError("");
         }
 
         async function deleteLine(lineId) {
+            if (pettyState.readOnly) return;
             if (!pettyState.claim) return;
             const claimId = pettyState.claim.id;
             const { ok, data } = await fetchJson(
@@ -825,6 +1040,7 @@
         }
 
         async function updateHeader(payload) {
+            if (pettyState.readOnly) return;
             if (!pettyState.claim) return;
             const { ok, data } = await fetchJson(
                 `/api/petty-cash/weekly-claims/${pettyState.claim.id}`,
@@ -849,6 +1065,9 @@
                 return;
             }
             applyClaim(data.claim);
+            if (pettyState.readOnly) {
+                await loadClaimsList();
+            }
             showError("");
         }
 
@@ -873,6 +1092,36 @@
         pettyEls.area.addEventListener("blur", (event) => {
             updateHeader({ area_visited: event.target.value });
         });
+
+        if (pettyEls.filterWeek) {
+            pettyEls.filterWeek.addEventListener("change", () => {
+                pettyState.filters.weekStart = pettyEls.filterWeek.value;
+                pettyState.claim = null;
+                if (pettyEls.card) pettyEls.card.hidden = true;
+                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                loadClaimsList();
+            });
+        }
+
+        if (pettyEls.filterStatus) {
+            pettyEls.filterStatus.addEventListener("change", () => {
+                pettyState.filters.status = pettyEls.filterStatus.value;
+                pettyState.claim = null;
+                if (pettyEls.card) pettyEls.card.hidden = true;
+                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                loadClaimsList();
+            });
+        }
+
+        if (pettyEls.filterEmployee) {
+            pettyEls.filterEmployee.addEventListener("change", () => {
+                pettyState.filters.employeeId = pettyEls.filterEmployee.value;
+                pettyState.claim = null;
+                if (pettyEls.card) pettyEls.card.hidden = true;
+                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                loadClaimsList();
+            });
+        }
 
         pettyEls.save.addEventListener("click", () => updateStatus("Draft"));
         pettyEls.submit.addEventListener("click", () => updateStatus("Submitted"));
@@ -1498,7 +1747,8 @@
         }
         function toggleManagerActions() {
             const isManager = managerRoles.includes(user?.role);
-            [pettyEls.approve, pettyEls.paid].forEach((btn) => {
+            [pettyEls.approve, pettyEls.reject, pettyEls.paid].forEach((btn) => {
+                if (!btn) return;
                 btn.disabled = !isManager;
                 btn.title = isManager ? "" : "Only managers/finance can approve or mark as paid";
             });

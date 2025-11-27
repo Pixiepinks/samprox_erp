@@ -358,12 +358,98 @@ def init_claim():
     return jsonify({"claim": _serialize_claim(claim)}), 201
 
 
+@bp.get("/weekly-claims")
+@jwt_required()
+def list_claims():
+    user = _current_user()
+    if user is None:
+        return jsonify({"msg": "Not authenticated"}), 401
+
+    if user.role not in {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}:
+        return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
+
+    try:
+        week_start = _parse_week_start(request.args.get("week_start"))
+    except PettyCashError as exc:
+        return jsonify({"msg": exc.message}), exc.status_code
+
+    status_filter = (request.args.get("status") or "ALL").upper()
+    employee_id = request.args.get("employee_id")
+
+    query = PettyCashWeeklyClaim.query.filter(
+        PettyCashWeeklyClaim.week_start_date == week_start
+    )
+
+    if status_filter != "ALL":
+        try:
+            status_enum = PettyCashStatus(status_filter.title())
+        except ValueError:
+            return jsonify({"msg": "Invalid status filter"}), 400
+        query = query.filter(PettyCashWeeklyClaim.status == status_enum)
+
+    if employee_id:
+        try:
+            employee_id_int = int(employee_id)
+            query = query.filter(PettyCashWeeklyClaim.employee_id == employee_id_int)
+        except ValueError:
+            return jsonify({"msg": "employee_id must be an integer"}), 400
+
+    claims = (
+        query.order_by(PettyCashWeeklyClaim.updated_at.desc())
+        .with_entities(
+            PettyCashWeeklyClaim.id,
+            PettyCashWeeklyClaim.sheet_no,
+            PettyCashWeeklyClaim.employee_id,
+            PettyCashWeeklyClaim.employee_name,
+            PettyCashWeeklyClaim.week_start_date,
+            PettyCashWeeklyClaim.status,
+            PettyCashWeeklyClaim.total_expenses,
+            PettyCashWeeklyClaim.created_at,
+            PettyCashWeeklyClaim.updated_at,
+        )
+        .all()
+    )
+
+    results = []
+    for claim in claims:
+        results.append(
+            {
+                "id": claim.id,
+                "sheet_no": claim.sheet_no,
+                "employee_id": claim.employee_id,
+                "employee_name": claim.employee_name,
+                "week_start": claim.week_start_date.isoformat(),
+                "status": claim.status.value,
+                "total_amount": float(claim.total_expenses or 0),
+                "submitted_at": claim.created_at.isoformat() if claim.created_at else None,
+                "updated_at": claim.updated_at.isoformat() if claim.updated_at else None,
+            }
+        )
+
+    return jsonify({"claims": results})
+
+
 @bp.get("/weekly-claims/<int:claim_id>")
 @jwt_required()
 def get_claim(claim_id: int):
     claim = PettyCashWeeklyClaim.query.get(claim_id)
     if not claim:
         return jsonify({"msg": "Claim not found"}), 404
+
+    user = _current_user()
+    if user is None:
+        return jsonify({"msg": "Not authenticated"}), 401
+
+    is_owner = claim.employee_id == user.id or claim.created_by_id == user.id
+    is_manager = user.role in {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+    }
+
+    if not is_owner and not is_manager:
+        return jsonify({"msg": "You are not allowed to view this claim."}), 403
+
     _prune_disallowed_lines(claim)
     return jsonify({"claim": _serialize_claim(claim)})
 

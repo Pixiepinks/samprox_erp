@@ -544,7 +544,15 @@
             window.location.href = "/";
         }
 
-        if (user?.role !== "outside_manager") {
+        const responsibilityAccessRoles = [
+            "production_manager",
+            "maintenance_manager",
+            "finance_manager",
+            "admin",
+            "outside_manager",
+        ];
+
+        if (!responsibilityAccessRoles.includes(user?.role)) {
             window.location.replace("/mind");
         }
 

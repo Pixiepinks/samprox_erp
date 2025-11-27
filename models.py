@@ -55,6 +55,11 @@ class RoleEnum(str, Enum):
 
 # Explicitly enumerate scoped permissions per role for UI and API guards.
 ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
+    RoleEnum.finance_manager: {
+        "responsibility_plan_view",
+        "responsibility_plan_edit",
+        "responsibility_plan_create",
+    },
     RoleEnum.sales: {
         "petty_cash_weekly_travel_claims:view",
         "petty_cash_weekly_travel_claims:create",

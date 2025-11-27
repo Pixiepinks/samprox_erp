@@ -170,6 +170,12 @@ def _serialize_claim(claim: PettyCashWeeklyClaim) -> dict[str, object]:
         "week_end_date": claim.week_end_date.isoformat(),
         "vehicle_no": claim.vehicle_no or "",
         "area_visited": claim.area_visited or "",
+        "monday_morning_odo": float(claim.monday_morning_odo)
+        if claim.monday_morning_odo is not None
+        else None,
+        "friday_evening_odo": float(claim.friday_evening_odo)
+        if claim.friday_evening_odo is not None
+        else None,
         "status": claim.status.value,
         "total_expenses": float(claim.total_expenses or 0),
         "lines": [_serialize_line(line) for line in claim.lines],
@@ -426,6 +432,8 @@ def list_claims():
             PettyCashWeeklyClaim.total_expenses,
             PettyCashWeeklyClaim.created_at,
             PettyCashWeeklyClaim.updated_at,
+            PettyCashWeeklyClaim.monday_morning_odo,
+            PettyCashWeeklyClaim.friday_evening_odo,
         )
         .all()
     )
@@ -443,6 +451,12 @@ def list_claims():
                 "total_amount": float(claim.total_expenses or 0),
                 "submitted_at": claim.created_at.isoformat() if claim.created_at else None,
                 "updated_at": claim.updated_at.isoformat() if claim.updated_at else None,
+                "monday_morning_odo": float(claim.monday_morning_odo)
+                if claim.monday_morning_odo is not None
+                else None,
+                "friday_evening_odo": float(claim.friday_evening_odo)
+                if claim.friday_evening_odo is not None
+                else None,
             }
         )
 
@@ -515,6 +529,48 @@ def update_claim(claim_id: int):
 
     if "area_visited" in payload:
         claim.area_visited = (payload.get("area_visited") or "").strip()
+
+    try:
+        def _optional_decimal(raw_value: object, label: str) -> Decimal | None:
+            if raw_value is None or raw_value == "":
+                return None
+            try:
+                return Decimal(str(raw_value))
+            except Exception as exc:  # pragma: no cover - defensive guard
+                raise PettyCashError(f"{label} must be a number.") from exc
+
+        monday_value = claim.monday_morning_odo
+        friday_value = claim.friday_evening_odo
+
+        if "monday_morning_odo" in payload:
+            monday_value = _optional_decimal(
+                payload.get("monday_morning_odo"), "Monday morning ODO"
+            )
+
+        if "friday_evening_odo" in payload:
+            friday_value = _optional_decimal(
+                payload.get("friday_evening_odo"), "Friday evening ODO"
+            )
+
+        if (
+            monday_value is not None
+            and friday_value is not None
+            and friday_value < monday_value
+        ):
+            return (
+                jsonify({
+                    "msg": "Friday evening ODO must be greater than or equal to Monday morning ODO.",
+                }),
+                400,
+            )
+
+        if "monday_morning_odo" in payload:
+            claim.monday_morning_odo = monday_value
+
+        if "friday_evening_odo" in payload:
+            claim.friday_evening_odo = friday_value
+    except PettyCashError as exc:
+        return jsonify({"msg": exc.message}), exc.status_code
 
     if "company_id" in payload:
         claims = get_jwt() or {}

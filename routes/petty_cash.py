@@ -24,8 +24,6 @@ DEFAULT_EXPENSE_TYPES = [
     "Lunch",
     "Dinner",
     "Lodging",
-    "Parking Fees",
-    "Transport Charges",
     "High Way Charges",
 ]
 
@@ -34,6 +32,8 @@ DISALLOWED_DEFAULT_EXPENSE_TYPES = {
     "vehicle maintenance",
     "Communications",
     "Miscellaneous",
+    "Parking Fees",
+     "Transport Charges",
     "stationery",
 }
 

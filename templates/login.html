@@ -116,11 +116,13 @@
                     localStorage.setItem("samprox_token", data.access_token);
                     localStorage.setItem("samprox_user", JSON.stringify(data.user));
 
-                    if (data.user?.role === "outside_manager") {
+                    const normalizedRole = (data.user?.role || "").toLowerCase();
+
+                    if (normalizedRole === "outside_manager") {
                         window.location.href = "/responsibility_portal";
-                    } else if (data.user?.role === "maintenance_manager") {
+                    } else if (normalizedRole === "maintenance_manager") {
                         window.location.href = "/machines";
-                    } else if (data.user?.role === "Sales") {
+                    } else if (normalizedRole === "sales") {
                         window.location.href = "/money";
                     } else {
                         window.location.href = "/mind";

@@ -170,7 +170,7 @@
                             <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
                         </div>
 
-                        <div class="petty-review__details">
+                        <div class="petty-review__details" id="petty-review-details" hidden>
                             <p class="helper-text" id="petty-detail-placeholder">Select a claim to view details.</p>
                             <div id="petty-card-host"></div>
                         </div>
@@ -612,6 +612,7 @@
             filterEmployee: document.getElementById("petty-filter-employee"),
             claimsRows: document.getElementById("petty-claims-rows"),
             claimsEmpty: document.getElementById("petty-claims-empty"),
+            details: document.getElementById("petty-review-details"),
         };
 
         const managerRoles = ["admin", "finance_manager", "production_manager"];
@@ -683,6 +684,24 @@
                 data = {};
             }
             return { ok: response.ok, data };
+        }
+
+        function hideDetailsPanel() {
+            if (!pettyEls.details) return;
+            pettyEls.details.hidden = true;
+            if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
+                pettyEls.card.hidden = true;
+            }
+        }
+
+        function showDetailsPanel() {
+            if (!pettyEls.details) return;
+            pettyEls.details.hidden = false;
+            if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = true;
+            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
+                pettyEls.card.hidden = false;
+            }
         }
 
         function renderClaimsTable() {
@@ -898,6 +917,7 @@
         }
 
         async function selectClaim(claimId) {
+            if (!managerRoles.includes(user?.role)) return;
             const { ok, data } = await fetchJson(`/api/petty-cash/weekly-claims/${claimId}`);
             if (!ok || !data.claim) {
                 showError(data.msg || "Unable to load claim.");
@@ -907,9 +927,7 @@
             if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
                 pettyEls.cardHost.appendChild(pettyEls.card);
             }
-            if (pettyEls.detailPlaceholder) {
-                pettyEls.detailPlaceholder.hidden = true;
-            }
+            showDetailsPanel();
             setReadOnlyMode(true);
             applyClaim(data.claim);
             showError("");
@@ -981,9 +999,7 @@
                 if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
                     pettyEls.cardHost.appendChild(pettyEls.card);
                 }
-                if (pettyEls.card) {
-                    pettyEls.card.hidden = true;
-                }
+                hideDetailsPanel();
                 const monday = startOfWeek(new Date());
                 pettyState.filters.weekStart = formatDateInput(monday);
                 if (pettyEls.filterWeek) pettyEls.filterWeek.value = pettyState.filters.weekStart;
@@ -1097,8 +1113,7 @@
             pettyEls.filterWeek.addEventListener("change", () => {
                 pettyState.filters.weekStart = pettyEls.filterWeek.value;
                 pettyState.claim = null;
-                if (pettyEls.card) pettyEls.card.hidden = true;
-                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                hideDetailsPanel();
                 loadClaimsList();
             });
         }
@@ -1107,8 +1122,7 @@
             pettyEls.filterStatus.addEventListener("change", () => {
                 pettyState.filters.status = pettyEls.filterStatus.value;
                 pettyState.claim = null;
-                if (pettyEls.card) pettyEls.card.hidden = true;
-                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                hideDetailsPanel();
                 loadClaimsList();
             });
         }
@@ -1117,8 +1131,7 @@
             pettyEls.filterEmployee.addEventListener("change", () => {
                 pettyState.filters.employeeId = pettyEls.filterEmployee.value;
                 pettyState.claim = null;
-                if (pettyEls.card) pettyEls.card.hidden = true;
-                if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
+                hideDetailsPanel();
                 loadClaimsList();
             });
         }

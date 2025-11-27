@@ -29,6 +29,14 @@ DEFAULT_EXPENSE_TYPES = [
     "High Way Charges",
 ]
 
+DISALLOWED_DEFAULT_EXPENSE_TYPES = {
+    "fuel",
+    "vehicle maintenance",
+    "communication",
+    "missalaniuos",
+    "stationery",
+}
+
 
 class PettyCashError(Exception):
     def __init__(self, message: str, status_code: int = 400):
@@ -201,6 +209,23 @@ def _resequence_lines(claim: PettyCashWeeklyClaim) -> None:
         line.line_order = index
 
 
+def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
+    removed = False
+    for line in list(claim.lines):
+        expense_name = (line.expense_type or "").strip().lower()
+        if expense_name in DISALLOWED_DEFAULT_EXPENSE_TYPES:
+            db.session.delete(line)
+            removed = True
+
+    if removed:
+        _resequence_lines(claim)
+        claim.recalculate_totals()
+        db.session.commit()
+        db.session.refresh(claim)
+
+    return removed
+
+
 def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:
     if _has_full_petty_cash_access(user):
         return False
@@ -274,6 +299,7 @@ def init_claim():
         .first()
     )
     if existing:
+        _prune_disallowed_lines(existing)
         return jsonify({"claim": _serialize_claim(existing)})
 
     sheet_no = _generate_sheet_number(week_start)
@@ -314,6 +340,7 @@ def get_claim(claim_id: int):
     claim = PettyCashWeeklyClaim.query.get(claim_id)
     if not claim:
         return jsonify({"msg": "Claim not found"}), 404
+    _prune_disallowed_lines(claim)
     return jsonify({"claim": _serialize_claim(claim)})
 
 

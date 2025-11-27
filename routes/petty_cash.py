@@ -30,10 +30,6 @@ DEFAULT_EXPENSE_TYPES = [
 DISALLOWED_DEFAULT_EXPENSE_TYPES = {
     "fuel",
     "vehicle maintenance",
-    "Communications",
-    "Miscellaneous",
-    "Parking Fees",
-     "Transport Charges",
     "stationery",
 }
 

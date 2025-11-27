@@ -112,7 +112,7 @@ def create_user():
     name = (payload.get("name") or "").strip()
     email = _normalise_email(payload.get("email"))
     password = payload.get("password") or ""
-    role_value = payload.get("role")
+    role_value = (payload.get("role") or "").strip().lower()
     active = bool(payload.get("active", True))
     company_key, company_error = _validate_company_key(payload.get("company_key"))
 
@@ -170,7 +170,7 @@ def update_user(user_id: int):
 
     name = (payload.get("name") or user.name or "").strip()
     email = _normalise_email(payload.get("email")) or user.email
-    role_value = payload.get("role") or user.role.value
+    role_value = (payload.get("role") or user.role.value or "").strip().lower()
     active = bool(payload.get("active", user.active))
     password = (payload.get("password") or "").strip()
     company_raw = payload.get("company_key", user.company_key)

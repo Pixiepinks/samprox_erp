@@ -50,7 +50,7 @@ class RoleEnum(str, Enum):
     maintenance_manager = "maintenance_manager"
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
-    sales = "Sales"
+    sales = "sales"
 
 
 # Explicitly enumerate scoped permissions per role for UI and API guards.

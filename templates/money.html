@@ -649,7 +649,16 @@
             });
         }
 
+        function lineKey(line) {
+            if (!line._inputKey) {
+                const randomSuffix = Math.random().toString(36).slice(2, 8);
+                line._inputKey = line.id ? `line-${line.id}` : `line-temp-${randomSuffix}`;
+            }
+            return line._inputKey;
+        }
+
         function buildAmountInput(line, field, locked) {
+            const inputId = `${lineKey(line)}-${field}`;
             const input = document.createElement("input");
             input.type = "number";
             input.step = "0.01";
@@ -657,6 +666,8 @@
             input.value = formatAmount(line[field]);
             input.className = "cell-input";
             input.disabled = locked;
+            input.id = inputId;
+            input.name = inputId;
             input.addEventListener("keydown", (event) => {
                 if (event.key === "Enter") {
                     event.preventDefault();
@@ -670,11 +681,14 @@
         }
 
         function buildTextInput(line, locked) {
+            const inputId = `${lineKey(line)}-expense`;
             const input = document.createElement("input");
             input.type = "text";
             input.value = line.expense_type || "";
             input.className = "cell-input cell-input--text";
             input.disabled = locked;
+            input.id = inputId;
+            input.name = inputId;
             input.addEventListener("blur", () => {
                 persistLineUpdate(line.id, { expense_type: input.value });
             });

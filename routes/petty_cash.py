@@ -32,8 +32,8 @@ DEFAULT_EXPENSE_TYPES = [
 DISALLOWED_DEFAULT_EXPENSE_TYPES = {
     "fuel",
     "vehicle maintenance",
-    "communication",
-    "missalaniuos",
+    "Communications",
+    "Miscellaneous",
     "stationery",
 }
 

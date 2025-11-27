@@ -839,7 +839,10 @@
 
             const locked = pettyState.readOnly || ["Approved", "Paid"].includes(claim.status);
             pettyEls.employee.disabled = locked || isSales;
-            [pettyEls.weekStart, pettyEls.vehicle, pettyEls.area, pettyEls.company].forEach((field) => {
+            if (pettyEls.weekStart) {
+                pettyEls.weekStart.disabled = locked && !isSales;
+            }
+            [pettyEls.vehicle, pettyEls.area, pettyEls.company].forEach((field) => {
                 field.disabled = locked;
             });
         }
@@ -1030,6 +1033,29 @@
             renderClaimsTable();
         }
 
+        async function loadClaimForWeek(weekStartValue) {
+            const params = new URLSearchParams();
+            if (weekStartValue) {
+                params.append("week_start", weekStartValue);
+            }
+
+            const queryString = params.toString();
+            const url = queryString
+                ? `/api/petty-cash/weekly-claims/init?${queryString}`
+                : "/api/petty-cash/weekly-claims/init";
+
+            const { ok, data } = await fetchJson(url);
+            if (!ok || !data.claim) {
+                showError(data.msg || "Unable to load petty cash claim.");
+                return;
+            }
+
+            setReadOnlyMode(false);
+            applyClaim(data.claim);
+            await loadEmployees(data.claim.company?.key);
+            showError("");
+        }
+
         async function initPettyCash() {
             await loadCompanies();
             await loadEmployees();
@@ -1050,15 +1076,7 @@
 
             moveCardInline();
             closeModal();
-            setReadOnlyMode(false);
-            const { ok, data } = await fetchJson("/api/petty-cash/weekly-claims/init");
-            if (!ok || !data.claim) {
-                showError(data.msg || "Unable to load petty cash claim.");
-                return;
-            }
-            applyClaim(data.claim);
-            await loadEmployees(data.claim.company?.key);
-            showError("");
+            await loadClaimForWeek();
         }
 
         async function persistLineUpdate(lineId, payload) {
@@ -1140,7 +1158,17 @@
         });
 
         pettyEls.weekStart.addEventListener("change", (event) => {
-            updateHeader({ week_start_date: event.target.value });
+            const newWeek = event.target.value;
+            const locked = pettyState.claim
+                ? pettyState.readOnly || ["Approved", "Paid"].includes(pettyState.claim.status)
+                : false;
+
+            if (isSales) {
+                loadClaimForWeek(newWeek);
+                return;
+            }
+
+            updateHeader({ week_start_date: newWeek });
         });
 
         pettyEls.vehicle.addEventListener("blur", (event) => {

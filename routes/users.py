@@ -143,8 +143,12 @@ def create_user():
         company_key=company_key,
     )
     user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
+    try:
+        db.session.add(user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"msg": "Email already registered"}), 400
 
     return jsonify(_serialise_user(user)), 201
 
@@ -201,7 +205,11 @@ def update_user(user_id: int):
     if password:
         user.set_password(password)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"msg": "Email already registered"}), 400
 
     return jsonify(_serialise_user(user))
 

@@ -121,6 +121,14 @@ def _current_role() -> RoleEnum | None:
         return None
 
 
+def _current_employee_id(user: User | None) -> int | None:
+    if user is None:
+        return None
+    if getattr(user, "employee_id", None):
+        return user.employee_id
+    return user.id
+
+
 @bp.before_request
 @jwt_required()
 def _enforce_weekly_claim_roles():
@@ -289,9 +297,18 @@ def list_employees():
     claims = get_jwt() or {}
     requested_key = request.args.get("company")
     company_key = select_company_key(current_app.config, requested_key, claims)
+    user = _current_user()
+    if user is None:
+        return jsonify({"msg": "Not authenticated"}), 401
+
     query = User.query.filter_by(active=True)
     if company_key:
         query = query.filter(User.company_key == company_key)
+
+    if user.role == RoleEnum.sales:
+        employee_id = _current_employee_id(user)
+        query = query.filter(User.id == employee_id)
+
     employees = query.order_by(User.name.asc()).all()
     return jsonify(
         [
@@ -365,7 +382,8 @@ def list_claims():
     if user is None:
         return jsonify({"msg": "Not authenticated"}), 401
 
-    if user.role not in {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}:
+    manager_roles = {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}
+    if user.role not in manager_roles and user.role != RoleEnum.sales:
         return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
 
     try:
@@ -374,7 +392,13 @@ def list_claims():
         return jsonify({"msg": exc.message}), exc.status_code
 
     status_filter = (request.args.get("status") or "ALL").upper()
-    employee_id = request.args.get("employee_id")
+    employee_raw = request.args.get("employee_id")
+    employee_id = request.args.get("employee_id", type=int)
+    if employee_raw is not None and employee_raw != "" and employee_id is None:
+        return jsonify({"msg": "employee_id must be an integer"}), 400
+
+    if user.role == RoleEnum.sales:
+        employee_id = _current_employee_id(user)
 
     query = PettyCashWeeklyClaim.query.filter(
         PettyCashWeeklyClaim.week_start_date == week_start
@@ -388,11 +412,7 @@ def list_claims():
         query = query.filter(PettyCashWeeklyClaim.status == status_enum)
 
     if employee_id:
-        try:
-            employee_id_int = int(employee_id)
-            query = query.filter(PettyCashWeeklyClaim.employee_id == employee_id_int)
-        except ValueError:
-            return jsonify({"msg": "employee_id must be an integer"}), 400
+        query = query.filter(PettyCashWeeklyClaim.employee_id == employee_id)
 
     claims = (
         query.order_by(PettyCashWeeklyClaim.updated_at.desc())
@@ -471,6 +491,9 @@ def update_claim(claim_id: int):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
+    if user.role == RoleEnum.sales:
+        payload["employee_id"] = _current_employee_id(user)
+
     if "employee_id" in payload:
         employee_id = payload.get("employee_id")
         employee = User.query.get(employee_id) if employee_id else None

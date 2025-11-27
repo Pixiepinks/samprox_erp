@@ -181,7 +181,6 @@
                     </div>
 
                     <div class="petty-toolbar">
-                        <button class="button button--ghost" id="petty-add-row">+ Add Row</button>
                         <div class="petty-actions">
                             <button class="button button--secondary" id="petty-save">Save Draft</button>
                             <button class="button" id="petty-submit">Submit for Approval</button>
@@ -483,8 +482,6 @@
             companies: [],
         };
 
-        let addRowPending = false;
-
         const pettyEls = {
             company: document.getElementById("petty-company"),
             employee: document.getElementById("petty-employee"),
@@ -498,7 +495,6 @@
             status: document.getElementById("petty-status"),
             helper: document.getElementById("petty-helper"),
             error: document.getElementById("petty-error"),
-            addRow: document.getElementById("petty-add-row"),
             save: document.getElementById("petty-save"),
             submit: document.getElementById("petty-submit"),
             approve: document.getElementById("petty-approve"),
@@ -696,8 +692,6 @@
             });
 
             pettyEls.total.textContent = formatAmount(claim.total_expenses);
-
-            pettyEls.addRow.disabled = locked || addRowPending;
             pettyEls.helper.textContent = locked
                 ? "This claim is locked because it has been approved or paid."
                 : "Click any weekday cell to enter an amount. Empty cells are treated as 0.";
@@ -769,42 +763,6 @@
             showError("");
         }
 
-        async function addLine() {
-            if (addRowPending) return;
-
-            if (!pettyState.claim) {
-                await initPettyCash();
-            }
-
-            if (!pettyState.claim) {
-                showError("Unable to add a new row because the claim could not be loaded.");
-                return;
-            }
-
-            addRowPending = true;
-            pettyEls.addRow.disabled = true;
-
-            try {
-                const { ok, data } = await fetchJson(
-                    `/api/petty-cash/weekly-claims/${pettyState.claim.id}/lines`,
-                    { method: "POST", body: JSON.stringify({}) }
-                );
-                if (!ok || !data.claim) {
-                    showError(data.msg || "Unable to add a new row.");
-                    return;
-                }
-                applyClaim(data.claim);
-                showError("");
-            } catch (error) {
-                console.error("Failed to add petty cash row", error);
-                showError("Unable to add a new row. Please try again.");
-            } finally {
-                addRowPending = false;
-                const locked = pettyState.claim && ["Approved", "Paid"].includes(pettyState.claim.status);
-                pettyEls.addRow.disabled = Boolean(locked);
-            }
-        }
-
         async function updateHeader(payload) {
             if (!pettyState.claim) return;
             const { ok, data } = await fetchJson(
@@ -855,7 +813,6 @@
             updateHeader({ area_visited: event.target.value });
         });
 
-        pettyEls.addRow.addEventListener("click", addLine);
         pettyEls.save.addEventListener("click", () => updateStatus("Draft"));
         pettyEls.submit.addEventListener("click", () => updateStatus("Submitted"));
         pettyEls.approve.addEventListener("click", () => updateStatus("Approved"));

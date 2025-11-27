@@ -436,10 +436,9 @@ body {
 }
 
 .petty-review__body {
-    display: grid;
-    grid-template-columns: 1fr 1.1fr;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
-    align-items: start;
 }
 
 .petty-review__list {
@@ -453,12 +452,63 @@ body {
     margin-bottom: 0.5rem;
 }
 
-.petty-review__details {
-    background: rgba(255, 255, 255, 0.96);
-    border-radius: 16px;
-    padding: 1rem;
-    min-height: 200px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+.petty-review__list table {
+    width: 100%;
+}
+
+.petty-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(15, 23, 42, 0.35);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+}
+
+.petty-modal__backdrop {
+    position: absolute;
+    inset: 0;
+}
+
+.petty-modal__dialog {
+    position: relative;
+    background: #fff;
+    border-radius: 20px;
+    padding: 1.5rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    width: min(1100px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.petty-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.petty-modal__close {
+    border: none;
+    background: #e2e8f0;
+    color: #0f172a;
+    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.petty-modal__content {
+    margin-top: 0.75rem;
+}
+
+body.petty-modal-open {
+    overflow: hidden;
 }
 
 .clickable-row {

@@ -169,11 +169,25 @@
                             </table>
                             <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="petty-review__details" id="petty-review-details" hidden>
-                            <p class="helper-text" id="petty-detail-placeholder">Select a claim to view details.</p>
-                            <div id="petty-card-host"></div>
+                <div class="petty-modal" id="petty-modal" hidden>
+                    <div class="petty-modal__backdrop" id="petty-modal-backdrop"></div>
+                    <div
+                        class="petty-modal__dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="petty-modal-title"
+                    >
+                        <div class="petty-modal__header">
+                            <h2 id="petty-modal-title">Weekly travel claim</h2>
+                            <button class="petty-modal__close" type="button" id="petty-modal-close" aria-label="Close">
+                                ×
+                            </button>
                         </div>
+                        <p class="helper-text" id="petty-detail-placeholder">Select a claim to view details.</p>
+                        <div class="petty-modal__content" id="petty-card-host"></div>
                     </div>
                 </div>
 
@@ -612,7 +626,9 @@
             filterEmployee: document.getElementById("petty-filter-employee"),
             claimsRows: document.getElementById("petty-claims-rows"),
             claimsEmpty: document.getElementById("petty-claims-empty"),
-            details: document.getElementById("petty-review-details"),
+            details: document.getElementById("petty-modal"),
+            modalClose: document.getElementById("petty-modal-close"),
+            modalBackdrop: document.getElementById("petty-modal-backdrop"),
         };
 
         const managerRoles = ["admin", "finance_manager", "production_manager"];
@@ -689,8 +705,9 @@
         function hideDetailsPanel() {
             if (!pettyEls.details) return;
             pettyEls.details.hidden = true;
+            document.body.classList.remove("petty-modal-open");
             if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
-            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
+            if (pettyEls.card) {
                 pettyEls.card.hidden = true;
             }
         }
@@ -698,8 +715,9 @@
         function showDetailsPanel() {
             if (!pettyEls.details) return;
             pettyEls.details.hidden = false;
+            document.body.classList.add("petty-modal-open");
             if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = true;
-            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
+            if (pettyEls.card) {
                 pettyEls.card.hidden = false;
             }
         }
@@ -1108,6 +1126,18 @@
         pettyEls.area.addEventListener("blur", (event) => {
             updateHeader({ area_visited: event.target.value });
         });
+
+        if (pettyEls.modalClose) {
+            pettyEls.modalClose.addEventListener("click", hideDetailsPanel);
+        }
+
+        if (pettyEls.details) {
+            pettyEls.details.addEventListener("click", (event) => {
+                if (event.target === pettyEls.details || event.target === pettyEls.modalBackdrop) {
+                    hideDetailsPanel();
+                }
+            });
+        }
 
         if (pettyEls.filterWeek) {
             pettyEls.filterWeek.addEventListener("change", () => {

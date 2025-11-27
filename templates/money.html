@@ -143,12 +143,14 @@
                                 <option value="Rejected">Rejected</option>
                             </select>
                         </label>
-                        <label class="form-field">
-                            <span>Employee (optional)</span>
-                            <select id="petty-filter-employee">
-                                <option value="">All employees</option>
-                            </select>
-                        </label>
+                        {% if not current_user.has_role('sales') %}
+                            <label class="form-field">
+                                <span>Employee (optional)</span>
+                                <select id="petty-filter-employee">
+                                    <option value="">All employees</option>
+                                </select>
+                            </label>
+                        {% endif %}
                     </div>
 
                     <div class="petty-review__list w-full">
@@ -545,6 +547,10 @@
                     panel.remove();
                 }
             });
+        }
+
+        if (isSales && pettyEls.filterEmployee?.closest(".form-field")) {
+            pettyEls.filterEmployee.closest(".form-field").hidden = true;
         }
 
         logoutButton.addEventListener("click", async () => {
@@ -1014,7 +1020,7 @@
                 week_start: weekValue,
                 status: pettyEls.filterStatus?.value || "ALL",
             });
-            if (pettyEls.filterEmployee?.value) {
+            if (!isSales && pettyEls.filterEmployee?.value) {
                 params.append("employee_id", pettyEls.filterEmployee.value);
             }
 

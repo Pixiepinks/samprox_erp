@@ -289,16 +289,18 @@ def list_employees():
     claims = get_jwt() or {}
     requested_key = request.args.get("company")
     company_key = select_company_key(current_app.config, requested_key, claims)
+    user = _current_user()
+
+    if user and user.role == RoleEnum.sales:
+        return jsonify([{"id": user.id, "name": user.name}])
+
     query = User.query.filter_by(active=True)
     if company_key:
         query = query.filter(User.company_key == company_key)
     employees = query.order_by(User.name.asc()).all()
-    return jsonify(
-        [
-            {"id": employee.id, "name": employee.name}
-            for employee in employees
-        ]
-    )
+    return jsonify([
+        {"id": employee.id, "name": employee.name} for employee in employees
+    ])
 
 
 @bp.get("/weekly-claims/init")
@@ -365,9 +367,6 @@ def list_claims():
     if user is None:
         return jsonify({"msg": "Not authenticated"}), 401
 
-    if user.role not in {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}:
-        return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
-
     try:
         week_start = _parse_week_start(request.args.get("week_start"))
     except PettyCashError as exc:
@@ -387,12 +386,28 @@ def list_claims():
             return jsonify({"msg": "Invalid status filter"}), 400
         query = query.filter(PettyCashWeeklyClaim.status == status_enum)
 
-    if employee_id:
-        try:
-            employee_id_int = int(employee_id)
-            query = query.filter(PettyCashWeeklyClaim.employee_id == employee_id_int)
-        except ValueError:
-            return jsonify({"msg": "employee_id must be an integer"}), 400
+    if user.role == RoleEnum.sales:
+        query = query.filter(PettyCashWeeklyClaim.employee_id == user.id)
+        employee_id = None
+    else:
+        if user.role not in {
+            RoleEnum.admin,
+            RoleEnum.finance_manager,
+            RoleEnum.production_manager,
+        }:
+            return (
+                jsonify({"msg": "You are not allowed to view weekly claims."}),
+                403,
+            )
+
+        if employee_id:
+            try:
+                employee_id_int = int(employee_id)
+                query = query.filter(
+                    PettyCashWeeklyClaim.employee_id == employee_id_int
+                )
+            except ValueError:
+                return jsonify({"msg": "employee_id must be an integer"}), 400
 
     claims = (
         query.order_by(PettyCashWeeklyClaim.updated_at.desc())
@@ -446,6 +461,9 @@ def get_claim(claim_id: int):
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
     }
+
+    if user.role == RoleEnum.sales and claim.employee_id != user.id:
+        return jsonify({"msg": "You are not allowed to view this claim."}), 403
 
     if not is_owner and not is_manager:
         return jsonify({"msg": "You are not allowed to view this claim."}), 403

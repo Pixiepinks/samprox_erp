@@ -50,6 +50,18 @@ class RoleEnum(str, Enum):
     maintenance_manager = "maintenance_manager"
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
+    sales = "Sales"
+
+
+# Explicitly enumerate scoped permissions per role for UI and API guards.
+ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
+    RoleEnum.sales: {
+        "petty_cash_weekly_travel_claims:view",
+        "petty_cash_weekly_travel_claims:create",
+        "petty_cash_weekly_travel_claims:edit",
+        "petty_cash_weekly_travel_claims:submit",
+    }
+}
 
 
 class PettyCashStatus(str, Enum):

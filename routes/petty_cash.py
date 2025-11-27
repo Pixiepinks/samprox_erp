@@ -19,6 +19,18 @@ from models import (
 
 bp = Blueprint("petty_cash", __name__, url_prefix="/api/petty-cash")
 
+# Weekly travel claims are intentionally scoped to a small set of roles. Sales
+# users can access only this module while broader finance roles retain their
+# existing permissions.
+_WEEKLY_CLAIM_ROLES = {
+    RoleEnum.admin,
+    RoleEnum.finance_manager,
+    RoleEnum.production_manager,
+    RoleEnum.maintenance_manager,
+    RoleEnum.outside_manager,
+    RoleEnum.sales,
+}
+
 DEFAULT_EXPENSE_TYPES = [
     "Breakfast",
     "Lunch",
@@ -99,6 +111,22 @@ def _current_user() -> User | None:
         return None
 
     return User.query.get(user_id)
+
+
+def _current_role() -> RoleEnum | None:
+    claims = get_jwt() or {}
+    try:
+        return RoleEnum(claims.get("role"))
+    except Exception:
+        return None
+
+
+@bp.before_request
+@jwt_required()
+def _enforce_weekly_claim_roles():
+    role = _current_role()
+    if role not in _WEEKLY_CLAIM_ROLES:
+        return jsonify({"msg": "Access denied"}), 403
 
 
 def _serialize_line(line: PettyCashWeeklyLine) -> dict[str, object]:

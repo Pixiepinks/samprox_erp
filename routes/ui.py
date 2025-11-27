@@ -250,6 +250,12 @@ def _enforce_role_page_restrictions():
         return None
 
     role = _current_role()
+    if role == RoleEnum.sales:
+        allowed_endpoints = {"ui.login_page", "ui.money_page"}
+        if endpoint in allowed_endpoints:
+            return None
+        return redirect(url_for("ui.money_page"))
+
     if role == RoleEnum.maintenance_manager:
         if endpoint in {"ui.machines_page", "ui.login_page"}:
             return None
@@ -433,13 +439,17 @@ def movers_page():
 def money_page():
     """Render the financial overview page."""
     context = _load_financials_context()
-    context.update({"active_tab": "overview"})
+    active_tab = "petty-cash" if _current_role() == RoleEnum.sales else "overview"
+    context.update({"active_tab": active_tab})
     return render_template("money.html", **context)
 
 
 @bp.get("/money/financials")
 def financials_page():
     """Render the manual financials capture UI."""
+
+    if _current_role() == RoleEnum.sales:
+        return render_template("403.html"), 403
 
     company_id = request.args.get("company_id")
     statement_type = request.args.get("statement_type", "income")
@@ -458,6 +468,9 @@ def financials_page():
 
 @bp.post("/money/financials/save")
 def save_financials():
+    if _current_role() == RoleEnum.sales:
+        return render_template("403.html"), 403
+
     statement_type = request.form.get("statement_type", "income")
     financial_year_raw = request.form.get("financial_year")
     company_id_raw = request.form.get("company_id")
@@ -570,6 +583,9 @@ def save_financials():
 
 @bp.post("/money/financials/new-line")
 def create_financial_line():
+    if _current_role() == RoleEnum.sales:
+        return render_template("403.html"), 403
+
     statement_type = request.form.get("statement_type", "income")
     label = (request.form.get("label") or "").strip()
     line_key_input = (request.form.get("line_key") or "").strip()

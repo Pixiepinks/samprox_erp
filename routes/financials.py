@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any, Dict
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt, jwt_required
 from sqlalchemy import or_
 
 from extensions import db
@@ -12,10 +12,25 @@ from models import (
     ChartOfAccount,
     FinancialTrialBalanceLine,
     IFRS_TRIAL_BALANCE_CATEGORIES,
+    RoleEnum,
     generate_financial_year_months,
 )
 
 bp = Blueprint("financials", __name__, url_prefix="/api/financial-statements")
+
+
+def _current_role() -> RoleEnum | None:
+    try:
+        return RoleEnum((get_jwt() or {}).get("role"))
+    except Exception:
+        return None
+
+
+@bp.before_request
+@jwt_required()
+def _block_sales_access():
+    if _current_role() == RoleEnum.sales:
+        return jsonify({"error": "Access denied"}), 403
 
 
 IFRS_CATEGORY_SUBCATEGORIES: dict[str, list[str]] = IFRS_TRIAL_BALANCE_CATEGORIES

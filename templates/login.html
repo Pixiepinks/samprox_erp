@@ -120,6 +120,8 @@
                         window.location.href = "/responsibility_portal";
                     } else if (data.user?.role === "maintenance_manager") {
                         window.location.href = "/machines";
+                    } else if (data.user?.role === "Sales") {
+                        window.location.href = "/money";
                     } else {
                         window.location.href = "/mind";
                     }

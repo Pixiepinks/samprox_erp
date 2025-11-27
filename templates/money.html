@@ -77,7 +77,6 @@
                     </button>
                 {% endif %}
             </div>
-
             {% if not is_sales %}
                 <div class="tab-panel {% if current_tab == 'overview' %}tab-panel--active{% endif %}" id="tab-overview" role="tabpanel" aria-label="Financial overview">
                     <header class="section__header">
@@ -152,101 +151,112 @@
                         </label>
                     </div>
 
-                    <div class="petty-review__body">
-                        <div class="petty-review__list">
-                            <table class="petty-table petty-table--compact">
-                                <thead>
-                                    <tr>
-                                        <th>Sheet</th>
-                                        <th>Employee</th>
-                                        <th>Status</th>
-                                        <th>Total</th>
-                                        <th>Submitted</th>
-                                        <th>Updated</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="petty-claims-rows"></tbody>
-                            </table>
-                            <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
-                        </div>
-
-                        <div class="petty-review__details" id="petty-review-details" hidden>
-                            <p class="helper-text" id="petty-detail-placeholder">Select a claim to view details.</p>
-                            <div id="petty-card-host"></div>
-                        </div>
+                    <div class="petty-review__list w-full">
+                        <table class="petty-table petty-table--compact w-full">
+                            <thead>
+                                <tr>
+                                    <th>Sheet</th>
+                                    <th>Employee</th>
+                                    <th>Status</th>
+                                    <th>Total</th>
+                                    <th>Submitted</th>
+                                    <th>Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody id="petty-claims-rows"></tbody>
+                        </table>
+                        <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
                     </div>
                 </div>
 
-                <div class="petty-card" id="petty-card">
-                    <div class="form-grid">
-                        <label class="form-field">
-                            <span>Company</span>
-                            <select id="petty-company"></select>
-                        </label>
-                        <label class="form-field">
-                            <span>Employee</span>
-                            <select id="petty-employee"></select>
-                        </label>
-                        <label class="form-field">
-                            <span>Week starting</span>
-                            <input id="petty-week-start" type="date" />
-                        </label>
-                        <label class="form-field">
-                            <span>Week ending</span>
-                            <input id="petty-week-end" type="date" readonly />
-                        </label>
-                        <label class="form-field">
-                            <span>Sheet No</span>
-                            <input id="petty-sheet" type="text" readonly />
-                        </label>
-                        <label class="form-field">
-                            <span>Vehicle No</span>
-                            <input id="petty-vehicle" type="text" placeholder="Enter vehicle number" />
-                        </label>
-                        <label class="form-field form-field--wide">
-                            <span>Area visited</span>
-                            <textarea id="petty-area" rows="2" placeholder="Enter locations covered"></textarea>
-                        </label>
-                    </div>
+                <div id="petty-card-inline-host"></div>
 
-                    <div class="petty-table-wrapper">
-                        <table class="petty-table">
-                            <thead>
-                                <tr>
-                                    <th>No</th>
-                                    <th>Expense Type</th>
-                                    <th>MON</th>
-                                    <th>TUE</th>
-                                    <th>WED</th>
-                                    <th>THU</th>
-                                    <th>FRI</th>
-                                    <th>SAT</th>
-                                    <th>SUN</th>
-                                    <th>TOTAL</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody id="petty-lines"></tbody>
-                            <tfoot>
-                                <tr>
-                                    <td colspan="9" class="total-label">TOTAL EXPENSES</td>
-                                    <td colspan="2" class="total-value" id="petty-total">0.00</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
+                <div id="weekly-claim-modal" class="fixed inset-0 hidden items-center justify-center z-40">
+                    <div class="absolute inset-0 bg-black/40" data-modal-close></div>
 
-                    <div class="petty-toolbar">
-                        <div class="petty-actions">
-                            <button class="button button--secondary" id="petty-save">Save Draft</button>
-                            <button class="button" id="petty-submit">Submit for Approval</button>
-                            <button class="button" id="petty-approve">Approve</button>
-                            <button class="button button--danger" id="petty-reject">Reject</button>
-                            <button class="button" id="petty-paid">Mark as Paid</button>
+                    <div class="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+                        <button
+                            type="button"
+                            class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                            data-modal-close
+                        >&times;</button>
+
+                        <div class="modal-body space-y-4" id="petty-card-modal-host">
+                            <div class="petty-card" id="petty-card">
+                                <div class="form-grid">
+                                    <label class="form-field">
+                                        <span>Company</span>
+                                        <select id="petty-company"></select>
+                                    </label>
+                                    <label class="form-field">
+                                        <span>Employee</span>
+                                        <select id="petty-employee"></select>
+                                    </label>
+                                    <label class="form-field">
+                                        <span>Week starting</span>
+                                        <input id="petty-week-start" type="date" />
+                                    </label>
+                                    <label class="form-field">
+                                        <span>Week ending</span>
+                                        <input id="petty-week-end" type="date" readonly />
+                                    </label>
+                                    <label class="form-field">
+                                        <span>Sheet No</span>
+                                        <input id="petty-sheet" type="text" readonly />
+                                    </label>
+                                    <label class="form-field">
+                                        <span>Vehicle No</span>
+                                        <input id="petty-vehicle" type="text" placeholder="Enter vehicle number" />
+                                    </label>
+                                    <label class="form-field form-field--wide">
+                                        <span>Area visited</span>
+                                        <textarea id="petty-area" rows="2" placeholder="Enter locations covered"></textarea>
+                                    </label>
+                                </div>
+
+                                <div class="petty-table-wrapper">
+                                    <table class="petty-table">
+                                        <thead>
+                                            <tr>
+                                                <th>No</th>
+                                                <th>Expense Type</th>
+                                                <th>MON</th>
+                                                <th>TUE</th>
+                                                <th>WED</th>
+                                                <th>THU</th>
+                                                <th>FRI</th>
+                                                <th>SAT</th>
+                                                <th>SUN</th>
+                                                <th>TOTAL</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="petty-lines"></tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="9" class="total-label">TOTAL EXPENSES</td>
+                                                <td colspan="2" class="total-value" id="petty-total">0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                <div class="petty-toolbar">
+                                    <div class="petty-actions">
+                                        <button class="button button--secondary" id="petty-save">Save Draft</button>
+                                        <button class="button" id="petty-submit">Submit for Approval</button>
+                                        <button class="button" id="petty-approve">Approve</button>
+                                        <button class="button button--danger" id="petty-reject">Reject</button>
+                                        <button class="button" id="petty-paid">Mark as Paid</button>
+                                    </div>
+                                </div>
+                                <p class="helper-text" id="petty-helper">
+                                    Click any weekday cell to enter an amount. Empty cells are treated as 0.
+                                </p>
+                                <p class="helper-text helper-text--error" id="petty-error" hidden></p>
+                            </div>
                         </div>
                     </div>
-                    <p class="helper-text" id="petty-helper">Click any weekday cell to enter an amount. Empty cells are treated as 0.</p>
-                    <p class="helper-text helper-text--error" id="petty-error" hidden></p>
                 </div>
             </div>
 
@@ -605,14 +615,14 @@
             paid: document.getElementById("petty-paid"),
             review: document.getElementById("petty-review"),
             card: document.getElementById("petty-card"),
-            cardHost: document.getElementById("petty-card-host"),
-            detailPlaceholder: document.getElementById("petty-detail-placeholder"),
+            inlineCardHost: document.getElementById("petty-card-inline-host"),
+            modalHost: document.getElementById("petty-card-modal-host"),
+            modal: document.getElementById("weekly-claim-modal"),
             filterWeek: document.getElementById("petty-filter-week"),
             filterStatus: document.getElementById("petty-filter-status"),
             filterEmployee: document.getElementById("petty-filter-employee"),
             claimsRows: document.getElementById("petty-claims-rows"),
             claimsEmpty: document.getElementById("petty-claims-empty"),
-            details: document.getElementById("petty-review-details"),
         };
 
         const managerRoles = ["admin", "finance_manager", "production_manager"];
@@ -643,6 +653,24 @@
         function showError(message) {
             pettyEls.error.textContent = message || "";
             pettyEls.error.hidden = !message;
+        }
+
+        function openModal() {
+            if (!pettyEls.modal) return;
+            pettyEls.modal.classList.remove("hidden");
+            pettyEls.modal.classList.add("flex");
+            if (pettyEls.card && pettyEls.modalHost?.contains(pettyEls.card)) {
+                pettyEls.card.hidden = false;
+            }
+        }
+
+        function closeModal() {
+            if (!pettyEls.modal) return;
+            pettyEls.modal.classList.add("hidden");
+            pettyEls.modal.classList.remove("flex");
+            if (pettyEls.card && pettyEls.modalHost?.contains(pettyEls.card)) {
+                pettyEls.card.hidden = true;
+            }
         }
 
         function setReadOnlyMode(readOnly) {
@@ -686,23 +714,35 @@
             return { ok: response.ok, data };
         }
 
-        function hideDetailsPanel() {
-            if (!pettyEls.details) return;
-            pettyEls.details.hidden = true;
-            if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = false;
-            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
-                pettyEls.card.hidden = true;
+        function moveCardToModal() {
+            if (!pettyEls.card || !pettyEls.modalHost) return;
+            if (!pettyEls.modalHost.contains(pettyEls.card)) {
+                pettyEls.modalHost.appendChild(pettyEls.card);
             }
         }
 
-        function showDetailsPanel() {
-            if (!pettyEls.details) return;
-            pettyEls.details.hidden = false;
-            if (pettyEls.detailPlaceholder) pettyEls.detailPlaceholder.hidden = true;
-            if (pettyEls.card && pettyEls.details.contains(pettyEls.card)) {
-                pettyEls.card.hidden = false;
+        function moveCardInline() {
+            if (!pettyEls.card || !pettyEls.inlineCardHost) return;
+            if (!pettyEls.inlineCardHost.contains(pettyEls.card)) {
+                pettyEls.inlineCardHost.appendChild(pettyEls.card);
             }
+            pettyEls.card.hidden = false;
         }
+
+        function hideDetailsPanel() {
+            closeModal();
+        }
+
+        function showDetailsPanel() {
+            openModal();
+        }
+
+        const modalCloseEls = pettyEls.modal ? pettyEls.modal.querySelectorAll("[data-modal-close]") : [];
+        modalCloseEls.forEach((el) => el.addEventListener("click", closeModal));
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") closeModal();
+        });
 
         function renderClaimsTable() {
             if (!pettyEls.claimsRows || !pettyEls.claimsEmpty) return;
@@ -722,8 +762,8 @@
 
             pettyState.claims.forEach((claim) => {
                 const row = document.createElement("tr");
-                row.dataset.claimId = claim.id;
-                row.className = "clickable-row";
+                row.dataset.sheetId = claim.id;
+                row.className = "cursor-pointer hover:bg-gray-50";
                 row.addEventListener("click", () => selectClaim(claim.id));
 
                 [
@@ -924,12 +964,10 @@
                 return;
             }
 
-            if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
-                pettyEls.cardHost.appendChild(pettyEls.card);
-            }
-            showDetailsPanel();
+            moveCardToModal();
             setReadOnlyMode(true);
             applyClaim(data.claim);
+            showDetailsPanel();
             showError("");
         }
 
@@ -996,10 +1034,8 @@
             const isManagerView = managerRoles.includes(user?.role) && !isSales;
             if (isManagerView && pettyEls.review) {
                 pettyEls.review.hidden = false;
-                if (pettyEls.cardHost && !pettyEls.cardHost.contains(pettyEls.card)) {
-                    pettyEls.cardHost.appendChild(pettyEls.card);
-                }
-                hideDetailsPanel();
+                moveCardToModal();
+                closeModal();
                 const monday = startOfWeek(new Date());
                 pettyState.filters.weekStart = formatDateInput(monday);
                 if (pettyEls.filterWeek) pettyEls.filterWeek.value = pettyState.filters.weekStart;
@@ -1009,6 +1045,8 @@
                 return;
             }
 
+            moveCardInline();
+            closeModal();
             setReadOnlyMode(false);
             const { ok, data } = await fetchJson("/api/petty-cash/weekly-claims/init");
             if (!ok || !data.claim) {

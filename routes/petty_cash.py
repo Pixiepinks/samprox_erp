@@ -20,17 +20,12 @@ from models import (
 bp = Blueprint("petty_cash", __name__, url_prefix="/api/petty-cash")
 
 DEFAULT_EXPENSE_TYPES = [
-    "Fuel",
-    "Vehicle Maintenance",
     "Breakfast",
     "Lunch",
     "Dinner",
     "Lodging",
     "Parking Fees",
     "Transport Charges",
-    "Communications",
-    "Miscellaneous",
-    "Stationery",
     "High Way Charges",
 ]
 

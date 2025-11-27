@@ -45,16 +45,19 @@
             >Mechanism</a>
         </nav>
         <section class="section">
+            {% set is_sales = is_sales or false %}
             {% set current_tab = active_tab or 'overview' %}
             <div class="tab-switcher" role="tablist" aria-label="Money sections">
-                <button
-                    class="tab-switcher__button {% if current_tab == 'overview' %}tab-switcher__button--active{% endif %}"
-                    data-tab="overview"
-                    role="tab"
-                    aria-selected="{{ 'true' if current_tab == 'overview' else 'false' }}"
-                >
-                    Overview
-                </button>
+                {% if not is_sales %}
+                    <button
+                        class="tab-switcher__button {% if current_tab == 'overview' %}tab-switcher__button--active{% endif %}"
+                        data-tab="overview"
+                        role="tab"
+                        aria-selected="{{ 'true' if current_tab == 'overview' else 'false' }}"
+                    >
+                        Overview
+                    </button>
+                {% endif %}
                 <button
                     class="tab-switcher__button {% if current_tab == 'petty-cash' %}tab-switcher__button--active{% endif %}"
                     data-tab="petty-cash"
@@ -63,51 +66,55 @@
                 >
                     Petty Cash
                 </button>
-                <button
-                    class="tab-switcher__button {% if current_tab == 'financials' %}tab-switcher__button--active{% endif %}"
-                    data-tab="financials"
-                    role="tab"
-                    aria-selected="{{ 'true' if current_tab == 'financials' else 'false' }}"
-                >
-                    Financials
-                </button>
+                {% if not is_sales %}
+                    <button
+                        class="tab-switcher__button {% if current_tab == 'financials' %}tab-switcher__button--active{% endif %}"
+                        data-tab="financials"
+                        role="tab"
+                        aria-selected="{{ 'true' if current_tab == 'financials' else 'false' }}"
+                    >
+                        Financials
+                    </button>
+                {% endif %}
             </div>
 
-            <div class="tab-panel {% if current_tab == 'overview' %}tab-panel--active{% endif %}" id="tab-overview" role="tabpanel" aria-label="Financial overview">
-                <header class="section__header">
-                    <h1>Financial performance snapshot</h1>
-                </header>
-                <p class="section__description">
-                    Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
-                    insights here to control costs and prioritize high-value work.
-                </p>
-                <div class="section__grid">
-                    <article class="tile">
-                        <h2 class="tile__title">Budget vs. actual</h2>
-                        <p class="tile__description">
-                            Compare planned spending against actuals across departments and job types.
-                        </p>
-                    </article>
-                    <article class="tile">
-                        <h2 class="tile__title">Job costing</h2>
-                        <p class="tile__description">
-                            Track labour, material, and machine time consumption to understand job margins.
-                        </p>
-                    </article>
-                    <article class="tile">
-                        <h2 class="tile__title">Cash flow outlook</h2>
-                        <p class="tile__description">
-                            Review upcoming receivables and payables to plan funding and investments.
-                        </p>
-                    </article>
-                    <article class="tile">
-                        <h2 class="tile__title">Capital planning</h2>
-                        <p class="tile__description">
-                            Highlight equipment upgrades and large purchases to align with financial targets.
-                        </p>
-                    </article>
+            {% if not is_sales %}
+                <div class="tab-panel {% if current_tab == 'overview' %}tab-panel--active{% endif %}" id="tab-overview" role="tabpanel" aria-label="Financial overview">
+                    <header class="section__header">
+                        <h1>Financial performance snapshot</h1>
+                    </header>
+                    <p class="section__description">
+                        Connect operations with finance by monitoring budgets, spending, and cash flow. Use the
+                        insights here to control costs and prioritize high-value work.
+                    </p>
+                    <div class="section__grid">
+                        <article class="tile">
+                            <h2 class="tile__title">Budget vs. actual</h2>
+                            <p class="tile__description">
+                                Compare planned spending against actuals across departments and job types.
+                            </p>
+                        </article>
+                        <article class="tile">
+                            <h2 class="tile__title">Job costing</h2>
+                            <p class="tile__description">
+                                Track labour, material, and machine time consumption to understand job margins.
+                            </p>
+                        </article>
+                        <article class="tile">
+                            <h2 class="tile__title">Cash flow outlook</h2>
+                            <p class="tile__description">
+                                Review upcoming receivables and payables to plan funding and investments.
+                            </p>
+                        </article>
+                        <article class="tile">
+                            <h2 class="tile__title">Capital planning</h2>
+                            <p class="tile__description">
+                                Highlight equipment upgrades and large purchases to align with financial targets.
+                            </p>
+                        </article>
+                    </div>
                 </div>
-            </div>
+            {% endif %}
 
             <div class="tab-panel {% if current_tab == 'petty-cash' %}tab-panel--active{% endif %}" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
                 <header class="section__header">
@@ -194,7 +201,8 @@
                 </div>
             </div>
 
-            <div class="tab-panel {% if current_tab == 'financials' %}tab-panel--active{% endif %}" id="tab-financials" role="tabpanel" aria-label="Financial statements capture">
+            {% if not is_sales %}
+                <div class="tab-panel {% if current_tab == 'financials' %}tab-panel--active{% endif %}" id="tab-financials" role="tabpanel" aria-label="Financial statements capture">
                 <header class="section__header">
                     <div>
                         <p class="eyebrow">New</p>
@@ -392,6 +400,7 @@
                     </form>
                 </div>
             </div>
+            {% endif %}
         </section>
     </div>
     <script>
@@ -417,7 +426,9 @@
             window.location.replace("/machines");
         }
 
-        if (user?.role === "Sales" && window.location.pathname !== "/money") {
+        const normalizedRole = (user?.role || "").toLowerCase();
+
+        if (normalizedRole === "sales" && window.location.pathname !== "/money") {
             window.location.replace("/money");
         }
 
@@ -428,10 +439,10 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
-            Sales: "Sales",
+            sales: "Sales",
         };
 
-        const isSales = user?.role === "Sales";
+        const isSales = normalizedRole === "sales";
 
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
@@ -441,7 +452,7 @@
         const subnavLinks = document.querySelectorAll(".subnav__link");
 
         userNameEl.textContent = user?.name || "Unknown";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
+        userRoleEl.textContent = roleLabels[normalizedRole] || "";
         if (mechanismLink) {
             if (user?.role === "admin") {
                 mechanismLink.hidden = false;

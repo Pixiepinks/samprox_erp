@@ -59,7 +59,8 @@ def _current_role() -> RoleEnum | None:
         return None
 
     try:
-        return RoleEnum(role)
+        normalized_role = role.lower() if isinstance(role, str) else role
+        return RoleEnum(normalized_role)
     except ValueError:
         return None
 
@@ -439,8 +440,9 @@ def movers_page():
 def money_page():
     """Render the financial overview page."""
     context = _load_financials_context()
-    active_tab = "petty-cash" if _current_role() == RoleEnum.sales else "overview"
-    context.update({"active_tab": active_tab})
+    is_sales = _current_role() == RoleEnum.sales
+    active_tab = "petty-cash" if is_sales else "overview"
+    context.update({"active_tab": active_tab, "is_sales": is_sales})
     return render_template("money.html", **context)
 
 
@@ -462,7 +464,7 @@ def financials_page():
     context = _load_financials_context(
         company_id=company_id, statement_type=statement_type, financial_year=parsed_year
     )
-    context.update({"active_tab": "financials"})
+    context.update({"active_tab": "financials", "is_sales": False})
     return render_template("money.html", **context)
 
 

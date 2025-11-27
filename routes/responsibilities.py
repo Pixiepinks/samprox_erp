@@ -372,6 +372,7 @@ def _is_responsibility_number_conflict(error: IntegrityError) -> bool:
 _ALLOWED_CREATOR_ROLES = {
     RoleEnum.production_manager,
     RoleEnum.maintenance_manager,
+    RoleEnum.finance_manager,
     RoleEnum.admin,
     RoleEnum.outside_manager,
 }
@@ -571,7 +572,7 @@ def list_assignees():
 
     role = _current_role()
     if role not in _ALLOWED_CREATOR_ROLES:
-        return jsonify({"msg": "Only managers can access responsibility planning."}), 403
+        return jsonify({"msg": "You are not authorized to access responsibility planning."}), 403
 
     manager_roles = [
         RoleEnum.production_manager,
@@ -1147,7 +1148,7 @@ def create_task():
 
     role = _current_role()
     if role not in _ALLOWED_CREATOR_ROLES:
-        return jsonify({"msg": "Only managers can create responsibility tasks."}), 403
+        return jsonify({"msg": "You are not authorized to create responsibility tasks."}), 403
 
     assigner_id = _current_user_id()
     if assigner_id is None:
@@ -1332,7 +1333,7 @@ def update_task(task_id: int):
 
     role = _current_role()
     if role not in _ALLOWED_CREATOR_ROLES:
-        return jsonify({"msg": "Only managers can update responsibility tasks."}), 403
+        return jsonify({"msg": "You are not authorized to update responsibility tasks."}), 403
 
     task = ResponsibilityTask.query.get(task_id)
     if not task:
@@ -1520,7 +1521,7 @@ def list_tasks():
 
     role = _current_role()
     if role not in _ALLOWED_CREATOR_ROLES:
-        return jsonify({"msg": "Only managers can view responsibility tasks."}), 403
+        return jsonify({"msg": "You are not authorized to view responsibility tasks."}), 403
 
     query = (
         ResponsibilityTask.query.options(
@@ -1565,7 +1566,7 @@ def send_weekly_plan():
 
     role = _current_role()
     if role not in _ALLOWED_CREATOR_ROLES:
-        return jsonify({"msg": "Only managers can send weekly plans."}), 403
+        return jsonify({"msg": "You are not authorized to send weekly plans."}), 403
 
     payload = request.get_json(silent=True) or {}
     recipient = payload.get("recipientEmail")

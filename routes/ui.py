@@ -306,7 +306,13 @@ def responsibility_portal():
     """Render the standalone responsibility planning portal."""
 
     role = _current_role()
-    if role not in {RoleEnum.outside_manager}:
+    if role not in {
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
+        RoleEnum.finance_manager,
+        RoleEnum.admin,
+        RoleEnum.outside_manager,
+    }:
         return render_template("403.html"), 403
 
     return render_template("responsibility_plan.html")

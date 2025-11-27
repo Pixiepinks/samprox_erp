@@ -1514,6 +1514,8 @@ class PettyCashWeeklyClaim(db.Model):
     week_end_date = db.Column(db.Date, nullable=False)
     vehicle_no = db.Column(db.String(100))
     area_visited = db.Column(db.Text)
+    monday_morning_odo = db.Column(db.Numeric(14, 2), nullable=True, default=None)
+    friday_evening_odo = db.Column(db.Numeric(14, 2), nullable=True, default=None)
     status = db.Column(
         db.Enum(
             PettyCashStatus,

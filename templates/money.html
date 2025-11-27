@@ -1163,7 +1163,7 @@
                 ? pettyState.readOnly || ["Approved", "Paid"].includes(pettyState.claim.status)
                 : false;
 
-            if (isSales && locked) {
+            if (isSales) {
                 loadClaimForWeek(newWeek);
                 return;
             }

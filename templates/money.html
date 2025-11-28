@@ -228,7 +228,7 @@
                                     </label>
                                     <label class="form-field">
                                         <span>Vehicle No</span>
-                                        <input id="petty-vehicle" type="text" placeholder="Enter vehicle number" />
+                                        <select id="petty-vehicle"></select>
                                     </label>
                                     <label class="form-field form-field--wide">
                                         <span>Area visited</span>
@@ -604,6 +604,22 @@
             });
         });
 
+        const vehicleOptions = [
+            "CHW-0766",
+            "KY-6871",
+            "BJV-8357",
+            "BJY-8912",
+            "KW-3141",
+            "LO-5608",
+            "KN-0967",
+            "BJV-7747",
+            "BJV-7645",
+            "PI-6537",
+            "KI-7135",
+            "LO-2324",
+            "LO-6639",
+        ];
+
         const pettyState = {
             claim: null,
             employees: [],
@@ -838,10 +854,10 @@
             pettyEls.sheet.value = claim.sheet_no || "";
             pettyEls.weekStart.value = claim.week_start_date;
             pettyEls.weekEnd.value = claim.week_end_date;
-            pettyEls.vehicle.value = claim.vehicle_no || "";
             pettyEls.area.value = claim.area_visited || "";
             pettyEls.mondayOdo.value = claim.monday_morning_odo ?? "";
             pettyEls.fridayOdo.value = claim.friday_evening_odo ?? "";
+            renderVehicleOptions(claim.vehicle_no || "");
             updateStatusBadge(claim.status);
 
             const employees = [...pettyState.employees];
@@ -875,6 +891,38 @@
             ].forEach((field) => {
                 field.disabled = locked;
             });
+        }
+
+        function renderVehicleOptions(selectedValue) {
+            if (!pettyEls.vehicle) return;
+            pettyEls.vehicle.innerHTML = "";
+
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select Vehicle";
+            placeholder.disabled = true;
+            placeholder.selected = !selectedValue;
+            pettyEls.vehicle.appendChild(placeholder);
+
+            vehicleOptions.forEach((value) => {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = value;
+                if (value === selectedValue) {
+                    option.selected = true;
+                    placeholder.selected = false;
+                }
+                pettyEls.vehicle.appendChild(option);
+            });
+
+            if (selectedValue && !vehicleOptions.includes(selectedValue)) {
+                const fallback = document.createElement("option");
+                fallback.value = selectedValue;
+                fallback.textContent = selectedValue;
+                fallback.selected = true;
+                placeholder.selected = false;
+                pettyEls.vehicle.appendChild(fallback);
+            }
         }
 
         function lineKey(line) {
@@ -1201,7 +1249,7 @@
             updateHeader({ week_start_date: newWeek });
         });
 
-        pettyEls.vehicle.addEventListener("blur", (event) => {
+        pettyEls.vehicle.addEventListener("change", (event) => {
             updateHeader({ vehicle_no: event.target.value });
         });
 

@@ -605,7 +605,10 @@
             "Maintenance Material",
         ]);
         const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
-        const canEditSuppliers = userRole === "admin" || userRole === "production_manager";
+        const canEditSuppliers =
+            userRole === "admin" ||
+            userRole === "production_manager" ||
+            userRole === "finance_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
@@ -1489,53 +1492,32 @@
             updateSupplierFieldErrors({}, { force: true });
         }
 
-        async function loadSupplierIntoForm(supplierId) {
-            const response = await fetch(`/api/material/suppliers/${supplierId}`, {
-                headers: {
-                    Authorization: token ? `Bearer ${token}` : undefined,
-                },
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
-                setSupplierModalError(message);
-                throw new Error(message);
-            }
-            populateSupplierForm(data);
-            supplierModalSaveButton.disabled = false;
-            supplierFieldElements.name?.focus();
-        }
-
-        async function openSupplierEditor(supplierId, record = null) {
-            if (!canEditSuppliers || !supplierModal) {
+        function openSupplierEditor(supplierId, record = null) {
+            if (!canEditSuppliers) {
+                setSupplierModalError("You do not have permission to edit suppliers.");
                 return;
             }
+            if (!supplierModal) return;
 
             resetSupplierModalState("Edit supplier");
-            activeSupplierId = supplierId;
-            if (supplierIdInput) {
-                supplierIdInput.value = supplierId || "";
-            }
+
+            activeSupplierId = supplierId || null;
+            if (supplierIdInput) supplierIdInput.value = supplierId || "";
+
+            // Open modal
             supplierModal.classList.add("modal--open");
             supplierModal.removeAttribute("hidden");
             supplierModal.setAttribute("aria-hidden", "false");
             document.body.classList.add("modal-open");
-            if (record) {
-                populateSupplierForm(record);
-                supplierModalSaveButton.disabled = false;
-            } else {
-                supplierModalSaveButton.disabled = true;
-            }
-            if (!supplierId) {
-                setSupplierModalError("Unable to load this supplier.");
-                return;
-            }
 
-            try {
-                await loadSupplierIntoForm(supplierId);
-            } catch (error) {
-                console.error(error);
-            }
+            // Populate form using row data (no additional API call)
+            populateSupplierForm(record || {});
+
+            // Enable save button
+            if (supplierModalSaveButton) supplierModalSaveButton.disabled = false;
+
+            // Focus first field
+            supplierFieldElements?.name?.focus();
         }
 
         function openSupplierCreator() {
@@ -1564,98 +1546,6 @@
         const supplierModalOverlay = supplierModal?.querySelector("[data-modal-dismiss]");
         if (supplierModalOverlay) {
             supplierModalOverlay.addEventListener("click", closeSupplierModal);
-        }
-
-        Object.entries(supplierFieldElements).forEach(([field, element]) => {
-            if (!element) {
-                return;
-            }
-            const handler = () => {
-                supplierTouchedFields.add(field);
-                if (field in supplierServerErrors) {
-                    delete supplierServerErrors[field];
-                }
-                if (field === "category") {
-                    updateVehicleRequirement(element.value);
-                }
-                evaluateSupplierForm();
-            };
-            const eventName = element.tagName === "SELECT" ? "change" : "input";
-            element.addEventListener(eventName, handler);
-            element.addEventListener("blur", handler);
-        });
-
-        if (supplierModalForm) {
-            supplierModalForm.addEventListener("submit", async (event) => {
-                event.preventDefault();
-                setSupplierModalError("");
-                supplierTouchedFields.add("name");
-                supplierTouchedFields.add("supplier_id_no");
-                supplierTouchedFields.add("category");
-                supplierTouchedFields.add("primary_phone");
-                supplierTouchedFields.add("credit_period");
-                supplierTouchedFields.add("vehicle_no_1");
-
-                const { values, clientErrors } = evaluateSupplierForm({ force: true });
-                if (Object.keys(clientErrors).length > 0) {
-                    return;
-                }
-
-                const supplierId = supplierIdInput ? supplierIdInput.value.trim() : "";
-                const targetSupplierId = supplierId || activeSupplierId || "";
-                const method = targetSupplierId ? "PUT" : "POST";
-                const url = targetSupplierId
-                    ? `/api/material/suppliers/${targetSupplierId}`
-                    : "/api/material/suppliers";
-
-                supplierModalSaveButton.disabled = true;
-                const payload = {
-                    name: values.name,
-                    supplier_id_no: values.supplier_id_no,
-                    category: values.category,
-                    primary_phone: values.primary_phone,
-                    credit_period: values.credit_period,
-                    secondary_phone: values.secondary_phone,
-                    vehicle_no_1: values.vehicle_no_1,
-                    vehicle_no_2: values.vehicle_no_2,
-                    vehicle_no_3: values.vehicle_no_3,
-                    email: values.email,
-                    address: values.address,
-                    tax_id: values.tax_id,
-                };
-
-                try {
-                    const response = await fetch(url, {
-                        method,
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: token ? `Bearer ${token}` : undefined,
-                        },
-                        body: JSON.stringify(payload),
-                    });
-                    const data = await response.json().catch(() => ({}));
-                    if (!response.ok) {
-                        const fieldErrors = data?.errors || {};
-                        supplierServerErrors = { ...fieldErrors };
-                        Object.keys(fieldErrors).forEach((field) => supplierTouchedFields.add(field));
-                        evaluateSupplierForm({ force: true });
-                        const message =
-                            fieldErrors.supplier_reg_no || data?.msg || "Unable to save supplier.";
-                        if (message) {
-                            setSupplierModalError(message);
-                        }
-                        return;
-                    }
-
-                    const currentQuery = supplierSearchInput ? supplierSearchInput.value : "";
-                    await loadSuppliers(currentQuery || "");
-                    closeSupplierModal();
-                } catch (error) {
-                    setSupplierModalError("Network error. Please try again.");
-                } finally {
-                    evaluateSupplierForm();
-                }
-            });
         }
 
         function formatDate(value) {

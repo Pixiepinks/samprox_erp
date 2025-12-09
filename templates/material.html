@@ -2027,8 +2027,24 @@
         }
 
         if (registerSupplierButton) {
-            registerSupplierButton.addEventListener("click", () => {
+            registerSupplierButton.addEventListener("click", (event) => {
+                event.preventDefault();
                 openSupplierCreator();
+            });
+        }
+
+        if (supplierTableBody) {
+            supplierTableBody.addEventListener("click", (event) => {
+                const editButton = event.target.closest(".supplier-edit-btn");
+                if (!editButton) {
+                    return;
+                }
+
+                event.preventDefault();
+                const supplierId = editButton.getAttribute("data-supplier-id");
+                if (supplierId) {
+                    openSupplierEditor(supplierId);
+                }
             });
         }
 

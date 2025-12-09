@@ -254,7 +254,7 @@
             </div>
         </section>
     </div>
-    <div class="modal" id="briquette-mix-modal" hidden aria-hidden="true">
+    <div class="modal modal--app" id="briquette-mix-modal" hidden aria-hidden="true">
         <div class="modal__overlay" data-modal-dismiss></div>
         <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="briquette-mix-title">
             <header class="modal__header modal__header--with-actions">
@@ -1549,7 +1549,7 @@
                 supplierModalSaveButton.disabled = true;
             }
 
-            fetch(`/api/suppliers/${supplierId}`, {
+            fetch(`/api/material/suppliers/${supplierId}`, {
                 headers: {
                     Authorization: token ? `Bearer ${token}` : undefined,
                 },

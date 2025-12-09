@@ -5305,3 +5305,19 @@ body.modal-polyfill-active::before {
         align-items: stretch;
     }
 }
+
+/* Ensure Bootstrap supplier modal is visible */
+#supplier-modal.modal {
+    display: none;
+}
+
+#supplier-modal.modal.show {
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 1055 !important;
+}
+
+#supplier-modal .modal-dialog {
+    margin: 1.75rem auto;
+}

@@ -62,7 +62,7 @@ def supplier_search():
     return jsonify(suppliers_schema.dump(suppliers))
 
 
-@bp.get("/suppliers/<supplier_id>")
+@bp.get("/suppliers/<string:supplier_id>")
 @jwt_required()
 def supplier_detail(supplier_id: str):
     if not require_role(RoleEnum.admin, RoleEnum.production_manager):
@@ -92,7 +92,7 @@ def supplier_create():
     return jsonify(supplier_schema.dump(supplier)), 201
 
 
-@bp.put("/suppliers/<supplier_id>")
+@bp.put("/suppliers/<string:supplier_id>")
 @jwt_required()
 def supplier_update(supplier_id: str):
     if not require_role(RoleEnum.admin, RoleEnum.production_manager):

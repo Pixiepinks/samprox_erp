@@ -1146,6 +1146,18 @@
             items.forEach((item) => {
                 const row = document.createElement("tr");
 
+                if (canEditSuppliers && item.id) {
+                    row.addEventListener("click", (event) => {
+                        const interactiveTarget = event.target.closest(
+                            "button, a, input, select, textarea"
+                        );
+                        if (interactiveTarget) {
+                            return;
+                        }
+                        openSupplierEditor(item.id, item);
+                    });
+                }
+
                 const nameCell = document.createElement("td");
                 nameCell.textContent = item.name || "—";
                 row.appendChild(nameCell);
@@ -1492,32 +1504,76 @@
             updateSupplierFieldErrors({}, { force: true });
         }
 
-        function openSupplierEditor(supplierId, record = null) {
-            if (!canEditSuppliers) {
-                setSupplierModalError("You do not have permission to edit suppliers.");
+        function loadSupplierIntoForm(supplierId) {
+            if (!supplierId) {
+                setSupplierModalError("Unable to load this supplier.");
                 return;
             }
-            if (!supplierModal) return;
 
+            if (supplierModalSaveButton) {
+                supplierModalSaveButton.disabled = true;
+            }
+
+            fetch(`/api/material/suppliers/${supplierId}`, {
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                },
+            })
+                .then((response) =>
+                    response
+                        .json()
+                        .catch(() => ({}))
+                        .then((data) => ({ response, data }))
+                )
+                .then(({ response, data }) => {
+                    if (!response.ok) {
+                        const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
+                        setSupplierModalError(message);
+                        console.error("Failed to load supplier", message);
+                        return;
+                    }
+                    populateSupplierForm(data);
+                    if (supplierModalSaveButton) {
+                        supplierModalSaveButton.disabled = false;
+                    }
+                    supplierFieldElements.name?.focus();
+                })
+                .catch((error) => {
+                    console.error("Unexpected error loading supplier", error);
+                    setSupplierModalError("Unable to load supplier.");
+                });
+        }
+
+        function openSupplierEditor(supplierId, record = null) {
+            if (!canEditSuppliers || !supplierModal) {
+                return;
+            }
+
+            // Reset state and basic info
             resetSupplierModalState("Edit supplier");
-
             activeSupplierId = supplierId || null;
-            if (supplierIdInput) supplierIdInput.value = supplierId || "";
+            if (supplierIdInput) {
+                supplierIdInput.value = supplierId || "";
+            }
 
-            // Open modal
+            // Open the modal
             supplierModal.classList.add("modal--open");
             supplierModal.removeAttribute("hidden");
             supplierModal.setAttribute("aria-hidden", "false");
             document.body.classList.add("modal-open");
 
-            // Populate form using row data (no additional API call)
-            populateSupplierForm(record || {});
+            // If we have the record from the table, use it immediately
+            if (record) {
+                populateSupplierForm(record);
+                if (supplierModalSaveButton) {
+                    supplierModalSaveButton.disabled = false;
+                }
+            } else if (supplierModalSaveButton) {
+                supplierModalSaveButton.disabled = true;
+            }
 
-            // Enable save button
-            if (supplierModalSaveButton) supplierModalSaveButton.disabled = false;
-
-            // Focus first field
-            supplierFieldElements?.name?.focus();
+            // Always try to refresh from backend in the background
+            loadSupplierIntoForm(supplierId);
         }
 
         function openSupplierCreator() {
@@ -1975,17 +2031,6 @@
                 openSupplierCreator();
             });
         }
-
-        document.addEventListener("click", (event) => {
-            const btn = event.target.closest(".supplier-edit-btn");
-            if (!btn) {
-                return;
-            }
-            const supplierId = btn.getAttribute("data-supplier-id");
-            if (supplierId) {
-                openSupplierEditor(supplierId);
-            }
-        });
 
         if (supplierSearchForm) {
             supplierSearchForm.addEventListener("submit", (event) => {

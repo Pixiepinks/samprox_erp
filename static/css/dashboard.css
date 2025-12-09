@@ -2854,6 +2854,124 @@ body.modal-open {
     justify-content: space-between;
 }
 
+.supplier-panel {
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.supplier-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.supplier-panel__title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.supplier-panel__subtitle {
+    margin: 0.25rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.supplier-panel__close {
+    border: none;
+    background: rgba(148, 163, 184, 0.25);
+    border-radius: 999px;
+    width: 32px;
+    height: 32px;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.supplier-panel__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.supplier-panel__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.supplier-panel__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.supplier-panel__field--full {
+    grid-column: 1 / -1;
+}
+
+.supplier-panel__label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+}
+
+.supplier-panel__input,
+.supplier-panel__textarea,
+.supplier-panel__select {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    padding: 0.6rem 0.75rem;
+    font: inherit;
+    background: #fff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.supplier-panel__input:focus,
+.supplier-panel__textarea:focus,
+.supplier-panel__select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.supplier-panel__error {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #b91c1c;
+}
+
+.supplier-panel__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.supplier-panel__feedback {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.supplier-panel__feedback--error {
+    color: #b91c1c;
+}
+
+@media (max-width: 768px) {
+    .supplier-panel {
+        padding: 1.2rem 1.25rem;
+    }
+}
+
 .stock-status-card__controls {
     display: flex;
     flex-direction: column;

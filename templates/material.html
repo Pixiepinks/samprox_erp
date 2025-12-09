@@ -134,36 +134,161 @@
                     </div>
                     <button type="button" class="button" id="register-supplier-btn">Register supplier</button>
                 </div>
-                <form class="material-receipts-card__search" id="supplier-search-form">
-                    <label class="sr-only" for="supplier-search-input">Search suppliers</label>
-                    <input
-                        id="supplier-search-input"
-                        type="search"
-                        name="q"
-                        placeholder="Search by supplier name, registration, or contact"
-                        autocomplete="off"
-                    />
-                    <div class="material-receipts-card__actions">
-                        <button type="submit" class="button button--secondary">Search</button>
-                        <button type="button" class="button button--ghost" id="supplier-clear-button">Clear</button>
+                <div class="material-receipts-card__body">
+                    <div class="supplier-panel" id="supplier-form-panel" hidden>
+                        <div class="supplier-panel__header">
+                            <div>
+                                <h3 class="supplier-panel__title" id="supplier-panel-title">Register supplier</h3>
+                                <p class="supplier-panel__subtitle">
+                                    Add or update supplier details for material receipts.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                class="supplier-panel__close"
+                                id="supplier-panel-close"
+                                aria-label="Close supplier form"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <form class="supplier-panel__form" id="supplier-form" novalidate>
+                            <input type="hidden" id="supplier-id" name="supplier_id" />
+                            <input type="hidden" id="supplier-form-mode" name="mode" value="create" />
+                            <div class="supplier-panel__grid">
+                                <label class="supplier-panel__field supplier-panel__field--full">
+                                    <span class="supplier-panel__label">Supplier Name<span class="text-red"> *</span></span>
+                                    <input class="supplier-panel__input" id="supplier-name" name="name" type="text" required />
+                                    <p class="supplier-panel__error" data-error-for="name"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Supplier Registration No</span>
+                                    <input
+                                        class="supplier-panel__input"
+                                        id="supplier-registration"
+                                        name="supplier_reg_no"
+                                        type="text"
+                                        readonly
+                                    />
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Supplier ID No<span class="text-red"> *</span></span>
+                                    <input
+                                        class="supplier-panel__input"
+                                        id="supplier-id-no"
+                                        name="supplier_id_no"
+                                        type="text"
+                                        required
+                                    />
+                                    <p class="supplier-panel__error" data-error-for="supplier_id_no"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Category<span class="text-red"> *</span></span>
+                                    <select class="supplier-panel__select" id="supplier-category" name="category" required>
+                                        <option value="" hidden>Select category</option>
+                                        <option value="Raw Material">Raw Material</option>
+                                        <option value="Packing Material">Packing Material</option>
+                                        <option value="Repair Material">Repair Material</option>
+                                        <option value="Maintenance Material">Maintenance Material</option>
+                                    </select>
+                                    <p class="supplier-panel__error" data-error-for="category"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Primary Phone<span class="text-red"> *</span></span>
+                                    <input
+                                        class="supplier-panel__input"
+                                        id="supplier-primary-phone"
+                                        name="primary_phone"
+                                        type="text"
+                                        required
+                                    />
+                                    <p class="supplier-panel__error" data-error-for="primary_phone"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Secondary Phone</span>
+                                    <input
+                                        class="supplier-panel__input"
+                                        id="supplier-secondary-phone"
+                                        name="secondary_phone"
+                                        type="text"
+                                    />
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Vehicle No 1</span>
+                                    <input class="supplier-panel__input" id="supplier-vehicle-1" name="vehicle_no_1" type="text" />
+                                    <p class="helper" id="vehicle-no-1-helper" hidden>Required for Raw Material suppliers.</p>
+                                    <p class="supplier-panel__error" data-error-for="vehicle_no_1"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Vehicle No 2</span>
+                                    <input class="supplier-panel__input" id="supplier-vehicle-2" name="vehicle_no_2" type="text" />
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Vehicle No 3</span>
+                                    <input class="supplier-panel__input" id="supplier-vehicle-3" name="vehicle_no_3" type="text" />
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Credit Period<span class="text-red"> *</span></span>
+                                    <select class="supplier-panel__select" id="supplier-credit-period" name="credit_period" required>
+                                        <option value="" hidden>Select credit period</option>
+                                        <option value="Cash">Cash</option>
+                                        <option value="3 Days">3 Days</option>
+                                        <option value="7 Days">7 Days</option>
+                                        <option value="1 Month">1 Month</option>
+                                    </select>
+                                    <p class="supplier-panel__error" data-error-for="credit_period"></p>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Email</span>
+                                    <input class="supplier-panel__input" id="supplier-email" name="email" type="email" />
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Address</span>
+                                    <textarea class="supplier-panel__textarea" id="supplier-address" name="address"></textarea>
+                                </label>
+                                <label class="supplier-panel__field">
+                                    <span class="supplier-panel__label">Tax ID</span>
+                                    <input class="supplier-panel__input" id="supplier-tax-id" name="tax_id" type="text" />
+                                </label>
+                            </div>
+                            <div class="supplier-panel__actions">
+                                <p class="supplier-panel__feedback supplier-panel__feedback--error" id="supplier-panel-error" hidden></p>
+                                <button type="button" class="button button--secondary" id="supplier-panel-cancel">Cancel</button>
+                                <button type="submit" class="button" id="supplier-panel-save">Save supplier</button>
+                            </div>
+                        </form>
                     </div>
-                </form>
-                <p class="empty-state" id="supplier-empty-state">Loading suppliers…</p>
-                <div class="table-wrapper" id="supplier-table-wrapper" hidden>
-                    <table class="data-table" id="supplier-table">
-                        <thead>
-                            <tr>
-                                <th scope="col">Supplier</th>
-                                <th scope="col">Registration no.</th>
-                                <th scope="col">Category</th>
-                                <th scope="col">Primary phone</th>
-                                <th scope="col">Vehicle No 1</th>
-                                <th scope="col">Credit period</th>
-                                <th scope="col" id="supplier-actions-header" hidden>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="supplier-table-body"></tbody>
-                    </table>
+                    <form class="material-receipts-card__search" id="supplier-search-form">
+                        <label class="sr-only" for="supplier-search-input">Search suppliers</label>
+                        <input
+                            id="supplier-search-input"
+                            type="search"
+                            name="q"
+                            placeholder="Search by supplier name, registration, or contact"
+                            autocomplete="off"
+                        />
+                        <div class="material-receipts-card__actions">
+                            <button type="submit" class="button button--secondary">Search</button>
+                            <button type="button" class="button button--ghost" id="supplier-clear-button">Clear</button>
+                        </div>
+                    </form>
+                    <p class="empty-state" id="supplier-empty-state">Loading suppliers…</p>
+                    <div class="table-wrapper" id="supplier-table-wrapper" hidden>
+                        <table class="data-table" id="supplier-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Supplier</th>
+                                    <th scope="col">Registration no.</th>
+                                    <th scope="col">Category</th>
+                                    <th scope="col">Primary phone</th>
+                                    <th scope="col">Vehicle No 1</th>
+                                    <th scope="col">Credit period</th>
+                                    <th scope="col" id="supplier-actions-header" hidden>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="supplier-table-body"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="material-receipts-card">
@@ -397,114 +522,6 @@
         </div>
     </div>
 
-    <div class="modal modal--app" id="supplier-modal" hidden aria-hidden="true" tabindex="-1">
-        <div class="modal__overlay" data-modal-dismiss></div>
-        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="supplier-modal-title">
-            <header class="modal__header">
-                <div>
-                    <h2 class="modal__title" id="supplier-modal-title">Edit supplier</h2>
-                    <p class="modal__subtitle mb-0">Update supplier contact, category, and billing details.</p>
-                </div>
-                <button
-                    type="button"
-                    class="modal__close"
-                    id="supplier-modal-close"
-                    aria-label="Close supplier form"
-                >
-                    &times;
-                </button>
-            </header>
-            <form class="modal__form" id="supplier-form" novalidate>
-                <input type="hidden" id="supplier-id" name="supplier_id" />
-                <input type="hidden" id="supplier-form-mode" value="edit" />
-                <div class="modal__body">
-                    <div class="modal__grid">
-                        <label class="modal__field modal__field--full">
-                            <span class="modal__label">Supplier Name<span class="text-red"> *</span></span>
-                            <input class="modal__input" id="supplier-name" name="name" type="text" required />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_name"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Supplier Registration No</span>
-                            <input class="modal__input" id="supplier-registration" type="text" name="supplier_reg_no" readonly />
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Supplier ID No<span class="text-red"> *</span></span>
-                            <input class="modal__input" id="supplier-id-no" name="supplier_id_no" type="text" required />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_supplier_id_no"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Category<span class="text-red"> *</span></span>
-                            <select class="modal__select" id="supplier-category" name="category" required>
-                                <option value="" hidden>Select category</option>
-                                <option value="Raw Material">Raw Material</option>
-                                <option value="Packing Material">Packing Material</option>
-                                <option value="Repair Material">Repair Material</option>
-                                <option value="Maintenance Material">Maintenance Material</option>
-                            </select>
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_category"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Primary Phone<span class="text-red"> *</span></span>
-                            <input class="modal__input" id="supplier-primary-phone" name="primary_phone" type="text" required />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_primary_phone"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Secondary Phone</span>
-                            <input class="modal__input" id="supplier-secondary-phone" name="secondary_phone" type="text" />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_secondary_phone"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Vehicle No 1</span>
-                            <input class="modal__input" id="supplier-vehicle-1" name="vehicle_no_1" type="text" />
-                            <p class="helper" id="vehicle-no-1-helper" hidden>Required for Raw Material suppliers.</p>
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_vehicle_no_1"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Vehicle No 2</span>
-                            <input class="modal__input" id="supplier-vehicle-2" name="vehicle_no_2" type="text" />
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Vehicle No 3</span>
-                            <input class="modal__input" id="supplier-vehicle-3" name="vehicle_no_3" type="text" />
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Credit Period<span class="text-red"> *</span></span>
-                            <select class="modal__select" id="supplier-credit-period" name="credit_period" required>
-                                <option value="" hidden>Select credit period</option>
-                                <option value="Cash">Cash</option>
-                                <option value="3 Days">3 Days</option>
-                                <option value="7 Days">7 Days</option>
-                                <option value="1 Month">1 Month</option>
-                            </select>
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_credit_period"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Email</span>
-                            <input class="modal__input" id="supplier-email" name="email" type="email" />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_email"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Address</span>
-                            <textarea class="modal__textarea" id="supplier-address" name="address"></textarea>
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_address"></p>
-                        </label>
-                        <label class="modal__field">
-                            <span class="modal__label">Tax ID</span>
-                            <input class="modal__input" id="supplier-tax-id" name="tax_id" type="text" />
-                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_tax_id"></p>
-                        </label>
-                    </div>
-                    <p id="supplier-modal-alert" class="modal__feedback modal__feedback--error" hidden></p>
-                </div>
-                <footer class="modal__actions">
-                    <button type="button" class="button button--ghost" id="cancel-supplier">Cancel</button>
-                    <button type="submit" class="button" id="save-supplier">Save supplier</button>
-                </footer>
-            </form>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
@@ -609,13 +626,13 @@
         const supplierClearButton = document.getElementById("supplier-clear-button");
         const registerSupplierButton = document.getElementById("register-supplier-btn");
         const supplierActionsHeader = document.getElementById("supplier-actions-header");
-        const supplierModal = document.getElementById("supplier-modal");
-        const supplierModalForm = document.getElementById("supplier-form");
-        const supplierModalTitle = document.getElementById("supplier-modal-title");
-        const supplierModalAlert = document.getElementById("supplier-modal-alert");
-        const supplierModalClose = document.getElementById("supplier-modal-close");
-        const supplierModalCancel = document.getElementById("cancel-supplier");
-        const supplierModalSaveButton = document.getElementById("save-supplier");
+        const supplierPanel = document.getElementById("supplier-form-panel");
+        const supplierPanelTitle = document.getElementById("supplier-panel-title");
+        const supplierPanelClose = document.getElementById("supplier-panel-close");
+        const supplierPanelCancel = document.getElementById("supplier-panel-cancel");
+        const supplierPanelError = document.getElementById("supplier-panel-error");
+        const supplierPanelSaveButton = document.getElementById("supplier-panel-save");
+        const supplierForm = document.getElementById("supplier-form");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierRegistrationInput = document.getElementById("supplier-registration");
         const supplierFormMode = document.getElementById("supplier-form-mode");
@@ -1280,16 +1297,16 @@
             }
         }
 
-        function setSupplierModalError(message) {
-            if (!supplierModalAlert) {
+        function setSupplierPanelError(message) {
+            if (!supplierPanelError) {
                 return;
             }
             if (message) {
-                supplierModalAlert.hidden = false;
-                supplierModalAlert.textContent = message;
+                supplierPanelError.hidden = false;
+                supplierPanelError.textContent = message;
             } else {
-                supplierModalAlert.hidden = true;
-                supplierModalAlert.textContent = "";
+                supplierPanelError.hidden = true;
+                supplierPanelError.textContent = "";
             }
         }
 
@@ -1312,10 +1329,10 @@
             element.addEventListener("blur", handler);
         });
 
-        if (supplierModalForm) {
-            supplierModalForm.addEventListener("submit", async (event) => {
+        if (supplierForm) {
+            supplierForm.addEventListener("submit", async (event) => {
                 event.preventDefault();
-                setSupplierModalError("");
+                setSupplierPanelError("");
                 supplierTouchedFields.add("name");
                 supplierTouchedFields.add("supplier_id_no");
                 supplierTouchedFields.add("category");
@@ -1335,7 +1352,7 @@
                     ? `/api/material/suppliers/${targetSupplierId}`
                     : "/api/material/suppliers";
 
-                supplierModalSaveButton.disabled = true;
+                supplierPanelSaveButton.disabled = true;
                 const payload = {
                     name: values.name,
                     supplier_id_no: values.supplier_id_no,
@@ -1369,16 +1386,16 @@
                         const message =
                             fieldErrors.supplier_reg_no || data?.msg || "Unable to save supplier.";
                         if (message) {
-                            setSupplierModalError(message);
+                            setSupplierPanelError(message);
                         }
                         return;
                     }
 
                     const currentQuery = supplierSearchInput ? supplierSearchInput.value : "";
                     await loadSuppliers(currentQuery || "");
-                    closeSupplierModal();
+                    closeSupplierPanel();
                 } catch (error) {
-                    setSupplierModalError("Network error. Please try again.");
+                    setSupplierPanelError("Network error. Please try again.");
                 } finally {
                     evaluateSupplierForm();
                 }
@@ -1405,17 +1422,8 @@
         }
 
         function updateSupplierFieldErrors(errors, { force = false } = {}) {
-            const mapping = {
-                name: "modal_name",
-                primary_phone: "modal_primary_phone",
-                category: "modal_category",
-                supplier_id_no: "modal_supplier_id_no",
-                credit_period: "modal_credit_period",
-                vehicle_no_1: "modal_vehicle_no_1",
-            };
-
-            Object.entries(mapping).forEach(([field, key]) => {
-                const node = supplierModalForm?.querySelector(`[data-error-for='${key}']`);
+            Object.entries(supplierFieldElements).forEach(([field]) => {
+                const node = supplierForm?.querySelector(`[data-error-for='${field}']`);
                 if (!node) {
                     return;
                 }
@@ -1429,10 +1437,10 @@
         }
 
         function updateSupplierSaveButton(errors) {
-            if (!supplierModalSaveButton) {
+            if (!supplierPanelSaveButton) {
                 return;
             }
-            supplierModalSaveButton.disabled = Object.keys(errors).length > 0;
+            supplierPanelSaveButton.disabled = Object.keys(errors).length > 0;
         }
 
         function getSupplierFormValues() {
@@ -1514,67 +1522,12 @@
             evaluateSupplierForm({ force: true });
         }
 
-        function showSupplierModal() {
-            // Debug to confirm this actually runs
-            console.log("showSupplierModal called");
-
-            if (!supplierModal) {
-                console.error("supplierModal element not found");
-                return;
-            }
-
-            // Remove HTML hidden / aria-hidden
-            supplierModal.hidden = false;
-            supplierModal.removeAttribute("hidden");
-            supplierModal.setAttribute("aria-hidden", "false");
-
-            // Add our open state class
-            supplierModal.classList.add("modal--open");
-
-            // Force the modal container itself to be visible on top of everything
-            supplierModal.style.position = "fixed";
-            supplierModal.style.inset = "0";
-            supplierModal.style.display = "flex";
-            supplierModal.style.alignItems = "center";
-            supplierModal.style.justifyContent = "center";
-            supplierModal.style.zIndex = "2000";
-
-            document.body.classList.add("modal-open");
-        }
-
-        function hideSupplierModal() {
-            if (!supplierModal) {
-                console.error("supplierModal element not found on hide");
-                return;
-            }
-
-            supplierModal.classList.remove("modal--open");
-
-            // Re-apply hidden state
-            supplierModal.hidden = true;
-            supplierModal.setAttribute("hidden", "");
-            supplierModal.setAttribute("aria-hidden", "true");
-
-            // Hide again via inline style
-            supplierModal.style.display = "none";
-
-            document.body.classList.remove("modal-open");
-        }
-
-        function closeSupplierModal() {
-            hideSupplierModal();
-            activeSupplierId = null;
-            if (supplierIdInput) {
-                supplierIdInput.value = "";
-            }
-        }
-
         function resetSupplierModalState(defaultTitle = "Edit supplier", mode = "edit") {
             supplierTouchedFields.clear();
             supplierServerErrors = {};
-            setSupplierModalError("");
-            if (supplierModalTitle) {
-                supplierModalTitle.textContent = defaultTitle;
+            setSupplierPanelError("");
+            if (supplierPanelTitle) {
+                supplierPanelTitle.textContent = defaultTitle;
             }
             if (supplierIdInput) {
                 supplierIdInput.value = "";
@@ -1585,14 +1538,34 @@
             updateSupplierFieldErrors({}, { force: true });
         }
 
+        function openSupplierPanel(mode = "create", titleText = "Register supplier") {
+            if (!supplierPanel) return;
+            supplierPanel.hidden = false;
+            if (supplierPanelTitle) supplierPanelTitle.textContent = titleText;
+            if (supplierFormMode) supplierFormMode.value = mode;
+        }
+
+        function closeSupplierPanel() {
+            if (!supplierPanel) return;
+            supplierPanel.hidden = true;
+            activeSupplierId = null;
+            if (supplierIdInput) {
+                supplierIdInput.value = "";
+            }
+            if (supplierPanelError) {
+                supplierPanelError.textContent = "";
+                supplierPanelError.hidden = true;
+            }
+        }
+
         function loadSupplierIntoForm(supplierId) {
             if (!supplierId) {
-                setSupplierModalError("Unable to load this supplier.");
+                setSupplierPanelError("Unable to load this supplier.");
                 return;
             }
 
-            if (supplierModalSaveButton) {
-                supplierModalSaveButton.disabled = true;
+            if (supplierPanelSaveButton) {
+                supplierPanelSaveButton.disabled = true;
             }
 
             fetch(`/api/material/suppliers/${supplierId}`, {
@@ -1609,24 +1582,24 @@
                 .then(({ response, data }) => {
                     if (!response.ok) {
                         const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
-                        setSupplierModalError(message);
+                        setSupplierPanelError(message);
                         console.error("Failed to load supplier", message);
                         return;
                     }
                     populateSupplierForm(data);
-                    if (supplierModalSaveButton) {
-                        supplierModalSaveButton.disabled = false;
+                    if (supplierPanelSaveButton) {
+                        supplierPanelSaveButton.disabled = false;
                     }
                     supplierFieldElements.name?.focus();
                 })
                 .catch((error) => {
                     console.error("Unexpected error loading supplier", error);
-                    setSupplierModalError("Unable to load supplier.");
+                    setSupplierPanelError("Unable to load supplier.");
                 });
         }
 
         function openSupplierEditor(supplierId, record = null) {
-            if (!canEditSuppliers || !supplierModal) {
+            if (!canEditSuppliers) {
                 return;
             }
 
@@ -1637,17 +1610,16 @@
                 supplierIdInput.value = supplierId || "";
             }
 
-            // Open the modal
-            showSupplierModal();
+            openSupplierPanel("edit", "Edit supplier");
 
             // If we have the record from the table, use it immediately
             if (record) {
                 populateSupplierForm(record);
-                if (supplierModalSaveButton) {
-                    supplierModalSaveButton.disabled = false;
+                if (supplierPanelSaveButton) {
+                    supplierPanelSaveButton.disabled = false;
                 }
-            } else if (supplierModalSaveButton) {
-                supplierModalSaveButton.disabled = true;
+            } else if (supplierPanelSaveButton) {
+                supplierPanelSaveButton.disabled = true;
             }
 
             // Always try to refresh from backend in the background
@@ -1655,33 +1627,20 @@
         }
 
         function openSupplierCreator() {
-            if (!supplierModal) {
-                return;
-            }
             activeSupplierId = null;
             resetSupplierModalState("Register supplier", "create");
             populateSupplierForm({});
-            showSupplierModal();
-            supplierModalSaveButton.disabled = false;
+            openSupplierPanel("create", "Register supplier");
+            supplierPanelSaveButton.disabled = false;
             supplierFieldElements.name?.focus();
         }
 
-        if (supplierModalClose) {
-            supplierModalClose.addEventListener("click", closeSupplierModal);
-        }
+        supplierPanelClose?.addEventListener("click", closeSupplierPanel);
 
-        if (supplierModalCancel) {
-            supplierModalCancel.addEventListener("click", closeSupplierModal);
-        }
-
-        if (supplierModal) {
-            supplierModal.addEventListener("click", (event) => {
-                const target = event.target;
-                if (target && target.hasAttribute("data-modal-dismiss")) {
-                    closeSupplierModal();
-                }
-            });
-        }
+        supplierPanelCancel?.addEventListener("click", (event) => {
+            event.preventDefault();
+            closeSupplierPanel();
+        });
 
         function formatDate(value) {
             if (!value) {
@@ -2115,9 +2074,6 @@
                 }
 
                 openSupplierCreator();
-
-                // Ensure the modal visually overlays the supplier registry table
-                supplierModal?.focus({ preventScroll: true });
             });
         }
 

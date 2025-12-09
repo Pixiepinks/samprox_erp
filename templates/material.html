@@ -504,7 +504,27 @@
             user = null;
         }
 
-        const userRole = typeof user?.role === "string" ? user.role.toLowerCase() : "";
+        function normalizeRole(value) {
+            if (typeof value === "string") {
+                return value.trim().toLowerCase().replace(/\s+/g, "_");
+            }
+            if (value && typeof value === "object") {
+                const candidate = value.name || value.role || value.title;
+                if (typeof candidate === "string") {
+                    return candidate.trim().toLowerCase().replace(/\s+/g, "_");
+                }
+            }
+            return "";
+        }
+
+        const rawRole =
+            user?.role ??
+            user?.role_name ??
+            user?.roleName ??
+            user?.user_role ??
+            user?.userRole ??
+            user?.role?.name;
+        const userRole = normalizeRole(rawRole);
 
         if (!token || !user) {
             window.location.href = "/";
@@ -605,10 +625,7 @@
             "Maintenance Material",
         ]);
         const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
-        const canEditSuppliers =
-            userRole === "admin" ||
-            userRole === "production_manager" ||
-            userRole === "finance_manager";
+        const canEditSuppliers = userRole === "admin" || userRole === "production_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
@@ -2026,7 +2043,12 @@
             }
         }
 
-        if (registerSupplierButton) {
+        if (registerSupplierButton && !canEditSuppliers) {
+            registerSupplierButton.disabled = true;
+            registerSupplierButton.title = "You do not have permission to register suppliers.";
+        }
+
+        if (registerSupplierButton && canEditSuppliers) {
             registerSupplierButton.addEventListener("click", (event) => {
                 event.preventDefault();
                 openSupplierCreator();

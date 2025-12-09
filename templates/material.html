@@ -132,7 +132,7 @@
                             Review registered suppliers and keep their contact details at your fingertips.
                         </p>
                     </div>
-                    <button type="button" class="button" id="register-supplier-button">Register supplier</button>
+                    <button type="button" class="button" id="register-supplier-btn">Register supplier</button>
                 </div>
                 <form class="material-receipts-card__search" id="supplier-search-form">
                     <label class="sr-only" for="supplier-search-input">Search suppliers</label>
@@ -397,105 +397,111 @@
         </div>
     </div>
 
-    <div class="modal fade" id="supplier-modal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <div>
-                        <h2 class="modal__title modal-title" id="supplier-modal-title">Edit supplier</h2>
-                        <p class="modal__subtitle mb-0">Update supplier contact, category, and billing details.</p>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="close-supplier-modal"></button>
+    <div class="modal modal--app" id="supplier-modal" hidden aria-hidden="true">
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="supplier-modal-title">
+            <header class="modal__header">
+                <div>
+                    <h2 class="modal__title" id="supplier-modal-title">Edit supplier</h2>
+                    <p class="modal__subtitle mb-0">Update supplier contact, category, and billing details.</p>
                 </div>
-                <form class="modal__form" id="supplier-form" novalidate>
-                    <input type="hidden" id="supplier-id" name="supplier_id" />
-                    <input type="hidden" id="supplier-form-mode" value="edit" />
-                    <div class="modal-body">
-                        <div class="modal__grid row g-3">
-                            <label class="modal__field modal__field--full col-12">
-                                <span class="modal__label">Supplier Name<span class="text-red"> *</span></span>
-                                <input class="modal__input form-control" id="supplier-name" name="name" type="text" required />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_name"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Supplier Registration No</span>
-                                <input class="modal__input form-control" id="supplier-registration" type="text" name="supplier_reg_no" readonly />
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Supplier ID No<span class="text-red"> *</span></span>
-                                <input class="modal__input form-control" id="supplier-id-no" name="supplier_id_no" type="text" required />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_supplier_id_no"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Category<span class="text-red"> *</span></span>
-                                <select class="modal__select form-select" id="supplier-category" name="category" required>
-                                    <option value="" hidden>Select category</option>
-                                    <option value="Raw Material">Raw Material</option>
-                                    <option value="Packing Material">Packing Material</option>
-                                    <option value="Repair Material">Repair Material</option>
-                                    <option value="Maintenance Material">Maintenance Material</option>
-                                </select>
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_category"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Primary Phone<span class="text-red"> *</span></span>
-                                <input class="modal__input form-control" id="supplier-primary-phone" name="primary_phone" type="text" required />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_primary_phone"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Secondary Phone</span>
-                                <input class="modal__input form-control" id="supplier-secondary-phone" name="secondary_phone" type="text" />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_secondary_phone"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Vehicle No 1</span>
-                                <input class="modal__input form-control" id="supplier-vehicle-1" name="vehicle_no_1" type="text" />
-                                <p class="helper" id="vehicle-no-1-helper" hidden>Required for Raw Material suppliers.</p>
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_vehicle_no_1"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Vehicle No 2</span>
-                                <input class="modal__input form-control" id="supplier-vehicle-2" name="vehicle_no_2" type="text" />
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Vehicle No 3</span>
-                                <input class="modal__input form-control" id="supplier-vehicle-3" name="vehicle_no_3" type="text" />
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Credit Period<span class="text-red"> *</span></span>
-                                <select class="modal__select form-select" id="supplier-credit-period" name="credit_period" required>
-                                    <option value="" hidden>Select credit period</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="3 Days">3 Days</option>
-                                    <option value="7 Days">7 Days</option>
-                                    <option value="1 Month">1 Month</option>
-                                </select>
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_credit_period"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Email</span>
-                                <input class="modal__input form-control" id="supplier-email" name="email" type="email" />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_email"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Address</span>
-                                <textarea class="modal__textarea form-control" id="supplier-address" name="address"></textarea>
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_address"></p>
-                            </label>
-                            <label class="modal__field col-md-6">
-                                <span class="modal__label">Tax ID</span>
-                                <input class="modal__input form-control" id="supplier-tax-id" name="tax_id" type="text" />
-                                <p class="modal__feedback modal__feedback--error" data-error-for="modal_tax_id"></p>
-                            </label>
-                        </div>
-                        <p id="supplier-modal-alert" class="modal__feedback modal__feedback--error" hidden></p>
+                <button
+                    type="button"
+                    class="modal__close"
+                    id="supplier-modal-close"
+                    aria-label="Close supplier form"
+                >
+                    &times;
+                </button>
+            </header>
+            <form class="modal__form" id="supplier-form" novalidate>
+                <input type="hidden" id="supplier-id" name="supplier_id" />
+                <input type="hidden" id="supplier-form-mode" value="edit" />
+                <div class="modal__body">
+                    <div class="modal__grid">
+                        <label class="modal__field modal__field--full">
+                            <span class="modal__label">Supplier Name<span class="text-red"> *</span></span>
+                            <input class="modal__input" id="supplier-name" name="name" type="text" required />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_name"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Supplier Registration No</span>
+                            <input class="modal__input" id="supplier-registration" type="text" name="supplier_reg_no" readonly />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Supplier ID No<span class="text-red"> *</span></span>
+                            <input class="modal__input" id="supplier-id-no" name="supplier_id_no" type="text" required />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_supplier_id_no"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Category<span class="text-red"> *</span></span>
+                            <select class="modal__select" id="supplier-category" name="category" required>
+                                <option value="" hidden>Select category</option>
+                                <option value="Raw Material">Raw Material</option>
+                                <option value="Packing Material">Packing Material</option>
+                                <option value="Repair Material">Repair Material</option>
+                                <option value="Maintenance Material">Maintenance Material</option>
+                            </select>
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_category"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Primary Phone<span class="text-red"> *</span></span>
+                            <input class="modal__input" id="supplier-primary-phone" name="primary_phone" type="text" required />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_primary_phone"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Secondary Phone</span>
+                            <input class="modal__input" id="supplier-secondary-phone" name="secondary_phone" type="text" />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_secondary_phone"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Vehicle No 1</span>
+                            <input class="modal__input" id="supplier-vehicle-1" name="vehicle_no_1" type="text" />
+                            <p class="helper" id="vehicle-no-1-helper" hidden>Required for Raw Material suppliers.</p>
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_vehicle_no_1"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Vehicle No 2</span>
+                            <input class="modal__input" id="supplier-vehicle-2" name="vehicle_no_2" type="text" />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Vehicle No 3</span>
+                            <input class="modal__input" id="supplier-vehicle-3" name="vehicle_no_3" type="text" />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Credit Period<span class="text-red"> *</span></span>
+                            <select class="modal__select" id="supplier-credit-period" name="credit_period" required>
+                                <option value="" hidden>Select credit period</option>
+                                <option value="Cash">Cash</option>
+                                <option value="3 Days">3 Days</option>
+                                <option value="7 Days">7 Days</option>
+                                <option value="1 Month">1 Month</option>
+                            </select>
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_credit_period"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Email</span>
+                            <input class="modal__input" id="supplier-email" name="email" type="email" />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_email"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Address</span>
+                            <textarea class="modal__textarea" id="supplier-address" name="address"></textarea>
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_address"></p>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Tax ID</span>
+                            <input class="modal__input" id="supplier-tax-id" name="tax_id" type="text" />
+                            <p class="modal__feedback modal__feedback--error" data-error-for="modal_tax_id"></p>
+                        </label>
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="button button--ghost" data-bs-dismiss="modal" id="cancel-supplier">Cancel</button>
-                        <button type="submit" class="button" id="save-supplier">Save supplier</button>
-                    </div>
-                </form>
-            </div>
+                    <p id="supplier-modal-alert" class="modal__feedback modal__feedback--error" hidden></p>
+                </div>
+                <footer class="modal__actions">
+                    <button type="button" class="button button--ghost" id="cancel-supplier">Cancel</button>
+                    <button type="submit" class="button" id="save-supplier">Save supplier</button>
+                </footer>
+            </form>
         </div>
     </div>
 
@@ -602,20 +608,18 @@
         const supplierSearchForm = document.getElementById("supplier-search-form");
         const supplierSearchInput = document.getElementById("supplier-search-input");
         const supplierClearButton = document.getElementById("supplier-clear-button");
-        const registerSupplierButton = document.getElementById("register-supplier-button");
+        const registerSupplierButton = document.getElementById("register-supplier-btn");
         const supplierActionsHeader = document.getElementById("supplier-actions-header");
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalForm = document.getElementById("supplier-form");
         const supplierModalTitle = document.getElementById("supplier-modal-title");
         const supplierModalAlert = document.getElementById("supplier-modal-alert");
-        const supplierModalClose = document.getElementById("close-supplier-modal");
+        const supplierModalClose = document.getElementById("supplier-modal-close");
         const supplierModalCancel = document.getElementById("cancel-supplier");
         const supplierModalSaveButton = document.getElementById("save-supplier");
         const supplierIdInput = document.getElementById("supplier-id");
         const supplierRegistrationInput = document.getElementById("supplier-registration");
         const supplierFormMode = document.getElementById("supplier-form-mode");
-        const supplierBootstrapModal =
-            typeof bootstrap !== "undefined" && supplierModal ? new bootstrap.Modal(supplierModal) : null;
         const supplierFieldElements = {
             name: document.getElementById("supplier-name"),
             supplier_id_no: document.getElementById("supplier-id-no"),
@@ -1511,12 +1515,30 @@
             evaluateSupplierForm({ force: true });
         }
 
-        function closeSupplierModal() {
-            if (supplierBootstrapModal) {
-                supplierBootstrapModal.hide();
-            } else if (supplierModal) {
-                supplierModal.setAttribute("aria-hidden", "true");
+        function showSupplierModal() {
+            if (!supplierModal) {
+                return;
             }
+            supplierModal.hidden = false;
+            supplierModal.removeAttribute("hidden");
+            supplierModal.setAttribute("aria-hidden", "false");
+            supplierModal.classList.add("modal--open");
+            document.body.classList.add("modal-open");
+        }
+
+        function hideSupplierModal() {
+            if (!supplierModal) {
+                return;
+            }
+            supplierModal.classList.remove("modal--open");
+            supplierModal.hidden = true;
+            supplierModal.setAttribute("hidden", "");
+            supplierModal.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("modal-open");
+        }
+
+        function closeSupplierModal() {
+            hideSupplierModal();
             activeSupplierId = null;
             if (supplierIdInput) {
                 supplierIdInput.value = "";
@@ -1592,9 +1614,7 @@
             }
 
             // Open the modal
-            if (supplierBootstrapModal) {
-                supplierBootstrapModal.show();
-            }
+            showSupplierModal();
 
             // If we have the record from the table, use it immediately
             if (record) {
@@ -1617,9 +1637,7 @@
             activeSupplierId = null;
             resetSupplierModalState("Register supplier", "create");
             populateSupplierForm({});
-            if (supplierBootstrapModal) {
-                supplierBootstrapModal.show();
-            }
+            showSupplierModal();
             supplierModalSaveButton.disabled = false;
             supplierFieldElements.name?.focus();
         }
@@ -1633,10 +1651,10 @@
         }
 
         if (supplierModal) {
-            supplierModal.addEventListener("hidden.bs.modal", () => {
-                activeSupplierId = null;
-                if (supplierIdInput) {
-                    supplierIdInput.value = "";
+            supplierModal.addEventListener("click", (event) => {
+                const target = event.target;
+                if (target && target.hasAttribute("data-modal-dismiss")) {
+                    closeSupplierModal();
                 }
             });
         }

@@ -1515,33 +1515,47 @@
         }
 
         function showSupplierModal() {
-            if (!supplierModal) {
-                return;
-            }
-            // Debug: confirm we are actually opening
+            // Debug to confirm this actually runs
             console.log("showSupplierModal called");
 
+            if (!supplierModal) {
+                console.error("supplierModal element not found");
+                return;
+            }
+
+            // Remove HTML hidden / aria-hidden
             supplierModal.hidden = false;
             supplierModal.removeAttribute("hidden");
             supplierModal.setAttribute("aria-hidden", "false");
+
+            // Add our open state class
             supplierModal.classList.add("modal--open");
 
-            // Force the modal to be visible
+            // Force the modal container itself to be visible on top of everything
+            supplierModal.style.position = "fixed";
+            supplierModal.style.inset = "0";
             supplierModal.style.display = "flex";
+            supplierModal.style.alignItems = "center";
+            supplierModal.style.justifyContent = "center";
+            supplierModal.style.zIndex = "2000";
 
             document.body.classList.add("modal-open");
         }
 
         function hideSupplierModal() {
             if (!supplierModal) {
+                console.error("supplierModal element not found on hide");
                 return;
             }
+
             supplierModal.classList.remove("modal--open");
+
+            // Re-apply hidden state
             supplierModal.hidden = true;
             supplierModal.setAttribute("hidden", "");
             supplierModal.setAttribute("aria-hidden", "true");
 
-            // Hide again when closed
+            // Hide again via inline style
             supplierModal.style.display = "none";
 
             document.body.classList.remove("modal-open");

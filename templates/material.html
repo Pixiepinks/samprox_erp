@@ -605,10 +605,7 @@
             "Maintenance Material",
         ]);
         const supplierCreditPeriods = new Set(["Cash", "3 Days", "7 Days", "1 Month"]);
-        const canEditSuppliers =
-            userRole === "admin" ||
-            userRole === "production_manager" ||
-            userRole === "finance_manager";
+        const canEditSuppliers = userRole === "admin" || userRole === "production_manager";
 
         const mrnTableBody = document.getElementById("mrn-table-body");
         const mrnTableWrapper = document.getElementById("mrn-table-wrapper");
@@ -2026,7 +2023,12 @@
             }
         }
 
-        if (registerSupplierButton) {
+        if (registerSupplierButton && !canEditSuppliers) {
+            registerSupplierButton.disabled = true;
+            registerSupplierButton.title = "You do not have permission to register suppliers.";
+        }
+
+        if (registerSupplierButton && canEditSuppliers) {
             registerSupplierButton.addEventListener("click", (event) => {
                 event.preventDefault();
                 openSupplierCreator();

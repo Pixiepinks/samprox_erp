@@ -504,7 +504,8 @@
             user = null;
         }
 
-        const userRole = typeof user?.role === "string" ? user.role.toLowerCase() : "";
+        const rawRole = typeof user?.role === "string" ? user.role : "";
+        const userRole = rawRole.trim().toLowerCase().replace(/\s+/g, "_");
 
         if (!token || !user) {
             window.location.href = "/";

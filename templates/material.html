@@ -126,7 +126,7 @@
                             Review registered suppliers and keep their contact details at your fingertips.
                         </p>
                     </div>
-                    <a class="button" href="{{ url_for('ui.material_mrn_new_page') }}">Register supplier</a>
+                    <button type="button" class="button" id="register-supplier-button">Register supplier</button>
                 </div>
                 <form class="material-receipts-card__search" id="supplier-search-form">
                     <label class="sr-only" for="supplier-search-input">Search suppliers</label>
@@ -404,6 +404,7 @@
                 </button>
             </header>
             <form class="modal__form" id="supplier-form" novalidate>
+                <input type="hidden" id="supplier-id" name="supplier_id" />
                 <div class="modal__grid">
                     <label class="modal__field modal__field--full">
                         <span class="modal__label">Supplier Name<span class="text-red"> *</span></span>
@@ -491,7 +492,7 @@
     </div>
 
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" integrity="sha384-8FmKpVzVfU6Ly3OJUokHknsE+Fjr12JOP5tBxOBE31AyGdSzZsv/CrKHr2TRVsyG" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
     <script>
         const token = localStorage.getItem("samprox_token");
         const userRaw = localStorage.getItem("samprox_user");
@@ -568,6 +569,7 @@
         const supplierSearchForm = document.getElementById("supplier-search-form");
         const supplierSearchInput = document.getElementById("supplier-search-input");
         const supplierClearButton = document.getElementById("supplier-clear-button");
+        const registerSupplierButton = document.getElementById("register-supplier-button");
         const supplierActionsHeader = document.getElementById("supplier-actions-header");
         const supplierModal = document.getElementById("supplier-modal");
         const supplierModalForm = document.getElementById("supplier-form");
@@ -576,6 +578,7 @@
         const supplierModalClose = document.getElementById("close-supplier-modal");
         const supplierModalCancel = document.getElementById("cancel-supplier");
         const supplierModalSaveButton = document.getElementById("save-supplier");
+        const supplierIdInput = document.getElementById("supplier-id");
         const supplierRegistrationInput = document.getElementById("supplier-registration");
         const supplierFieldElements = {
             name: document.getElementById("supplier-name"),
@@ -1169,7 +1172,8 @@
                     if (item.id) {
                         const editButton = document.createElement("button");
                         editButton.type = "button";
-                        editButton.className = "button button--secondary";
+                        editButton.className = "button button--secondary supplier-edit-btn";
+                        editButton.setAttribute("data-supplier-id", item.id);
                         editButton.textContent = "Edit";
                         editButton.addEventListener("click", () => {
                             openSupplierEditor(item.id, item);
@@ -1238,118 +1242,6 @@
             }
         }
 
-        function evaluateSupplierForm({ force = false } = {}) {
-            const values = getSupplierFormValues();
-            const clientErrors = validateSupplierFormValues(values);
-            const combinedErrors = { ...clientErrors, ...supplierServerErrors };
-            updateSupplierFieldErrors(combinedErrors, { force });
-            updateSupplierSaveButton(combinedErrors);
-            return { values, errors: combinedErrors, clientErrors };
-        }
-
-        function populateSupplierForm(record) {
-            supplierFieldElements.name.value = record?.name || "";
-            supplierFieldElements.supplier_id_no.value = record?.supplierIdNo || "";
-            supplierFieldElements.category.value = record?.category || "";
-            supplierFieldElements.primary_phone.value = record?.primaryPhone || record?.phone || "";
-            supplierFieldElements.secondary_phone.value = record?.secondaryPhone || "";
-            supplierFieldElements.vehicle_no_1.value = record?.vehicleNo1 || "";
-            supplierFieldElements.vehicle_no_2.value = record?.vehicleNo2 || "";
-            supplierFieldElements.vehicle_no_3.value = record?.vehicleNo3 || "";
-            supplierFieldElements.credit_period.value = record?.creditPeriod || "";
-            supplierFieldElements.email.value = record?.email || "";
-            supplierFieldElements.address.value = record?.address || "";
-            supplierFieldElements.tax_id.value = record?.taxId || "";
-
-            if (supplierRegistrationInput) {
-                supplierRegistrationInput.value = record?.supplierRegNo || "";
-            }
-
-            updateVehicleRequirement(record?.category || "");
-            evaluateSupplierForm({ force: true });
-        }
-
-        function closeSupplierModal() {
-            if (supplierModal) {
-                supplierModal.classList.remove("modal--open");
-                supplierModal.setAttribute("hidden", "");
-                supplierModal.setAttribute("aria-hidden", "true");
-            }
-            document.body.classList.remove("modal-open");
-            activeSupplierId = null;
-        }
-
-        function resetSupplierModalState() {
-            supplierTouchedFields.clear();
-            supplierServerErrors = {};
-            setSupplierModalError("");
-            if (supplierModalTitle) {
-                supplierModalTitle.textContent = "Edit supplier";
-            }
-            updateSupplierFieldErrors({}, { force: true });
-        }
-
-        async function openSupplierEditor(supplierId, record = null) {
-            if (!canEditSuppliers || !supplierModal) {
-                return;
-            }
-
-            resetSupplierModalState();
-            activeSupplierId = supplierId;
-            supplierModal.classList.add("modal--open");
-            supplierModal.removeAttribute("hidden");
-            supplierModal.setAttribute("aria-hidden", "false");
-            document.body.classList.add("modal-open");
-            if (record) {
-                populateSupplierForm(record);
-                supplierModalSaveButton.disabled = false;
-            } else {
-                supplierModalSaveButton.disabled = true;
-            }
-            if (!supplierId) {
-                setSupplierModalError("Unable to load this supplier.");
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/material/suppliers/${supplierId}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
-                    setSupplierModalError(message);
-                    return;
-                }
-                populateSupplierForm(data);
-                supplierModalSaveButton.disabled = false;
-                supplierFieldElements.name?.focus();
-            } catch (error) {
-                console.error(error);
-                if (!record) {
-                    setSupplierModalError("Unable to load supplier.");
-                }
-            }
-        }
-
-        if (supplierModalClose) {
-            supplierModalClose.addEventListener("click", closeSupplierModal);
-        }
-
-        if (supplierModalCancel) {
-            supplierModalCancel.addEventListener("click", closeSupplierModal);
-        }
-
-        if (supplierModal) {
-            supplierModal.addEventListener("click", (event) => {
-                if (event.target === supplierModal) {
-                    closeSupplierModal();
-                }
-            });
-        }
-
         Object.entries(supplierFieldElements).forEach(([field, element]) => {
             if (!element) {
                 return;
@@ -1385,10 +1277,12 @@
                     return;
                 }
 
-                if (!activeSupplierId) {
-                    setSupplierModalError("No supplier selected.");
-                    return;
-                }
+                const supplierId = supplierIdInput ? supplierIdInput.value.trim() : "";
+                const targetSupplierId = supplierId || activeSupplierId || "";
+                const method = targetSupplierId ? "PUT" : "POST";
+                const url = targetSupplierId
+                    ? `/api/material/suppliers/${targetSupplierId}`
+                    : "/api/material/suppliers";
 
                 supplierModalSaveButton.disabled = true;
                 const payload = {
@@ -1407,11 +1301,11 @@
                 };
 
                 try {
-                    const response = await fetch(`/api/material/suppliers/${activeSupplierId}`, {
-                        method: "PUT",
+                    const response = await fetch(url, {
+                        method,
                         headers: {
                             "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
+                            Authorization: token ? `Bearer ${token}` : undefined,
                         },
                         body: JSON.stringify(payload),
                     });
@@ -1545,6 +1439,9 @@
         }
 
         function populateSupplierForm(record) {
+            if (supplierIdInput) {
+                supplierIdInput.value = record?.id || "";
+            }
             supplierFieldElements.name.value = record?.name || "";
             supplierFieldElements.supplier_id_no.value = record?.supplierIdNo || "";
             supplierFieldElements.category.value = record?.category || "";
@@ -1574,16 +1471,39 @@
             }
             document.body.classList.remove("modal-open");
             activeSupplierId = null;
+            if (supplierIdInput) {
+                supplierIdInput.value = "";
+            }
         }
 
-        function resetSupplierModalState() {
+        function resetSupplierModalState(defaultTitle = "Edit supplier") {
             supplierTouchedFields.clear();
             supplierServerErrors = {};
             setSupplierModalError("");
             if (supplierModalTitle) {
-                supplierModalTitle.textContent = "Edit supplier";
+                supplierModalTitle.textContent = defaultTitle;
+            }
+            if (supplierIdInput) {
+                supplierIdInput.value = "";
             }
             updateSupplierFieldErrors({}, { force: true });
+        }
+
+        async function loadSupplierIntoForm(supplierId) {
+            const response = await fetch(`/api/material/suppliers/${supplierId}`, {
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : undefined,
+                },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
+                setSupplierModalError(message);
+                throw new Error(message);
+            }
+            populateSupplierForm(data);
+            supplierModalSaveButton.disabled = false;
+            supplierFieldElements.name?.focus();
         }
 
         async function openSupplierEditor(supplierId, record = null) {
@@ -1591,8 +1511,11 @@
                 return;
             }
 
-            resetSupplierModalState();
+            resetSupplierModalState("Edit supplier");
             activeSupplierId = supplierId;
+            if (supplierIdInput) {
+                supplierIdInput.value = supplierId || "";
+            }
             supplierModal.classList.add("modal--open");
             supplierModal.removeAttribute("hidden");
             supplierModal.setAttribute("aria-hidden", "false");
@@ -1609,26 +1532,25 @@
             }
 
             try {
-                const response = await fetch(`/api/material/suppliers/${supplierId}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    const message = data?.errors?.id || data?.msg || "Unable to load supplier.";
-                    setSupplierModalError(message);
-                    return;
-                }
-                populateSupplierForm(data);
-                supplierModalSaveButton.disabled = false;
-                supplierFieldElements.name?.focus();
+                await loadSupplierIntoForm(supplierId);
             } catch (error) {
                 console.error(error);
-                if (!record) {
-                    setSupplierModalError("Unable to load supplier.");
-                }
             }
+        }
+
+        function openSupplierCreator() {
+            if (!supplierModal) {
+                return;
+            }
+            activeSupplierId = null;
+            resetSupplierModalState("Register supplier");
+            populateSupplierForm({});
+            supplierModal.classList.add("modal--open");
+            supplierModal.removeAttribute("hidden");
+            supplierModal.setAttribute("aria-hidden", "false");
+            document.body.classList.add("modal-open");
+            supplierModalSaveButton.disabled = false;
+            supplierFieldElements.name?.focus();
         }
 
         if (supplierModalClose) {
@@ -1679,10 +1601,12 @@
                     return;
                 }
 
-                if (!activeSupplierId) {
-                    setSupplierModalError("No supplier selected.");
-                    return;
-                }
+                const supplierId = supplierIdInput ? supplierIdInput.value.trim() : "";
+                const targetSupplierId = supplierId || activeSupplierId || "";
+                const method = targetSupplierId ? "PUT" : "POST";
+                const url = targetSupplierId
+                    ? `/api/material/suppliers/${targetSupplierId}`
+                    : "/api/material/suppliers";
 
                 supplierModalSaveButton.disabled = true;
                 const payload = {
@@ -1701,11 +1625,11 @@
                 };
 
                 try {
-                    const response = await fetch(`/api/material/suppliers/${activeSupplierId}`, {
-                        method: "PUT",
+                    const response = await fetch(url, {
+                        method,
                         headers: {
                             "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
+                            Authorization: token ? `Bearer ${token}` : undefined,
                         },
                         body: JSON.stringify(payload),
                     });
@@ -2155,6 +2079,23 @@
                 }
             }
         }
+
+        if (registerSupplierButton) {
+            registerSupplierButton.addEventListener("click", () => {
+                openSupplierCreator();
+            });
+        }
+
+        document.addEventListener("click", (event) => {
+            const btn = event.target.closest(".supplier-edit-btn");
+            if (!btn) {
+                return;
+            }
+            const supplierId = btn.getAttribute("data-supplier-id");
+            if (supplierId) {
+                openSupplierEditor(supplierId);
+            }
+        });
 
         if (supplierSearchForm) {
             supplierSearchForm.addEventListener("submit", (event) => {

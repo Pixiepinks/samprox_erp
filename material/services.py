@@ -258,6 +258,21 @@ def update_supplier(supplier_id: str, payload: Dict[str, Any]) -> Supplier:
 
     supplier = get_supplier_detail(supplier_id)
 
+    # Accept either snake_case or camelCase payload keys from the client.
+    payload = {
+        **payload,
+        "name": payload.get("name", payload.get("supplierName")),
+        "supplier_id_no": payload.get("supplier_id_no", payload.get("supplierIdNo")),
+        "supplier_reg_no": payload.get("supplier_reg_no", payload.get("supplierRegNo")),
+        "primary_phone": payload.get("primary_phone", payload.get("primaryPhone")),
+        "secondary_phone": payload.get("secondary_phone", payload.get("secondaryPhone")),
+        "vehicle_no_1": payload.get("vehicle_no_1", payload.get("vehicleNo1")),
+        "vehicle_no_2": payload.get("vehicle_no_2", payload.get("vehicleNo2")),
+        "vehicle_no_3": payload.get("vehicle_no_3", payload.get("vehicleNo3")),
+        "credit_period": payload.get("credit_period", payload.get("creditPeriod")),
+        "tax_id": payload.get("tax_id", payload.get("taxId")),
+    }
+
     errors: Dict[str, str] = {}
     name = (payload.get("name") or "").strip()
     if not name:

@@ -397,7 +397,7 @@
         </div>
     </div>
 
-    <div class="modal modal--app" id="supplier-modal" hidden aria-hidden="true">
+    <div class="modal modal--app" id="supplier-modal" hidden aria-hidden="true" tabindex="-1">
         <div class="modal__overlay" data-modal-dismiss></div>
         <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="supplier-modal-title">
             <header class="modal__header">
@@ -2105,15 +2105,19 @@
             }
         }
 
-        if (registerSupplierButton && !canEditSuppliers) {
-            registerSupplierButton.disabled = true;
-            registerSupplierButton.title = "You do not have permission to register suppliers.";
-        }
-
-        if (registerSupplierButton && canEditSuppliers) {
+        if (registerSupplierButton) {
             registerSupplierButton.addEventListener("click", (event) => {
                 event.preventDefault();
+
+                if (!canEditSuppliers) {
+                    registerSupplierButton.title = "You do not have permission to register suppliers.";
+                    return;
+                }
+
                 openSupplierCreator();
+
+                // Ensure the modal visually overlays the supplier registry table
+                supplierModal?.focus({ preventScroll: true });
             });
         }
 

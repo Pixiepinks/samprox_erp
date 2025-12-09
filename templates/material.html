@@ -1519,10 +1519,17 @@
             if (!supplierModal) {
                 return;
             }
+            // Debug: confirm we are actually opening
+            console.log("showSupplierModal called");
+
             supplierModal.hidden = false;
             supplierModal.removeAttribute("hidden");
             supplierModal.setAttribute("aria-hidden", "false");
             supplierModal.classList.add("modal--open");
+
+            // Force the modal to be visible
+            supplierModal.style.display = "flex";
+
             document.body.classList.add("modal-open");
         }
 
@@ -1534,6 +1541,10 @@
             supplierModal.hidden = true;
             supplierModal.setAttribute("hidden", "");
             supplierModal.setAttribute("aria-hidden", "true");
+
+            // Hide again when closed
+            supplierModal.style.display = "none";
+
             document.body.classList.remove("modal-open");
         }
 

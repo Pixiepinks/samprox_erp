@@ -504,8 +504,27 @@
             user = null;
         }
 
-        const rawRole = typeof user?.role === "string" ? user.role : "";
-        const userRole = rawRole.trim().toLowerCase().replace(/\s+/g, "_");
+        function normalizeRole(value) {
+            if (typeof value === "string") {
+                return value.trim().toLowerCase().replace(/\s+/g, "_");
+            }
+            if (value && typeof value === "object") {
+                const candidate = value.name || value.role || value.title;
+                if (typeof candidate === "string") {
+                    return candidate.trim().toLowerCase().replace(/\s+/g, "_");
+                }
+            }
+            return "";
+        }
+
+        const rawRole =
+            user?.role ??
+            user?.role_name ??
+            user?.roleName ??
+            user?.user_role ??
+            user?.userRole ??
+            user?.role?.name;
+        const userRole = normalizeRole(rawRole);
 
         if (!token || !user) {
             window.location.href = "/";

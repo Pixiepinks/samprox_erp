@@ -68,6 +68,7 @@ def _serialize_sale_entry(entry, sale_type: str):
                 "helper1_id": getattr(entry, "helper1_id", None),
                 "helper2_id": getattr(entry, "helper2_id", None),
                 "mileage_km": float(mileage) if mileage is not None else None,
+                "transport_mode_used": getattr(entry, "transport_mode_used", None),
             }
         )
 
@@ -165,13 +166,25 @@ def _parse_sale_payload(payload, *, enforce_transport_details: bool | None = Non
     )
 
     if sale_type == "actual":
-        requires_transport_details = (
-            customer.transport_mode == CustomerTransportMode.samprox_lorry
-        )
+        transport_mode_used = payload.get("transport_mode_used")
+        if isinstance(transport_mode_used, str):
+            transport_mode_used = transport_mode_used.strip()
+
+        if not transport_mode_used:
+            transport_mode_used = customer.default_transport_mode
+
+        if transport_mode_used not in customer.allowed_modes:
+            return None, None, None, (
+                jsonify({"msg": "Invalid transport_mode_used"}),
+                400,
+            )
+
+        entry_kwargs["transport_mode_used"] = transport_mode_used
+
+        requires_transport_details = transport_mode_used == "samprox_lorry"
         if enforce_transport_details is not None:
             requires_transport_details = (
-                customer.transport_mode == CustomerTransportMode.samprox_lorry
-                and enforce_transport_details
+                transport_mode_used == "samprox_lorry" and enforce_transport_details
             )
 
         def _extract_text(field_name: str, label: str, required: bool = False) -> str | None:
@@ -319,6 +332,9 @@ def _serialize_customer(customer: Customer):
         "category": customer.category.value,
         "credit_term": customer.credit_term.value,
         "transport_mode": customer.transport_mode.value,
+        "allowed_transport_modes": customer.allowed_modes,
+        "default_transport_mode": customer.default_transport_mode
+        or customer.transport_mode.value,
         "customer_type": customer.customer_type.value,
         "sales_coordinator_name": customer.sales_coordinator_name,
         "sales_coordinator_phone": customer.sales_coordinator_phone,
@@ -363,7 +379,6 @@ def _parse_customer_payload(payload):
     name = _required_text("name", "Customer name")
     category = _parse_enum("category", CustomerCategory, "Category")
     credit_term = _parse_enum("credit_term", CustomerCreditTerm, "Credit term")
-    transport_mode = _parse_enum("transport_mode", CustomerTransportMode, "Transport mode")
     customer_type = _parse_enum("customer_type", CustomerType, "Customer type")
     sales_coordinator_name = _required_text("sales_coordinator_name", "Sales coordinator name")
     sales_coordinator_phone = _required_text(
@@ -379,11 +394,28 @@ def _parse_customer_payload(payload):
     )
     special_note = (payload.get("special_note") or "").strip()
 
+    allowed = payload.get("allowed_transport_modes") or []
+    if not isinstance(allowed, list) or not allowed:
+        raise ValueError("At least one transport mode must be selected.")
+
+    cleaned_allowed: list[str] = []
+    for mode in allowed:
+        if mode not in ["samprox_lorry", "customer_lorry"]:
+            raise ValueError("Invalid transport mode in allowed_transport_modes")
+        if mode not in cleaned_allowed:
+            cleaned_allowed.append(mode)
+
+    default_mode = payload.get("default_transport_mode")
+    if default_mode not in cleaned_allowed:
+        default_mode = cleaned_allowed[0]
+
     return {
         "name": name,
         "category": category,
         "credit_term": credit_term,
-        "transport_mode": transport_mode,
+        "allowed_transport_modes": ",".join(cleaned_allowed),
+        "default_transport_mode": default_mode,
+        "transport_mode": CustomerTransportMode(default_mode),
         "customer_type": customer_type,
         "sales_coordinator_name": sales_coordinator_name,
         "sales_coordinator_phone": sales_coordinator_phone,

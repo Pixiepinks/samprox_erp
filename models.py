@@ -1356,6 +1356,8 @@ class Customer(db.Model):
         nullable=False,
     )
     transport_mode = db.Column(db.Enum(CustomerTransportMode), nullable=False)
+    allowed_transport_modes = db.Column(db.Text, nullable=True)
+    default_transport_mode = db.Column(db.Text, nullable=True)
     customer_type = db.Column(db.Enum(CustomerType), nullable=False)
     sales_coordinator_name = db.Column(db.String(120), nullable=False)
     sales_coordinator_phone = db.Column(db.String(50), nullable=False)
@@ -1365,6 +1367,20 @@ class Customer(db.Model):
     payment_coordinator_phone = db.Column(db.String(50), nullable=False)
     special_note = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def allowed_modes(self):
+        if not self.allowed_transport_modes:
+            return []
+        return [m.strip() for m in self.allowed_transport_modes.split(",") if m.strip()]
+
+    @allowed_modes.setter
+    def allowed_modes(self, items):
+        cleaned = []
+        for m in items:
+            if m in ["samprox_lorry", "customer_lorry"] and m not in cleaned:
+                cleaned.append(m)
+        self.allowed_transport_modes = ",".join(cleaned)
 
     @property
     def code(self):
@@ -1415,6 +1431,7 @@ class SalesActualEntry(db.Model):
     helper1_id = db.Column(db.Integer, db.ForeignKey("team_member.id"))
     helper2_id = db.Column(db.Integer, db.ForeignKey("team_member.id"))
     mileage_km = db.Column(db.Float)
+    transport_mode_used = db.Column(db.Text)
     loader1 = db.relationship("TeamMember", foreign_keys=[loader1_id])
     loader2 = db.relationship("TeamMember", foreign_keys=[loader2_id])
     loader3 = db.relationship("TeamMember", foreign_keys=[loader3_id])

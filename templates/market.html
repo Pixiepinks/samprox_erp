@@ -250,6 +250,10 @@
                                 ></p>
                             </div>
                             <p id="sales-entry-transport-note" class="sales-transport__note"></p>
+                            <div id="transport-mode-selector" class="sales-transport__modes">
+                                <label><input type="radio" name="transport_mode_used" value="samprox_lorry" /> Samprox lorry</label>
+                                <label><input type="radio" name="transport_mode_used" value="customer_lorry" /> Customer lorry</label>
+                            </div>
                             <div class="sales-transport__grid">
                                 <div class="sales-input">
                                     <label for="sales-entry-vehicle">
@@ -258,7 +262,7 @@
                                     <select
                                         id="sales-entry-vehicle"
                                         name="vehicle_number"
-                                        class="sales-input__control"
+                                        class="sales-input__control transport-input"
                                         data-placeholder="Select vehicle number"
                                         disabled
                                         aria-disabled="true"
@@ -273,7 +277,7 @@
                                     <select
                                         id="sales-entry-driver"
                                         name="driver_id"
-                                        class="sales-input__control"
+                                        class="sales-input__control transport-input"
                                         data-placeholder="Select driver"
                                         disabled
                                         aria-disabled="true"
@@ -288,7 +292,7 @@
                                     <select
                                         id="sales-entry-helper-1"
                                         name="helper1_id"
-                                        class="sales-input__control"
+                                        class="sales-input__control transport-input"
                                         data-placeholder="Select helper"
                                         disabled
                                         aria-disabled="true"
@@ -301,7 +305,7 @@
                                     <select
                                         id="sales-entry-helper-2"
                                         name="helper2_id"
-                                        class="sales-input__control"
+                                        class="sales-input__control transport-input"
                                         data-placeholder="Select helper"
                                         disabled
                                         aria-disabled="true"
@@ -317,7 +321,7 @@
                                         type="number"
                                         id="sales-entry-mileage"
                                         name="mileage_km"
-                                        class="sales-input__control"
+                                        class="sales-input__control transport-input"
                                         inputmode="decimal"
                                         step="0.1"
                                         min="0"
@@ -441,10 +445,18 @@
                             <span class="modal__label">Credit term</span>
                             <select id="customer-credit-term" name="credit_term" class="modal__select" required></select>
                         </label>
-                        <label class="modal__field" for="customer-transport-mode">
-                            <span class="modal__label">Transport mode</span>
-                            <select id="customer-transport-mode" name="transport_mode" class="modal__select" required></select>
-                        </label>
+                        <div class="modal__field modal__field--stacked" id="customer-transport-modes">
+                            <span class="modal__label">Allowed transport modes</span>
+                            <div class="modal__choices">
+                                <label><input type="checkbox" name="allowed_transport_modes" value="samprox_lorry" /> Samprox lorry</label>
+                                <label><input type="checkbox" name="allowed_transport_modes" value="customer_lorry" /> Customer lorry</label>
+                            </div>
+                            <div class="modal__label modal__label--inline">Default mode:</div>
+                            <div class="modal__choices">
+                                <label><input type="radio" name="default_transport_mode" value="samprox_lorry" /> Samprox lorry</label>
+                                <label><input type="radio" name="default_transport_mode" value="customer_lorry" /> Customer lorry</label>
+                            </div>
+                        </div>
                         <label class="modal__field" for="customer-type">
                             <span class="modal__label">Type</span>
                             <select id="customer-type" name="customer_type" class="modal__select" required></select>
@@ -667,6 +679,10 @@
         const transportGroup = document.getElementById("sales-entry-transport");
         const transportStatusEl = document.getElementById("sales-entry-transport-status");
         const transportNoteEl = document.getElementById("sales-entry-transport-note");
+        const transportModeSelector = document.getElementById("transport-mode-selector");
+        const transportModeRadios = Array.from(
+            document.querySelectorAll('input[name="transport_mode_used"]'),
+        );
         const entryVehicleSelect = document.getElementById("sales-entry-vehicle");
         const entryDriverSelect = document.getElementById("sales-entry-driver");
         const entryHelper1Select = document.getElementById("sales-entry-helper-1");
@@ -683,7 +699,12 @@
         const customerFormFeedback = document.getElementById("customer-form-feedback");
         const customerCategorySelect = document.getElementById("customer-category");
         const customerCreditTermSelect = document.getElementById("customer-credit-term");
-        const customerTransportSelect = document.getElementById("customer-transport-mode");
+        const customerAllowedModeCheckboxes = Array.from(
+            document.querySelectorAll('input[name="allowed_transport_modes"]'),
+        );
+        const customerDefaultModeRadios = Array.from(
+            document.querySelectorAll('input[name="default_transport_mode"]'),
+        );
         const customerTypeSelect = document.getElementById("customer-type");
         const customerNameInput = document.getElementById("customer-name");
         const customerSalesCoordinatorName = document.getElementById("customer-sales-coordinator-name");
@@ -814,10 +835,6 @@
             { value: "45_days", label: "45 Days" },
             { value: "60_days", label: "60 Days" },
         ];
-        const customerTransportOptions = [
-            { value: "samprox_lorry", label: "Samprox lorry" },
-            { value: "customer_lorry", label: "Customer lorry" },
-        ];
         const customerTypeOptions = [
             { value: "regular", label: "Regular" },
             { value: "seasonal", label: "Seasonal" },
@@ -852,7 +869,6 @@
         function populateCustomerFormOptions() {
             populateSelectOptions(customerCategorySelect, customerCategoryOptions);
             populateSelectOptions(customerCreditTermSelect, customerCreditTermOptions);
-            populateSelectOptions(customerTransportSelect, customerTransportOptions);
             populateSelectOptions(customerTypeSelect, customerTypeOptions);
         }
 
@@ -1407,6 +1423,7 @@
             if (entryMileageInput) {
                 entryMileageInput.value = "";
             }
+            setTransportModeValue(null);
             updateEntryTotal();
             updateTransportFieldState();
         }
@@ -1471,6 +1488,7 @@
                     entryMileageInput.value =
                         entry.mileage_km != null ? String(entry.mileage_km) : "";
                 }
+                setTransportModeValue(entry.transport_mode_used || null);
             } else {
                 if (entryDeliveryNoteInput) {
                     entryDeliveryNoteInput.value = "";
@@ -1494,9 +1512,12 @@
                 if (entryMileageInput) {
                     entryMileageInput.value = "";
                 }
+                setTransportModeValue(null);
             }
 
             if (normalizedSaleType === "actual") {
+                const usesSamproxTransport =
+                    normalizeTransportMode(entry.transport_mode_used) === "samprox_lorry";
                 const hasVehicleNumber = Boolean(entry.vehicle_number);
                 const hasDriver = entry.driver_id != null;
                 const hasHelper1 = entry.helper1_id != null;
@@ -1505,7 +1526,7 @@
                     entry.mileage_km !== null &&
                     String(entry.mileage_km).trim() !== "";
                 transportRequirementMode =
-                    hasVehicleNumber && hasDriver && hasHelper1 && hasMileage
+                    usesSamproxTransport && hasVehicleNumber && hasDriver && hasHelper1 && hasMileage
                         ? TRANSPORT_REQUIREMENT.STRICT
                         : TRANSPORT_REQUIREMENT.RELAXED;
             } else {
@@ -1745,12 +1766,43 @@
                 return null;
             }
 
+            const normalizedAllowed = (() => {
+                if (Array.isArray(customer.allowed_transport_modes)) {
+                    return Array.from(
+                        new Set(
+                            customer.allowed_transport_modes.map((mode) =>
+                                normalizeTransportMode(mode),
+                            ),
+                        ),
+                    ).filter(Boolean);
+                }
+                const raw = customer.allowed_transport_modes;
+                if (typeof raw === "string" && raw.trim()) {
+                    return Array.from(
+                        new Set(
+                            raw
+                                .split(",")
+                                .map((value) => normalizeTransportMode(value))
+                                .filter(Boolean),
+                        ),
+                    );
+                }
+                return [];
+            })();
+
+            const defaultMode =
+                normalizeTransportMode(
+                    customer.default_transport_mode ?? normalizedAllowed?.[0],
+                ) ?? normalizeTransportMode(customer.transport_mode);
+
             return {
                 ...customer,
                 id: String(id),
                 name,
                 code: customer.code ?? customer.customer_code ?? null,
-                transport_mode: normalizeTransportMode(customer.transport_mode),
+                allowed_transport_modes: normalizedAllowed,
+                default_transport_mode: defaultMode,
+                transport_mode: normalizeTransportMode(customer.transport_mode) ?? defaultMode,
             };
         }
 
@@ -1778,7 +1830,12 @@
             }
 
             const cachedCustomer = knownCustomers.get(normalizedId);
-            if (cachedCustomer && cachedCustomer.transport_mode && !forceRefresh) {
+            if (
+                cachedCustomer &&
+                cachedCustomer.allowed_transport_modes?.length &&
+                cachedCustomer.default_transport_mode &&
+                !forceRefresh
+            ) {
                 return cachedCustomer;
             }
 
@@ -1908,6 +1965,68 @@
             return knownCustomers.get(customerId) || null;
         }
 
+        function getSelectedTransportMode() {
+            const checked = transportModeRadios.find((radio) => radio.checked);
+            return normalizeTransportMode(checked?.value || "");
+        }
+
+        function setTransportModeValue(mode) {
+            const normalized = normalizeTransportMode(mode) || "";
+            let wasSet = false;
+            transportModeRadios.forEach((radio) => {
+                const matches = normalizeTransportMode(radio.value) === normalized;
+                radio.checked = matches;
+                if (matches) {
+                    wasSet = true;
+                }
+            });
+            if (!wasSet) {
+                transportModeRadios.forEach((radio) => {
+                    radio.checked = false;
+                });
+            }
+            applyMode(normalized);
+        }
+
+        function applyMode(mode) {
+            const normalized = normalizeTransportMode(mode);
+            const readonly = normalized === "customer_lorry";
+
+            if (!normalized) {
+                document.querySelectorAll(".transport-input").forEach((el) => {
+                    if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement)) {
+                        return;
+                    }
+
+                    el.disabled = true;
+                    el.setAttribute("aria-disabled", "true");
+                    if (el.tagName === "SELECT") {
+                        el.value = "";
+                    } else {
+                        el.value = "";
+                    }
+                });
+                return;
+            }
+
+            document.querySelectorAll(".transport-input").forEach((el) => {
+                if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement)) {
+                    return;
+                }
+
+                el.disabled = readonly;
+                el.toggleAttribute("aria-disabled", readonly);
+
+                if (readonly) {
+                    if (el.tagName === "SELECT") {
+                        el.value = "";
+                    } else {
+                        el.value = "";
+                    }
+                }
+            });
+        }
+
         function isEditingExistingEntry() {
             return Boolean(currentEditingEntry?.id);
         }
@@ -1915,9 +2034,11 @@
         function shouldRequireTransportDetails() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
-            const transportMode = normalizeTransportMode(customer?.transport_mode);
-            const isSamproxCustomer = transportMode === "samprox_lorry";
-            if (!isActualSale || !isSamproxCustomer) {
+            const selectedMode =
+                getSelectedTransportMode() ||
+                normalizeTransportMode(customer?.default_transport_mode ?? customer?.transport_mode);
+            const isSamproxCustomer = selectedMode === "samprox_lorry";
+            if (!isActualSale || !customer || !isSamproxCustomer) {
                 return false;
             }
 
@@ -1926,6 +2047,52 @@
             }
 
             return transportRequirementMode === TRANSPORT_REQUIREMENT.STRICT;
+        }
+
+        function configureTransportModeSelector(customer) {
+            const isActualSale = (entryTypeSelect?.value || "") === "actual";
+            let allowedModes = Array.isArray(customer?.allowed_transport_modes)
+                ? customer.allowed_transport_modes.map((mode) => normalizeTransportMode(mode)).filter(Boolean)
+                : [];
+
+            const defaultMode =
+                normalizeTransportMode(customer?.default_transport_mode) ||
+                allowedModes[0] ||
+                normalizeTransportMode(customer?.transport_mode);
+
+            if (!allowedModes.length && defaultMode) {
+                allowedModes = [defaultMode];
+            }
+
+            if (transportModeSelector) {
+                transportModeSelector.hidden = !customer || !isActualSale;
+            }
+
+            transportModeRadios.forEach((radio) => {
+                const value = normalizeTransportMode(radio.value);
+                const permitted = Boolean(customer && isActualSale && allowedModes.includes(value));
+                radio.disabled = !permitted;
+                const label = radio.closest("label");
+                if (label) {
+                    label.hidden = !permitted;
+                    label.style.display = permitted ? "" : "none";
+                }
+                if (!permitted) {
+                    radio.checked = false;
+                }
+            });
+
+            if (!customer || !isActualSale) {
+                setTransportModeValue(null);
+                return;
+            }
+
+            let selectedMode = getSelectedTransportMode();
+            if (!selectedMode || !allowedModes.includes(selectedMode)) {
+                selectedMode = defaultMode || allowedModes[0] || null;
+            }
+
+            setTransportModeValue(selectedMode);
         }
 
         function ensureStrictTransportRequirement() {
@@ -1937,6 +2104,9 @@
         }
 
         function handleTransportFieldInteraction() {
+            if (getSelectedTransportMode() !== "samprox_lorry") {
+                return;
+            }
             if (transportRequirementMode !== TRANSPORT_REQUIREMENT.RELAXED) {
                 return;
             }
@@ -2039,7 +2209,9 @@
                 appendCell(customer?.name || customer?.customer_name || "—");
                 appendCell(formatCustomerEnumLabel(customer?.category) || "—");
                 appendCell(formatCustomerEnumLabel(customer?.credit_term) || "—");
-                appendCell(getTransportModeLabel(customer?.transport_mode) || "—");
+                const reportMode =
+                    customer?.default_transport_mode || customer?.transport_mode || "";
+                appendCell(getTransportModeLabel(reportMode) || "—");
                 appendCell(formatCustomerEnumLabel(customer?.customer_type) || "—");
                 appendCell(customer?.sales_coordinator_name || "—");
                 appendCell(customer?.sales_coordinator_phone || "—");
@@ -2108,9 +2280,13 @@
         function updateTransportFieldState() {
             const customer = getSelectedCustomer();
             const isActualSale = (entryTypeSelect?.value || "") === "actual";
-            const transportMode = normalizeTransportMode(customer?.transport_mode);
+            configureTransportModeSelector(customer);
+
+            const selectedMode =
+                getSelectedTransportMode() ||
+                normalizeTransportMode(customer?.default_transport_mode ?? customer?.transport_mode);
             const requiresDetails = shouldRequireTransportDetails();
-            const isSamproxCustomer = transportMode === "samprox_lorry";
+            const isSamproxCustomer = selectedMode === "samprox_lorry";
             const isExistingEntry = isEditingExistingEntry();
             const shouldShowGroup = Boolean(transportGroup && isActualSale && customer);
 
@@ -2136,7 +2312,7 @@
                     transportStatusEl.textContent = "";
                 } else {
                     const label = getTransportModeLabel(
-                        transportMode ?? customer.transport_mode ?? "",
+                        selectedMode ?? customer.default_transport_mode ?? customer.transport_mode ?? "",
                     );
                     transportStatusEl.textContent = label
                         ? `Transport mode: ${label}`
@@ -2411,6 +2587,7 @@
                 sale_type: saleType,
                 unit_price: entryUnitPriceInput?.value || "",
                 quantity_tons: entryQuantityInput?.value || "",
+                transport_mode_used: isActualSale ? getSelectedTransportMode() : null,
                 delivery_note_number: isActualSale ? readTextValue(entryDeliveryNoteInput) : null,
                 weigh_slip_number: isActualSale ? readTextValue(entryWeighSlipInput) : null,
                 loader1_id: isActualSale ? readLoaderValue(entryLoader1Select) : null,
@@ -2798,6 +2975,24 @@
             }
         }
 
+        function setCustomerTransportFormState(allowedModes = [], defaultMode = null) {
+            const normalizedAllowed = Array.isArray(allowedModes)
+                ? allowedModes.map((mode) => normalizeTransportMode(mode)).filter(Boolean)
+                : [];
+            const normalizedDefault =
+                normalizeTransportMode(defaultMode) || normalizedAllowed[0] || null;
+
+            customerAllowedModeCheckboxes.forEach((checkbox) => {
+                const value = normalizeTransportMode(checkbox.value);
+                checkbox.checked = normalizedAllowed.includes(value);
+            });
+
+            customerDefaultModeRadios.forEach((radio) => {
+                const value = normalizeTransportMode(radio.value);
+                radio.checked = normalizedDefault ? value === normalizedDefault : false;
+            });
+        }
+
         function resetCustomerForm() {
             if (customerForm) {
                 customerForm.reset();
@@ -2805,6 +3000,7 @@
                     customerForm.dataset.mode = "create";
                 }
             }
+            setCustomerTransportFormState(["samprox_lorry"], "samprox_lorry");
             setCustomerFormMode("create");
             setCustomerFormFeedback("");
         }
@@ -2868,9 +3064,6 @@
             if (customerCreditTermSelect) {
                 customerCreditTermSelect.value = normalized.credit_term ?? "";
             }
-            if (customerTransportSelect) {
-                customerTransportSelect.value = normalizeTransportMode(normalized.transport_mode) ?? "";
-            }
             if (customerTypeSelect) {
                 customerTypeSelect.value = normalized.customer_type ?? "";
             }
@@ -2895,6 +3088,11 @@
             if (customerSpecialNote) {
                 customerSpecialNote.value = normalized.special_note ?? "";
             }
+
+            setCustomerTransportFormState(
+                normalized.allowed_transport_modes,
+                normalized.default_transport_mode ?? normalized.transport_mode,
+            );
         }
 
         function openCustomerDialog(customer = null) {
@@ -2983,6 +3181,14 @@
                 handleEntrySelectionChange(event);
             });
         }
+
+        transportModeRadios.forEach((radio) => {
+            radio.addEventListener("change", (event) => {
+                applyMode(event.target.value);
+                transportRequirementMode = TRANSPORT_REQUIREMENT.STRICT;
+                updateTransportFieldState();
+            });
+        });
 
         if (entryDateInput) {
             entryDateInput.addEventListener("change", (event) => {
@@ -3221,11 +3427,22 @@
         }
 
         function collectCustomerFormData() {
+            const allowed = [];
+            customerAllowedModeCheckboxes.forEach((checkbox) => {
+                if (checkbox.checked) {
+                    allowed.push(checkbox.value);
+                }
+            });
+
+            const defaultRadio = customerDefaultModeRadios.find((radio) => radio.checked);
+            const defaultMode = defaultRadio?.value || "";
+
             const payload = {
                 name: customerNameInput?.value?.trim() || "",
                 category: customerCategorySelect?.value || "",
                 credit_term: customerCreditTermSelect?.value || "",
-                transport_mode: customerTransportSelect?.value || "",
+                allowed_transport_modes: allowed,
+                default_transport_mode: defaultMode,
                 customer_type: customerTypeSelect?.value || "",
                 sales_coordinator_name: customerSalesCoordinatorName?.value?.trim() || "",
                 sales_coordinator_phone: customerSalesCoordinatorPhone?.value?.trim() || "",
@@ -3248,9 +3465,43 @@
                 }
 
                 const payload = collectCustomerFormData();
-                const values = Object.values(payload);
-                if (values.some((value) => value === "")) {
+                const requiredStrings = [
+                    payload.name,
+                    payload.category,
+                    payload.credit_term,
+                    payload.customer_type,
+                    payload.sales_coordinator_name,
+                    payload.sales_coordinator_phone,
+                    payload.store_keeper_name,
+                    payload.store_keeper_phone,
+                    payload.payment_coordinator_name,
+                    payload.payment_coordinator_phone,
+                    payload.special_note,
+                ];
+
+                if (requiredStrings.some((value) => !value)) {
                     setCustomerFormFeedback("All fields are required.", "error");
+                    return;
+                }
+
+                if (!payload.allowed_transport_modes.length) {
+                    setCustomerFormFeedback(
+                        "Select at least one allowed transport mode.",
+                        "error",
+                    );
+                    return;
+                }
+
+                if (!payload.default_transport_mode) {
+                    setCustomerFormFeedback("Select a default transport mode.", "error");
+                    return;
+                }
+
+                if (!payload.allowed_transport_modes.includes(payload.default_transport_mode)) {
+                    setCustomerFormFeedback(
+                        "Default transport mode must be one of the allowed modes.",
+                        "error",
+                    );
                     return;
                 }
 

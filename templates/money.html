@@ -684,10 +684,46 @@
             return `${year}-${month}-${day}`;
         }
 
+        const pettyWeekdayFields = [
+            "mon_amount",
+            "tue_amount",
+            "wed_amount",
+            "thu_amount",
+            "fri_amount",
+            "sat_amount",
+            "sun_amount",
+        ];
+
         function formatAmount(value) {
             const num = Number(value || 0);
             if (Number.isNaN(num)) return "0.00";
             return num.toFixed(2);
+        }
+
+        function calculateLineTotal(line) {
+            return pettyWeekdayFields.reduce((sum, field) => {
+                const value = Number(line[field]);
+                return sum + (Number.isFinite(value) ? value : 0);
+            }, 0);
+        }
+
+        function calculateClaimTotal(claim) {
+            if (!claim?.lines?.length) return 0;
+            return claim.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0);
+        }
+
+        function handleInlineAmountChange(line, field, newValue, totalCell) {
+            const parsed = Number(newValue);
+            line[field] = Number.isFinite(parsed) ? parsed : 0;
+            line.row_total = calculateLineTotal(line);
+            if (totalCell) {
+                totalCell.textContent = formatAmount(line.row_total);
+            }
+
+            pettyState.claim.total_expenses = calculateClaimTotal(pettyState.claim);
+            if (pettyEls.total) {
+                pettyEls.total.textContent = formatAmount(pettyState.claim.total_expenses);
+            }
         }
 
         function showError(message) {
@@ -933,7 +969,7 @@
             return line._inputKey;
         }
 
-        function buildAmountInput(line, field, locked) {
+        function buildAmountInput(line, field, locked, onInput) {
             const inputId = `${lineKey(line)}-${field}`;
             const input = document.createElement("input");
             input.type = "number";
@@ -944,6 +980,11 @@
             input.disabled = locked;
             input.id = inputId;
             input.name = inputId;
+            input.addEventListener("input", () => {
+                if (typeof onInput === "function") {
+                    onInput(input.value);
+                }
+            });
             input.addEventListener("keydown", (event) => {
                 if (event.key === "Enter") {
                     event.preventDefault();
@@ -994,22 +1035,19 @@
                 expenseCell.appendChild(buildTextInput(line, locked));
                 row.appendChild(expenseCell);
 
-                [
-                    "mon_amount",
-                    "tue_amount",
-                    "wed_amount",
-                    "thu_amount",
-                    "fri_amount",
-                    "sat_amount",
-                    "sun_amount",
-                ].forEach((field) => {
+                const totalCell = document.createElement("td");
+                totalCell.className = "total-cell";
+
+                pettyWeekdayFields.forEach((field) => {
                     const cell = document.createElement("td");
-                    cell.appendChild(buildAmountInput(line, field, locked));
+                    cell.appendChild(
+                        buildAmountInput(line, field, locked, (value) =>
+                            handleInlineAmountChange(line, field, value, totalCell)
+                        )
+                    );
                     row.appendChild(cell);
                 });
 
-                const totalCell = document.createElement("td");
-                totalCell.className = "total-cell";
                 totalCell.textContent = formatAmount(line.row_total);
                 row.appendChild(totalCell);
 

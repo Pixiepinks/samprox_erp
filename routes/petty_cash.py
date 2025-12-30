@@ -307,6 +307,11 @@ def list_employees():
     if user is None:
         return jsonify({"msg": "Not authenticated"}), 401
 
+    allowed_company_keys = set(available_company_keys(current_app.config))
+    if (not company_key or company_key not in allowed_company_keys) and user.company_key:
+        if user.company_key in allowed_company_keys:
+            company_key = user.company_key
+
     query = User.query.filter_by(active=True)
     if company_key:
         query = query.filter(User.company_key == company_key)
@@ -333,6 +338,11 @@ def init_claim():
 
     claims = get_jwt() or {}
     company_key = select_company_key(current_app.config, None, claims)
+    allowed_company_keys = set(available_company_keys(current_app.config))
+    if (not company_key or company_key not in allowed_company_keys) and current.company_key:
+        if current.company_key in allowed_company_keys:
+            company_key = current.company_key
+
     week_start = _parse_week_start(request.args.get("week_start"))
     week_end = week_start + timedelta(days=6)
 
@@ -388,7 +398,12 @@ def list_claims():
     if user is None:
         return jsonify({"msg": "Not authenticated"}), 401
 
-    manager_roles = {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}
+    manager_roles = {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
+    }
     if user.role not in manager_roles and user.role != RoleEnum.sales:
         return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
 

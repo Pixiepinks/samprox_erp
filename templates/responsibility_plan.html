@@ -20,6 +20,9 @@
                 </div>
             </div>
             <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.money_page') }}" id="petty-cash-link" hidden>
+                    Petty Cash – Weekly Travel Claims
+                </a>
                 <div class="user-summary">
                     <span class="user-summary__name" id="user-name"></span>
                     <span class="user-summary__role" id="user-role"></span>
@@ -568,9 +571,13 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");
+        const pettyCashLink = document.getElementById("petty-cash-link");
 
         userNameEl.textContent = user?.name || "Unknown";
         userRoleEl.textContent = roleLabels[user?.role] || "";
+        if (pettyCashLink && user?.role === "outside_manager") {
+            pettyCashLink.hidden = false;
+        }
 
         logoutButton.addEventListener("click", async () => {
             try {

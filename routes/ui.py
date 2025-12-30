@@ -263,7 +263,7 @@ def _enforce_role_page_restrictions():
         return redirect(url_for("ui.machines_page"))
 
     if role == RoleEnum.outside_manager:
-        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal"}
+        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal", "ui.money_page"}
         if _has_rainbows_end_market_access():
             allowed_endpoints.update({"ui.market_page", "ui.market_rainbows_end_page"})
         if endpoint in allowed_endpoints:
@@ -446,9 +446,18 @@ def movers_page():
 def money_page():
     """Render the financial overview page."""
     context = _load_financials_context()
-    is_sales = _current_role() == RoleEnum.sales
-    active_tab = "petty-cash" if is_sales else "overview"
-    context.update({"active_tab": active_tab, "is_sales": is_sales})
+    role = _current_role()
+    is_sales = role == RoleEnum.sales
+    is_outside_manager = role == RoleEnum.outside_manager
+    petty_only = is_sales or is_outside_manager
+    active_tab = "petty-cash" if petty_only else "overview"
+    context.update(
+        {
+            "active_tab": active_tab,
+            "is_sales": is_sales,
+            "petty_only": petty_only,
+        }
+    )
     return render_template("money.html", **context)
 
 

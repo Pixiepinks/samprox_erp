@@ -1,9 +1,11 @@
 import re
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, Optional
+from zoneinfo import ZoneInfo
+from math import radians, sin, cos, sqrt, atan2
 
 from sqlalchemy import CheckConstraint, UniqueConstraint, event, func, select
 from sqlalchemy.types import CHAR, TypeDecorator
@@ -51,6 +53,16 @@ class RoleEnum(str, Enum):
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
     sales = "sales"
+
+
+COLOMBO_TZ = ZoneInfo("Asia/Colombo")
+
+
+class SalesVisitApprovalStatus(str, Enum):
+    pending = "PENDING"
+    approved = "APPROVED"
+    rejected = "REJECTED"
+    not_required = "NOT_REQUIRED"
 
 
 # Explicitly enumerate scoped permissions per role for UI and API guards.
@@ -1593,26 +1605,143 @@ class PettyCashWeeklyLine(db.Model):
 
     claim = db.relationship("PettyCashWeeklyClaim", back_populates="lines")
 
-    def recalculate_total(self) -> None:
-        amounts = [
-            self.mon_amount,
-            self.tue_amount,
-            self.wed_amount,
-            self.thu_amount,
-            self.fri_amount,
-            self.sat_amount,
-            self.sun_amount,
-        ]
-        total = Decimal("0")
-        for amount in amounts:
-            value = amount or Decimal("0")
-            if not isinstance(value, Decimal):
+
+def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
+    """Calculate great-circle distance between two points in meters."""
+
+    radius_km = 6371.0
+    lat1_rad, lon1_rad, lat2_rad, lon2_rad = map(radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+
+    a = sin(dlat / 2) ** 2 + cos(lat1_rad) * cos(lat2_rad) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    distance_km = radius_km * c
+    return int(round(distance_km * 1000))
+
+
+class SalesTeamMember(db.Model):
+    __tablename__ = "sales_team_members"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    manager_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    sales_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    manager = db.relationship("User", foreign_keys=[manager_user_id])
+    sales_user = db.relationship("User", foreign_keys=[sales_user_id])
+
+    __table_args__ = (UniqueConstraint("manager_user_id", "sales_user_id", name="uq_sales_team_member_pair"),)
+
+
+class SalesVisit(db.Model):
+    __tablename__ = "sales_visits"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    visit_no = db.Column(db.String(40), nullable=False, unique=True, index=True)
+    sales_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=True, index=True)
+    prospect_name = db.Column(db.Text, nullable=True)
+    visit_date = db.Column(db.Date, nullable=False, server_default=func.current_date(), index=True)
+    planned = db.Column(db.Boolean, nullable=False, default=False)
+    purpose = db.Column(db.Text, nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
+    check_in_time = db.Column(db.DateTime(timezone=True), nullable=True)
+    check_out_time = db.Column(db.DateTime(timezone=True), nullable=True)
+    check_in_lat = db.Column(db.Numeric(10, 7), nullable=True)
+    check_in_lng = db.Column(db.Numeric(10, 7), nullable=True)
+    check_out_lat = db.Column(db.Numeric(10, 7), nullable=True)
+    check_out_lng = db.Column(db.Numeric(10, 7), nullable=True)
+    distance_from_customer_m = db.Column(db.Integer, nullable=True)
+    duration_minutes = db.Column(db.Integer, nullable=True)
+    gps_mismatch = db.Column(db.Boolean, nullable=False, default=False)
+    short_duration = db.Column(db.Boolean, nullable=False, default=False)
+    manual_location_override = db.Column(db.Boolean, nullable=False, default=False)
+    exception_reason = db.Column(db.Text, nullable=True)
+    approval_status = db.Column(
+        db.Enum(SalesVisitApprovalStatus, values_callable=_enum_values, name="sales_visit_approval_status"),
+        nullable=False,
+        default=SalesVisitApprovalStatus.not_required,
+        index=True,
+    )
+    approved_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    approval_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+    updated_by = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    user = db.relationship("User", foreign_keys=[sales_user_id])
+    customer = db.relationship("Customer", backref=db.backref("sales_visits", cascade="all, delete-orphan"))
+    approver = db.relationship("User", foreign_keys=[approved_by])
+    creator = db.relationship("User", foreign_keys=[created_by])
+    updater = db.relationship("User", foreign_keys=[updated_by])
+
+    attachments = db.relationship(
+        "SalesVisitAttachment",
+        back_populates="visit",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("visit_no", name="uq_sales_visit_visit_no"),
+        db.Index("ix_sales_visits_sales_user_date", "sales_user_id", "visit_date"),
+    )
+
+    @classmethod
+    def generate_visit_no(cls, visit_date: Optional[date] = None) -> str:
+        """Generate a sequential human-readable visit number per month.
+
+        Uses a database lock where supported to avoid collisions; falls back to
+        retry on unique constraint violations.
+        """
+
+        target_date = visit_date or datetime.now(tz=COLOMBO_TZ).date()
+        prefix = f"SV-{target_date.strftime('%Y%m')}-"
+        attempt = 0
+
+        while attempt < 5:
+            attempt += 1
+            session = db.session
+            query = cls.query.filter(cls.visit_no.like(f"{prefix}%")).order_by(cls.visit_no.desc())
+            try:
+                latest = query.with_for_update().first() if hasattr(query, "with_for_update") else query.first()
+            except Exception:
+                latest = query.first()
+
+            next_seq = 1
+            if latest and latest.visit_no and latest.visit_no.startswith(prefix):
                 try:
-                    value = Decimal(str(value))
-                except Exception:
-                    value = Decimal("0")
-            total += value
-        self.row_total = total
+                    tail = int(latest.visit_no.replace(prefix, ""))
+                    next_seq = tail + 1
+                except ValueError:
+                    next_seq = 1
+
+            candidate = f"{prefix}{next_seq:04d}"
+
+            exists = cls.query.filter_by(visit_no=candidate).first()
+            if exists:
+                continue
+
+            return candidate
+
+        raise ValueError("Unable to generate unique visit number")
+
+
+class SalesVisitAttachment(db.Model):
+    __tablename__ = "sales_visit_attachments"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    visit_id = db.Column(GUID(), db.ForeignKey("sales_visits.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_url = db.Column(db.Text, nullable=False)
+    file_type = db.Column(db.String(40), nullable=True)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    uploaded_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    visit = db.relationship("SalesVisit", back_populates="attachments")
+    uploader = db.relationship("User", foreign_keys=[uploaded_by])
 
 
 class FinancialStatementLine(db.Model):

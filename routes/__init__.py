@@ -20,6 +20,7 @@ from . import (
     ui,
     financials,
     users,
+    sales_visits,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     "ui",
     "financials",
     "users",
+    "sales_visits",
 ]

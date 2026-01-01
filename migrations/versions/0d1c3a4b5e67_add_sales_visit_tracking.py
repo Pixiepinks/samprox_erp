@@ -66,6 +66,17 @@ def upgrade():
         existing_indexes = inspector.get_indexes(table) if inspector.has_table(table) else []
         return any(idx.get("name") == name for idx in existing_indexes)
 
+    def _create_index_if_missing(name: str, table: str, columns: list[str]) -> None:
+        if not inspector.has_table(table):
+            return
+        if _index_exists(table, name):
+            return
+        if dialect == "postgresql":
+            cols = ", ".join(columns)
+            op.execute(sa.text(f'CREATE INDEX IF NOT EXISTS "{name}" ON {table} ({cols})'))
+        else:
+            op.create_index(name, table, columns)
+
     if not inspector.has_table("sales_visits"):
         op.create_table(
             "sales_visits",
@@ -99,12 +110,9 @@ def upgrade():
             sa.Column("created_by", sa.Integer(), sa.ForeignKey("user.id")),
             sa.Column("updated_by", sa.Integer(), sa.ForeignKey("user.id")),
         )
-    if not _index_exists("sales_visits", "ix_sales_visits_sales_user_date"):
-        op.create_index("ix_sales_visits_sales_user_date", "sales_visits", ["sales_user_id", "visit_date"])
-    if not _index_exists("sales_visits", "ix_sales_visits_customer_id"):
-        op.create_index("ix_sales_visits_customer_id", "sales_visits", ["customer_id"])
-    if not _index_exists("sales_visits", "ix_sales_visits_approval_status"):
-        op.create_index("ix_sales_visits_approval_status", "sales_visits", ["approval_status"])
+    _create_index_if_missing("ix_sales_visits_sales_user_date", "sales_visits", ["sales_user_id", "visit_date"])
+    _create_index_if_missing("ix_sales_visits_customer_id", "sales_visits", ["customer_id"])
+    _create_index_if_missing("ix_sales_visits_approval_status", "sales_visits", ["approval_status"])
 
     if not inspector.has_table("sales_visit_attachments"):
         op.create_table(

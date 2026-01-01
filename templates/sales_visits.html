@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales Visits | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Responsibility Portal</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.money_page') }}">Money</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <main class="section">
+            <header class="section__header">
+                <div>
+                    <p class="eyebrow">Field tracking</p>
+                    <h1>Sales Visits</h1>
+                    <p class="section__description">
+                        Plan visits, capture check-ins, and manage approvals for your sales team.
+                    </p>
+                </div>
+                <div class="section__actions">
+                    <button class="button button--primary" id="new-visit">Create visit</button>
+                </div>
+            </header>
+
+            <div class="card">
+                <div class="filters">
+                    <label class="form-field">
+                        <span>Date from</span>
+                        <input id="filter-from" type="date" />
+                    </label>
+                    <label class="form-field">
+                        <span>Date to</span>
+                        <input id="filter-to" type="date" />
+                    </label>
+                    <label class="form-field" id="filter-sales-container" hidden>
+                        <span>Sales user</span>
+                        <select id="filter-sales">
+                            <option value="">All</option>
+                        </select>
+                    </label>
+                    <button class="button button--secondary button--small" id="apply-filters">Apply</button>
+                    <button class="button button--ghost button--small" id="clear-filters">Clear</button>
+                </div>
+                <div class="table-container table-container--scrollable" style="margin-top: 1rem;">
+                    <table class="team-table responsibility-table">
+                        <thead>
+                            <tr>
+                                <th>Visit No</th>
+                                <th>Date</th>
+                                <th>Customer / Prospect</th>
+                                <th>Purpose</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
+                                <th>Duration</th>
+                                <th>GPS</th>
+                                <th>Exception</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visit-rows">
+                            <tr id="visits-empty">
+                                <td colspan="10" style="text-align:center;">No visits yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal" id="visit-modal" hidden>
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content">
+            <header class="modal__header">
+                <h2 id="visit-modal-title">Create visit</h2>
+                <button class="modal__close" data-modal-dismiss aria-label="Close">×</button>
+            </header>
+            <div class="modal__body">
+                <div class="alert alert--error" id="visit-modal-error" hidden></div>
+                <form id="visit-form" class="form-grid">
+                    <label class="form-field">
+                        <span>Visit date</span>
+                        <input type="date" id="visit-date" required />
+                    </label>
+                    <label class="form-field">
+                        <span>Customer ID (optional)</span>
+                        <input type="number" id="visit-customer" placeholder="Customer id" />
+                    </label>
+                    <label class="form-field">
+                        <span>Prospect name (if no customer)</span>
+                        <input type="text" id="visit-prospect" placeholder="Prospect name" />
+                    </label>
+                    <label class="form-field">
+                        <span>Purpose</span>
+                        <input type="text" id="visit-purpose" />
+                    </label>
+                    <label class="form-field">
+                        <span>Remarks</span>
+                        <textarea id="visit-remarks" rows="2"></textarea>
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="visit-planned" />
+                        <span>Planned visit</span>
+                    </label>
+                </form>
+            </div>
+            <footer class="modal__footer">
+                <button class="button button--ghost" data-modal-dismiss>Cancel</button>
+                <button class="button button--primary" id="visit-save">Save</button>
+            </footer>
+        </div>
+    </div>
+
+    <div class="modal" id="attachment-modal" hidden>
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content">
+            <header class="modal__header">
+                <h2>Add attachment</h2>
+                <button class="modal__close" data-modal-dismiss aria-label="Close">×</button>
+            </header>
+            <div class="modal__body">
+                <div class="alert alert--error" id="attachment-error" hidden></div>
+                <label class="form-field">
+                    <span>File URL</span>
+                    <input type="url" id="attachment-url" required />
+                </label>
+                <label class="form-field">
+                    <span>File type</span>
+                    <input type="text" id="attachment-type" placeholder="photo / doc" />
+                </label>
+            </div>
+            <footer class="modal__footer">
+                <button class="button button--ghost" data-modal-dismiss>Cancel</button>
+                <button class="button button--primary" id="attachment-save">Save</button>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
+            technician: "Technician",
+            outside_manager: "Outside Manager",
+            sales: "Sales",
+        };
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        userNameEl.textContent = user?.name || "";
+        userRoleEl.textContent = roleLabels[user?.role] || "";
+
+        document.getElementById("logout").addEventListener("click", async () => {
+            try {
+                await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+            } catch (_) {
+            } finally {
+                localStorage.removeItem("samprox_token");
+                localStorage.removeItem("samprox_user");
+                window.location.href = "/";
+            }
+        });
+
+        const headers = {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        };
+
+        const elements = {
+            visitRows: document.getElementById("visit-rows"),
+            visitsEmpty: document.getElementById("visits-empty"),
+            filterFrom: document.getElementById("filter-from"),
+            filterTo: document.getElementById("filter-to"),
+            filterSales: document.getElementById("filter-sales"),
+            filterSalesContainer: document.getElementById("filter-sales-container"),
+            applyFilters: document.getElementById("apply-filters"),
+            clearFilters: document.getElementById("clear-filters"),
+            newVisit: document.getElementById("new-visit"),
+            visitModal: document.getElementById("visit-modal"),
+            visitModalError: document.getElementById("visit-modal-error"),
+            visitDate: document.getElementById("visit-date"),
+            visitCustomer: document.getElementById("visit-customer"),
+            visitProspect: document.getElementById("visit-prospect"),
+            visitPurpose: document.getElementById("visit-purpose"),
+            visitRemarks: document.getElementById("visit-remarks"),
+            visitPlanned: document.getElementById("visit-planned"),
+            visitSave: document.getElementById("visit-save"),
+            visitForm: document.getElementById("visit-form"),
+            attachmentModal: document.getElementById("attachment-modal"),
+            attachmentUrl: document.getElementById("attachment-url"),
+            attachmentType: document.getElementById("attachment-type"),
+            attachmentSave: document.getElementById("attachment-save"),
+            attachmentError: document.getElementById("attachment-error"),
+        };
+
+        let activeVisitId = null;
+        let visits = [];
+        let team = [];
+
+        function openModal(modal) {
+            modal.hidden = false;
+        }
+
+        function closeModal(modal) {
+            modal.hidden = true;
+            const error = modal.querySelector(".alert");
+            if (error) {
+                error.hidden = true;
+                error.textContent = "";
+            }
+        }
+
+        document.querySelectorAll("[data-modal-dismiss]").forEach((el) => {
+            el.addEventListener("click", (event) => {
+                const modal = event.target.closest(".modal");
+                if (modal) closeModal(modal);
+            });
+        });
+
+        function formatTime(value) {
+            if (!value) return "";
+            const date = new Date(value);
+            return date.toLocaleString("en-GB", { timeZone: "Asia/Colombo" });
+        }
+
+        function renderVisits() {
+            elements.visitRows.innerHTML = "";
+            if (!visits.length) {
+                elements.visitRows.appendChild(elements.visitsEmpty);
+                elements.visitsEmpty.hidden = false;
+                return;
+            }
+            elements.visitsEmpty.hidden = true;
+            visits.forEach((visit) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${visit.visit_no}</td>
+                    <td>${visit.visit_date || ""}</td>
+                    <td>${visit.customer_name || visit.prospect_name || "-"}</td>
+                    <td>${visit.purpose || ""}</td>
+                    <td>${visit.check_in_time ? formatTime(visit.check_in_time) : "—"}</td>
+                    <td>${visit.check_out_time ? formatTime(visit.check_out_time) : "—"}</td>
+                    <td>${visit.duration_minutes ?? ""}</td>
+                    <td>${visit.gps_mismatch ? "Mismatch" : "OK"}</td>
+                    <td>${visit.approval_status || ""}</td>
+                    <td>
+                        <div class="badge-group">
+                            ${renderActions(visit)}
+                        </div>
+                    </td>
+                `;
+                elements.visitRows.appendChild(row);
+            });
+        }
+
+        function renderActions(visit) {
+            const actions = [];
+            const isOwner = visit.sales_user_id === user.id;
+            const isAdmin = user.role === "admin";
+            const isManager = user.role === "outside_manager";
+            if ((isOwner || isAdmin) && !visit.check_in_time) {
+                actions.push(`<button class="button button--ghost button--small" data-action="check-in" data-id="${visit.id}">Check-in</button>`);
+            }
+            if ((isOwner || isAdmin) && visit.check_in_time && !visit.check_out_time) {
+                actions.push(`<button class="button button--ghost button--small" data-action="check-out" data-id="${visit.id}">Check-out</button>`);
+            }
+            if ((isOwner || isAdmin) && !visit.check_out_time) {
+                actions.push(`<button class="button button--ghost button--small" data-action="edit" data-id="${visit.id}">Edit</button>`);
+            }
+            if ((isOwner || isAdmin) && visit.check_in_time) {
+                actions.push(`<button class="button button--ghost button--small" data-action="attach" data-id="${visit.id}">Attachments</button>`);
+            }
+            if ((isAdmin || isManager) && visit.approval_status === "PENDING") {
+                actions.push(`<button class="button button--secondary button--small" data-action="approve" data-id="${visit.id}">Approve</button>`);
+                actions.push(`<button class="button button--ghost button--small" data-action="reject" data-id="${visit.id}">Reject</button>`);
+            }
+            return actions.join(" ");
+        }
+
+        async function loadVisits() {
+            const params = new URLSearchParams();
+            if (elements.filterFrom.value) params.append("date_from", elements.filterFrom.value);
+            if (elements.filterTo.value) params.append("date_to", elements.filterTo.value);
+            if (elements.filterSales.value) params.append("sales_user_id", elements.filterSales.value);
+            const response = await fetch(`/api/sales-visits?${params.toString()}`, { headers });
+            const data = await response.json();
+            if (!data.ok) {
+                console.error(data.error || "Unable to load visits");
+                return;
+            }
+            visits = data.data || [];
+            renderVisits();
+        }
+
+        async function loadTeam() {
+            if (!["admin", "outside_manager"].includes(user.role)) return;
+            elements.filterSalesContainer.hidden = false;
+            const response = await fetch("/api/sales-visits/team", { headers });
+            const data = await response.json();
+            if (!data.ok) return;
+            team = data.data || [];
+            const uniqueUsers = new Map();
+            team.forEach((m) => {
+                if (m.sales_user) uniqueUsers.set(m.sales_user.id, m.sales_user);
+                if (m.manager) uniqueUsers.set(m.manager.id, m.manager);
+            });
+            uniqueUsers.forEach((u) => {
+                const option = document.createElement("option");
+                option.value = u.id;
+                option.textContent = `${u.name} (${u.role})`;
+                elements.filterSales.appendChild(option);
+            });
+        }
+
+        elements.applyFilters.addEventListener("click", () => loadVisits());
+        elements.clearFilters.addEventListener("click", () => {
+            elements.filterFrom.value = "";
+            elements.filterTo.value = "";
+            elements.filterSales.value = "";
+            loadVisits();
+        });
+
+        elements.newVisit.addEventListener("click", () => {
+            activeVisitId = null;
+            elements.visitForm.reset();
+            elements.visitDate.valueAsDate = new Date();
+            openModal(elements.visitModal);
+        });
+
+        elements.visitSave.addEventListener("click", async () => {
+            elements.visitModalError.hidden = true;
+            const payload = {
+                visit_date: elements.visitDate.value,
+                customer_id: elements.visitCustomer.value || null,
+                prospect_name: elements.visitProspect.value,
+                purpose: elements.visitPurpose.value,
+                remarks: elements.visitRemarks.value,
+                planned: elements.visitPlanned.checked,
+            };
+            const url = activeVisitId ? `/api/sales-visits/${activeVisitId}` : "/api/sales-visits";
+            const method = activeVisitId ? "PUT" : "POST";
+            const response = await fetch(url, { method, headers, body: JSON.stringify(payload) });
+            const data = await response.json();
+            if (!data.ok) {
+                elements.visitModalError.textContent = data.error || "Unable to save visit";
+                elements.visitModalError.hidden = false;
+                return;
+            }
+            closeModal(elements.visitModal);
+            await loadVisits();
+        });
+
+        elements.visitRows.addEventListener("click", async (event) => {
+            const button = event.target.closest("button[data-action]");
+            if (!button) return;
+            const action = button.dataset.action;
+            const visitId = button.dataset.id;
+
+            if (action === "edit") {
+                const visit = visits.find((v) => v.id === visitId);
+                if (!visit) return;
+                activeVisitId = visitId;
+                elements.visitDate.value = visit.visit_date || "";
+                elements.visitCustomer.value = visit.customer_id || "";
+                elements.visitProspect.value = visit.prospect_name || "";
+                elements.visitPurpose.value = visit.purpose || "";
+                elements.visitRemarks.value = visit.remarks || "";
+                elements.visitPlanned.checked = !!visit.planned;
+                openModal(elements.visitModal);
+                return;
+            }
+
+            if (action === "attach") {
+                activeVisitId = visitId;
+                elements.attachmentUrl.value = "";
+                elements.attachmentType.value = "";
+                openModal(elements.attachmentModal);
+                return;
+            }
+
+            if (action === "check-in" || action === "check-out") {
+                const lat = prompt("Latitude?");
+                const lng = prompt("Longitude?");
+                if (!lat || !lng) return;
+                const response = await fetch(`/api/sales-visits/${visitId}/${action === "check-in" ? "check-in" : "check-out"}`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ lat, lng }),
+                });
+                const data = await response.json();
+                if (!data.ok) {
+                    alert(data.error || "Unable to update visit");
+                }
+                await loadVisits();
+                return;
+            }
+
+            if (action === "approve" || action === "reject") {
+                const note = prompt("Approval note (optional)") || "";
+                const response = await fetch(`/api/sales-visits/${visitId}/approve`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({ action: action === "approve" ? "APPROVE" : "REJECT", approval_note: note }),
+                });
+                const data = await response.json();
+                if (!data.ok) {
+                    alert(data.error || "Unable to update approval");
+                }
+                await loadVisits();
+            }
+        });
+
+        elements.attachmentSave.addEventListener("click", async () => {
+            elements.attachmentError.hidden = true;
+            if (!activeVisitId) return;
+            const payload = {
+                file_url: elements.attachmentUrl.value,
+                file_type: elements.attachmentType.value,
+            };
+            const response = await fetch(`/api/sales-visits/${activeVisitId}/attachments`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!data.ok) {
+                elements.attachmentError.textContent = data.error || "Unable to save attachment";
+                elements.attachmentError.hidden = false;
+                return;
+            }
+            closeModal(elements.attachmentModal);
+        });
+
+        document.querySelectorAll(".modal__overlay, .modal__close").forEach((el) => {
+            el.addEventListener("click", () => {
+                closeModal(el.closest(".modal"));
+            });
+        });
+
+        loadTeam().finally(loadVisits);
+    </script>
+</body>
+</html>

@@ -252,10 +252,10 @@ def _enforce_role_page_restrictions():
 
     role = _current_role()
     if role == RoleEnum.sales:
-        allowed_endpoints = {"ui.login_page", "ui.money_page"}
+        allowed_endpoints = {"ui.login_page", "ui.money_page", "ui.sales_visits_page"}
         if endpoint in allowed_endpoints:
             return None
-        return redirect(url_for("ui.money_page"))
+        return redirect(url_for("ui.sales_visits_page"))
 
     if role == RoleEnum.maintenance_manager:
         if endpoint in {"ui.machines_page", "ui.login_page"}:
@@ -263,7 +263,7 @@ def _enforce_role_page_restrictions():
         return redirect(url_for("ui.machines_page"))
 
     if role == RoleEnum.outside_manager:
-        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal", "ui.money_page"}
+        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal", "ui.money_page", "ui.sales_visits_page"}
         if _has_rainbows_end_market_access():
             allowed_endpoints.update({"ui.market_page", "ui.market_rainbows_end_page"})
         if endpoint in allowed_endpoints:
@@ -459,6 +459,17 @@ def money_page():
         }
     )
     return render_template("money.html", **context)
+
+
+@bp.get("/sales_visits")
+def sales_visits_page():
+    """Render the sales visit tracking page inside the portal."""
+
+    role = _current_role()
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin}:
+        return render_template("403.html"), 403
+
+    return render_template("sales_visits.html")
 
 
 @bp.get("/money/financials")

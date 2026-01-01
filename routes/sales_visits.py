@@ -85,8 +85,10 @@ def _serialize_visit(visit: SalesVisit) -> dict[str, Any]:
         "check_out_time": visit.check_out_time.isoformat() if visit.check_out_time else None,
         "check_in_lat": float(visit.check_in_lat) if visit.check_in_lat is not None else None,
         "check_in_lng": float(visit.check_in_lng) if visit.check_in_lng is not None else None,
+        "check_in_accuracy_m": visit.check_in_accuracy_m,
         "check_out_lat": float(visit.check_out_lat) if visit.check_out_lat is not None else None,
         "check_out_lng": float(visit.check_out_lng) if visit.check_out_lng is not None else None,
+        "check_out_accuracy_m": visit.check_out_accuracy_m,
         "distance_from_customer_m": visit.distance_from_customer_m,
         "duration_minutes": visit.duration_minutes,
         "gps_mismatch": bool(visit.gps_mismatch),
@@ -327,10 +329,13 @@ def update_visit(visit_id: str):
     return jsonify({"ok": True, "data": _serialize_visit(visit)})
 
 
-def _apply_check_in_metadata(visit: SalesVisit, lat: float, lng: float, ts: Optional[datetime] = None) -> None:
+def _apply_check_in_metadata(
+    visit: SalesVisit, lat: float, lng: float, ts: Optional[datetime] = None, accuracy_m: Optional[int] = None
+) -> None:
     visit.check_in_time = ts or datetime.now(tz=COLOMBO_TZ)
     visit.check_in_lat = Decimal(str(lat))
     visit.check_in_lng = Decimal(str(lng))
+    visit.check_in_accuracy_m = accuracy_m
     visit.gps_mismatch = False
     if visit.customer and getattr(visit.customer, "latitude", None) is not None and getattr(visit.customer, "longitude", None) is not None:
         try:
@@ -372,18 +377,34 @@ def check_in(visit_id: str):
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "lat and lng are required"}), 400
 
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
+
+    accuracy_raw = payload.get("accuracy_m")
+    accuracy = None
+    if accuracy_raw is not None:
+        try:
+            accuracy = int(accuracy_raw)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "accuracy_m must be an integer"}), 400
+        if accuracy < 0:
+            accuracy = None
+
     ts = _parse_timestamp(payload.get("timestamp"))
-    _apply_check_in_metadata(visit, lat, lng, ts)
+    _apply_check_in_metadata(visit, lat, lng, ts, accuracy_m=accuracy)
     visit.updated_by = user.id
     db.session.commit()
     return jsonify({"ok": True, "data": _serialize_visit(visit)})
 
 
-def _apply_checkout_metadata(visit: SalesVisit, lat: float, lng: float, ts: Optional[datetime] = None) -> None:
+def _apply_checkout_metadata(
+    visit: SalesVisit, lat: float, lng: float, ts: Optional[datetime] = None, accuracy_m: Optional[int] = None
+) -> None:
     now_ts = ts or datetime.now(tz=COLOMBO_TZ)
     visit.check_out_time = now_ts
     visit.check_out_lat = Decimal(str(lat))
     visit.check_out_lng = Decimal(str(lng))
+    visit.check_out_accuracy_m = accuracy_m
     if visit.check_in_time:
         if visit.check_in_time.tzinfo is None:
             visit.check_in_time = visit.check_in_time.replace(tzinfo=COLOMBO_TZ)
@@ -423,8 +444,21 @@ def check_out(visit_id: str):
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "lat and lng are required"}), 400
 
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return jsonify({"ok": False, "error": "Invalid coordinates"}), 400
+
+    accuracy_raw = payload.get("accuracy_m")
+    accuracy = None
+    if accuracy_raw is not None:
+        try:
+            accuracy = int(accuracy_raw)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "accuracy_m must be an integer"}), 400
+        if accuracy < 0:
+            accuracy = None
+
     ts = _parse_timestamp(payload.get("timestamp"))
-    _apply_checkout_metadata(visit, lat, lng, ts)
+    _apply_checkout_metadata(visit, lat, lng, ts, accuracy_m=accuracy)
     visit.updated_by = user.id
     db.session.commit()
     return jsonify({"ok": True, "data": _serialize_visit(visit)})

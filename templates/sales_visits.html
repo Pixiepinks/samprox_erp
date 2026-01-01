@@ -196,6 +196,15 @@
             "Content-Type": "application/json",
         };
 
+        function authFetch(url, options = {}) {
+            return fetch(url, {
+                credentials: "include",
+                headers,
+                ...options,
+                headers: { ...headers, ...(options.headers || {}) },
+            });
+        }
+
         const elements = {
             visitRows: document.getElementById("visit-rows"),
             visitsEmpty: document.getElementById("visits-empty"),
@@ -226,6 +235,31 @@
         let activeVisitId = null;
         let visits = [];
         let team = [];
+
+        function getLiveLocation() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject(new Error("Geolocation is not supported by this browser."));
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        resolve({
+                            lat: Number(pos.coords.latitude.toFixed(7)),
+                            lng: Number(pos.coords.longitude.toFixed(7)),
+                            accuracy: pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null,
+                        });
+                    },
+                    (err) => {
+                        if (err.code === err.PERMISSION_DENIED) reject(new Error("Location permission is required to check-in."));
+                        else if (err.code === err.POSITION_UNAVAILABLE) reject(new Error("Unable to detect location. Please try again."));
+                        else if (err.code === err.TIMEOUT) reject(new Error("Location request timed out. Please try again."));
+                        else reject(new Error("Failed to get location."));
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+                );
+            });
+        }
 
         function openModal(modal) {
             modal.hidden = false;
@@ -271,7 +305,7 @@
                     <td>${visit.check_in_time ? formatTime(visit.check_in_time) : "—"}</td>
                     <td>${visit.check_out_time ? formatTime(visit.check_out_time) : "—"}</td>
                     <td>${visit.duration_minutes ?? ""}</td>
-                    <td>${visit.gps_mismatch ? "Mismatch" : "OK"}</td>
+                    <td>${formatGpsStatus(visit)}</td>
                     <td>${visit.approval_status || ""}</td>
                     <td>
                         <div class="badge-group">
@@ -307,12 +341,23 @@
             return actions.join(" ");
         }
 
+        function formatGpsStatus(visit) {
+            if (visit.gps_mismatch) return "Mismatch";
+            const accuracy = visit.check_in_accuracy_m || visit.check_out_accuracy_m;
+            const label = accuracy ? `OK (±${accuracy}m)` : "OK";
+            const lat = visit.check_in_lat ?? visit.check_out_lat;
+            const lng = visit.check_in_lng ?? visit.check_out_lng;
+            if (lat == null || lng == null) return label;
+            const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+            return `${label} <a href="${mapUrl}" target="_blank" rel="noopener">Map</a>`;
+        }
+
         async function loadVisits() {
             const params = new URLSearchParams();
             if (elements.filterFrom.value) params.append("date_from", elements.filterFrom.value);
             if (elements.filterTo.value) params.append("date_to", elements.filterTo.value);
             if (elements.filterSales.value) params.append("sales_user_id", elements.filterSales.value);
-            const response = await fetch(`/api/sales-visits?${params.toString()}`, { headers });
+            const response = await authFetch(`/api/sales-visits?${params.toString()}`);
             const data = await response.json();
             if (!data.ok) {
                 console.error(data.error || "Unable to load visits");
@@ -325,7 +370,7 @@
         async function loadTeam() {
             if (!["admin", "outside_manager"].includes(user.role)) return;
             elements.filterSalesContainer.hidden = false;
-            const response = await fetch("/api/sales-visits/team", { headers });
+            const response = await authFetch("/api/sales-visits/team");
             const data = await response.json();
             if (!data.ok) return;
             team = data.data || [];
@@ -369,7 +414,7 @@
             };
             const url = activeVisitId ? `/api/sales-visits/${activeVisitId}` : "/api/sales-visits";
             const method = activeVisitId ? "PUT" : "POST";
-            const response = await fetch(url, { method, headers, body: JSON.stringify(payload) });
+            const response = await authFetch(url, { method, body: JSON.stringify(payload) });
             const data = await response.json();
             if (!data.ok) {
                 elements.visitModalError.textContent = data.error || "Unable to save visit";
@@ -409,27 +454,37 @@
             }
 
             if (action === "check-in" || action === "check-out") {
-                const lat = prompt("Latitude?");
-                const lng = prompt("Longitude?");
-                if (!lat || !lng) return;
-                const response = await fetch(`/api/sales-visits/${visitId}/${action === "check-in" ? "check-in" : "check-out"}`, {
-                    method: "POST",
-                    headers,
-                    body: JSON.stringify({ lat, lng }),
-                });
-                const data = await response.json();
-                if (!data.ok) {
-                    alert(data.error || "Unable to update visit");
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = "Locating...";
+                try {
+                    const { lat, lng, accuracy } = await getLiveLocation();
+                    button.textContent = "Saving...";
+                    const response = await authFetch(
+                        `/api/sales-visits/${visitId}/${action === "check-in" ? "check-in" : "check-out"}`,
+                        {
+                            method: "POST",
+                            body: JSON.stringify({ lat, lng, accuracy_m: accuracy }),
+                        },
+                    );
+                    const data = await response.json();
+                    if (!data.ok) {
+                        throw new Error(data.error || "Unable to update visit");
+                    }
+                    await loadVisits();
+                } catch (err) {
+                    alert(err.message || "Unable to update visit");
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalText;
                 }
-                await loadVisits();
                 return;
             }
 
             if (action === "approve" || action === "reject") {
                 const note = prompt("Approval note (optional)") || "";
-                const response = await fetch(`/api/sales-visits/${visitId}/approve`, {
+                const response = await authFetch(`/api/sales-visits/${visitId}/approve`, {
                     method: "POST",
-                    headers,
                     body: JSON.stringify({ action: action === "approve" ? "APPROVE" : "REJECT", approval_note: note }),
                 });
                 const data = await response.json();
@@ -447,9 +502,8 @@
                 file_url: elements.attachmentUrl.value,
                 file_type: elements.attachmentType.value,
             };
-            const response = await fetch(`/api/sales-visits/${activeVisitId}/attachments`, {
+            const response = await authFetch(`/api/sales-visits/${activeVisitId}/attachments`, {
                 method: "POST",
-                headers,
                 body: JSON.stringify(payload),
             });
             const data = await response.json();

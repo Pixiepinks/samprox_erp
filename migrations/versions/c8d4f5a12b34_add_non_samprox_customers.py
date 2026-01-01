@@ -49,7 +49,8 @@ def upgrade():
             ["city", "district"],
         )
 
-    if inspector.has_table("sales_visits") and not inspector.has_column("sales_visits", "non_samprox_customer_id"):
+    existing_sales_visits_columns = {col.get("name") for col in inspector.get_columns("sales_visits")} if inspector.has_table("sales_visits") else set()
+    if inspector.has_table("sales_visits") and "non_samprox_customer_id" not in existing_sales_visits_columns:
         with op.batch_alter_table("sales_visits") as batch_op:
             batch_op.add_column(
                 sa.Column(
@@ -75,7 +76,8 @@ def downgrade():
 
     if _index_exists("sales_visits", "ix_sales_visits_non_samprox_customer_id"):
         op.drop_index("ix_sales_visits_non_samprox_customer_id", table_name="sales_visits")
-    if inspector.has_column("sales_visits", "non_samprox_customer_id"):
+    sales_visit_columns = {col.get("name") for col in inspector.get_columns("sales_visits")} if inspector.has_table("sales_visits") else set()
+    if "non_samprox_customer_id" in sales_visit_columns:
         with op.batch_alter_table("sales_visits") as batch_op:
             batch_op.drop_column("non_samprox_customer_id")
 

@@ -7,6 +7,7 @@ Create Date: 2025-02-06 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -24,12 +25,40 @@ sales_visit_status = sa.Enum(
     name="sales_visit_approval_status",
 )
 
+postgres_sales_visit_status = postgresql.ENUM(
+    "PENDING",
+    "APPROVED",
+    "REJECTED",
+    "NOT_REQUIRED",
+    name="sales_visit_approval_status",
+    create_type=False,
+)
+
 
 def upgrade():
     bind = op.get_bind()
     dialect = bind.dialect.name if bind else ""
 
-    sales_visit_status.create(bind, checkfirst=True)
+    if dialect == "postgresql":
+        op.execute(
+            sa.text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_type WHERE typname = 'sales_visit_approval_status'
+                    ) THEN
+                        CREATE TYPE sales_visit_approval_status AS ENUM ('PENDING','APPROVED','REJECTED','NOT_REQUIRED');
+                    END IF;
+                END
+                $$;
+                """
+            )
+        )
+        status_enum = postgres_sales_visit_status
+    else:
+        sales_visit_status.create(bind, checkfirst=True)
+        status_enum = sales_visit_status
 
     op.create_table(
         "sales_visits",
@@ -54,7 +83,7 @@ def upgrade():
         sa.Column("short_duration", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("manual_location_override", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("exception_reason", sa.Text(), nullable=True),
-        sa.Column("approval_status", sales_visit_status, nullable=False, server_default="NOT_REQUIRED", index=True),
+        sa.Column("approval_status", status_enum, nullable=False, server_default="NOT_REQUIRED", index=True),
         sa.Column("approved_by", sa.Integer(), sa.ForeignKey("user.id"), nullable=True),
         sa.Column("approved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("approval_note", sa.Text(), nullable=True),
@@ -93,4 +122,10 @@ def downgrade():
     op.drop_index("ix_sales_visits_customer_id", table_name="sales_visits")
     op.drop_index("ix_sales_visits_approval_status", table_name="sales_visits")
     op.drop_table("sales_visits")
-    sales_visit_status.drop(op.get_bind(), checkfirst=True)
+
+    bind = op.get_bind()
+    dialect = bind.dialect.name if bind else ""
+    if dialect == "postgresql":
+        op.execute(sa.text("DROP TYPE IF EXISTS sales_visit_approval_status"))
+    else:
+        sales_visit_status.drop(bind, checkfirst=True)

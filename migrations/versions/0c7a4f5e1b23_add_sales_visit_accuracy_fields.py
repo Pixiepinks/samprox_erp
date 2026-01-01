@@ -1,7 +1,7 @@
 """Add accuracy fields to sales visits
 
 Revision ID: 0c7a4f5e1b23
-Revises: fb3e3d7c9a1b
+Revises: 0d1c3a4b5e67
 Create Date: 2025-02-16 00:00:00.000000
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0c7a4f5e1b23"
-down_revision = "fb3e3d7c9a1b"
+down_revision = "0d1c3a4b5e67"
 branch_labels = None
 depends_on = None
 

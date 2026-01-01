@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, date
 from decimal import Decimal
+import uuid
 from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo
 
@@ -13,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import (
     Customer,
+    NonSamproxCustomer,
     SalesTeamMember,
     SalesVisit,
     SalesVisitApprovalStatus,
@@ -69,13 +71,26 @@ def _serialize_attachment(att: SalesVisitAttachment) -> dict[str, Any]:
 
 
 def _serialize_visit(visit: SalesVisit) -> dict[str, Any]:
+    non_samprox_customer = visit.non_samprox_customer
+    legacy_customer = visit.customer
+    display_name = (
+        getattr(non_samprox_customer, "customer_name", None)
+        or getattr(legacy_customer, "name", None)
+        or visit.prospect_name
+        or "-"
+    )
     return {
         "id": str(visit.id),
         "visit_no": visit.visit_no,
         "sales_user_id": visit.sales_user_id,
         "sales_user_name": getattr(visit.user, "name", None),
         "customer_id": visit.customer_id,
-        "customer_name": getattr(visit.customer, "name", None),
+        "customer_name": getattr(legacy_customer, "name", None),
+        "non_samprox_customer_id": str(visit.non_samprox_customer_id) if visit.non_samprox_customer_id else None,
+        "non_samprox_customer_name": getattr(non_samprox_customer, "customer_name", None),
+        "non_samprox_customer_code": getattr(non_samprox_customer, "customer_code", None),
+        "non_samprox_customer_city": getattr(non_samprox_customer, "city", None),
+        "customer_display_name": display_name,
         "prospect_name": visit.prospect_name,
         "visit_date": visit.visit_date.isoformat() if visit.visit_date else None,
         "planned": bool(visit.planned),
@@ -150,6 +165,24 @@ def _guard_roles():
         return jsonify({"ok": False, "error": "Access denied"}), 403
 
 
+def _load_non_samprox_customer(customer_id: object, role: RoleEnum, user: User) -> tuple[Optional[NonSamproxCustomer], Optional[tuple]]:
+    try:
+        parsed_id = str(uuid.UUID(str(customer_id)))
+    except (TypeError, ValueError):
+        return None, (jsonify({"ok": False, "error": "Invalid non_samprox_customer_id"}), 400)
+
+    customer = NonSamproxCustomer.query.get(parsed_id)
+    if not customer:
+        return None, (jsonify({"ok": False, "error": "Non Samprox customer not found"}), 404)
+
+    if role == RoleEnum.sales and customer.managed_by_user_id != user.id:
+        return None, (jsonify({"ok": False, "error": "Not authorized for this customer"}), 403)
+    if role == RoleEnum.outside_manager and customer.managed_by_user_id not in _manager_sales_ids(user.id) | {user.id}:
+        return None, (jsonify({"ok": False, "error": "Not authorized for this customer"}), 403)
+
+    return customer, None
+
+
 @bp.get("")
 def list_visits():
     role = _current_role()
@@ -203,9 +236,7 @@ def create_visit():
     payload = request.get_json() or {}
     customer_id = payload.get("customer_id")
     prospect_name = (payload.get("prospect_name") or "").strip() or None
-
-    if not customer_id and not prospect_name:
-        return jsonify({"ok": False, "error": "customer_id or prospect_name is required"}), 400
+    non_samprox_customer_id = payload.get("non_samprox_customer_id")
 
     target_user_id = user.id
     if payload.get("sales_user_id"):
@@ -228,12 +259,19 @@ def create_visit():
         if not customer:
             return jsonify({"ok": False, "error": "Customer not found"}), 404
 
+    non_samprox_customer = None
+    if non_samprox_customer_id:
+        non_samprox_customer, error = _load_non_samprox_customer(non_samprox_customer_id, role, user)
+        if error:
+            return error
+
     visit_date_value = _parse_date(payload.get("visit_date")) or datetime.now(tz=COLOMBO_TZ).date()
 
     visit = SalesVisit(
         visit_no=SalesVisit.generate_visit_no(visit_date_value),
         sales_user_id=target_user_id,
         customer_id=customer.id if customer else None,
+        non_samprox_customer_id=non_samprox_customer.id if non_samprox_customer else None,
         prospect_name=prospect_name,
         visit_date=visit_date_value,
         planned=bool(payload.get("planned")),
@@ -292,6 +330,14 @@ def update_visit(visit_id: str):
             if not customer:
                 return jsonify({"ok": False, "error": "Customer not found"}), 404
             visit.customer_id = cid
+    if payload.get("non_samprox_customer_id") is not None:
+        if payload.get("non_samprox_customer_id") == "":
+            visit.non_samprox_customer_id = None
+        else:
+            non_samprox_customer, error = _load_non_samprox_customer(payload.get("non_samprox_customer_id"), role, user)
+            if error:
+                return error
+            visit.non_samprox_customer_id = non_samprox_customer.id
     visit.prospect_name = (payload.get("prospect_name") or "").strip() or None
     if payload.get("visit_date"):
         parsed_date = _parse_date(payload.get("visit_date"))

@@ -1634,6 +1634,30 @@ class SalesTeamMember(db.Model):
     __table_args__ = (UniqueConstraint("manager_user_id", "sales_user_id", name="uq_sales_team_member_pair"),)
 
 
+class NonSamproxCustomer(db.Model):
+    __tablename__ = "non_samprox_customers"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    customer_code = db.Column(db.String(30), nullable=False, unique=True)
+    customer_name = db.Column(db.Text, nullable=False)
+    area_code = db.Column(db.String(5), nullable=True)
+    city = db.Column(db.String(80), nullable=True)
+    district = db.Column(db.String(80), nullable=True)
+    province = db.Column(db.String(80), nullable=True)
+    managed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    managed_by = db.relationship("User", foreign_keys=[managed_by_user_id])
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        db.Index("ix_non_samprox_customers_city_district", "city", "district"),
+    )
+
+
 class SalesVisit(db.Model):
     __tablename__ = "sales_visits"
 
@@ -1641,6 +1665,7 @@ class SalesVisit(db.Model):
     visit_no = db.Column(db.String(40), nullable=False, unique=True, index=True)
     sales_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=True, index=True)
+    non_samprox_customer_id = db.Column(GUID(), db.ForeignKey("non_samprox_customers.id"), nullable=True, index=True)
     prospect_name = db.Column(db.Text, nullable=True)
     visit_date = db.Column(db.Date, nullable=False, server_default=func.current_date(), index=True)
     planned = db.Column(db.Boolean, nullable=False, default=False)
@@ -1676,6 +1701,9 @@ class SalesVisit(db.Model):
 
     user = db.relationship("User", foreign_keys=[sales_user_id])
     customer = db.relationship("Customer", backref=db.backref("sales_visits", cascade="all, delete-orphan"))
+    non_samprox_customer = db.relationship(
+        "NonSamproxCustomer", backref=db.backref("sales_visits", cascade="all, delete-orphan")
+    )
     approver = db.relationship("User", foreign_keys=[approved_by])
     creator = db.relationship("User", foreign_keys=[created_by])
     updater = db.relationship("User", foreign_keys=[updated_by])

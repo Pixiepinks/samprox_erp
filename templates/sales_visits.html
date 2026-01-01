@@ -103,8 +103,16 @@
                         <input type="date" id="visit-date" required />
                     </label>
                     <label class="form-field">
-                        <span>Customer ID (optional)</span>
-                        <input type="number" id="visit-customer" placeholder="Customer id" />
+                        <span>Non Samprox Customer (optional)</span>
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <div style="flex: 1;">
+                                <input type="text" id="non-samprox-search" placeholder="Search code, name, city" />
+                                <select id="visit-non-samprox" style="margin-top: 0.25rem; width: 100%;">
+                                    <option value="">Select customer (optional)</option>
+                                </select>
+                            </div>
+                            <button type="button" class="button button--secondary button--small" id="open-customer-modal">Create customer</button>
+                        </div>
                     </label>
                     <label class="form-field">
                         <span>Prospect name (if no customer)</span>
@@ -127,6 +135,57 @@
             <footer class="modal__footer">
                 <button class="button button--ghost" data-modal-dismiss>Cancel</button>
                 <button class="button button--primary" id="visit-save">Save</button>
+            </footer>
+        </div>
+    </div>
+
+    <div class="modal" id="non-samprox-modal" hidden>
+        <div class="modal__overlay" data-modal-dismiss></div>
+        <div class="modal__content">
+            <header class="modal__header">
+                <h2>Create Non Samprox Customer</h2>
+                <button class="modal__close" data-modal-dismiss aria-label="Close">×</button>
+            </header>
+            <div class="modal__body">
+                <div class="alert alert--error" id="non-samprox-error" hidden></div>
+                <form id="non-samprox-form" class="form-grid">
+                    <label class="form-field">
+                        <span>Customer Code</span>
+                        <input type="text" id="ns-customer-code" required />
+                    </label>
+                    <label class="form-field">
+                        <span>Customer Name</span>
+                        <input type="text" id="ns-customer-name" required />
+                    </label>
+                    <label class="form-field">
+                        <span>Area Code</span>
+                        <input type="text" id="ns-area-code" />
+                    </label>
+                    <label class="form-field">
+                        <span>City</span>
+                        <input type="text" id="ns-city" />
+                    </label>
+                    <label class="form-field">
+                        <span>District</span>
+                        <input type="text" id="ns-district" />
+                    </label>
+                    <label class="form-field">
+                        <span>Province</span>
+                        <input type="text" id="ns-province" />
+                    </label>
+                    <label class="form-field">
+                        <span>Managed By</span>
+                        <select id="ns-managed-by"></select>
+                    </label>
+                    <label class="form-field">
+                        <span>Company Name</span>
+                        <select id="ns-company" required></select>
+                    </label>
+                </form>
+            </div>
+            <footer class="modal__footer">
+                <button class="button button--ghost" data-modal-dismiss>Cancel</button>
+                <button class="button button--primary" id="ns-save">Save</button>
             </footer>
         </div>
     </div>
@@ -218,13 +277,27 @@
             visitModal: document.getElementById("visit-modal"),
             visitModalError: document.getElementById("visit-modal-error"),
             visitDate: document.getElementById("visit-date"),
-            visitCustomer: document.getElementById("visit-customer"),
+            visitNonSamprox: document.getElementById("visit-non-samprox"),
+            visitNonSamproxSearch: document.getElementById("non-samprox-search"),
             visitProspect: document.getElementById("visit-prospect"),
             visitPurpose: document.getElementById("visit-purpose"),
             visitRemarks: document.getElementById("visit-remarks"),
             visitPlanned: document.getElementById("visit-planned"),
             visitSave: document.getElementById("visit-save"),
             visitForm: document.getElementById("visit-form"),
+            openCustomerModal: document.getElementById("open-customer-modal"),
+            nonSamproxModal: document.getElementById("non-samprox-modal"),
+            nonSamproxForm: document.getElementById("non-samprox-form"),
+            nonSamproxError: document.getElementById("non-samprox-error"),
+            nsCustomerCode: document.getElementById("ns-customer-code"),
+            nsCustomerName: document.getElementById("ns-customer-name"),
+            nsAreaCode: document.getElementById("ns-area-code"),
+            nsCity: document.getElementById("ns-city"),
+            nsDistrict: document.getElementById("ns-district"),
+            nsProvince: document.getElementById("ns-province"),
+            nsManagedBy: document.getElementById("ns-managed-by"),
+            nsCompany: document.getElementById("ns-company"),
+            nsSave: document.getElementById("ns-save"),
             attachmentModal: document.getElementById("attachment-modal"),
             attachmentUrl: document.getElementById("attachment-url"),
             attachmentType: document.getElementById("attachment-type"),
@@ -235,6 +308,8 @@
         let activeVisitId = null;
         let visits = [];
         let team = [];
+        let nonSamproxCustomers = [];
+        let companies = [];
 
         function getLiveLocation() {
             return new Promise((resolve, reject) => {
@@ -300,7 +375,7 @@
                 row.innerHTML = `
                     <td>${visit.visit_no}</td>
                     <td>${visit.visit_date || ""}</td>
-                    <td>${visit.customer_name || visit.prospect_name || "-"}</td>
+                    <td>${visit.customer_display_name || visit.customer_name || visit.prospect_name || "-"}</td>
                     <td>${visit.purpose || ""}</td>
                     <td>${visit.check_in_time ? formatTime(visit.check_in_time) : "—"}</td>
                     <td>${visit.check_out_time ? formatTime(visit.check_out_time) : "—"}</td>
@@ -367,6 +442,112 @@
             renderVisits();
         }
 
+        function upsertNonSamproxOption(customer) {
+            if (!customer) return;
+            const exists = Array.from(elements.visitNonSamprox.options || []).some((opt) => opt.value === customer.id);
+            if (!exists) {
+                const option = document.createElement("option");
+                const cityLabel = customer.city ? ` (${customer.city})` : "";
+                option.value = customer.id;
+                option.textContent = `${customer.customer_code} — ${customer.customer_name}${cityLabel}`;
+                elements.visitNonSamprox.appendChild(option);
+            }
+        }
+
+        function renderNonSamproxOptions(selectedId = "") {
+            elements.visitNonSamprox.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select customer (optional)";
+            elements.visitNonSamprox.appendChild(placeholder);
+            nonSamproxCustomers.forEach((customer) => {
+                const option = document.createElement("option");
+                const cityLabel = customer.city ? ` (${customer.city})` : "";
+                option.value = customer.id;
+                option.textContent = `${customer.customer_code} — ${customer.customer_name}${cityLabel}`;
+                elements.visitNonSamprox.appendChild(option);
+            });
+            if (selectedId) {
+                elements.visitNonSamprox.value = selectedId;
+            }
+        }
+
+        async function loadNonSamproxCustomers(searchTerm = "") {
+            const params = new URLSearchParams();
+            if (searchTerm) params.append("q", searchTerm);
+            const response = await authFetch(`/api/non-samprox-customers?${params.toString()}`);
+            const data = await response.json();
+            if (!data.ok) {
+                console.error(data.error || "Unable to load customers");
+                return;
+            }
+            nonSamproxCustomers = data.data || [];
+            renderNonSamproxOptions(elements.visitNonSamprox.value);
+        }
+
+        async function loadCompanies() {
+            if (companies.length) return;
+            const response = await authFetch("/api/companies");
+            const data = await response.json();
+            if (!data.ok) return;
+            companies = data.data || [];
+            elements.nsCompany.innerHTML = "";
+            const placeholder = document.createElement("option");
+            placeholder.value = "";
+            placeholder.textContent = "Select company";
+            elements.nsCompany.appendChild(placeholder);
+            companies.forEach((company) => {
+                const option = document.createElement("option");
+                option.value = company.id;
+                option.textContent = company.name;
+                elements.nsCompany.appendChild(option);
+            });
+        }
+
+        function buildManagedByOptions() {
+            const options = new Map();
+            if (user?.id && user?.name) {
+                options.set(user.id, { id: user.id, name: user.name, role: user.role });
+            }
+            if (user.role === "outside_manager") {
+                team.forEach((m) => {
+                    if (m.sales_user) options.set(m.sales_user.id, m.sales_user);
+                });
+            }
+            return Array.from(options.values());
+        }
+
+        async function populateManagedBySelect() {
+            elements.nsManagedBy.innerHTML = "";
+            let managedByChoices = [];
+            if (user.role === "admin") {
+                const response = await authFetch("/api/users");
+                const data = await response.json();
+                const items = Array.isArray(data) ? data : data?.data || [];
+                managedByChoices = items.filter((u) => u.role === "sales" || u.role === "outside_manager");
+            } else if (user.role === "outside_manager" || user.role === "sales") {
+                managedByChoices = buildManagedByOptions();
+            }
+
+            managedByChoices.forEach((optionData) => {
+                const option = document.createElement("option");
+                option.value = optionData.id;
+                const roleLabel = optionData.role ? ` (${optionData.role})` : "";
+                option.textContent = `${optionData.name}${roleLabel}`;
+                elements.nsManagedBy.appendChild(option);
+            });
+
+            if (user.role === "sales") {
+                elements.nsManagedBy.value = user.id;
+                elements.nsManagedBy.disabled = true;
+            } else {
+                elements.nsManagedBy.disabled = false;
+                if (managedByChoices.length && !elements.nsManagedBy.value) {
+                    elements.nsManagedBy.value = managedByChoices[0].id;
+                }
+            }
+        }
+
         async function loadTeam() {
             if (!["admin", "outside_manager"].includes(user.role)) return;
             elements.filterSalesContainer.hidden = false;
@@ -399,6 +580,8 @@
             activeVisitId = null;
             elements.visitForm.reset();
             elements.visitDate.valueAsDate = new Date();
+            renderNonSamproxOptions();
+            elements.visitNonSamproxSearch.value = "";
             openModal(elements.visitModal);
         });
 
@@ -406,7 +589,7 @@
             elements.visitModalError.hidden = true;
             const payload = {
                 visit_date: elements.visitDate.value,
-                customer_id: elements.visitCustomer.value || null,
+                non_samprox_customer_id: elements.visitNonSamprox.value || null,
                 prospect_name: elements.visitProspect.value,
                 purpose: elements.visitPurpose.value,
                 remarks: elements.visitRemarks.value,
@@ -436,7 +619,16 @@
                 if (!visit) return;
                 activeVisitId = visitId;
                 elements.visitDate.value = visit.visit_date || "";
-                elements.visitCustomer.value = visit.customer_id || "";
+                elements.visitNonSamprox.value = visit.non_samprox_customer_id || "";
+                if (visit.non_samprox_customer_id && visit.non_samprox_customer_name) {
+                    upsertNonSamproxOption({
+                        id: visit.non_samprox_customer_id,
+                        customer_code: visit.non_samprox_customer_code || "",
+                        customer_name: visit.non_samprox_customer_name || "",
+                        city: visit.non_samprox_customer_city || "",
+                    });
+                    elements.visitNonSamprox.value = visit.non_samprox_customer_id;
+                }
                 elements.visitProspect.value = visit.prospect_name || "";
                 elements.visitPurpose.value = visit.purpose || "";
                 elements.visitRemarks.value = visit.remarks || "";
@@ -521,7 +713,62 @@
             });
         });
 
-        loadTeam().finally(loadVisits);
+        elements.visitNonSamproxSearch.addEventListener("input", () => {
+            const term = elements.visitNonSamproxSearch.value;
+            loadNonSamproxCustomers(term);
+        });
+
+        elements.openCustomerModal.addEventListener("click", async () => {
+            await loadCompanies();
+            await populateManagedBySelect();
+            elements.nonSamproxForm.reset();
+            if (user.role === "sales") {
+                elements.nsManagedBy.value = user.id;
+                elements.nsManagedBy.disabled = true;
+            }
+            elements.nonSamproxError.hidden = true;
+            openModal(elements.nonSamproxModal);
+        });
+
+        elements.nsSave.addEventListener("click", async () => {
+            elements.nonSamproxError.hidden = true;
+            const payload = {
+                customer_code: elements.nsCustomerCode.value,
+                customer_name: elements.nsCustomerName.value,
+                area_code: elements.nsAreaCode.value,
+                city: elements.nsCity.value,
+                district: elements.nsDistrict.value,
+                province: elements.nsProvince.value,
+                company_id: elements.nsCompany.value,
+            };
+            if (user.role !== "sales" && elements.nsManagedBy.value) {
+                payload.managed_by_user_id = Number(elements.nsManagedBy.value);
+            }
+            const response = await authFetch("/api/non-samprox-customers", {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!data.ok) {
+                elements.nonSamproxError.textContent = data.error || "Unable to create customer";
+                elements.nonSamproxError.hidden = false;
+                return;
+            }
+            const created = data.data;
+            closeModal(elements.nonSamproxModal);
+            await loadNonSamproxCustomers(elements.visitNonSamproxSearch.value);
+            if (created?.id) {
+                upsertNonSamproxOption(created);
+                elements.visitNonSamprox.value = created.id;
+            }
+        });
+
+        loadTeam()
+            .catch(() => {})
+            .finally(async () => {
+                await loadNonSamproxCustomers();
+                await loadVisits();
+            });
     </script>
 </body>
 </html>

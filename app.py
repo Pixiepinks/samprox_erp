@@ -65,6 +65,8 @@ from routes import (
     ui,
     users,
     financials,
+    companies,
+    non_samprox_customers,
     sales_visits,
 )
 
@@ -216,6 +218,8 @@ def create_app():
     app.register_blueprint(team.bp)
     app.register_blueprint(ui.bp)
     app.register_blueprint(users.bp)
+    app.register_blueprint(companies.bp)
+    app.register_blueprint(non_samprox_customers.bp)
     app.register_blueprint(sales_visits.bp)
 
     @app.get("/api/health")

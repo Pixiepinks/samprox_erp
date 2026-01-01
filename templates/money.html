@@ -21,6 +21,7 @@
             </div>
             <div class="topbar__actions">
                 <a class="button button--ghost" href="{{ url_for('ui.mind_page') }}">Mind</a>
+                <a class="button button--ghost" id="sales-visits-link" href="{{ url_for('ui.sales_visits_page') }}" hidden>Sales Visits</a>
                 <div class="user-summary">
                     <span class="user-summary__name" id="user-name"></span>
                     <span class="user-summary__role" id="user-role"></span>
@@ -534,6 +535,7 @@
         const logoutButton = document.getElementById("logout");
         const mechanismLink = document.getElementById("mechanism-link");
         const primaryNavLink = document.querySelector(".topbar__actions .button--ghost");
+        const salesVisitsLink = document.getElementById("sales-visits-link");
         const subnavLinks = document.querySelectorAll(".subnav__link");
 
         userNameEl.textContent = user?.name || "Unknown";
@@ -544,6 +546,9 @@
             } else {
                 mechanismLink.remove();
             }
+        }
+        if (salesVisitsLink && ["sales", "outside_manager", "admin"].includes(normalizedRole)) {
+            salesVisitsLink.hidden = false;
         }
 
         if (isPettyOnly) {

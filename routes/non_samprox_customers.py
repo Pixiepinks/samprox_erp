@@ -372,6 +372,7 @@ def update_customer(customer_id):
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
-        return jsonify({"ok": False, "error": "Unable to update customer", "details": str(exc.orig) if hasattr(exc, \"orig\") else None}), 400
+        details = str(exc.orig) if hasattr(exc, "orig") else None
+        return jsonify({"ok": False, "error": "Unable to update customer", "details": details}), 400
 
     return jsonify({"ok": True, "data": _serialize_customer(customer)})

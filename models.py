@@ -1638,7 +1638,7 @@ class NonSamproxCustomer(db.Model):
     __tablename__ = "non_samprox_customers"
 
     id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
-    customer_code = db.Column(db.String(30), nullable=False, unique=True)
+    customer_code = db.Column(db.String(6), nullable=False, unique=True)
     customer_name = db.Column(db.Text, nullable=False)
     area_code = db.Column(db.String(5), nullable=True)
     city = db.Column(db.String(80), nullable=True)

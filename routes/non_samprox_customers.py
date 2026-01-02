@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
@@ -11,6 +13,35 @@ from extensions import db
 from models import Company, NonSamproxCustomer, RoleEnum, SalesTeamMember, User
 
 bp = Blueprint("non_samprox_customers", __name__, url_prefix="/api/non-samprox-customers")
+COLOMBO_TZ = ZoneInfo("Asia/Colombo")
+
+
+def _now_colombo() -> datetime:
+    return datetime.now(tz=COLOMBO_TZ)
+
+
+def generate_non_samprox_customer_code(*, lock: bool = True) -> str:
+    now = _now_colombo()
+    year_suffix = now.year % 100
+    prefix = f"{year_suffix:02d}"
+
+    query = (
+        NonSamproxCustomer.query.filter(NonSamproxCustomer.customer_code.like(f"{prefix}____"))
+        .order_by(NonSamproxCustomer.customer_code.desc())
+    )
+    try:
+        latest = query.with_for_update().first() if lock and hasattr(query, "with_for_update") else query.first()
+    except Exception:
+        latest = query.first()
+
+    next_seq = 1
+    if latest and latest.customer_code and latest.customer_code.startswith(prefix):
+        try:
+            next_seq = int(latest.customer_code[2:]) + 1
+        except ValueError:
+            next_seq = 1
+
+    return f"{year_suffix:02d}{next_seq:04d}"
 
 
 def _current_user() -> Optional[User]:
@@ -122,6 +153,17 @@ def list_customers():
     return jsonify({"ok": True, "data": [_serialize_customer(c) for c in customers]})
 
 
+@bp.get("/next-code")
+def preview_next_code():
+    role = _current_role()
+    user = _current_user()
+    if not user or not role:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    next_code = generate_non_samprox_customer_code(lock=False)
+    return jsonify({"ok": True, "data": {"next_code": next_code}, "next_code": next_code})
+
+
 @bp.post("")
 def create_customer():
     role = _current_role()
@@ -130,7 +172,6 @@ def create_customer():
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
     payload = request.get_json() or {}
-    customer_code = (payload.get("customer_code") or "").strip()
     customer_name = (payload.get("customer_name") or "").strip()
     area_code = (payload.get("area_code") or "").strip() or None
     city = (payload.get("city") or "").strip() or None
@@ -138,8 +179,8 @@ def create_customer():
     province = (payload.get("province") or "").strip() or None
     company_raw = payload.get("company_id")
 
-    if not customer_code or not customer_name:
-        return jsonify({"ok": False, "error": "customer_code and customer_name are required"}), 400
+    if not customer_name:
+        return jsonify({"ok": False, "error": "customer_name is required"}), 400
 
     try:
         company_id = int(company_raw)
@@ -173,25 +214,27 @@ def create_customer():
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid managed_by_user_id"}), 400
 
-    existing = NonSamproxCustomer.query.filter(NonSamproxCustomer.customer_code == customer_code).first()
-    if existing:
-        return jsonify({"ok": False, "error": "Customer code already exists"}), 400
+    attempts = 0
+    while attempts < 2:
+        attempts += 1
+        customer_code = generate_non_samprox_customer_code()
+        customer = NonSamproxCustomer(
+            customer_code=customer_code,
+            customer_name=customer_name,
+            area_code=area_code,
+            city=city,
+            district=district,
+            province=province,
+            managed_by_user_id=managed_by,
+            company_id=company.id,
+        )
+        db.session.add(customer)
+        try:
+            db.session.commit()
+            return jsonify({"ok": True, "data": _serialize_customer(customer)}), 201
+        except IntegrityError:
+            db.session.rollback()
+            if attempts >= 2:
+                return jsonify({"ok": False, "error": "Customer code already exists, please retry"}), 400
 
-    customer = NonSamproxCustomer(
-        customer_code=customer_code,
-        customer_name=customer_name,
-        area_code=area_code,
-        city=city,
-        district=district,
-        province=province,
-        managed_by_user_id=managed_by,
-        company_id=company.id,
-    )
-    db.session.add(customer)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"ok": False, "error": "Customer code already exists"}), 400
-
-    return jsonify({"ok": True, "data": _serialize_customer(customer)}), 201
+    return jsonify({"ok": False, "error": "Unable to create customer"}), 500

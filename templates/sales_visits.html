@@ -111,7 +111,10 @@
                                     <option value="">Select customer (optional)</option>
                                 </select>
                             </div>
-                            <button type="button" class="button button--secondary button--small" id="open-customer-modal">Create customer</button>
+                            <div style="display: flex; gap: 0.35rem;">
+                                <button type="button" class="button button--secondary button--small" id="open-customer-modal">Create customer</button>
+                                <button type="button" class="button button--ghost button--small" id="edit-customer" type="button">Edit customer</button>
+                            </div>
                         </div>
                     </label>
                     <label class="form-field">
@@ -142,8 +145,12 @@
     <div class="modal" id="non-samprox-modal" hidden>
         <div class="modal__overlay" data-modal-dismiss></div>
         <div class="modal__content">
-            <header class="modal__header">
-                <h2>Create Non Samprox Customer</h2>
+            <header class="modal__header" style="display:flex; align-items:center; justify-content: space-between; gap: 0.5rem;">
+                <div>
+                    <h2 id="non-samprox-title">Create Non Samprox Customer</h2>
+                    <p id="non-samprox-subtitle" class="eyebrow" style="margin-top: 0.1rem;"></p>
+                </div>
+                <button class="button button--ghost button--small" id="cancel-edit" hidden type="button">Cancel edit</button>
                 <button class="modal__close" data-modal-dismiss aria-label="Close">×</button>
             </header>
             <div class="modal__body">
@@ -180,6 +187,13 @@
                     <label class="form-field">
                         <span>Company Name</span>
                         <select id="ns-company" required></select>
+                    </label>
+                    <label class="form-field" id="ns-active-field" hidden>
+                        <span>Active</span>
+                        <select id="ns-active">
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
                     </label>
                 </form>
             </div>
@@ -286,9 +300,13 @@
             visitSave: document.getElementById("visit-save"),
             visitForm: document.getElementById("visit-form"),
             openCustomerModal: document.getElementById("open-customer-modal"),
+            editCustomer: document.getElementById("edit-customer"),
             nonSamproxModal: document.getElementById("non-samprox-modal"),
             nonSamproxForm: document.getElementById("non-samprox-form"),
             nonSamproxError: document.getElementById("non-samprox-error"),
+            nonSamproxTitle: document.getElementById("non-samprox-title"),
+            nonSamproxSubtitle: document.getElementById("non-samprox-subtitle"),
+            cancelEdit: document.getElementById("cancel-edit"),
             nsCustomerCode: document.getElementById("ns-customer-code"),
             nsCustomerName: document.getElementById("ns-customer-name"),
             nsAreaCode: document.getElementById("ns-area-code"),
@@ -297,6 +315,8 @@
             nsProvince: document.getElementById("ns-province"),
             nsManagedBy: document.getElementById("ns-managed-by"),
             nsCompany: document.getElementById("ns-company"),
+            nsActiveField: document.getElementById("ns-active-field"),
+            nsActive: document.getElementById("ns-active"),
             nsSave: document.getElementById("ns-save"),
             attachmentModal: document.getElementById("attachment-modal"),
             attachmentUrl: document.getElementById("attachment-url"),
@@ -310,6 +330,8 @@
         let team = [];
         let nonSamproxCustomers = [];
         let companies = [];
+        let nonSamproxMode = "create";
+        let editingCustomerId = null;
 
         function getLiveLocation() {
             return new Promise((resolve, reject) => {
@@ -470,6 +492,30 @@
             if (selectedId) {
                 elements.visitNonSamprox.value = selectedId;
             }
+            toggleEditCustomerButton();
+        }
+
+        function toggleEditCustomerButton() {
+            const selectedId = elements.visitNonSamprox.value;
+            const allowedRoles = ["sales", "outside_manager", "admin"];
+            if (!allowedRoles.includes(user.role)) {
+                elements.editCustomer.hidden = true;
+                return;
+            }
+            elements.editCustomer.hidden = false;
+            const disabled = !selectedId;
+            elements.editCustomer.disabled = disabled;
+            elements.editCustomer.classList.toggle("button--ghost-disabled", disabled);
+        }
+
+        function updateNonSamproxCache(customer) {
+            if (!customer?.id) return;
+            const idx = nonSamproxCustomers.findIndex((c) => c.id === customer.id);
+            if (idx >= 0) {
+                nonSamproxCustomers[idx] = customer;
+            } else {
+                nonSamproxCustomers.push(customer);
+            }
         }
 
         async function loadNonSamproxCustomers(searchTerm = "") {
@@ -583,6 +629,10 @@
             renderNonSamproxOptions();
             elements.visitNonSamproxSearch.value = "";
             openModal(elements.visitModal);
+        });
+
+        elements.visitNonSamprox.addEventListener("change", () => {
+            toggleEditCustomerButton();
         });
 
         elements.visitSave.addEventListener("click", async () => {
@@ -733,19 +783,104 @@
             }
         }
 
+        function setNonSamproxMode(mode, customer = null) {
+            nonSamproxMode = mode;
+            editingCustomerId = mode === "edit" && customer?.id ? customer.id : null;
+            elements.nonSamproxTitle.textContent = mode === "edit" ? "Edit Non Samprox Customer" : "Create Non Samprox Customer";
+            elements.nsSave.textContent = mode === "edit" ? "Update" : "Save";
+            elements.cancelEdit.hidden = mode !== "edit";
+            elements.nonSamproxSubtitle.textContent =
+                mode === "edit" && customer ? `${customer.customer_code || ""} — ${customer.customer_name || ""}` : "";
+            if (user.role === "sales") {
+                elements.nsManagedBy.disabled = true;
+            } else {
+                elements.nsManagedBy.disabled = false;
+            }
+            const showActive = user.role === "outside_manager" || user.role === "admin";
+            elements.nsActiveField.hidden = !showActive;
+            if (!showActive) {
+                elements.nsActive.value = "true";
+            } else if (mode === "create") {
+                elements.nsActive.value = "true";
+            }
+        }
+
+        function populateNonSamproxForm(customer) {
+            elements.nsCustomerCode.value = customer?.customer_code || "";
+            elements.nsCustomerName.value = customer?.customer_name || "";
+            elements.nsAreaCode.value = customer?.area_code || "";
+            elements.nsCity.value = customer?.city || "";
+            elements.nsDistrict.value = customer?.district || "";
+            elements.nsProvince.value = customer?.province || "";
+            if (customer?.managed_by_user_id) {
+                elements.nsManagedBy.value = customer.managed_by_user_id;
+            }
+            if (customer?.company_id) {
+                elements.nsCompany.value = customer.company_id;
+            }
+            if (customer?.is_active != null) {
+                elements.nsActive.value = String(Boolean(customer.is_active));
+            } else {
+                elements.nsActive.value = "true";
+            }
+        }
+
         elements.openCustomerModal.addEventListener("click", async () => {
             await loadCompanies();
             await populateManagedBySelect();
             elements.nonSamproxForm.reset();
+            setNonSamproxMode("create");
             if (user.role === "sales") {
                 elements.nsManagedBy.value = user.id;
                 elements.nsManagedBy.disabled = true;
             }
             elements.nsCustomerCode.readOnly = true;
             elements.nsCustomerCode.placeholder = "Auto-generated";
+            elements.nonSamproxError.hidden = true;
+            await loadNextNonSamproxCode();
+            openModal(elements.nonSamproxModal);
+        });
+
+        elements.cancelEdit.addEventListener("click", async () => {
+            setNonSamproxMode("create");
+            elements.nonSamproxForm.reset();
             await loadNextNonSamproxCode();
             elements.nonSamproxError.hidden = true;
-            openModal(elements.nonSamproxModal);
+        });
+
+        elements.editCustomer.addEventListener("click", async () => {
+            const selectedId = elements.visitNonSamprox.value;
+            if (!selectedId) {
+                alert("Select a customer first.");
+                return;
+            }
+            await loadCompanies();
+            await populateManagedBySelect();
+            elements.nonSamproxError.hidden = true;
+            elements.nonSamproxForm.reset();
+            try {
+                const response = await authFetch(`/api/non-samprox-customers/${selectedId}`);
+                const data = await response.json();
+                if (!data.ok) {
+                    const message =
+                        response.status === 403
+                            ? "You do not have permission to edit this customer."
+                            : data.error || "Unable to load customer";
+                    alert(message);
+                    return;
+                }
+                const customer = data.data;
+                setNonSamproxMode("edit", customer);
+                populateNonSamproxForm(customer);
+                elements.nsCustomerCode.readOnly = true;
+                if (user.role === "sales") {
+                    elements.nsManagedBy.disabled = true;
+                }
+                openModal(elements.nonSamproxModal);
+            } catch (err) {
+                console.error(err);
+                alert("Unable to load customer");
+            }
         });
 
         elements.nsSave.addEventListener("click", async () => {
@@ -758,26 +893,43 @@
                 province: elements.nsProvince.value,
                 company_id: elements.nsCompany.value,
             };
+
             if (user.role !== "sales" && elements.nsManagedBy.value) {
                 payload.managed_by_user_id = Number(elements.nsManagedBy.value);
             }
-            const response = await authFetch("/api/non-samprox-customers", {
-                method: "POST",
+            if ((user.role === "outside_manager" || user.role === "admin") && nonSamproxMode === "edit") {
+                payload.is_active = elements.nsActive.value === "true";
+            }
+
+            const isEdit = nonSamproxMode === "edit" && editingCustomerId;
+            const url = isEdit ? `/api/non-samprox-customers/${editingCustomerId}` : "/api/non-samprox-customers";
+            const method = isEdit ? "PUT" : "POST";
+            const response = await authFetch(url, {
+                method,
                 body: JSON.stringify(payload),
             });
             const data = await response.json();
             if (!data.ok) {
-                elements.nonSamproxError.textContent = data.error || "Unable to create customer";
+                const message =
+                    response.status === 403
+                        ? "You do not have permission to edit this customer."
+                        : data.error || "Unable to save customer";
+                elements.nonSamproxError.textContent = message;
                 elements.nonSamproxError.hidden = false;
                 return;
             }
-            const created = data.data;
+            const saved = data.data;
             closeModal(elements.nonSamproxModal);
-            await loadNonSamproxCustomers(elements.visitNonSamproxSearch.value);
-            if (created?.id) {
-                upsertNonSamproxOption(created);
-                elements.visitNonSamprox.value = created.id;
+            updateNonSamproxCache(saved);
+            renderNonSamproxOptions(saved?.id || elements.visitNonSamprox.value);
+            if (saved?.id) {
+                elements.visitNonSamprox.value = saved.id;
             }
+            await loadNonSamproxCustomers(elements.visitNonSamproxSearch.value);
+            if (saved?.id) {
+                elements.visitNonSamprox.value = saved.id;
+            }
+            setNonSamproxMode("create");
         });
 
         loadTeam()

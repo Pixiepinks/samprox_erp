@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
+import uuid
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
@@ -107,6 +108,52 @@ def _scoped_query(user: User, role: RoleEnum):
     return query
 
 
+def _load_customer(customer_id: object, user: User, role: RoleEnum):
+    try:
+        parsed_id = str(uuid.UUID(str(customer_id)))
+    except (TypeError, ValueError):
+        return None, (jsonify({"ok": False, "error": "Invalid customer id"}), 400)
+
+    customer = NonSamproxCustomer.query.get(parsed_id)
+    if not customer:
+        return None, (jsonify({"ok": False, "error": "Non Samprox customer not found"}), 404)
+
+    if role == RoleEnum.sales and customer.managed_by_user_id != user.id:
+        return None, (jsonify({"ok": False, "error": "Not authorized for this customer"}), 403)
+
+    if role == RoleEnum.outside_manager:
+        if customer.managed_by_user_id not in (_manager_sales_ids(user.id) | {user.id}):
+            return None, (jsonify({"ok": False, "error": "Not authorized for this customer"}), 403)
+
+    return customer, None
+
+
+def _validate_company(company_id_raw: object):
+    try:
+        company_id = int(company_id_raw)
+    except (TypeError, ValueError):
+        return None, (jsonify({"ok": False, "error": "Invalid company_id"}), 400)
+
+    company = Company.query.get(company_id)
+    if not company:
+        return None, (jsonify({"ok": False, "error": "Company not found"}), 404)
+    return company, None
+
+
+def _parse_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        if value.lower() in {"true", "1", "yes", "y"}:
+            return True
+        if value.lower() in {"false", "0", "no", "n"}:
+            return False
+    try:
+        return bool(int(value))
+    except Exception:
+        return bool(value)
+
+
 @bp.get("")
 def list_customers():
     role = _current_role()
@@ -151,6 +198,20 @@ def list_customers():
 
     customers = query.order_by(NonSamproxCustomer.customer_code.asc()).all()
     return jsonify({"ok": True, "data": [_serialize_customer(c) for c in customers]})
+
+
+@bp.get("/<customer_id>")
+def get_customer(customer_id):
+    role = _current_role()
+    user = _current_user()
+    if not user or not role:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    customer, error = _load_customer(customer_id, user, role)
+    if error:
+        return error
+
+    return jsonify({"ok": True, "data": _serialize_customer(customer)})
 
 
 @bp.get("/next-code")
@@ -238,3 +299,79 @@ def create_customer():
                 return jsonify({"ok": False, "error": "Customer code already exists, please retry"}), 400
 
     return jsonify({"ok": False, "error": "Unable to create customer"}), 500
+
+
+@bp.put("/<customer_id>")
+def update_customer(customer_id):
+    role = _current_role()
+    user = _current_user()
+    if not user or not role:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    customer, error = _load_customer(customer_id, user, role)
+    if error:
+        return error
+
+    payload = request.get_json() or {}
+
+    # Prevent changing code even if sent
+    payload.pop("customer_code", None)
+
+    allowed_fields = {
+        "customer_name",
+        "area_code",
+        "city",
+        "district",
+        "province",
+        "company_id",
+    }
+
+    if role in {RoleEnum.outside_manager, RoleEnum.admin}:
+        allowed_fields |= {"managed_by_user_id", "is_active"}
+
+    updates = {key: payload.get(key) for key in allowed_fields if key in payload}
+
+    if "customer_name" in updates:
+        if not (updates["customer_name"] or "").strip():
+            return jsonify({"ok": False, "error": "customer_name is required"}), 400
+        customer.customer_name = updates["customer_name"].strip()
+
+    if "area_code" in updates:
+        customer.area_code = (updates["area_code"] or "").strip() or None
+    if "city" in updates:
+        customer.city = (updates["city"] or "").strip() or None
+    if "district" in updates:
+        customer.district = (updates["district"] or "").strip() or None
+    if "province" in updates:
+        customer.province = (updates["province"] or "").strip() or None
+
+    if "company_id" in updates:
+        company, err = _validate_company(updates["company_id"])
+        if err:
+            return err
+        customer.company_id = company.id
+
+    if "managed_by_user_id" in updates:
+        if role == RoleEnum.sales:
+            return jsonify({"ok": False, "error": "Not authorized to change managed_by"}), 403
+        try:
+            managed_by = int(updates["managed_by_user_id"])
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid managed_by_user_id"}), 400
+        if role == RoleEnum.outside_manager:
+            if managed_by not in (_manager_sales_ids(user.id) | {user.id}):
+                return jsonify({"ok": False, "error": "Not authorized for this managed_by_user_id"}), 403
+        customer.managed_by_user_id = managed_by
+
+    if "is_active" in updates:
+        if role == RoleEnum.sales:
+            return jsonify({"ok": False, "error": "Not authorized to change is_active"}), 403
+        customer.is_active = _parse_bool(updates["is_active"])
+
+    try:
+        db.session.commit()
+    except IntegrityError as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": "Unable to update customer", "details": str(exc.orig) if hasattr(exc, \"orig\") else None}), 400
+
+    return jsonify({"ok": True, "data": _serialize_customer(customer)})

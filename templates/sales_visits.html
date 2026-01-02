@@ -166,7 +166,8 @@
                     </label>
                     <label class="form-field">
                         <span>City</span>
-                        <input type="text" id="ns-city" />
+                        <input type="text" id="ns-city" list="ns-city-list" />
+                        <datalist id="ns-city-list"></datalist>
                     </label>
                     <label class="form-field">
                         <span>Area Code</span>
@@ -232,6 +233,7 @@
     <script>
         const token = localStorage.getItem("samprox_token");
         const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+        const locationDataUrl = "{{ url_for('static', filename='data/lk_locations.json') }}";
 
         if (!token || !user) {
             window.location.href = "/";
@@ -311,6 +313,7 @@
             nsCustomerName: document.getElementById("ns-customer-name"),
             nsAreaCode: document.getElementById("ns-area-code"),
             nsCity: document.getElementById("ns-city"),
+            nsCityList: document.getElementById("ns-city-list"),
             nsDistrict: document.getElementById("ns-district"),
             nsProvince: document.getElementById("ns-province"),
             nsManagedBy: document.getElementById("ns-managed-by"),
@@ -332,6 +335,8 @@
         let companies = [];
         let nonSamproxMode = "create";
         let editingCustomerId = null;
+        let locationData = [];
+        let locationLookup = new Map();
 
         function getLiveLocation() {
             return new Promise((resolve, reject) => {
@@ -783,6 +788,56 @@
             }
         }
 
+        function normalizeCityName(value = "") {
+            return value.trim().toLowerCase();
+        }
+
+        async function loadLocationData() {
+            if (locationData.length) return locationData;
+            try {
+                const response = await fetch(locationDataUrl);
+                if (!response.ok) throw new Error("Failed to fetch location data");
+                const data = await response.json();
+                locationData = Array.isArray(data) ? data : [];
+                locationLookup = new Map(locationData.map((item) => [normalizeCityName(item.city), item]));
+                renderCityOptions(elements.nsCity.value);
+            } catch (err) {
+                console.error("Unable to load location data", err);
+            }
+            return locationData;
+        }
+
+        function getCityMatches(term = "") {
+            const normalized = normalizeCityName(term);
+            if (!locationData.length) return [];
+            if (!normalized) return locationData.slice(0, 50);
+            return locationData.filter((item) => normalizeCityName(item.city).includes(normalized)).slice(0, 50);
+        }
+
+        function renderCityOptions(term = "") {
+            if (!locationData.length || !elements.nsCityList) return;
+            elements.nsCityList.innerHTML = "";
+            getCityMatches(term).forEach((item) => {
+                const option = document.createElement("option");
+                option.value = item.city;
+                option.label = `${item.city} — ${item.areaCode}`;
+                elements.nsCityList.appendChild(option);
+            });
+        }
+
+        function applyLocationForCity(cityName) {
+            const match = locationLookup.get(normalizeCityName(cityName));
+            if (match) {
+                elements.nsAreaCode.value = match.areaCode || "";
+                elements.nsDistrict.value = match.district || "";
+                elements.nsProvince.value = match.province || "";
+            } else if (!cityName) {
+                elements.nsAreaCode.value = "";
+                elements.nsDistrict.value = "";
+                elements.nsProvince.value = "";
+            }
+        }
+
         function setNonSamproxMode(mode, customer = null) {
             nonSamproxMode = mode;
             editingCustomerId = mode === "edit" && customer?.id ? customer.id : null;
@@ -812,6 +867,8 @@
             elements.nsCity.value = customer?.city || "";
             elements.nsDistrict.value = customer?.district || "";
             elements.nsProvince.value = customer?.province || "";
+            renderCityOptions(customer?.city || elements.nsCity.value);
+            applyLocationForCity(customer?.city || elements.nsCity.value);
             if (customer?.managed_by_user_id) {
                 elements.nsManagedBy.value = customer.managed_by_user_id;
             }
@@ -828,12 +885,15 @@
         elements.openCustomerModal.addEventListener("click", async () => {
             await loadCompanies();
             await populateManagedBySelect();
+            await loadLocationData();
             elements.nonSamproxForm.reset();
             setNonSamproxMode("create");
             if (user.role === "sales") {
                 elements.nsManagedBy.value = user.id;
                 elements.nsManagedBy.disabled = true;
             }
+            renderCityOptions();
+            applyLocationForCity("");
             elements.nsCustomerCode.readOnly = true;
             elements.nsCustomerCode.placeholder = "Auto-generated";
             elements.nonSamproxError.hidden = true;
@@ -856,6 +916,7 @@
             }
             await loadCompanies();
             await populateManagedBySelect();
+            await loadLocationData();
             elements.nonSamproxError.hidden = true;
             elements.nonSamproxForm.reset();
             try {
@@ -873,6 +934,8 @@
                 setNonSamproxMode("edit", customer);
                 populateNonSamproxForm(customer);
                 elements.nsCustomerCode.readOnly = true;
+                renderCityOptions(customer?.city || "");
+                applyLocationForCity(customer?.city || "");
                 if (user.role === "sales") {
                     elements.nsManagedBy.disabled = true;
                 }
@@ -932,6 +995,15 @@
             setNonSamproxMode("create");
         });
 
+        elements.nsCity.addEventListener("input", () => {
+            renderCityOptions(elements.nsCity.value);
+            applyLocationForCity(elements.nsCity.value);
+        });
+        elements.nsCity.addEventListener("change", () => {
+            applyLocationForCity(elements.nsCity.value);
+        });
+
+        loadLocationData();
         loadTeam()
             .catch(() => {})
             .finally(async () => {

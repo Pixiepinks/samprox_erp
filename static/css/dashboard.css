@@ -1522,6 +1522,26 @@ body {
     z-index: 3;
 }
 
+/* Sales Visits table: disable sticky/frozen columns */
+.table-container--scrollable #sales-visits-table td:nth-child(1),
+.table-container--scrollable #sales-visits-table td:nth-child(2) {
+    position: static !important;
+    left: auto !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
+.table-container--scrollable #sales-visits-table th:nth-child(1),
+.table-container--scrollable #sales-visits-table th:nth-child(2) {
+    position: sticky !important;
+    top: 0;
+    left: auto !important;
+    z-index: 1;
+    box-shadow: none !important;
+    background: rgba(226, 232, 240, 0.4) !important;
+}
+
 .team-table {
     width: 100%;
     border-collapse: collapse;

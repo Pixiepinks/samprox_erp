@@ -113,7 +113,7 @@
                             </div>
                             <div style="display: flex; gap: 0.35rem;">
                                 <button type="button" class="button button--secondary button--small" id="open-customer-modal">Create customer</button>
-                                <button type="button" class="button button--ghost button--small" id="edit-customer">Edit customer</button>
+                                <button type="button" class="button button--ghost button--small" id="edit-customer" type="button">Edit customer</button>
                             </div>
                         </div>
                     </label>
@@ -503,7 +503,9 @@
                 return;
             }
             elements.editCustomer.hidden = false;
-            elements.editCustomer.classList.toggle("button--ghost-disabled", !selectedId);
+            const disabled = !selectedId;
+            elements.editCustomer.disabled = disabled;
+            elements.editCustomer.classList.toggle("button--ghost-disabled", disabled);
         }
 
         function updateNonSamproxCache(customer) {

@@ -151,7 +151,7 @@
                 <form id="non-samprox-form" class="form-grid">
                     <label class="form-field">
                         <span>Customer Code</span>
-                        <input type="text" id="ns-customer-code" required />
+                        <input type="text" id="ns-customer-code" placeholder="Auto-generated" readonly />
                     </label>
                     <label class="form-field">
                         <span>Customer Name</span>
@@ -718,6 +718,21 @@
             loadNonSamproxCustomers(term);
         });
 
+        async function loadNextNonSamproxCode() {
+            elements.nsCustomerCode.value = "";
+            elements.nsCustomerCode.placeholder = "Auto-generated";
+            try {
+                const response = await authFetch("/api/non-samprox-customers/next-code");
+                const data = await response.json();
+                const nextCode = data?.data?.next_code || data?.next_code;
+                if (data.ok && nextCode) {
+                    elements.nsCustomerCode.value = nextCode;
+                }
+            } catch (err) {
+                console.error("Unable to load next customer code", err);
+            }
+        }
+
         elements.openCustomerModal.addEventListener("click", async () => {
             await loadCompanies();
             await populateManagedBySelect();
@@ -726,6 +741,9 @@
                 elements.nsManagedBy.value = user.id;
                 elements.nsManagedBy.disabled = true;
             }
+            elements.nsCustomerCode.readOnly = true;
+            elements.nsCustomerCode.placeholder = "Auto-generated";
+            await loadNextNonSamproxCode();
             elements.nonSamproxError.hidden = true;
             openModal(elements.nonSamproxModal);
         });
@@ -733,7 +751,6 @@
         elements.nsSave.addEventListener("click", async () => {
             elements.nonSamproxError.hidden = true;
             const payload = {
-                customer_code: elements.nsCustomerCode.value,
                 customer_name: elements.nsCustomerName.value,
                 area_code: elements.nsAreaCode.value,
                 city: elements.nsCity.value,

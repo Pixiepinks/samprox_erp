@@ -684,84 +684,12 @@
         });
 
         dealersTableBody.addEventListener("click", (event) => {
-            const target = event.target.closest(".dealers-table__link");
-            if (!target) return;
+            const link = event.target.closest(".dealers-table__link");
+            if (!link) return;
             event.preventDefault();
-            const code = target.dataset.customerCode || target.textContent;
-            const id = target.dataset.customerId;
-            const dealerMatch =
-                dealersCache.find((dealer) => dealer.id === id || dealer.customer_code === code) ||
-                { id, customer_code: code };
-            openCustomerEditor(dealerMatch);
-        });
-
-        customerModalCloseButtons.forEach((button) => {
-            button.addEventListener("click", closeCustomerEditModal);
-        });
-
-        customerEditModal?.addEventListener("click", (event) => {
-            if (event.target.dataset.closeModal || event.target.classList.contains("modal__overlay")) {
-                closeCustomerEditModal();
-            }
-        });
-
-        customerEditForm?.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            hideCustomerEditError();
-            if (!activeCustomerId) {
-                showCustomerEditError("No customer selected.");
-                return;
-            }
-            const payload = {
-                customer_name: customerEditName.value?.trim(),
-                area_code: customerEditAreaCode.value,
-                city: customerEditCity.value,
-                district: customerEditDistrict.value,
-                province: customerEditProvince.value,
-                company_id: customerEditCompany.value ? Number(customerEditCompany.value) : null,
-            };
-            if (!payload.customer_name) {
-                showCustomerEditError("Customer name is required.");
-                return;
-            }
-            if (!payload.company_id) {
-                showCustomerEditError("Please select a company.");
-                return;
-            }
-            if (user?.role !== "sales" && customerEditManagedBy.value) {
-                payload.managed_by_user_id = Number(customerEditManagedBy.value);
-            }
-            if (user?.role === "admin" || user?.role === "outside_manager") {
-                payload.is_active = customerEditActive.value === "true";
-            }
-            const originalText = customerEditSave.textContent;
-            customerEditSave.disabled = true;
-            customerEditSave.textContent = "Saving…";
-            try {
-                const response = await fetch(`/api/non-samprox-customers/${activeCustomerId}`, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify(payload),
-                });
-                const data = await response.json();
-                if (!response.ok || !data?.ok) {
-                    const message =
-                        response.status === 403
-                            ? "You do not have permission to edit this customer."
-                            : data?.error || "Unable to update customer.";
-                    throw new Error(message);
-                }
-                updateDealersCache(data.data);
-                closeCustomerEditModal();
-            } catch (error) {
-                console.error("Failed to save customer", error);
-                showCustomerEditError(error.message || "Unable to update customer.");
-            } finally {
-                customerEditSave.disabled = false;
-                customerEditSave.textContent = originalText;
+            const href = link.getAttribute("href");
+            if (href) {
+                window.location.href = href;
             }
         });
 

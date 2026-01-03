@@ -1,0 +1,89 @@
+{% set active_tab = active_tab or "" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block page_title %}Sales | SAMPROX ERP{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body data-active-tab="{{ active_tab }}">
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Sales Workspace</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="Sales navigation">
+            <a class="subnav__link {% if active_tab == 'dashboard' %}subnav__link--active{% endif %}" href="{{ url_for('ui.sales_dashboard_page') }}">Dashboard</a>
+            <a class="subnav__link {% if active_tab == 'data-entry' %}subnav__link--active{% endif %}" href="{{ url_for('ui.sales_data_entry_page') }}">Data Entry</a>
+            <a class="subnav__link {% if active_tab == 'reports' %}subnav__link--active{% endif %}" href="{{ url_for('ui.sales_reports_page') }}">Reports</a>
+        </nav>
+        {% block content %}{% endblock %}
+    </div>
+    <script>
+        const token = localStorage.getItem("samprox_token");
+        const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            sales_manager: "Sales Manager",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
+            outside_manager: "Member Of Rainbow Group",
+            sales: "Sales",
+        };
+
+        const allowedRoles = new Set(["sales_manager", "admin"]);
+        const normalizedRole = (user?.role || "").toLowerCase();
+        if (!allowedRoles.has(normalizedRole)) {
+            if (normalizedRole === "sales") {
+                window.location.replace("/sales_visits");
+            } else if (normalizedRole === "maintenance_manager") {
+                window.location.replace("/machines");
+            } else if (normalizedRole === "outside_manager") {
+                window.location.replace("/responsibility_portal");
+            } else {
+                window.location.replace("/mind");
+            }
+        }
+
+        const userNameEl = document.getElementById("user-name");
+        const userRoleEl = document.getElementById("user-role");
+        const logoutButton = document.getElementById("logout");
+
+        if (userNameEl) userNameEl.textContent = user?.name || "Unknown";
+        if (userRoleEl) userRoleEl.textContent = roleLabels[normalizedRole] || "";
+
+        logoutButton?.addEventListener("click", async () => {
+            try {
+                await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+            } catch (error) {
+                console.error("Failed to log out", error);
+            } finally {
+                localStorage.removeItem("samprox_token");
+                localStorage.removeItem("samprox_user");
+                window.location.href = "/";
+            }
+        });
+    </script>
+</body>
+</html>

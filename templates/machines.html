@@ -1276,6 +1276,9 @@
         if (user?.role === "outside_manager") {
             window.location.replace("/responsibility_portal");
         }
+        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
 
         if (user?.role === "maintenance_manager") {
             document.querySelectorAll(".subnav__link").forEach((link) => {
@@ -1295,6 +1298,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            sales_manager: "Sales Manager",
         };
 
         const userNameEl = document.getElementById("user-name");

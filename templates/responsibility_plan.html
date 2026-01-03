@@ -547,6 +547,10 @@
             window.location.href = "/";
         }
 
+        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
+
         const responsibilityAccessRoles = [
             "production_manager",
             "maintenance_manager",
@@ -566,6 +570,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            sales_manager: "Sales Manager",
         };
 
         const userNameEl = document.getElementById("user-name");

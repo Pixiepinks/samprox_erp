@@ -1,0 +1,30 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "reports" %}
+{% block page_title %}Sales Reports | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Performance visibility</p>
+            <h1>Sales Reports</h1>
+            <p class="section__description">
+                Quick links for dashboards, exports, and KPIs. Hook up report widgets and fine-grained permissions here later on.
+            </p>
+        </div>
+    </header>
+    <div class="section__grid">
+        <article class="tile">
+            <h2 class="tile__title">Revenue trends</h2>
+            <p class="tile__description">Reserved for charts showing sales velocity by period.</p>
+        </article>
+        <article class="tile">
+            <h2 class="tile__title">Customer insights</h2>
+            <p class="tile__description">Segment health and contribution placeholders.</p>
+        </article>
+        <article class="tile">
+            <h2 class="tile__title">Export center</h2>
+            <p class="tile__description">Future links for CSV, PDF, and scheduled report jobs.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}

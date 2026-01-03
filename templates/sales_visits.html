@@ -159,6 +159,10 @@
                 <form id="non-samprox-form" class="form-grid">
                     <input type="hidden" id="nsc-edit-id" />
                     <label class="form-field">
+                        <span>Company Name</span>
+                        <select id="ns-company" required></select>
+                    </label>
+                    <label class="form-field">
                         <span>Customer Code</span>
                         <input type="text" id="ns-customer-code" placeholder="Auto-generated" readonly />
                     </label>
@@ -186,10 +190,6 @@
                     <label class="form-field">
                         <span>Managed By</span>
                         <select id="ns-managed-by"></select>
-                    </label>
-                    <label class="form-field">
-                        <span>Company Name</span>
-                        <select id="ns-company" required></select>
                     </label>
                     <label class="form-field" id="ns-active-field" hidden>
                         <span>Active</span>

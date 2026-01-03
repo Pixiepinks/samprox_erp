@@ -54,10 +54,10 @@
                 and one-off tasks that keep operations moving.
             </p>
             <div class="section__grid">
-                <article class="tile">
-                    <h2 class="tile__title">Quick notes</h2>
+                <article class="tile misc-tile" id="dealersTile" role="button" tabindex="0" aria-pressed="false">
+                    <h2 class="tile__title">Dealers</h2>
                     <p class="tile__description">
-                        Jot down reminders or ad-hoc updates that teams should see alongside their regular flows.
+                        View and manage all the dealers.
                     </p>
                 </article>
                 <article class="tile">
@@ -80,6 +80,41 @@
                 </article>
             </div>
         </section>
+    </div>
+    <div id="dealersModal" class="fullscreen-modal hidden" role="dialog" aria-modal="true" aria-labelledby="dealersModalTitle">
+        <div class="fullscreen-modal__backdrop"></div>
+        <div class="fullscreen-modal__dialog">
+            <header class="fullscreen-modal__header">
+                <h2 id="dealersModalTitle">Dealers</h2>
+                <button type="button" class="fullscreen-modal__close" aria-label="Close dealers list">✖</button>
+            </header>
+            <div class="fullscreen-modal__body">
+                <div class="fullscreen-modal__table-wrapper" id="dealersTableWrapper">
+                    <div id="dealersLoading" class="fullscreen-modal__status">Loading dealers…</div>
+                    <div id="dealersError" class="fullscreen-modal__status fullscreen-modal__status--error hidden">
+                        Unable to load dealers. Please try again.
+                    </div>
+                    <table class="dealers-table hidden" aria-describedby="dealersModalTitle">
+                        <thead>
+                            <tr>
+                                <th scope="col">customer_code</th>
+                                <th scope="col">customer_name</th>
+                                <th scope="col">area_code</th>
+                                <th scope="col">city</th>
+                                <th scope="col">district</th>
+                                <th scope="col">province</th>
+                                <th scope="col">managed_by</th>
+                                <th scope="col">company</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dealersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <footer class="fullscreen-modal__footer">
+                <button type="button" class="button fullscreen-modal__footer-close" data-close-modal>Close</button>
+            </footer>
+        </div>
     </div>
     <script>
         const token = localStorage.getItem("samprox_token");
@@ -137,6 +172,106 @@
                 localStorage.removeItem("samprox_token");
                 localStorage.removeItem("samprox_user");
                 window.location.href = "/";
+            }
+        });
+
+        const dealersTile = document.getElementById("dealersTile");
+        const dealersModal = document.getElementById("dealersModal");
+        const dealersCloseButtons = dealersModal.querySelectorAll(".fullscreen-modal__close, [data-close-modal]");
+        const dealersLoading = document.getElementById("dealersLoading");
+        const dealersError = document.getElementById("dealersError");
+        const dealersTable = dealersModal.querySelector(".dealers-table");
+        const dealersTableBody = document.getElementById("dealersTableBody");
+        let dealersLoaded = false;
+        let dealersCache = [];
+
+        const toggleScrollLock = (locked) => {
+            if (locked) {
+                document.body.classList.add("modal-open");
+            } else {
+                document.body.classList.remove("modal-open");
+            }
+        };
+
+        const closeDealersModal = () => {
+            dealersModal.classList.add("hidden");
+            toggleScrollLock(false);
+        };
+
+        const renderDealers = (records = []) => {
+            dealersTableBody.innerHTML = "";
+            const safeValue = (value) => (value ?? value === 0 ? value : "—");
+
+            records.forEach((dealer) => {
+                const row = document.createElement("tr");
+                [
+                    "customer_code",
+                    "customer_name",
+                    "area_code",
+                    "city",
+                    "district",
+                    "province",
+                    "managed_by",
+                    "company",
+                ].forEach((key) => {
+                    const cell = document.createElement("td");
+                    cell.textContent = safeValue(dealer[key]);
+                    row.appendChild(cell);
+                });
+                dealersTableBody.appendChild(row);
+            });
+        };
+
+        const showDealersModal = async () => {
+            dealersModal.classList.remove("hidden");
+            toggleScrollLock(true);
+            if (dealersLoaded) return;
+
+            dealersLoading.classList.remove("hidden");
+            dealersError.classList.add("hidden");
+            dealersTable.classList.add("hidden");
+
+            try {
+                const response = await fetch("/api/dealers", {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    throw new Error(`Request failed: ${response.status}`);
+                }
+                const data = await response.json();
+                dealersCache = Array.isArray(data) ? data : data?.data || [];
+                renderDealers(dealersCache);
+                dealersLoaded = true;
+                dealersTable.classList.remove("hidden");
+            } catch (error) {
+                console.error("Failed to load dealers", error);
+                dealersError.classList.remove("hidden");
+            } finally {
+                dealersLoading.classList.add("hidden");
+            }
+        };
+
+        dealersTile.addEventListener("click", showDealersModal);
+        dealersTile.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                showDealersModal();
+            }
+        });
+
+        dealersCloseButtons.forEach((button) => {
+            button.addEventListener("click", closeDealersModal);
+        });
+
+        dealersModal.addEventListener("click", (event) => {
+            if (event.target === dealersModal || event.target.classList.contains("fullscreen-modal__backdrop")) {
+                closeDealersModal();
+            }
+        });
+
+        window.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && !dealersModal.classList.contains("hidden")) {
+                closeDealersModal();
             }
         });
     </script>

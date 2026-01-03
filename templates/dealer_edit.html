@@ -53,11 +53,11 @@
                     </label>
                     <label class="modal__field">
                         <span class="modal__label">Company</span>
-                        <select id="company_id" class="modal__select" required></select>
+                        <select id="company_id" name="company_id" class="modal__select" required></select>
                     </label>
                     <label class="modal__field">
                         <span class="modal__label">Managed by</span>
-                        <select id="managed_by_user_id" class="modal__select"></select>
+                        <select id="managed_by_user_id" name="managed_by" class="modal__select"></select>
                     </label>
                     <label class="modal__field">
                         <span class="modal__label">City</span>
@@ -364,7 +364,8 @@
                             : data?.error || "Unable to update customer."
                     );
                 }
-                populateForm(data.data);
+                const refreshedCustomer = await fetchCustomer(data?.data?.id || resolvedCustomerId);
+                populateForm(refreshedCustomer);
                 setStatus("Saved. You can return to the Dealers list at any time.");
             } catch (error) {
                 console.error("Failed to save customer", error);

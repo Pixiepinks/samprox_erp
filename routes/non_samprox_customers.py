@@ -420,6 +420,9 @@ def update_customer(customer_id):
     # Prevent changing code even if sent
     payload.pop("customer_code", None)
 
+    if "managed_by" in payload and "managed_by_user_id" not in payload:
+        payload["managed_by_user_id"] = payload.get("managed_by")
+
     allowed_fields = {
         "customer_name",
         "area_code",
@@ -453,6 +456,7 @@ def update_customer(customer_id):
         if err:
             return err
         customer.company_id = company.id
+        customer.company_label = company.name
 
     if "managed_by_user_id" in updates:
         if role == RoleEnum.sales:
@@ -461,10 +465,14 @@ def update_customer(customer_id):
             managed_by = int(updates["managed_by_user_id"])
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid managed_by_user_id"}), 400
+        manager = User.query.get(managed_by)
+        if not manager:
+            return jsonify({"ok": False, "error": "Managed by user not found"}), 404
         if role == RoleEnum.outside_manager:
             if managed_by not in (_manager_sales_ids(user.id) | {user.id}):
                 return jsonify({"ok": False, "error": "Not authorized for this managed_by_user_id"}), 403
         customer.managed_by_user_id = managed_by
+        customer.managed_by_label = manager.name
 
     if "is_active" in updates:
         if role == RoleEnum.sales:
@@ -477,5 +485,7 @@ def update_customer(customer_id):
         db.session.rollback()
         details = str(exc.orig) if hasattr(exc, "orig") else None
         return jsonify({"ok": False, "error": "Unable to update customer", "details": details}), 400
+
+    db.session.refresh(customer)
 
     return jsonify({"ok": True, "data": _serialize_customer(customer)})

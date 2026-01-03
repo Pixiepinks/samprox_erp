@@ -68,6 +68,7 @@ from routes import (
     companies,
     non_samprox_customers,
     sales_visits,
+    dealers,
 )
 
 
@@ -221,6 +222,7 @@ def create_app():
     app.register_blueprint(companies.bp)
     app.register_blueprint(non_samprox_customers.bp)
     app.register_blueprint(sales_visits.bp)
+    app.register_blueprint(dealers.bp)
 
     @app.get("/api/health")
     def health(): return jsonify({"ok": True})

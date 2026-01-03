@@ -82,6 +82,8 @@ def _serialize_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
         "city": customer.city,
         "district": customer.district,
         "province": customer.province,
+        "managed_by": customer.managed_by_label or getattr(customer.managed_by, "name", None),
+        "company": customer.company_label or getattr(customer.company, "name", None),
         "managed_by_user_id": customer.managed_by_user_id,
         "managed_by_name": getattr(customer.managed_by, "name", None),
         "company_id": customer.company_id,

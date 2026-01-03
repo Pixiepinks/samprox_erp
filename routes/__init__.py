@@ -23,6 +23,7 @@ from . import (
     companies,
     non_samprox_customers,
     sales_visits,
+    dealers,
 )
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "companies",
     "non_samprox_customers",
     "sales_visits",
+    "dealers",
 ]

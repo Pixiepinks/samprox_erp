@@ -107,15 +107,16 @@
                         <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
                             <div style="flex: 1;">
                                 <input type="text" id="non-samprox-search" placeholder="Search code, name, city" />
-                                <select id="visit-non-samprox" style="margin-top: 0.25rem; width: 100%;">
+                                <select id="nsc-select" style="margin-top: 0.25rem; width: 100%;">
                                     <option value="">Select customer (optional)</option>
                                 </select>
                             </div>
                             <div style="display: flex; gap: 0.35rem;">
-                                <button type="button" class="button button--secondary button--small" id="open-customer-modal">Create customer</button>
-                                <button type="button" class="button button--ghost button--small" id="edit-customer" type="button">Edit customer</button>
+                                <button type="button" class="button button--secondary button--small" id="btn-nsc-create">Create customer</button>
+                                <button type="button" class="button button--ghost button--small" id="btn-nsc-edit">Edit customer</button>
                             </div>
                         </div>
+                        <div class="alert alert--error" id="nsc-editor-msg" hidden></div>
                     </label>
                     <label class="form-field">
                         <span>Prospect name (if no customer)</span>
@@ -153,9 +154,10 @@
                 <button class="button button--ghost button--small" id="cancel-edit" hidden type="button">Cancel edit</button>
                 <button class="modal__close" data-modal-dismiss aria-label="Close">×</button>
             </header>
-            <div class="modal__body">
+            <div class="modal__body" id="nsc-editor" data-mode="create">
                 <div class="alert alert--error" id="non-samprox-error" hidden></div>
                 <form id="non-samprox-form" class="form-grid">
+                    <input type="hidden" id="nsc-edit-id" />
                     <label class="form-field">
                         <span>Customer Code</span>
                         <input type="text" id="ns-customer-code" placeholder="Auto-generated" readonly />
@@ -280,52 +282,63 @@
             });
         }
 
+        function getElement(id) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.error(`Missing field: ${id}`);
+            }
+            return el;
+        }
+
         const elements = {
-            visitRows: document.getElementById("visit-rows"),
-            visitsEmpty: document.getElementById("visits-empty"),
-            filterFrom: document.getElementById("filter-from"),
-            filterTo: document.getElementById("filter-to"),
-            filterSales: document.getElementById("filter-sales"),
-            filterSalesContainer: document.getElementById("filter-sales-container"),
-            applyFilters: document.getElementById("apply-filters"),
-            clearFilters: document.getElementById("clear-filters"),
-            newVisit: document.getElementById("new-visit"),
-            visitModal: document.getElementById("visit-modal"),
-            visitModalError: document.getElementById("visit-modal-error"),
-            visitDate: document.getElementById("visit-date"),
-            visitNonSamprox: document.getElementById("visit-non-samprox"),
-            visitNonSamproxSearch: document.getElementById("non-samprox-search"),
-            visitProspect: document.getElementById("visit-prospect"),
-            visitPurpose: document.getElementById("visit-purpose"),
-            visitRemarks: document.getElementById("visit-remarks"),
-            visitPlanned: document.getElementById("visit-planned"),
-            visitSave: document.getElementById("visit-save"),
-            visitForm: document.getElementById("visit-form"),
-            openCustomerModal: document.getElementById("open-customer-modal"),
-            editCustomer: document.getElementById("edit-customer"),
-            nonSamproxModal: document.getElementById("non-samprox-modal"),
-            nonSamproxForm: document.getElementById("non-samprox-form"),
-            nonSamproxError: document.getElementById("non-samprox-error"),
-            nonSamproxTitle: document.getElementById("non-samprox-title"),
-            nonSamproxSubtitle: document.getElementById("non-samprox-subtitle"),
-            cancelEdit: document.getElementById("cancel-edit"),
-            nsCustomerCode: document.getElementById("ns-customer-code"),
-            nsCustomerName: document.getElementById("ns-customer-name"),
-            nsAreaCode: document.getElementById("ns-area-code"),
-            nsCity: document.getElementById("ns-city"),
-            nsCityList: document.getElementById("ns-city-list"),
-            nsDistrict: document.getElementById("ns-district"),
-            nsProvince: document.getElementById("ns-province"),
-            nsManagedBy: document.getElementById("ns-managed-by"),
-            nsCompany: document.getElementById("ns-company"),
-            nsActiveField: document.getElementById("ns-active-field"),
-            nsActive: document.getElementById("ns-active"),
-            nsSave: document.getElementById("ns-save"),
-            attachmentModal: document.getElementById("attachment-modal"),
-            attachmentUrl: document.getElementById("attachment-url"),
-            attachmentType: document.getElementById("attachment-type"),
-            attachmentSave: document.getElementById("attachment-save"),
-            attachmentError: document.getElementById("attachment-error"),
+            visitRows: getElement("visit-rows"),
+            visitsEmpty: getElement("visits-empty"),
+            filterFrom: getElement("filter-from"),
+            filterTo: getElement("filter-to"),
+            filterSales: getElement("filter-sales"),
+            filterSalesContainer: getElement("filter-sales-container"),
+            applyFilters: getElement("apply-filters"),
+            clearFilters: getElement("clear-filters"),
+            newVisit: getElement("new-visit"),
+            visitModal: getElement("visit-modal"),
+            visitModalError: getElement("visit-modal-error"),
+            visitDate: getElement("visit-date"),
+            visitNonSamprox: getElement("nsc-select"),
+            visitNonSamproxSearch: getElement("non-samprox-search"),
+            visitProspect: getElement("visit-prospect"),
+            visitPurpose: getElement("visit-purpose"),
+            visitRemarks: getElement("visit-remarks"),
+            visitPlanned: getElement("visit-planned"),
+            visitSave: getElement("visit-save"),
+            visitForm: getElement("visit-form"),
+            openCustomerModal: getElement("btn-nsc-create"),
+            editCustomer: getElement("btn-nsc-edit"),
+            nonSamproxModal: getElement("non-samprox-modal"),
+            nonSamproxForm: getElement("non-samprox-form"),
+            nonSamproxError: getElement("non-samprox-error"),
+            nonSamproxTitle: getElement("non-samprox-title"),
+            nonSamproxSubtitle: getElement("non-samprox-subtitle"),
+            cancelEdit: getElement("cancel-edit"),
+            nsCustomerCode: getElement("ns-customer-code"),
+            nsCustomerName: getElement("ns-customer-name"),
+            nsAreaCode: getElement("ns-area-code"),
+            nsCity: getElement("ns-city"),
+            nsCityList: getElement("ns-city-list"),
+            nsDistrict: getElement("ns-district"),
+            nsProvince: getElement("ns-province"),
+            nsManagedBy: getElement("ns-managed-by"),
+            nsCompany: getElement("ns-company"),
+            nsActiveField: getElement("ns-active-field"),
+            nsActive: getElement("ns-active"),
+            nsSave: getElement("ns-save"),
+            nscEditor: getElement("nsc-editor"),
+            nscEditorMsg: getElement("nsc-editor-msg"),
+            nscEditId: getElement("nsc-edit-id"),
+            attachmentModal: getElement("attachment-modal"),
+            attachmentUrl: getElement("attachment-url"),
+            attachmentType: getElement("attachment-type"),
+            attachmentSave: getElement("attachment-save"),
+            attachmentError: getElement("attachment-error"),
         };
 
         let activeVisitId = null;
@@ -337,6 +350,16 @@
         let editingCustomerId = null;
         let locationData = [];
         let locationLookup = new Map();
+
+        function showNscMessage(message = "") {
+            if (!elements.nscEditorMsg) return;
+            elements.nscEditorMsg.textContent = message;
+            elements.nscEditorMsg.hidden = !message;
+        }
+
+        function clearNscMessage() {
+            showNscMessage("");
+        }
 
         function getLiveLocation() {
             return new Promise((resolve, reject) => {
@@ -471,17 +494,19 @@
 
         function upsertNonSamproxOption(customer) {
             if (!customer) return;
-            const exists = Array.from(elements.visitNonSamprox.options || []).some((opt) => opt.value === customer.id);
+            const optionValue = String(customer.id);
+            const exists = Array.from(elements.visitNonSamprox.options || []).some((opt) => opt.value === optionValue);
             if (!exists) {
                 const option = document.createElement("option");
                 const cityLabel = customer.city ? ` (${customer.city})` : "";
-                option.value = customer.id;
+                option.value = optionValue;
                 option.textContent = `${customer.customer_code} — ${customer.customer_name}${cityLabel}`;
                 elements.visitNonSamprox.appendChild(option);
             }
         }
 
         function renderNonSamproxOptions(selectedId = "") {
+            const selectionValue = selectedId ? String(selectedId) : "";
             elements.visitNonSamprox.innerHTML = "";
             const placeholder = document.createElement("option");
             placeholder.value = "";
@@ -490,17 +515,18 @@
             nonSamproxCustomers.forEach((customer) => {
                 const option = document.createElement("option");
                 const cityLabel = customer.city ? ` (${customer.city})` : "";
-                option.value = customer.id;
+                option.value = String(customer.id);
                 option.textContent = `${customer.customer_code} — ${customer.customer_name}${cityLabel}`;
                 elements.visitNonSamprox.appendChild(option);
             });
-            if (selectedId) {
-                elements.visitNonSamprox.value = selectedId;
+            if (selectionValue) {
+                elements.visitNonSamprox.value = selectionValue;
             }
             toggleEditCustomerButton();
         }
 
         function toggleEditCustomerButton() {
+            if (!elements.editCustomer || !elements.visitNonSamprox) return;
             const selectedId = elements.visitNonSamprox.value;
             const allowedRoles = ["sales", "outside_manager", "admin"];
             if (!allowedRoles.includes(user.role)) {
@@ -638,6 +664,7 @@
 
         elements.visitNonSamprox.addEventListener("change", () => {
             toggleEditCustomerButton();
+            clearNscMessage();
         });
 
         elements.visitSave.addEventListener("click", async () => {
@@ -674,7 +701,7 @@
                 if (!visit) return;
                 activeVisitId = visitId;
                 elements.visitDate.value = visit.visit_date || "";
-                elements.visitNonSamprox.value = visit.non_samprox_customer_id || "";
+                elements.visitNonSamprox.value = visit.non_samprox_customer_id ? String(visit.non_samprox_customer_id) : "";
                 if (visit.non_samprox_customer_id && visit.non_samprox_customer_name) {
                     upsertNonSamproxOption({
                         id: visit.non_samprox_customer_id,
@@ -682,7 +709,7 @@
                         customer_name: visit.non_samprox_customer_name || "",
                         city: visit.non_samprox_customer_city || "",
                     });
-                    elements.visitNonSamprox.value = visit.non_samprox_customer_id;
+                    elements.visitNonSamprox.value = String(visit.non_samprox_customer_id);
                 }
                 elements.visitProspect.value = visit.prospect_name || "";
                 elements.visitPurpose.value = visit.purpose || "";
@@ -840,7 +867,13 @@
 
         function setNonSamproxMode(mode, customer = null) {
             nonSamproxMode = mode;
-            editingCustomerId = mode === "edit" && customer?.id ? customer.id : null;
+            editingCustomerId = mode === "edit" ? customer?.id || editingCustomerId : null;
+            if (elements.nscEditor) {
+                elements.nscEditor.dataset.mode = mode;
+            }
+            if (elements.nscEditId) {
+                elements.nscEditId.value = mode === "edit" && editingCustomerId ? editingCustomerId : "";
+            }
             elements.nonSamproxTitle.textContent = mode === "edit" ? "Edit Non Samprox Customer" : "Create Non Samprox Customer";
             elements.nsSave.textContent = mode === "edit" ? "Update" : "Save";
             elements.cancelEdit.hidden = mode !== "edit";
@@ -888,6 +921,7 @@
             await loadLocationData();
             elements.nonSamproxForm.reset();
             setNonSamproxMode("create");
+            clearNscMessage();
             if (user.role === "sales") {
                 elements.nsManagedBy.value = user.id;
                 elements.nsManagedBy.disabled = true;
@@ -906,12 +940,15 @@
             elements.nonSamproxForm.reset();
             await loadNextNonSamproxCode();
             elements.nonSamproxError.hidden = true;
+            clearNscMessage();
         });
 
-        elements.editCustomer.addEventListener("click", async () => {
+        elements.editCustomer.addEventListener("click", async (event) => {
+            event.preventDefault();
+            clearNscMessage();
             const selectedId = elements.visitNonSamprox.value;
             if (!selectedId) {
-                alert("Select a customer first.");
+                showNscMessage("Select a customer to edit");
                 return;
             }
             await loadCompanies();
@@ -923,14 +960,13 @@
                 const response = await authFetch(`/api/non-samprox-customers/${selectedId}`);
                 const data = await response.json();
                 if (!data.ok) {
-                    const message =
-                        response.status === 403
-                            ? "You do not have permission to edit this customer."
-                            : data.error || "Unable to load customer";
-                    alert(message);
+                    const message = response.status === 403 ? "You do not have permission to edit this customer." : "Unable to load customer. Please try again.";
+                    showNscMessage(message);
+                    console.error("Failed to load customer", response.status, data);
                     return;
                 }
                 const customer = data.data;
+                editingCustomerId = customer?.id || selectedId;
                 setNonSamproxMode("edit", customer);
                 populateNonSamproxForm(customer);
                 elements.nsCustomerCode.readOnly = true;
@@ -939,10 +975,11 @@
                 if (user.role === "sales") {
                     elements.nsManagedBy.disabled = true;
                 }
+                clearNscMessage();
                 openModal(elements.nonSamproxModal);
             } catch (err) {
-                console.error(err);
-                alert("Unable to load customer");
+                console.error("Failed to load customer", err);
+                showNscMessage("Unable to load customer. Please try again.");
             }
         });
 
@@ -964,8 +1001,9 @@
                 payload.is_active = elements.nsActive.value === "true";
             }
 
-            const isEdit = nonSamproxMode === "edit" && editingCustomerId;
-            const url = isEdit ? `/api/non-samprox-customers/${editingCustomerId}` : "/api/non-samprox-customers";
+            const editId = (elements.nscEditId && elements.nscEditId.value) || editingCustomerId;
+            const isEdit = nonSamproxMode === "edit" && editId;
+            const url = isEdit ? `/api/non-samprox-customers/${editId}` : "/api/non-samprox-customers";
             const method = isEdit ? "PUT" : "POST";
             const response = await authFetch(url, {
                 method,
@@ -986,13 +1024,14 @@
             updateNonSamproxCache(saved);
             renderNonSamproxOptions(saved?.id || elements.visitNonSamprox.value);
             if (saved?.id) {
-                elements.visitNonSamprox.value = saved.id;
+                elements.visitNonSamprox.value = String(saved.id);
             }
             await loadNonSamproxCustomers(elements.visitNonSamproxSearch.value);
             if (saved?.id) {
-                elements.visitNonSamprox.value = saved.id;
+                elements.visitNonSamprox.value = String(saved.id);
             }
             setNonSamproxMode("create");
+            clearNscMessage();
         });
 
         elements.nsCity.addEventListener("input", () => {

@@ -217,6 +217,7 @@ def list_dealers():
     customers = NonSamproxCustomer.query.order_by(NonSamproxCustomer.customer_code.asc()).all()
     data = [
         {
+            "id": str(customer.id),
             "customer_code": customer.customer_code,
             "customer_name": customer.customer_name,
             "area_code": customer.area_code,

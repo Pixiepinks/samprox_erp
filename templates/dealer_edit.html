@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Edit Dealer | SAMPROX ERP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand__logo">S</div>
+                <div class="brand__details">
+                    <p class="brand__name">SAMPROX ERP</p>
+                    <p class="brand__section">Dealer editor</p>
+                </div>
+            </div>
+            <div class="topbar__actions">
+                <a class="button button--ghost" href="{{ url_for('ui.miscellaneous_page') }}">Back to Miscellaneous</a>
+                <div class="user-summary">
+                    <span class="user-summary__name" id="user-name"></span>
+                    <span class="user-summary__role" id="user-role"></span>
+                </div>
+                <button type="button" class="button button--secondary" id="logout">Sign out</button>
+            </div>
+        </header>
+        <nav class="subnav" aria-label="7M navigation">
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.miscellaneous_page') }}">Miscellaneous</a>
+        </nav>
+        <section class="section">
+            <header class="section__header">
+                <div>
+                    <p class="eyebrow" id="customer-code-label">Loading…</p>
+                    <h1 id="page-title">Edit dealer</h1>
+                    <p class="section__description">Update dealer details and save directly without returning to the table.</p>
+                </div>
+            </header>
+            <div id="status" class="fullscreen-modal__status" hidden></div>
+            <div id="error" class="fullscreen-modal__status fullscreen-modal__status--error" hidden></div>
+            <form id="dealer-form" class="modal__form" aria-live="polite">
+                <div class="modal__grid">
+                    <label class="modal__field">
+                        <span class="modal__label">Customer code</span>
+                        <input id="customer_code" class="modal__input" type="text" readonly />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Customer name</span>
+                        <input id="customer_name" class="modal__input" type="text" required />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Company</span>
+                        <select id="company_id" class="modal__select" required></select>
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Managed by</span>
+                        <select id="managed_by_user_id" class="modal__select"></select>
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">City</span>
+                        <input id="city" class="modal__input" type="text" />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Area code</span>
+                        <input id="area_code" class="modal__input" type="text" />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">District</span>
+                        <input id="district" class="modal__input" type="text" />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Province</span>
+                        <input id="province" class="modal__input" type="text" />
+                    </label>
+                    <label class="modal__field" id="active-field" hidden>
+                        <span class="modal__label">Active</span>
+                        <select id="is_active" class="modal__select">
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </label>
+                </div>
+                <footer class="modal__actions" style="justify-content: flex-start; margin-top: 1rem;">
+                    <button type="submit" class="button button--primary" id="save-btn">Save changes</button>
+                    <a class="button button--ghost" href="{{ url_for('ui.miscellaneous_page') }}">Back to dealers</a>
+                </footer>
+            </form>
+        </section>
+    </div>
+
+    <script>
+        const customerIdentifier = "{{ customer_identifier }}";
+        const token = localStorage.getItem("samprox_token");
+        const userRaw = localStorage.getItem("samprox_user");
+        let user;
+
+        try {
+            user = userRaw ? JSON.parse(userRaw) : null;
+        } catch (_) {
+            user = null;
+        }
+
+        if (!token || !user) {
+            window.location.href = "/";
+        }
+
+        const roleLabels = {
+            admin: "Admin",
+            production_manager: "Production Manager",
+            maintenance_manager: "Maintenance Manager",
+            finance_manager: "Finance Manager",
+            technician: "Technician",
+            outside_manager: "Member Of Rainbow Group",
+        };
+
+        document.getElementById("user-name").textContent = user?.name || "Unknown";
+        document.getElementById("user-role").textContent = roleLabels[user?.role] || "";
+
+        document.getElementById("logout").addEventListener("click", async () => {
+            try {
+                await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+            } catch (error) {
+                console.error("Failed to log out", error);
+            } finally {
+                localStorage.removeItem("samprox_token");
+                localStorage.removeItem("samprox_user");
+                window.location.href = "/";
+            }
+        });
+
+        const statusEl = document.getElementById("status");
+        const errorEl = document.getElementById("error");
+        const form = document.getElementById("dealer-form");
+        const fields = {
+            code: document.getElementById("customer_code"),
+            name: document.getElementById("customer_name"),
+            company: document.getElementById("company_id"),
+            managedBy: document.getElementById("managed_by_user_id"),
+            city: document.getElementById("city"),
+            areaCode: document.getElementById("area_code"),
+            district: document.getElementById("district"),
+            province: document.getElementById("province"),
+            active: document.getElementById("is_active"),
+            activeField: document.getElementById("active-field"),
+        };
+        const saveBtn = document.getElementById("save-btn");
+        let companiesCache = [];
+        let managersCache = [];
+        let resolvedCustomerId = null;
+
+        const setStatus = (message) => {
+            if (!message) {
+                statusEl.hidden = true;
+                statusEl.textContent = "";
+                return;
+            }
+            statusEl.hidden = false;
+            statusEl.textContent = message;
+        };
+
+        const setError = (message) => {
+            if (!message) {
+                errorEl.hidden = true;
+                errorEl.textContent = "";
+                return;
+            }
+            errorEl.hidden = false;
+            errorEl.textContent = message;
+        };
+
+        const fetchCustomer = async (identifier) => {
+            const resp = await fetch(`/api/non-samprox-customers/${identifier}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+                throw new Error(data?.error || "Unable to load customer");
+            }
+            return data.data || data;
+        };
+
+        const searchCustomerByCode = async (code) => {
+            const resp = await fetch(`/api/non-samprox-customers?q=${encodeURIComponent(code)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+                throw new Error(data?.error || "Unable to find customer");
+            }
+            const items = Array.isArray(data) ? data : data?.data || [];
+            const match = items.find((item) => item.customer_code === code) || items[0];
+            if (!match) {
+                throw new Error("Customer not found");
+            }
+            return match;
+        };
+
+        const loadCompanies = async () => {
+            if (companiesCache.length) return companiesCache;
+            const resp = await fetch("/api/companies", { headers: { Authorization: `Bearer ${token}` } });
+            const data = await resp.json();
+            companiesCache = (Array.isArray(data) ? data : data?.data) || [];
+            return companiesCache;
+        };
+
+        const loadManagers = async () => {
+            if (managersCache.length) return managersCache;
+            try {
+                if (user?.role === "admin") {
+                    const resp = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } });
+                    const payload = await resp.json();
+                    const items = Array.isArray(payload) ? payload : payload?.data || [];
+                    managersCache = items.filter((u) => ["sales", "outside_manager"].includes(u.role));
+                } else if (user?.role === "outside_manager") {
+                    const resp = await fetch("/api/sales-visits/team", {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const payload = await resp.json();
+                    const team = payload?.data || [];
+                    const unique = new Map();
+                    team.forEach((member) => {
+                        if (member.manager) unique.set(member.manager.id, member.manager);
+                        if (member.sales_user) unique.set(member.sales_user.id, member.sales_user);
+                    });
+                    if (user?.id && user?.name) {
+                        unique.set(user.id, { id: user.id, name: user.name, role: user.role });
+                    }
+                    managersCache = Array.from(unique.values());
+                } else if (user?.id && user?.name) {
+                    managersCache = [{ id: user.id, name: user.name, role: user.role }];
+                }
+            } catch (error) {
+                console.error("Failed to load managers", error);
+                managersCache = user?.id && user?.name ? [{ id: user.id, name: user.name, role: user.role }] : [];
+            }
+            return managersCache;
+        };
+
+        const populateCompanies = (selectedId = null) => {
+            fields.company.innerHTML = '<option value="">Select company</option>';
+            companiesCache.forEach((company) => {
+                const option = document.createElement("option");
+                option.value = company.id;
+                option.textContent = company.name;
+                fields.company.appendChild(option);
+            });
+            if (selectedId) {
+                fields.company.value = String(selectedId);
+            }
+        };
+
+        const populateManagers = (selectedId = null) => {
+            fields.managedBy.innerHTML = "";
+            managersCache.forEach((manager) => {
+                const option = document.createElement("option");
+                option.value = manager.id;
+                const roleLabel = manager.role ? ` (${manager.role})` : "";
+                option.textContent = `${manager.name}${roleLabel}`;
+                fields.managedBy.appendChild(option);
+            });
+            if (selectedId) {
+                fields.managedBy.value = String(selectedId);
+            }
+            if (!fields.managedBy.value && managersCache[0]) {
+                fields.managedBy.value = managersCache[0].id;
+            }
+            fields.managedBy.disabled = user?.role === "sales";
+        };
+
+        const populateForm = (customer) => {
+            fields.code.value = customer.customer_code || "";
+            fields.name.value = customer.customer_name || "";
+            fields.city.value = customer.city || "";
+            fields.areaCode.value = customer.area_code || "";
+            fields.district.value = customer.district || "";
+            fields.province.value = customer.province || "";
+            fields.activeField.hidden = !(user?.role === "admin" || user?.role === "outside_manager");
+            if (!fields.activeField.hidden) {
+                fields.active.value = customer.is_active ? "true" : "false";
+            }
+            populateCompanies(customer.company_id);
+            populateManagers(customer.managed_by_user_id);
+            document.getElementById("customer-code-label").textContent = `Customer code ${customer.customer_code || ""}`;
+            document.getElementById("page-title").textContent = customer.customer_name || "Edit dealer";
+        };
+
+        const loadPage = async () => {
+            setError("");
+            setStatus("Loading customer…");
+            saveBtn.disabled = true;
+            try {
+                let customer = null;
+                try {
+                    customer = await fetchCustomer(customerIdentifier);
+                } catch (err) {
+                    customer = await searchCustomerByCode(customerIdentifier);
+                }
+                resolvedCustomerId = customer.id;
+                await Promise.all([loadCompanies(), loadManagers()]);
+                populateForm(customer);
+                setStatus("");
+            } catch (error) {
+                console.error(error);
+                setError(error.message || "Unable to load customer.");
+                setStatus("");
+            } finally {
+                saveBtn.disabled = false;
+            }
+        };
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setError("");
+            if (!resolvedCustomerId) {
+                setError("No customer loaded.");
+                return;
+            }
+            if (!fields.name.value.trim()) {
+                setError("Customer name is required.");
+                return;
+            }
+            if (!fields.company.value) {
+                setError("Please select a company.");
+                return;
+            }
+
+            const payload = {
+                customer_name: fields.name.value.trim(),
+                area_code: fields.areaCode.value,
+                city: fields.city.value,
+                district: fields.district.value,
+                province: fields.province.value,
+                company_id: Number(fields.company.value),
+            };
+            if (user?.role !== "sales" && fields.managedBy.value) {
+                payload.managed_by_user_id = Number(fields.managedBy.value);
+            }
+            if (user?.role === "admin" || user?.role === "outside_manager") {
+                payload.is_active = fields.active.value === "true";
+            }
+
+            const originalText = saveBtn.textContent;
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Saving…";
+            setStatus("Saving changes…");
+
+            try {
+                const resp = await fetch(`/api/non-samprox-customers/${resolvedCustomerId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data?.ok) {
+                    throw new Error(
+                        resp.status === 403
+                            ? "You do not have permission to edit this customer."
+                            : data?.error || "Unable to update customer."
+                    );
+                }
+                populateForm(data.data);
+                setStatus("Saved. You can return to the Dealers list at any time.");
+            } catch (error) {
+                console.error("Failed to save customer", error);
+                setError(error.message || "Unable to update customer.");
+                setStatus("");
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        });
+
+        loadPage();
+    </script>
+</body>
+</html>

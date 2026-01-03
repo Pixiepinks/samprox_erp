@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Movers | SAMPROX ERP</title>
+    <title>Miscellaneous | SAMPROX ERP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -16,7 +16,7 @@
                 <div class="brand__logo">S</div>
                 <div class="brand__details">
                     <p class="brand__name">SAMPROX ERP</p>
-                    <p class="brand__section">Movers Overview</p>
+                    <p class="brand__section">Miscellaneous Overview</p>
                 </div>
             </div>
             <div class="topbar__actions">
@@ -35,9 +35,9 @@
             <a class="subnav__link" href="{{ url_for('ui.material_page') }}">Material</a>
             <a class="subnav__link" href="{{ url_for('ui.market_page') }}">Market</a>
             <a class="subnav__link" href="{{ url_for('ui.manufacturing_page') }}">Manufacturing</a>
-            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.movers_page') }}">Movers</a>
+            <a class="subnav__link" href="{{ url_for('ui.movers_page') }}">Movers</a>
             <a class="subnav__link" href="{{ url_for('ui.money_page') }}">Money</a>
-            <a class="subnav__link" href="{{ url_for('ui.miscellaneous_page') }}">Miscellaneous</a>
+            <a class="subnav__link subnav__link--active" href="{{ url_for('ui.miscellaneous_page') }}">Miscellaneous</a>
             <a
                 class="subnav__link"
                 href="{{ url_for('ui.mechanism_page') }}"
@@ -47,36 +47,35 @@
         </nav>
         <section class="section">
             <header class="section__header">
-                <h1>Logistics & mover coordination</h1>
+                <h1>Miscellaneous workspace</h1>
             </header>
             <p class="section__description">
-                Track vehicle availability, plan routes, and keep shipments moving efficiently. Use this page to
-                coordinate daily dispatches and monitor delivery performance.
+                Capture the extras that don’t fit neatly into the other modules—internal notes, quick references,
+                and one-off tasks that keep operations moving.
             </p>
             <div class="section__grid">
                 <article class="tile">
-                    <h2 class="tile__title">Fleet availability</h2>
+                    <h2 class="tile__title">Quick notes</h2>
                     <p class="tile__description">
-                        Keep an eye on which vehicles are online, under maintenance, or scheduled for upcoming jobs.
+                        Jot down reminders or ad-hoc updates that teams should see alongside their regular flows.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Route planning</h2>
+                    <h2 class="tile__title">Reference links</h2>
                     <p class="tile__description">
-                        Organize pickups and drop-offs to minimize travel time and maximize load capacity.
+                        Centralize helpful resources, SOPs, or checklists for fast access in daily standups.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Delivery tracking</h2>
+                    <h2 class="tile__title">Action items</h2>
                     <p class="tile__description">
-                        Monitor active consignments with status updates so exceptions can be handled quickly.
+                        Track unplanned follow-ups and make sure nothing slips through the cracks between teams.
                     </p>
                 </article>
                 <article class="tile">
-                    <h2 class="tile__title">Vendor coordination</h2>
+                    <h2 class="tile__title">Parking lot ideas</h2>
                     <p class="tile__description">
-                        Capture partner SLAs, contact points, and performance notes to align external movers with
-                        internal standards.
+                        Collect future improvements and experiments before promoting them into a dedicated module.
                     </p>
                 </article>
             </div>

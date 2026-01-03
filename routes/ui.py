@@ -442,6 +442,13 @@ def movers_page():
     return render_template("movers.html")
 
 
+@bp.get("/miscellaneous")
+def miscellaneous_page():
+    """Render the miscellaneous operations overview page."""
+
+    return render_template("miscellaneous.html")
+
+
 @bp.get("/money")
 def money_page():
     """Render the financial overview page."""

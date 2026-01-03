@@ -2080,6 +2080,20 @@ body {
     padding-top: 1rem;
 }
 
+.modal.modal--stacked {
+    z-index: 2000;
+    display: none;
+}
+
+.modal.modal--stacked .modal__overlay {
+    backdrop-filter: blur(6px);
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.modal.modal--stacked.is-open {
+    display: flex;
+}
+
 .salary-form__summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

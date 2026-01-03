@@ -22,7 +22,13 @@ def _current_role() -> Optional[RoleEnum]:
 @jwt_required()
 def _guard_roles():
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin}:
+    if role not in {
+        RoleEnum.sales,
+        RoleEnum.outside_manager,
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+    }:
         return jsonify({"ok": False, "error": "Access denied"}), 403
 
 

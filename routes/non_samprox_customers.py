@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 import uuid
+import re
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
@@ -11,7 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import Company, NonSamproxCustomer, RoleEnum, SalesTeamMember, User
+from models import Company, CustomerCodeSequence, NonSamproxCustomer, RoleEnum, SalesTeamMember, User
 
 bp = Blueprint("non_samprox_customers", __name__, url_prefix="/api/non-samprox-customers")
 COLOMBO_TZ = ZoneInfo("Asia/Colombo")
@@ -43,6 +44,85 @@ def generate_non_samprox_customer_code(*, lock: bool = True) -> str:
             next_seq = 1
 
     return f"{year_suffix:02d}{next_seq:04d}"
+
+
+_COMPANY_PREFIXES: dict[str, str] = {
+    "exsol-engineering": "E",
+    "rainbows-end-trading": "T",
+    "rainbows-industrial": "I",
+    "hello-homes": "H",
+    "samprox-international": "",
+    "samprox": "",
+}
+
+
+def _company_prefix(company: Company) -> str:
+    configured = (company.company_code_prefix or "").strip()
+    if configured:
+        return configured
+    return _COMPANY_PREFIXES.get(company.key, "")
+
+
+def _current_year_suffix() -> str:
+    return f"{_now_colombo().year % 100:02d}"
+
+
+def _get_or_create_sequence(company_id: int, year_yy: str, lock: bool = True) -> CustomerCodeSequence:
+    query = CustomerCodeSequence.query.filter_by(company_id=company_id, year_yy=year_yy)
+    try:
+        seq = query.with_for_update().first() if lock and hasattr(query, "with_for_update") else query.first()
+    except Exception:
+        seq = query.first()
+
+    if not seq:
+        seq = CustomerCodeSequence(company_id=company_id, year_yy=year_yy, last_number=0)
+        db.session.add(seq)
+        db.session.flush()
+    return seq
+
+
+def _format_prefixed_code(prefix: str, year_suffix: str, number: int) -> str:
+    return f"{prefix}{year_suffix}{number:04d}"
+
+
+def _allocate_prefixed_code(company: Company, provided_code: object | None = None, *, lock: bool = True) -> str:
+    prefix = _company_prefix(company)
+    year_suffix = _current_year_suffix()
+    seq = _get_or_create_sequence(company.id, year_suffix, lock=lock)
+    current = seq.last_number or 0
+    next_number = current + 1
+
+    expected_prefix = f"{prefix}{year_suffix}"
+    if provided_code:
+        code = str(provided_code).strip()
+        if code.startswith(expected_prefix) and len(code) == len(expected_prefix) + 4:
+            try:
+                parsed_number = int(code[-4:])
+            except ValueError:
+                parsed_number = None
+            else:
+                if parsed_number >= current:
+                    # Accept the provided number if it is current or the immediate next expected slot.
+                    if parsed_number in {current, current + 1}:
+                        next_number = parsed_number
+
+    seq.last_number = next_number
+    return _format_prefixed_code(prefix, year_suffix, next_number)
+
+
+def _generate_customer_code_for_company(company: Company, *, provided_code: object | None = None, lock: bool = True) -> str:
+    prefix = _company_prefix(company)
+    if not prefix:
+        return generate_non_samprox_customer_code(lock=lock)
+    return _allocate_prefixed_code(company, provided_code, lock=lock)
+
+
+def _validate_customer_code(company: Company, code: str) -> bool:
+    prefix = _company_prefix(company)
+    if not prefix:
+        return bool(re.fullmatch(r"\d{6}", code))
+    pattern = rf"{re.escape(prefix)}\d{{6}}"
+    return bool(re.fullmatch(pattern, code))
 
 
 def _current_user() -> Optional[User]:
@@ -223,8 +303,21 @@ def preview_next_code():
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
-    next_code = generate_non_samprox_customer_code(lock=False)
-    return jsonify({"ok": True, "data": {"next_code": next_code}, "next_code": next_code})
+    company_param = request.args.get("company_id")
+    company, err = _validate_company(company_param)
+    if err:
+        return err
+
+    try:
+        with db.session.begin_nested():
+            next_code = _generate_customer_code_for_company(company, lock=True)
+        db.session.commit()
+    except IntegrityError as exc:
+        db.session.rollback()
+        details = str(exc.orig) if hasattr(exc, "orig") else None
+        return jsonify({"ok": False, "error": "Unable to generate customer code", "details": details}), 400
+
+    return jsonify({"ok": True, "data": {"next_code": next_code, "customer_code": next_code}, "next_code": next_code})
 
 
 @bp.post("")
@@ -241,6 +334,7 @@ def create_customer():
     district = (payload.get("district") or "").strip() or None
     province = (payload.get("province") or "").strip() or None
     company_raw = payload.get("company_id")
+    requested_code = (payload.get("customer_code") or "").strip()
 
     if not customer_name:
         return jsonify({"ok": False, "error": "customer_name is required"}), 400
@@ -280,21 +374,28 @@ def create_customer():
     attempts = 0
     while attempts < 2:
         attempts += 1
-        customer_code = generate_non_samprox_customer_code()
-        customer = NonSamproxCustomer(
-            customer_code=customer_code,
-            customer_name=customer_name,
-            area_code=area_code,
-            city=city,
-            district=district,
-            province=province,
-            managed_by_user_id=managed_by,
-            company_id=company.id,
-        )
-        db.session.add(customer)
         try:
+            with db.session.begin_nested():
+                customer_code = _generate_customer_code_for_company(company, provided_code=requested_code, lock=True)
+                if not _validate_customer_code(company, customer_code):
+                    raise ValueError("Invalid customer code format")
+
+                customer = NonSamproxCustomer(
+                    customer_code=customer_code,
+                    customer_name=customer_name,
+                    area_code=area_code,
+                    city=city,
+                    district=district,
+                    province=province,
+                    managed_by_user_id=managed_by,
+                    company_id=company.id,
+                )
+                db.session.add(customer)
             db.session.commit()
             return jsonify({"ok": True, "data": _serialize_customer(customer)}), 201
+        except ValueError:
+            db.session.rollback()
+            return jsonify({"ok": False, "error": "Invalid customer code format"}), 400
         except IntegrityError:
             db.session.rollback()
             if attempts >= 2:

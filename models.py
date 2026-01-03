@@ -95,6 +95,7 @@ class Company(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(64), nullable=False, unique=True)
     name = db.Column(db.String(255), nullable=False)
+    company_code_prefix = db.Column(db.String(4), nullable=False, server_default="", default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self) -> str:  # pragma: no cover - representation helper
@@ -1638,7 +1639,7 @@ class NonSamproxCustomer(db.Model):
     __tablename__ = "non_samprox_customers"
 
     id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
-    customer_code = db.Column(db.String(6), nullable=False, unique=True)
+    customer_code = db.Column(db.String(10), nullable=False, unique=True)
     customer_name = db.Column(db.Text, nullable=False)
     area_code = db.Column(db.String(5), nullable=True)
     city = db.Column(db.String(80), nullable=True)
@@ -1657,6 +1658,21 @@ class NonSamproxCustomer(db.Model):
 
     __table_args__ = (
         db.Index("ix_non_samprox_customers_city_district", "city", "district"),
+    )
+
+
+class CustomerCodeSequence(db.Model):
+    __tablename__ = "customer_code_sequences"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
+    year_yy = db.Column(db.String(2), nullable=False)
+    last_number = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "year_yy", name="uq_customer_code_sequence_company_year"),
     )
 
 

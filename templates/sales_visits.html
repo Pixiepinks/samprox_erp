@@ -165,6 +165,7 @@
                     <label class="form-field">
                         <span>Customer Code</span>
                         <input type="text" id="ns-customer-code" placeholder="Auto-generated" readonly />
+                        <p class="eyebrow text--error" id="ns-code-error" hidden style="margin-top: 0.2rem;">Unable to generate customer code</p>
                     </label>
                     <label class="form-field">
                         <span>Customer Name</span>
@@ -320,6 +321,7 @@
             nonSamproxSubtitle: getElement("non-samprox-subtitle"),
             cancelEdit: getElement("cancel-edit"),
             nsCustomerCode: getElement("ns-customer-code"),
+            nsCustomerCodeError: getElement("ns-code-error"),
             nsCustomerName: getElement("ns-customer-name"),
             nsAreaCode: getElement("ns-area-code"),
             nsCity: getElement("ns-city"),
@@ -355,6 +357,23 @@
             if (!elements.nscEditorMsg) return;
             elements.nscEditorMsg.textContent = message;
             elements.nscEditorMsg.hidden = !message;
+        }
+
+        function showCodeError(message = "Unable to generate customer code") {
+            if (elements.nsCustomerCodeError) {
+                elements.nsCustomerCodeError.textContent = message;
+                elements.nsCustomerCodeError.hidden = false;
+            }
+            if (elements.nsSave) {
+                elements.nsSave.disabled = true;
+            }
+        }
+
+        function clearCodeError() {
+            if (elements.nsCustomerCodeError) {
+                elements.nsCustomerCodeError.hidden = true;
+                elements.nsCustomerCodeError.textContent = "";
+            }
         }
 
         function clearNscMessage() {
@@ -800,18 +819,28 @@
             loadNonSamproxCustomers(term);
         });
 
-        async function loadNextNonSamproxCode() {
+        async function loadNextNonSamproxCode(companyId) {
             elements.nsCustomerCode.value = "";
-            elements.nsCustomerCode.placeholder = "Auto-generated";
+            elements.nsCustomerCode.placeholder = companyId ? "Loading..." : "Select company";
+            clearCodeError();
+            if (elements.nsSave) {
+                elements.nsSave.disabled = !companyId;
+            }
+            if (!companyId) return;
             try {
-                const response = await authFetch("/api/non-samprox-customers/next-code");
+                const response = await authFetch(`/api/non-samprox-customers/next-code?company_id=${companyId}`);
                 const data = await response.json();
-                const nextCode = data?.data?.next_code || data?.next_code;
+                const nextCode = data?.data?.next_code || data?.data?.customer_code || data?.next_code;
                 if (data.ok && nextCode) {
                     elements.nsCustomerCode.value = nextCode;
+                    elements.nsCustomerCode.placeholder = "Auto-generated";
+                    if (elements.nsSave) elements.nsSave.disabled = false;
+                } else {
+                    showCodeError("Unable to generate customer code");
                 }
             } catch (err) {
                 console.error("Unable to load next customer code", err);
+                showCodeError("Unable to generate customer code");
             }
         }
 
@@ -891,6 +920,9 @@
             } else if (mode === "create") {
                 elements.nsActive.value = "true";
             }
+            if (elements.nsSave) {
+                elements.nsSave.disabled = false;
+            }
         }
 
         function populateNonSamproxForm(customer) {
@@ -922,6 +954,7 @@
             elements.nonSamproxForm.reset();
             setNonSamproxMode("create");
             clearNscMessage();
+            clearCodeError();
             if (user.role === "sales") {
                 elements.nsManagedBy.value = user.id;
                 elements.nsManagedBy.disabled = true;
@@ -931,14 +964,15 @@
             elements.nsCustomerCode.readOnly = true;
             elements.nsCustomerCode.placeholder = "Auto-generated";
             elements.nonSamproxError.hidden = true;
-            await loadNextNonSamproxCode();
+            await loadNextNonSamproxCode(elements.nsCompany.value);
             openModal(elements.nonSamproxModal);
         });
 
         elements.cancelEdit.addEventListener("click", async () => {
             setNonSamproxMode("create");
             elements.nonSamproxForm.reset();
-            await loadNextNonSamproxCode();
+            clearCodeError();
+            await loadNextNonSamproxCode(elements.nsCompany.value);
             elements.nonSamproxError.hidden = true;
             clearNscMessage();
         });
@@ -956,6 +990,7 @@
             await loadLocationData();
             elements.nonSamproxError.hidden = true;
             elements.nonSamproxForm.reset();
+            clearCodeError();
             try {
                 const response = await authFetch(`/api/non-samprox-customers/${selectedId}`);
                 const data = await response.json();
@@ -992,6 +1027,7 @@
                 district: elements.nsDistrict.value,
                 province: elements.nsProvince.value,
                 company_id: elements.nsCompany.value,
+                customer_code: elements.nsCustomerCode.value,
             };
 
             if (user.role !== "sales" && elements.nsManagedBy.value) {
@@ -1040,6 +1076,10 @@
         });
         elements.nsCity.addEventListener("change", () => {
             applyLocationForCity(elements.nsCity.value);
+        });
+        elements.nsCompany.addEventListener("change", async () => {
+            clearNscMessage();
+            await loadNextNonSamproxCode(elements.nsCompany.value);
         });
 
         loadLocationData();

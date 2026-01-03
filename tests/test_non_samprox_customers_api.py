@@ -25,7 +25,9 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
         User = self.app_module.User
         Company = self.app_module.Company
 
-        self.company = Company(key="samprox", name="Samprox International")
+        self.company = Company(key="samprox", name="Samprox International", company_code_prefix="")
+        self.exsol = Company(key="exsol-engineering", name="Exsol Engineering (Pvt) Ltd", company_code_prefix="E")
+        self.trading = Company(key="rainbows-end-trading", name="Rainbow Trading (Pvt) Ltd", company_code_prefix="T")
         self.sales = User(name="Sales One", email="sales@example.com", role=RoleEnum.sales)
         self.sales.set_password("Password!1")
         self.manager = User(name="Manager", email="manager@example.com", role=RoleEnum.outside_manager)
@@ -33,7 +35,9 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
         self.admin = User(name="Admin", email="admin@example.com", role=RoleEnum.admin)
         self.admin.set_password("Password!1")
 
-        self.app_module.db.session.add_all([self.company, self.sales, self.manager, self.admin])
+        self.app_module.db.session.add_all(
+            [self.company, self.exsol, self.trading, self.sales, self.manager, self.admin]
+        )
         self.app_module.db.session.commit()
 
         self.client = self.app.test_client()
@@ -59,7 +63,7 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
     def _create_customer(self, token, **overrides):
         payload = {
             "customer_name": overrides.pop("customer_name", "Customer"),
-            "company_id": self.company.id,
+            "company_id": overrides.pop("company_id", self.company.id),
             "city": overrides.pop("city", "Colombo"),
         }
         payload.update(overrides)
@@ -92,14 +96,20 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
     def test_preview_next_code_reflects_upcoming_sequence(self):
         with patch("routes.non_samprox_customers._now_colombo") as mock_now:
             mock_now.return_value = datetime(2026, 3, 1, tzinfo=ZoneInfo("Asia/Colombo"))
-            resp = self.client.get("/api/non-samprox-customers/next-code", headers=self._auth(self.sales_token))
+            resp = self.client.get(
+                f"/api/non-samprox-customers/next-code?company_id={self.company.id}",
+                headers=self._auth(self.sales_token),
+            )
             self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
             payload = resp.get_json()
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["next_code"], "260001")
 
             self._create_customer(self.sales_token, customer_name="Epsilon")
-            resp = self.client.get("/api/non-samprox-customers/next-code", headers=self._auth(self.sales_token))
+            resp = self.client.get(
+                f"/api/non-samprox-customers/next-code?company_id={self.company.id}",
+                headers=self._auth(self.sales_token),
+            )
             next_payload = resp.get_json()
             self.assertEqual(next_payload["next_code"], "260002")
 
@@ -114,6 +124,43 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
         ):
             created = self._create_customer(self.sales_token, customer_name="Eta")
             self.assertEqual(created["customer_code"], "260002")
+
+    def test_next_code_requires_company_id(self):
+        resp = self.client.get("/api/non-samprox-customers/next-code", headers=self._auth(self.sales_token))
+        self.assertEqual(resp.status_code, 400, resp.get_data(as_text=True))
+
+    def test_prefixed_next_code_and_creation_use_company_sequence(self):
+        with patch("routes.non_samprox_customers._now_colombo") as mock_now:
+            mock_now.return_value = datetime(2026, 5, 1, tzinfo=ZoneInfo("Asia/Colombo"))
+            resp = self.client.get(
+                f"/api/non-samprox-customers/next-code?company_id={self.exsol.id}",
+                headers=self._auth(self.sales_token),
+            )
+            self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+            preview = resp.get_json()
+            self.assertEqual(preview["next_code"], "E260001")
+
+            created = self._create_customer(
+                self.sales_token,
+                customer_name="Exsol One",
+                company_id=self.exsol.id,
+                customer_code=preview["next_code"],
+            )
+            self.assertEqual(created["customer_code"], "E260001")
+
+            second = self._create_customer(self.sales_token, customer_name="Exsol Two", company_id=self.exsol.id)
+            self.assertEqual(second["customer_code"], "E260002")
+
+    def test_sequences_are_per_company(self):
+        with patch("routes.non_samprox_customers._now_colombo") as mock_now:
+            mock_now.return_value = datetime(2026, 6, 1, tzinfo=ZoneInfo("Asia/Colombo"))
+            exsol = self._create_customer(self.sales_token, company_id=self.exsol.id, customer_name="A")
+            trading = self._create_customer(self.sales_token, company_id=self.trading.id, customer_name="B")
+            self.assertEqual(exsol["customer_code"], "E260001")
+            self.assertEqual(trading["customer_code"], "T260001")
+
+            exsol_second = self._create_customer(self.sales_token, company_id=self.exsol.id, customer_name="C")
+            self.assertEqual(exsol_second["customer_code"], "E260002")
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

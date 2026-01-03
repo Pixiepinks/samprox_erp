@@ -301,7 +301,16 @@
                     "company",
                 ].forEach((key) => {
                     const cell = document.createElement("td");
-                    cell.textContent = safeValue(dealer[key]);
+                    if (key === "customer_code" && dealer.customer_code) {
+                        const link = document.createElement("a");
+                        link.className = "dealers-table__link";
+                        link.href = `/miscellaneous/dealers/${encodeURIComponent(dealer.id || dealer.customer_code)}`;
+                        link.textContent = safeValue(dealer.customer_code);
+                        link.setAttribute("aria-label", `Edit customer ${dealer.customer_code}`);
+                        cell.appendChild(link);
+                    } else {
+                        cell.textContent = safeValue(dealer[key]);
+                    }
                     row.appendChild(cell);
                 });
                 dealersTableBody.appendChild(row);
@@ -352,6 +361,16 @@
         dealersModal.addEventListener("click", (event) => {
             if (event.target === dealersModal || event.target.classList.contains("fullscreen-modal__backdrop")) {
                 closeDealersModal();
+            }
+        });
+
+        dealersTableBody.addEventListener("click", (event) => {
+            const link = event.target.closest(".dealers-table__link");
+            if (!link) return;
+            event.preventDefault();
+            const href = link.getAttribute("href");
+            if (href) {
+                window.location.href = href;
             }
         });
 

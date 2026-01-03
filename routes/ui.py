@@ -449,6 +449,13 @@ def miscellaneous_page():
     return render_template("miscellaneous.html")
 
 
+@bp.get("/miscellaneous/dealers/<customer_identifier>")
+def dealer_edit_page(customer_identifier):
+    """Render an edit form for a single dealer (Non-Samprox customer)."""
+
+    return render_template("dealer_edit.html", customer_identifier=customer_identifier)
+
+
 @bp.get("/money")
 def money_page():
     """Render the financial overview page."""

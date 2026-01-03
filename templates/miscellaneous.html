@@ -540,6 +540,19 @@
             return data.data || data;
         };
 
+        const searchCustomerByCode = async (code) => {
+            if (!code) return null;
+            const resp = await fetch(`/api/non-samprox-customers?q=${encodeURIComponent(code)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+                return null;
+            }
+            const items = Array.isArray(data) ? data : data?.data || [];
+            return items.find((item) => item.customer_code === code) || items[0] || null;
+        };
+
         const populateCustomerEditForm = (customer) => {
             if (!customer) return;
             customerEditCode.value = customer.customer_code || "";
@@ -558,22 +571,27 @@
         };
 
         const openCustomerEditor = async (dealer) => {
-            if (!dealer?.id) {
-                showCustomerEditError("Customer details unavailable.");
-                return;
-            }
             showCustomerEditModal();
             hideCustomerEditError();
             setCustomerEditLoading();
             customerEditSave.disabled = true;
+            let customerId = dealer?.id || dealer?.customer_id || null;
+            let customer = null;
             try {
-                const customerPromise = fetchCustomerDetails(dealer.id);
-                const companiesPromise = loadEditCompanies();
-                const managedByPromise = loadManagedByOptions();
-                const customer = await customerPromise;
-                await companiesPromise;
-                await managedByPromise;
-                activeCustomerId = customer?.id || dealer.id;
+                if (customerId) {
+                    customer = await fetchCustomerDetails(customerId);
+                } else if (dealer?.customer_code) {
+                    customer = await searchCustomerByCode(dealer.customer_code);
+                    customerId = customer?.id || null;
+                }
+
+                if (!customer) {
+                    throw new Error("Customer details unavailable.");
+                }
+
+                await Promise.all([loadEditCompanies(), loadManagedByOptions()]);
+
+                activeCustomerId = customerId;
                 customerEditTitle.textContent = "Edit customer";
                 customerEditSubtitle.textContent = `${customer.customer_code || ""} — ${customer.customer_name || ""}`;
                 populateCustomerEditForm(customer);

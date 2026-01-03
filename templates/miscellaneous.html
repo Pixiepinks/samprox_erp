@@ -430,6 +430,12 @@
                         const button = document.createElement("button");
                         button.type = "button";
                         button.className = "dealers-table__link";
+                        if (dealer.id) {
+                            button.dataset.customerId = dealer.id;
+                        }
+                        if (dealer.customer_code) {
+                            button.dataset.customerCode = dealer.customer_code;
+                        }
                         button.textContent = safeValue(dealer.customer_code);
                         button.addEventListener("click", () => openCustomerEditor(dealer));
                         cell.appendChild(button);
@@ -677,6 +683,18 @@
             if (event.target === dealersModal || event.target.classList.contains("fullscreen-modal__backdrop")) {
                 closeDealersModal();
             }
+        });
+
+        dealersTableBody.addEventListener("click", (event) => {
+            const target = event.target.closest(".dealers-table__link");
+            if (!target) return;
+            event.preventDefault();
+            const code = target.dataset.customerCode || target.textContent;
+            const id = target.dataset.customerId;
+            const dealerMatch =
+                dealersCache.find((dealer) => dealer.id === id || dealer.customer_code === code) ||
+                { id, customer_code: code };
+            openCustomerEditor(dealerMatch);
         });
 
         customerModalCloseButtons.forEach((button) => {

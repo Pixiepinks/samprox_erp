@@ -2081,12 +2081,17 @@ body {
 }
 
 .modal.modal--stacked {
-    z-index: 1800;
+    z-index: 2000;
+    display: none;
 }
 
 .modal.modal--stacked .modal__overlay {
     backdrop-filter: blur(6px);
     background: rgba(15, 23, 42, 0.55);
+}
+
+.modal.modal--stacked.is-open {
+    display: flex;
 }
 
 .salary-form__summary {

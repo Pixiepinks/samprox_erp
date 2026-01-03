@@ -122,7 +122,7 @@
             </footer>
         </div>
     </div>
-    <div id="customerEditModal" class="modal modal--app modal--stacked" hidden role="dialog" aria-modal="true" aria-labelledby="customerEditTitle">
+    <div id="customerEditModal" class="modal modal--app modal--stacked" role="dialog" aria-modal="true" aria-labelledby="customerEditTitle">
         <div class="modal__overlay" data-close-modal></div>
         <div class="modal__content">
             <header class="modal__header modal__header--with-actions">
@@ -355,6 +355,10 @@
         let managedByCache = [];
         let activeCustomerId = null;
 
+        if (customerEditModal && customerEditModal.parentElement !== document.body) {
+            document.body.appendChild(customerEditModal);
+        }
+
         const toggleScrollLock = (locked) => {
             if (locked) {
                 document.body.classList.add("modal-open");
@@ -363,11 +367,11 @@
             }
         };
 
-        const isCustomerModalOpen = () => customerEditModal && !customerEditModal.hasAttribute("hidden");
+        const isCustomerModalOpen = () => customerEditModal?.classList.contains("is-open");
 
         const closeCustomerEditModal = () => {
             if (!customerEditModal) return;
-            customerEditModal.setAttribute("hidden", "hidden");
+            customerEditModal.classList.remove("is-open");
             activeCustomerId = null;
             customerEditError.hidden = true;
             customerEditLoading.hidden = true;
@@ -378,7 +382,7 @@
 
         const showCustomerEditModal = () => {
             if (!customerEditModal) return;
-            customerEditModal.removeAttribute("hidden");
+            customerEditModal.classList.add("is-open");
         };
 
         const setCustomerEditLoading = (message = "Loading customer…") => {

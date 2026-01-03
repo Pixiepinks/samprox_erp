@@ -2291,6 +2291,135 @@ body.modal-open {
     overflow: hidden;
 }
 
+/* Full-screen dealers modal */
+.fullscreen-modal {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1500;
+}
+
+.fullscreen-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(2px);
+}
+
+.fullscreen-modal__dialog {
+    position: relative;
+    background: #ffffff;
+    border-radius: 20px;
+    width: min(1100px, 94vw);
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 28px 60px rgba(15, 23, 42, 0.35);
+    display: flex;
+    flex-direction: column;
+}
+
+.fullscreen-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.fullscreen-modal__header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.fullscreen-modal__close {
+    background: none;
+    border: none;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #475569;
+    padding: 0.35rem;
+    border-radius: 50%;
+}
+
+.fullscreen-modal__close:hover,
+.fullscreen-modal__close:focus-visible {
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+    outline: none;
+}
+
+.fullscreen-modal__body {
+    padding: 1rem 1.5rem 0.5rem;
+    overflow: hidden;
+}
+
+.fullscreen-modal__table-wrapper {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 16px;
+    overflow: auto;
+    background: #f8fafc;
+    max-height: 60vh;
+}
+
+.fullscreen-modal__status {
+    padding: 1.25rem;
+    text-align: center;
+    font-weight: 600;
+    color: #475569;
+}
+
+.fullscreen-modal__status--error {
+    color: #b91c1c;
+}
+
+.dealers-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+}
+
+.dealers-table th,
+.dealers-table td {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+    color: #0f172a;
+    font-size: 0.95rem;
+}
+
+.dealers-table th {
+    position: sticky;
+    top: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+    z-index: 1;
+    font-weight: 700;
+    color: #1e293b;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.45);
+    text-transform: none;
+}
+
+.dealers-table tr:hover td {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.fullscreen-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    background: #ffffff;
+}
+
+.fullscreen-modal__footer .button {
+    min-width: 120px;
+}
+
 @media (max-width: 768px) {
     .salary-section__controls {
         justify-content: flex-start;
@@ -2302,6 +2431,21 @@ body.modal-open {
 
     .modal.modal--app .modal__content {
         width: 100%;
+    }
+
+    .fullscreen-modal__dialog {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .fullscreen-modal__body {
+        padding: 0.75rem 1rem 0.25rem;
+    }
+
+    .fullscreen-modal__table-wrapper {
+        max-height: calc(100vh - 160px);
     }
 }
 .status-badge {
@@ -2657,6 +2801,10 @@ body.modal-open {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.2rem;
+}
+
+.hidden {
+    display: none !important;
 }
 
 .tile {

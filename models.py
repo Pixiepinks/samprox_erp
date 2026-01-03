@@ -1644,6 +1644,8 @@ class NonSamproxCustomer(db.Model):
     city = db.Column(db.String(80), nullable=True)
     district = db.Column(db.String(80), nullable=True)
     province = db.Column(db.String(80), nullable=True)
+    managed_by_label = db.Column("managed_by", db.String(120), nullable=True)
+    company_label = db.Column("company", db.String(80), nullable=True)
     managed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)

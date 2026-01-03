@@ -1,0 +1,49 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "data-entry" %}
+{% block page_title %}Sales Data Entry | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Data capture</p>
+            <h1>Sales Data Entry</h1>
+            <p class="section__description">
+                Use this workspace to enter or review sales records. Inputs remain intentionally minimal so granular rules can be added later.
+            </p>
+        </div>
+    </header>
+    <div class="card">
+        <div class="form-grid">
+            <label class="form-field">
+                <span>Entry type</span>
+                <select id="sales-entry-type">
+                    <option value="">Select</option>
+                    <option value="actual">Actual</option>
+                    <option value="forecast">Forecast</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Customer</span>
+                <input type="text" id="sales-entry-customer" placeholder="Search or select customer" />
+            </label>
+            <label class="form-field">
+                <span>Date</span>
+                <input type="date" id="sales-entry-date" />
+            </label>
+            <label class="form-field">
+                <span>Quantity</span>
+                <input type="number" step="any" id="sales-entry-quantity" placeholder="Tons or units" />
+            </label>
+            <label class="form-field">
+                <span>Unit price</span>
+                <input type="number" step="any" id="sales-entry-unit-price" placeholder="LKR" />
+            </label>
+        </div>
+        <p class="form-feedback" id="sales-entry-feedback">Future validations and submission hooks will plug in here.</p>
+        <div class="card__actions">
+            <button type="button" class="button button--primary" id="sales-entry-save">Save entry</button>
+            <button type="button" class="button button--ghost" id="sales-entry-reset">Reset</button>
+        </div>
+    </div>
+</section>
+{% endblock %}

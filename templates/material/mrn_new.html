@@ -584,6 +584,9 @@
         if (user?.role === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
+        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
 
         const roleLabels = {
             admin: "Admin",
@@ -592,6 +595,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            sales_manager: "Sales Manager",
         };
 
         const userNameEl = document.getElementById("user-name");

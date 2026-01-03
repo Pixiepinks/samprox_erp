@@ -241,6 +241,9 @@
         if (!token || !user) {
             window.location.href = "/";
         }
+        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
 
         const roleLabels = {
             admin: "Admin",
@@ -249,6 +252,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Outside Manager",
+            sales_manager: "Sales Manager",
             sales: "Sales",
         };
 

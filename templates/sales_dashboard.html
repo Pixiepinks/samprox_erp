@@ -1,0 +1,30 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "dashboard" %}
+{% block page_title %}Sales Dashboard | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Sales overview</p>
+            <h1>Sales Dashboard</h1>
+            <p class="section__description">
+                Track the latest sales pulse. This shell is ready for charts and KPIs without locking in any future business rules.
+            </p>
+        </div>
+    </header>
+    <div class="section__grid">
+        <article class="tile">
+            <h2 class="tile__title">Pipeline summary</h2>
+            <p class="tile__description">Placeholder for upcoming pipeline KPIs and quick filters.</p>
+        </article>
+        <article class="tile">
+            <h2 class="tile__title">Dispatch status</h2>
+            <p class="tile__description">Future widget for daily/weekly dispatch visibility.</p>
+        </article>
+        <article class="tile">
+            <h2 class="tile__title">Priority customers</h2>
+            <p class="tile__description">Surface high-touch accounts and their recent interactions.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}

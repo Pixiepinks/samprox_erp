@@ -52,6 +52,7 @@ class RoleEnum(str, Enum):
     maintenance_manager = "maintenance_manager"
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
+    sales_manager = "sales_manager"
     sales = "sales"
 
 
@@ -71,6 +72,11 @@ ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
         "responsibility_plan_view",
         "responsibility_plan_edit",
         "responsibility_plan_create",
+    },
+    RoleEnum.sales_manager: {
+        "sales:dashboard",
+        "sales:data_entry",
+        "sales:reports",
     },
     RoleEnum.sales: {
         "petty_cash_weekly_travel_claims:view",

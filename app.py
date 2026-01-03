@@ -7,7 +7,8 @@ import click
 from alembic import command
 from alembic.config import Config as AlembicConfig
 from alembic.script import ScriptDirectory
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
+from flask_jwt_extended import get_jwt, verify_jwt_in_request
 from sqlalchemy import create_engine, func, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -223,6 +224,60 @@ def create_app():
     app.register_blueprint(non_samprox_customers.bp)
     app.register_blueprint(sales_visits.bp)
     app.register_blueprint(dealers.bp)
+
+    def _jwt_role() -> RoleEnum | None:
+        try:
+            verify_jwt_in_request(optional=True)
+        except Exception:
+            return None
+
+        try:
+            claims = get_jwt()
+        except Exception:
+            claims = None
+
+        if not claims:
+            return None
+
+        try:
+            return RoleEnum(claims.get("role"))
+        except Exception:
+            return None
+
+    @app.before_request
+    def _limit_sales_manager_scope():
+        role = _jwt_role()
+        if role != RoleEnum.sales_manager:
+            return None
+
+        endpoint = request.endpoint or ""
+        if not endpoint or endpoint.startswith("static"):
+            return None
+
+        allowed_endpoints = {
+            "auth.login",
+            "auth.logout",
+            "ui.login_page",
+            "ui.sales_dashboard_page",
+            "ui.sales_data_entry_page",
+            "ui.sales_reports_page",
+            "ui.sales_dashboard_redirect",
+            "health",
+        }
+        allowed_report_endpoints = {
+            "reports.customer_sales_report",
+            "reports.sales_summary",
+            "reports.monthly_sales_summary",
+        }
+
+        if endpoint in allowed_endpoints:
+            return None
+        if endpoint.startswith("market."):
+            return None
+        if endpoint in allowed_report_endpoints:
+            return None
+
+        return jsonify({"ok": False, "error": "Access denied"}), 403
 
     @app.get("/api/health")
     def health(): return jsonify({"ok": True})

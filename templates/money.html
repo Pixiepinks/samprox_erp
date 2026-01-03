@@ -513,6 +513,10 @@
             window.location.replace("/machines");
         }
 
+        if (normalizedRole === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
+
         if (normalizedRole === "sales" && window.location.pathname !== "/money") {
             window.location.replace("/money");
         }
@@ -524,6 +528,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            sales_manager: "Sales Manager",
             sales: "Sales",
         };
 

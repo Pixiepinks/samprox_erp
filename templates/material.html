@@ -573,6 +573,9 @@
         if (userRole === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
+        if (userRole === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+            window.location.replace("/sales/dashboard");
+        }
 
         const roleLabels = {
             admin: "Admin",
@@ -581,6 +584,7 @@
             finance_manager: "Finance Manager",
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
+            sales_manager: "Sales Manager",
         };
 
         const DEFAULT_DRY_FACTOR = 0.6;

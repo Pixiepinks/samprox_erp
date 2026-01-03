@@ -251,6 +251,17 @@ def _enforce_role_page_restrictions():
         return None
 
     role = _current_role()
+    if role == RoleEnum.sales_manager:
+        allowed_endpoints = {
+            "ui.login_page",
+            "ui.sales_dashboard_page",
+            "ui.sales_data_entry_page",
+            "ui.sales_reports_page",
+        }
+        if endpoint in allowed_endpoints:
+            return None
+        return redirect(url_for("ui.sales_dashboard_page"))
+
     if role == RoleEnum.sales:
         allowed_endpoints = {"ui.login_page", "ui.money_page", "ui.sales_visits_page"}
         if endpoint in allowed_endpoints:
@@ -293,6 +304,30 @@ def mind_page():
 def dashboard_redirect():
     """Preserve the legacy dashboard route by redirecting to Mind."""
     return redirect(url_for("ui.mind_page"))
+
+
+@bp.get("/sales")
+def sales_dashboard_redirect():
+    """Redirect /sales to the Sales Manager dashboard."""
+    return redirect(url_for("ui.sales_dashboard_page"))
+
+
+@bp.get("/sales/dashboard")
+def sales_dashboard_page():
+    """Render the Sales Manager dashboard shell."""
+    return render_template("sales_dashboard.html", active_tab="dashboard")
+
+
+@bp.get("/sales/data-entry")
+def sales_data_entry_page():
+    """Render the Sales Manager data entry shell."""
+    return render_template("sales_data_entry.html", active_tab="data-entry")
+
+
+@bp.get("/sales/reports")
+def sales_reports_page():
+    """Render the Sales Manager reports shell."""
+    return render_template("sales_reports.html", active_tab="reports")
 
 
 @bp.get("/man")

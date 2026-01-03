@@ -1650,11 +1650,14 @@ class NonSamproxCustomer(db.Model):
     managed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    source = db.Column(db.String(50), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     managed_by = db.relationship("User", foreign_keys=[managed_by_user_id])
     company = db.relationship("Company")
+    creator = db.relationship("User", foreign_keys=[created_by])
 
     __table_args__ = (
         db.Index("ix_non_samprox_customers_city_district", "city", "district"),

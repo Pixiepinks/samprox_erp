@@ -60,6 +60,12 @@
                         View and manage all the dealers.
                     </p>
                 </article>
+                <article class="tile misc-tile" id="bulkDealersTile" role="button" tabindex="0" aria-pressed="false">
+                    <h2 class="tile__title">Bulk Updation</h2>
+                    <p class="tile__description">
+                        Bulk create Dealers (Non-Samprox customers) via CSV upload.
+                    </p>
+                </article>
                 <article class="tile">
                     <h2 class="tile__title">Reference links</h2>
                     <p class="tile__description">
@@ -108,6 +114,86 @@
                             </tr>
                         </thead>
                         <tbody id="dealersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <footer class="fullscreen-modal__footer">
+                <button type="button" class="button fullscreen-modal__footer-close" data-close-modal>Close</button>
+            </footer>
+        </div>
+    </div>
+    <div id="bulkDealersModal" class="fullscreen-modal hidden" role="dialog" aria-modal="true" aria-labelledby="bulkDealersModalTitle">
+        <div class="fullscreen-modal__backdrop"></div>
+        <div class="fullscreen-modal__dialog fullscreen-modal__dialog--wide">
+            <header class="fullscreen-modal__header">
+                <h2 id="bulkDealersModalTitle">Bulk Updation — Dealers</h2>
+                <button type="button" class="fullscreen-modal__close" aria-label="Close bulk upload">✖</button>
+            </header>
+            <div class="fullscreen-modal__body">
+                <div class="bulk-modal__controls">
+                    <label class="bulk-modal__field">
+                        <span class="bulk-modal__label">Company <span class="bulk-modal__required">*</span></span>
+                        <select id="bulkCompanySelect" class="edit-form__input">
+                            <option value="">Select company</option>
+                        </select>
+                    </label>
+                    <label class="bulk-modal__field bulk-modal__toggle">
+                        <input type="checkbox" id="bulkStrictMode" />
+                        <span>Strict mode (fail all if any error)</span>
+                    </label>
+                    <button type="button" class="button button--ghost" id="downloadBulkTemplate">
+                        Download template
+                    </button>
+                </div>
+                <div class="bulk-modal__upload">
+                    <label class="bulk-modal__field bulk-modal__upload-field">
+                        <span class="bulk-modal__label">CSV file <span class="bulk-modal__required">*</span></span>
+                        <input type="file" id="bulkFileInput" accept=".csv" />
+                    </label>
+                    <div class="bulk-modal__actions">
+                        <button type="button" class="button button--secondary" id="validateBulkBtn">Validate</button>
+                        <button type="button" class="button button--primary" id="importBulkBtn">Import</button>
+                        <button type="button" class="button button--ghost" data-close-modal>Cancel</button>
+                    </div>
+                </div>
+                <div id="bulkStatus" class="fullscreen-modal__status hidden"></div>
+                <div id="bulkError" class="fullscreen-modal__status fullscreen-modal__status--error hidden"></div>
+                <div class="bulk-modal__summary hidden" id="bulkSummary">
+                    <p class="bulk-modal__summary-title">Import summary</p>
+                    <div class="bulk-modal__summary-grid">
+                        <div class="bulk-modal__summary-item">
+                            <p class="bulk-modal__summary-label">Inserted</p>
+                            <p class="bulk-modal__summary-value" id="bulkInsertedCount">0</p>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <p class="bulk-modal__summary-label">Failed</p>
+                            <p class="bulk-modal__summary-value" id="bulkFailedCount">0</p>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <p class="bulk-modal__summary-label">Generated codes</p>
+                            <p class="bulk-modal__summary-value" id="bulkGeneratedCount">0</p>
+                        </div>
+                    </div>
+                    <button type="button" class="button button--ghost hidden" id="downloadErrorReport">
+                        Download error report CSV
+                    </button>
+                </div>
+                <div class="fullscreen-modal__table-wrapper bulk-modal__preview hidden" id="bulkPreviewWrapper">
+                    <table class="dealers-table" aria-describedby="bulkDealersModalTitle">
+                        <thead>
+                            <tr>
+                                <th scope="col">Row</th>
+                                <th scope="col">customer_code</th>
+                                <th scope="col">customer_name</th>
+                                <th scope="col">area_code</th>
+                                <th scope="col">city</th>
+                                <th scope="col">district</th>
+                                <th scope="col">province</th>
+                                <th scope="col">managed_by</th>
+                                <th scope="col">Error</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkPreviewBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -269,9 +355,248 @@
             }
         });
 
+        const bulkDealersTile = document.getElementById("bulkDealersTile");
+        const bulkDealersModal = document.getElementById("bulkDealersModal");
+        const bulkCloseButtons = bulkDealersModal.querySelectorAll(".fullscreen-modal__close, [data-close-modal]");
+        const bulkCompanySelect = document.getElementById("bulkCompanySelect");
+        const bulkStrictMode = document.getElementById("bulkStrictMode");
+        const bulkFileInput = document.getElementById("bulkFileInput");
+        const bulkPreviewBody = document.getElementById("bulkPreviewBody");
+        const bulkStatus = document.getElementById("bulkStatus");
+        const bulkError = document.getElementById("bulkError");
+        const bulkSummary = document.getElementById("bulkSummary");
+        const bulkInsertedCount = document.getElementById("bulkInsertedCount");
+        const bulkFailedCount = document.getElementById("bulkFailedCount");
+        const bulkGeneratedCount = document.getElementById("bulkGeneratedCount");
+        const downloadTemplateBtn = document.getElementById("downloadBulkTemplate");
+        const downloadErrorReportBtn = document.getElementById("downloadErrorReport");
+        const validateBulkBtn = document.getElementById("validateBulkBtn");
+        const importBulkBtn = document.getElementById("importBulkBtn");
+        const bulkPreviewWrapper = document.getElementById("bulkPreviewWrapper");
+        const allowedBulkRoles = ["admin", "finance_manager", "production_manager"];
+        let errorReportToken = null;
+
+        const hideBulkForUnauthorized = () => {
+            if (!allowedBulkRoles.includes(user?.role)) {
+                bulkDealersTile?.remove();
+                bulkDealersModal?.remove();
+            }
+        };
+
+        hideBulkForUnauthorized();
+
+        const resetBulkState = () => {
+            bulkStatus.classList.add("hidden");
+            bulkError.classList.add("hidden");
+            bulkStatus.textContent = "";
+            bulkError.textContent = "";
+            bulkSummary.classList.add("hidden");
+            bulkInsertedCount.textContent = "0";
+            bulkFailedCount.textContent = "0";
+            bulkGeneratedCount.textContent = "0";
+            downloadErrorReportBtn.classList.add("hidden");
+            errorReportToken = null;
+            bulkPreviewBody.innerHTML = "";
+            bulkPreviewWrapper.classList.add("hidden");
+        };
+
+        const loadCompanies = async () => {
+            try {
+                const resp = await fetch("/api/companies", { headers: { Authorization: `Bearer ${token}` } });
+                if (!resp.ok) throw new Error(`Failed to load companies: ${resp.status}`);
+                const payload = await resp.json();
+                const data = Array.isArray(payload) ? payload : payload?.data || [];
+                bulkCompanySelect.innerHTML = '<option value=\"\">Select company</option>';
+                data.forEach((company) => {
+                    const option = document.createElement("option");
+                    option.value = company.id;
+                    option.textContent = company.name;
+                    bulkCompanySelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error(error);
+                bulkError.textContent = "Unable to load companies. Please retry.";
+                bulkError.classList.remove("hidden");
+            }
+        };
+
+        const openBulkModal = async () => {
+            if (!allowedBulkRoles.includes(user?.role)) return;
+            resetBulkState();
+            bulkDealersModal.classList.remove("hidden");
+            toggleScrollLock(true);
+            await loadCompanies();
+        };
+
+        const closeBulkModal = () => {
+            bulkDealersModal.classList.add("hidden");
+            toggleScrollLock(false);
+        };
+
+        const renderPreview = (rows = []) => {
+            bulkPreviewBody.innerHTML = "";
+            rows.forEach((row) => {
+                const tr = document.createElement("tr");
+                if (row.error) {
+                    tr.classList.add("bulk-row--error");
+                }
+                const cells = [
+                    row.row_number,
+                    row.customer_code || "",
+                    row.customer_name || "",
+                    row.area_code || "",
+                    row.city || "",
+                    row.district || "",
+                    row.province || "",
+                    row.managed_by || "",
+                    row.error || "",
+                ];
+                cells.forEach((value) => {
+                    const td = document.createElement("td");
+                    td.textContent = value ?? "";
+                    tr.appendChild(td);
+                });
+                bulkPreviewBody.appendChild(tr);
+            });
+            bulkPreviewWrapper.classList.remove("hidden");
+        };
+
+        const downloadTemplate = () => {
+            window.open("/api/dealers/bulk-template", "_blank");
+        };
+
+        const validateBulk = async () => {
+            resetBulkState();
+            const companyId = bulkCompanySelect.value;
+            if (!companyId) {
+                bulkError.textContent = "Please select a company.";
+                bulkError.classList.remove("hidden");
+                return;
+            }
+            const file = bulkFileInput.files?.[0];
+            if (!file) {
+                bulkError.textContent = "Please choose a CSV file to validate.";
+                bulkError.classList.remove("hidden");
+                return;
+            }
+            const formData = new FormData();
+            formData.append("company_id", companyId);
+            formData.append("file", file);
+            bulkStatus.textContent = "Validating file…";
+            bulkStatus.classList.remove("hidden");
+            try {
+                const resp = await fetch("/api/dealers/bulk-validate", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                });
+                const payload = await resp.json();
+                if (!resp.ok || !payload?.ok) {
+                    const errors = payload?.errors?.join?.(", ") || payload?.error || "Validation failed.";
+                    throw new Error(errors);
+                }
+                const rows = payload.data?.rows || [];
+                renderPreview(rows);
+                bulkStatus.textContent = `Validation complete — Valid: ${payload.data.valid_count}, Failed: ${payload.data.failed_count}`;
+            } catch (error) {
+                bulkStatus.classList.add("hidden");
+                bulkError.textContent = error.message || "Validation failed.";
+                bulkError.classList.remove("hidden");
+            }
+        };
+
+        const importBulk = async () => {
+            resetBulkState();
+            const companyId = bulkCompanySelect.value;
+            if (!companyId) {
+                bulkError.textContent = "Please select a company.";
+                bulkError.classList.remove("hidden");
+                return;
+            }
+            const file = bulkFileInput.files?.[0];
+            if (!file) {
+                bulkError.textContent = "Please choose a CSV file to import.";
+                bulkError.classList.remove("hidden");
+                return;
+            }
+            const formData = new FormData();
+            formData.append("company_id", companyId);
+            formData.append("file", file);
+            formData.append("strict_mode", bulkStrictMode.checked ? "true" : "false");
+            bulkStatus.textContent = "Importing dealers…";
+            bulkStatus.classList.remove("hidden");
+            try {
+                const resp = await fetch("/api/dealers/bulk-import", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                    body: formData,
+                });
+                const payload = await resp.json();
+                if (!resp.ok || !payload?.ok) {
+                    const message = payload?.error || "Import failed.";
+                    if (payload?.error_report_token) {
+                        errorReportToken = payload.error_report_token;
+                        downloadErrorReportBtn.classList.remove("hidden");
+                    }
+                    throw new Error(message);
+                }
+                const data = payload.data || {};
+                bulkInsertedCount.textContent = data.inserted_count ?? 0;
+                bulkFailedCount.textContent = data.failed_count ?? 0;
+                bulkGeneratedCount.textContent = data.generated_codes_count ?? 0;
+                errorReportToken = data.error_report_token;
+                if (errorReportToken) {
+                    downloadErrorReportBtn.classList.remove("hidden");
+                }
+                bulkSummary.classList.remove("hidden");
+                bulkStatus.textContent = "Import completed.";
+                if (Array.isArray(data.failed_rows)) {
+                    renderPreview(data.failed_rows);
+                }
+                dealersLoaded = false;
+            } catch (error) {
+                bulkStatus.classList.add("hidden");
+                bulkError.textContent = error.message || "Import failed.";
+                bulkError.classList.remove("hidden");
+            }
+        };
+
+        const downloadErrorReport = () => {
+            if (!errorReportToken) return;
+            window.open(`/api/dealers/bulk-error-report/${errorReportToken}`, "_blank");
+        };
+
+        bulkDealersTile?.addEventListener("click", openBulkModal);
+        bulkDealersTile?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openBulkModal();
+            }
+        });
+
+        bulkCloseButtons.forEach((button) => {
+            button.addEventListener("click", closeBulkModal);
+        });
+
+        bulkDealersModal?.addEventListener("click", (event) => {
+            if (event.target === bulkDealersModal || event.target.classList.contains("fullscreen-modal__backdrop")) {
+                closeBulkModal();
+            }
+        });
+
+        downloadTemplateBtn?.addEventListener("click", downloadTemplate);
+        downloadErrorReportBtn?.addEventListener("click", downloadErrorReport);
+        validateBulkBtn?.addEventListener("click", validateBulk);
+        importBulkBtn?.addEventListener("click", importBulk);
+
         window.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && !dealersModal.classList.contains("hidden")) {
-                closeDealersModal();
+            if (event.key === "Escape") {
+                if (!dealersModal.classList.contains("hidden")) {
+                    closeDealersModal();
+                }
+                if (bulkDealersModal && !bulkDealersModal.classList.contains("hidden")) {
+                    closeBulkModal();
+                }
             }
         });
     </script>

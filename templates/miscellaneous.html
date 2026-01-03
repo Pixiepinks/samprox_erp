@@ -122,6 +122,69 @@
             </footer>
         </div>
     </div>
+    <div id="customerEditModal" class="modal modal--app modal--stacked" role="dialog" aria-modal="true" aria-labelledby="customerEditTitle">
+        <div class="modal__overlay" data-close-modal></div>
+        <div class="modal__content">
+            <header class="modal__header modal__header--with-actions">
+                <div>
+                    <h2 id="customerEditTitle" class="modal__title">Edit customer</h2>
+                    <p id="customerEditSubtitle" class="eyebrow" style="margin: 0;"></p>
+                </div>
+                <button type="button" class="modal__close" aria-label="Close customer editor" data-close-modal>×</button>
+            </header>
+            <div class="modal__body">
+                <div id="customerEditLoading" class="fullscreen-modal__status" hidden>Loading customer…</div>
+                <div id="customerEditError" class="fullscreen-modal__status fullscreen-modal__status--error" hidden></div>
+                <form id="customerEditForm" class="modal__form">
+                    <div class="modal__grid">
+                        <label class="modal__field">
+                            <span class="modal__label">Customer code</span>
+                            <input id="customerEditCode" class="modal__input" type="text" readonly />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Customer name</span>
+                            <input id="customerEditName" class="modal__input" type="text" required />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Company</span>
+                            <select id="customerEditCompany" class="modal__select" required></select>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Managed by</span>
+                            <select id="customerEditManagedBy" class="modal__select"></select>
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">City</span>
+                            <input id="customerEditCity" class="modal__input" type="text" />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Area code</span>
+                            <input id="customerEditAreaCode" class="modal__input" type="text" />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">District</span>
+                            <input id="customerEditDistrict" class="modal__input" type="text" />
+                        </label>
+                        <label class="modal__field">
+                            <span class="modal__label">Province</span>
+                            <input id="customerEditProvince" class="modal__input" type="text" />
+                        </label>
+                        <label class="modal__field" id="customerEditActiveField" hidden>
+                            <span class="modal__label">Active</span>
+                            <select id="customerEditActive" class="modal__select">
+                                <option value="true">Active</option>
+                                <option value="false">Inactive</option>
+                            </select>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <footer class="modal__footer modal__actions">
+                <button type="button" class="button button--ghost" data-close-modal>Cancel</button>
+                <button type="submit" form="customerEditForm" class="button button--primary" id="customerEditSave">Save</button>
+            </footer>
+        </div>
+    </div>
     <div id="bulkDealersModal" class="fullscreen-modal hidden" role="dialog" aria-modal="true" aria-labelledby="bulkDealersModalTitle">
         <div class="fullscreen-modal__backdrop"></div>
         <div class="fullscreen-modal__dialog fullscreen-modal__dialog--wide">
@@ -268,8 +331,33 @@
         const dealersError = document.getElementById("dealersError");
         const dealersTable = dealersModal.querySelector(".dealers-table");
         const dealersTableBody = document.getElementById("dealersTableBody");
+        const customerEditModal = document.getElementById("customerEditModal");
+        const customerEditForm = document.getElementById("customerEditForm");
+        const customerEditError = document.getElementById("customerEditError");
+        const customerEditLoading = document.getElementById("customerEditLoading");
+        const customerEditTitle = document.getElementById("customerEditTitle");
+        const customerEditSubtitle = document.getElementById("customerEditSubtitle");
+        const customerEditSave = document.getElementById("customerEditSave");
+        const customerEditCode = document.getElementById("customerEditCode");
+        const customerEditName = document.getElementById("customerEditName");
+        const customerEditCompany = document.getElementById("customerEditCompany");
+        const customerEditManagedBy = document.getElementById("customerEditManagedBy");
+        const customerEditCity = document.getElementById("customerEditCity");
+        const customerEditAreaCode = document.getElementById("customerEditAreaCode");
+        const customerEditDistrict = document.getElementById("customerEditDistrict");
+        const customerEditProvince = document.getElementById("customerEditProvince");
+        const customerEditActive = document.getElementById("customerEditActive");
+        const customerEditActiveField = document.getElementById("customerEditActiveField");
+        const customerModalCloseButtons = customerEditModal?.querySelectorAll("[data-close-modal]") || [];
         let dealersLoaded = false;
         let dealersCache = [];
+        let companiesCache = [];
+        let managedByCache = [];
+        let activeCustomerId = null;
+
+        if (customerEditModal && customerEditModal.parentElement !== document.body) {
+            document.body.appendChild(customerEditModal);
+        }
 
         const toggleScrollLock = (locked) => {
             if (locked) {
@@ -277,6 +365,47 @@
             } else {
                 document.body.classList.remove("modal-open");
             }
+        };
+
+        const isCustomerModalOpen = () => customerEditModal?.classList.contains("is-open");
+
+        const closeCustomerEditModal = () => {
+            if (!customerEditModal) return;
+            customerEditModal.classList.remove("is-open");
+            activeCustomerId = null;
+            customerEditError.hidden = true;
+            customerEditLoading.hidden = true;
+            if (customerEditForm) {
+                customerEditForm.reset();
+            }
+        };
+
+        const showCustomerEditModal = () => {
+            if (!customerEditModal) return;
+            customerEditModal.classList.add("is-open");
+        };
+
+        const setCustomerEditLoading = (message = "Loading customer…") => {
+            if (!customerEditLoading) return;
+            customerEditLoading.textContent = message;
+            customerEditLoading.hidden = false;
+        };
+
+        const hideCustomerEditLoading = () => {
+            if (!customerEditLoading) return;
+            customerEditLoading.hidden = true;
+        };
+
+        const showCustomerEditError = (message) => {
+            if (!customerEditError) return;
+            customerEditError.textContent = message || "Unable to load customer";
+            customerEditError.hidden = false;
+        };
+
+        const hideCustomerEditError = () => {
+            if (!customerEditError) return;
+            customerEditError.hidden = true;
+            customerEditError.textContent = "";
         };
 
         const closeDealersModal = () => {
@@ -301,11 +430,215 @@
                     "company",
                 ].forEach((key) => {
                     const cell = document.createElement("td");
-                    cell.textContent = safeValue(dealer[key]);
+                    if (key === "customer_code" && dealer.customer_code) {
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "dealers-table__link";
+                        if (dealer.id) {
+                            button.dataset.customerId = dealer.id;
+                        }
+                        if (dealer.customer_code) {
+                            button.dataset.customerCode = dealer.customer_code;
+                        }
+                        button.textContent = safeValue(dealer.customer_code);
+                        button.addEventListener("click", () => openCustomerEditor(dealer));
+                        cell.appendChild(button);
+                    } else {
+                        cell.textContent = safeValue(dealer[key]);
+                    }
                     row.appendChild(cell);
                 });
                 dealersTableBody.appendChild(row);
             });
+        };
+
+        const loadEditCompanies = async () => {
+            if (companiesCache.length) return companiesCache;
+            try {
+                const resp = await fetch("/api/companies", { headers: { Authorization: `Bearer ${token}` } });
+                if (!resp.ok) throw new Error("Unable to load companies");
+                const data = await resp.json();
+                companiesCache = (Array.isArray(data) ? data : data?.data) || [];
+            } catch (error) {
+                console.error("Failed to load companies", error);
+                throw new Error("Unable to load companies");
+            }
+            return companiesCache;
+        };
+
+        const loadManagedByOptions = async () => {
+            if (managedByCache.length) return managedByCache;
+            try {
+                if (user?.role === "admin") {
+                    const resp = await fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } });
+                    const data = await resp.json();
+                    const items = Array.isArray(data) ? data : data?.data || [];
+                    managedByCache = items.filter((u) => ["sales", "outside_manager"].includes(u.role));
+                } else if (user?.role === "outside_manager") {
+                    const resp = await fetch("/api/sales-visits/team", {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const data = await resp.json();
+                    const teamMembers = data?.data || [];
+                    const unique = new Map();
+                    teamMembers.forEach((member) => {
+                        if (member.manager) unique.set(member.manager.id, member.manager);
+                        if (member.sales_user) unique.set(member.sales_user.id, member.sales_user);
+                    });
+                    if (user?.id && user?.name) {
+                        unique.set(user.id, { id: user.id, name: user.name, role: user.role });
+                    }
+                    managedByCache = Array.from(unique.values());
+                } else if (user?.id) {
+                    managedByCache = [{ id: user.id, name: user.name, role: user.role }];
+                }
+            } catch (error) {
+                console.error("Failed to load managed by options", error);
+                managedByCache = user?.id && user?.name ? [{ id: user.id, name: user.name, role: user.role }] : [];
+            }
+            return managedByCache;
+        };
+
+        const populateCompaniesSelect = (selectedId = null) => {
+            if (!customerEditCompany) return;
+            customerEditCompany.innerHTML = '<option value="">Select company</option>';
+            companiesCache.forEach((company) => {
+                const option = document.createElement("option");
+                option.value = company.id;
+                option.textContent = company.name;
+                customerEditCompany.appendChild(option);
+            });
+            if (selectedId) {
+                customerEditCompany.value = String(selectedId);
+            }
+        };
+
+        const populateManagedBySelect = (selectedId = null) => {
+            if (!customerEditManagedBy) return;
+            customerEditManagedBy.innerHTML = "";
+            managedByCache.forEach((manager) => {
+                const option = document.createElement("option");
+                option.value = manager.id;
+                const roleLabel = manager.role ? ` (${manager.role})` : "";
+                option.textContent = `${manager.name}${roleLabel}`;
+                customerEditManagedBy.appendChild(option);
+            });
+            if (selectedId) {
+                customerEditManagedBy.value = String(selectedId);
+            }
+            if (!customerEditManagedBy.value && managedByCache[0]) {
+                customerEditManagedBy.value = managedByCache[0].id;
+            }
+            customerEditManagedBy.disabled = user?.role === "sales";
+            if (!managedByCache.length && user?.id && user?.name) {
+                const option = document.createElement("option");
+                option.value = user.id;
+                option.textContent = `${user.name}${user.role ? ` (${user.role})` : ""}`;
+                customerEditManagedBy.appendChild(option);
+                customerEditManagedBy.disabled = true;
+            }
+        };
+
+        const fetchCustomerDetails = async (customerId) => {
+            const resp = await fetch(`/api/non-samprox-customers/${customerId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+                throw new Error(data?.error || "Unable to load customer");
+            }
+            return data.data || data;
+        };
+
+        const searchCustomerByCode = async (code) => {
+            if (!code) return null;
+            const resp = await fetch(`/api/non-samprox-customers?q=${encodeURIComponent(code)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) {
+                return null;
+            }
+            const items = Array.isArray(data) ? data : data?.data || [];
+            return items.find((item) => item.customer_code === code) || items[0] || null;
+        };
+
+        const populateCustomerEditForm = (customer) => {
+            if (!customer) return;
+            customerEditCode.value = customer.customer_code || "";
+            customerEditName.value = customer.customer_name || "";
+            customerEditCity.value = customer.city || "";
+            customerEditAreaCode.value = customer.area_code || "";
+            customerEditDistrict.value = customer.district || "";
+            customerEditProvince.value = customer.province || "";
+            populateCompaniesSelect(customer.company_id);
+            populateManagedBySelect(customer.managed_by_user_id);
+            const canToggleActive = user?.role === "admin" || user?.role === "outside_manager";
+            customerEditActiveField.hidden = !canToggleActive;
+            if (canToggleActive) {
+                customerEditActive.value = customer.is_active ? "true" : "false";
+            }
+        };
+
+        const openCustomerEditor = async (dealer) => {
+            showCustomerEditModal();
+            hideCustomerEditError();
+            setCustomerEditLoading();
+            customerEditSave.disabled = true;
+            let customerId = dealer?.id || dealer?.customer_id || null;
+            let customer = null;
+            try {
+                if (customerId) {
+                    customer = await fetchCustomerDetails(customerId);
+                } else if (dealer?.customer_code) {
+                    customer = await searchCustomerByCode(dealer.customer_code);
+                    customerId = customer?.id || null;
+                }
+
+                if (!customer) {
+                    throw new Error("Customer details unavailable.");
+                }
+
+                await Promise.all([loadEditCompanies(), loadManagedByOptions()]);
+
+                activeCustomerId = customerId;
+                customerEditTitle.textContent = "Edit customer";
+                customerEditSubtitle.textContent = `${customer.customer_code || ""} — ${customer.customer_name || ""}`;
+                populateCustomerEditForm(customer);
+                hideCustomerEditLoading();
+                hideCustomerEditError();
+                customerEditSave.disabled = false;
+            } catch (error) {
+                console.error("Failed to open customer editor", error);
+                hideCustomerEditLoading();
+                customerEditSave.disabled = true;
+                showCustomerEditError(error.message || "Unable to load customer");
+            }
+        };
+
+        const updateDealersCache = (updatedCustomer) => {
+            if (!updatedCustomer) return;
+            const normalized = {
+                id: updatedCustomer.id,
+                customer_code: updatedCustomer.customer_code,
+                customer_name: updatedCustomer.customer_name,
+                area_code: updatedCustomer.area_code,
+                city: updatedCustomer.city,
+                district: updatedCustomer.district,
+                province: updatedCustomer.province,
+                managed_by: updatedCustomer.managed_by || updatedCustomer.managed_by_name,
+                company: updatedCustomer.company || updatedCustomer.company_name,
+            };
+            const existingIndex = dealersCache.findIndex(
+                (dealer) =>
+                    dealer.id === normalized.id || dealer.customer_code === normalized.customer_code
+            );
+            if (existingIndex >= 0) {
+                dealersCache[existingIndex] = { ...dealersCache[existingIndex], ...normalized };
+            } else {
+                dealersCache.unshift(normalized);
+            }
+            renderDealers(dealersCache);
         };
 
         const showDealersModal = async () => {
@@ -350,8 +683,91 @@
         });
 
         dealersModal.addEventListener("click", (event) => {
+            if (isCustomerModalOpen()) return;
             if (event.target === dealersModal || event.target.classList.contains("fullscreen-modal__backdrop")) {
                 closeDealersModal();
+            }
+        });
+
+        dealersTableBody.addEventListener("click", (event) => {
+            const target = event.target.closest(".dealers-table__link");
+            if (!target) return;
+            event.preventDefault();
+            const code = target.dataset.customerCode || target.textContent;
+            const id = target.dataset.customerId;
+            const dealerMatch =
+                dealersCache.find((dealer) => dealer.id === id || dealer.customer_code === code) ||
+                { id, customer_code: code };
+            openCustomerEditor(dealerMatch);
+        });
+
+        customerModalCloseButtons.forEach((button) => {
+            button.addEventListener("click", closeCustomerEditModal);
+        });
+
+        customerEditModal?.addEventListener("click", (event) => {
+            if (event.target.dataset.closeModal || event.target.classList.contains("modal__overlay")) {
+                closeCustomerEditModal();
+            }
+        });
+
+        customerEditForm?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            hideCustomerEditError();
+            if (!activeCustomerId) {
+                showCustomerEditError("No customer selected.");
+                return;
+            }
+            const payload = {
+                customer_name: customerEditName.value?.trim(),
+                area_code: customerEditAreaCode.value,
+                city: customerEditCity.value,
+                district: customerEditDistrict.value,
+                province: customerEditProvince.value,
+                company_id: customerEditCompany.value ? Number(customerEditCompany.value) : null,
+            };
+            if (!payload.customer_name) {
+                showCustomerEditError("Customer name is required.");
+                return;
+            }
+            if (!payload.company_id) {
+                showCustomerEditError("Please select a company.");
+                return;
+            }
+            if (user?.role !== "sales" && customerEditManagedBy.value) {
+                payload.managed_by_user_id = Number(customerEditManagedBy.value);
+            }
+            if (user?.role === "admin" || user?.role === "outside_manager") {
+                payload.is_active = customerEditActive.value === "true";
+            }
+            const originalText = customerEditSave.textContent;
+            customerEditSave.disabled = true;
+            customerEditSave.textContent = "Saving…";
+            try {
+                const response = await fetch(`/api/non-samprox-customers/${activeCustomerId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json();
+                if (!response.ok || !data?.ok) {
+                    const message =
+                        response.status === 403
+                            ? "You do not have permission to edit this customer."
+                            : data?.error || "Unable to update customer.";
+                    throw new Error(message);
+                }
+                updateDealersCache(data.data);
+                closeCustomerEditModal();
+            } catch (error) {
+                console.error("Failed to save customer", error);
+                showCustomerEditError(error.message || "Unable to update customer.");
+            } finally {
+                customerEditSave.disabled = false;
+                customerEditSave.textContent = originalText;
             }
         });
 
@@ -591,6 +1007,10 @@
 
         window.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
+                if (isCustomerModalOpen()) {
+                    closeCustomerEditModal();
+                    return;
+                }
                 if (!dealersModal.classList.contains("hidden")) {
                     closeDealersModal();
                 }

@@ -2080,6 +2080,20 @@ body {
     padding-top: 1rem;
 }
 
+.modal.modal--stacked {
+    z-index: 2000;
+    display: none;
+}
+
+.modal.modal--stacked .modal__overlay {
+    backdrop-filter: blur(6px);
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.modal.modal--stacked.is-open {
+    display: flex;
+}
+
 .salary-form__summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -2509,6 +2523,28 @@ body.modal-open {
 
 .dealers-table tr:hover td {
     background: rgba(59, 130, 246, 0.05);
+}
+
+.dealers-table__link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #2563eb;
+    text-decoration: underline;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dealers-table__link:hover,
+.dealers-table__link:focus-visible {
+    color: #1d4ed8;
+    outline: none;
+    text-decoration: underline;
+}
+
+.dealers-table__link:focus-visible {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+    border-radius: 6px;
 }
 
 .fullscreen-modal__footer {

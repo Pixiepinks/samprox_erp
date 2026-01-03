@@ -1,10 +1,14 @@
+import csv
 import importlib
+import io
 import os
 import sys
 import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
+
+import models as models_module
 
 
 class NonSamproxCustomersApiTestCase(unittest.TestCase):
@@ -43,6 +47,7 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
         self.client = self.app.test_client()
         self.sales_token = self._login("sales@example.com")
         self.admin_token = self._login("admin@example.com")
+        self.NonSamproxCustomer = models_module.NonSamproxCustomer
 
     def tearDown(self):
         self.app_module.db.session.remove()
@@ -161,6 +166,176 @@ class NonSamproxCustomersApiTestCase(unittest.TestCase):
 
             exsol_second = self._create_customer(self.sales_token, company_id=self.exsol.id, customer_name="C")
             self.assertEqual(exsol_second["customer_code"], "E260002")
+
+    def _csv_bytes(self, rows):
+        buffer = io.StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=["customer_code", "customer_name", "area_code", "city", "district", "province", "managed_by"],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+        return buffer.getvalue().encode("utf-8")
+
+    def _bulk_import(self, rows, strict=False, expected_status=200):
+        payload = {
+            "company_id": str(self.exsol.id),
+            "strict_mode": "true" if strict else "false",
+            "file": (io.BytesIO(self._csv_bytes(rows)), "bulk.csv"),
+        }
+        resp = self.client.post(
+            "/api/dealers/bulk-import",
+            data=payload,
+            content_type="multipart/form-data",
+            headers=self._auth(self.admin_token),
+        )
+        self.assertEqual(resp.status_code, expected_status, resp.get_data(as_text=True))
+        return resp.get_json()
+
+    def _bulk_validate(self, rows, expected_status=200):
+        payload = {
+            "company_id": str(self.exsol.id),
+            "file": (io.BytesIO(self._csv_bytes(rows)), "bulk.csv"),
+        }
+        resp = self.client.post(
+            "/api/dealers/bulk-validate",
+            data=payload,
+            content_type="multipart/form-data",
+            headers=self._auth(self.admin_token),
+        )
+        self.assertEqual(resp.status_code, expected_status, resp.get_data(as_text=True))
+        return resp.get_json()
+
+    def test_bulk_validation_detects_errors_and_counts(self):
+        rows = [
+            {
+                "customer_code": "",
+                "customer_name": "Dealer A",
+                "area_code": "100",
+                "city": "Colombo",
+                "district": "Colombo",
+                "province": "Western",
+                "managed_by": str(self.sales.id),
+            },
+            {
+                "customer_code": "",
+                "customer_name": "",
+                "area_code": "",
+                "city": "",
+                "district": "",
+                "province": "",
+                "managed_by": "unknown",
+            },
+        ]
+        payload = self._bulk_validate(rows)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["valid_count"], 1)
+        self.assertEqual(payload["data"]["failed_count"], 1)
+        preview_errors = [row for row in payload["data"]["rows"] if row.get("error")]
+        self.assertEqual(len(preview_errors), 1)
+
+    def test_bulk_import_inserts_valid_rows_and_generates_codes(self):
+        rows = [
+            {
+                "customer_code": "",
+                "customer_name": "Dealer A",
+                "area_code": "100",
+                "city": "Colombo",
+                "district": "Colombo",
+                "province": "Western",
+                "managed_by": str(self.sales.id),
+            },
+            {
+                "customer_code": "E250123",
+                "customer_name": "Dealer B",
+                "area_code": "200",
+                "city": "Galle",
+                "district": "Galle",
+                "province": "Southern",
+                "managed_by": self.sales.name,
+            },
+        ]
+        payload = self._bulk_import(rows)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["inserted_count"], 2)
+        self.assertEqual(payload["data"]["failed_count"], 0)
+        self.assertEqual(payload["data"]["generated_codes_count"], 1)
+        total = self.app_module.db.session.query(self.NonSamproxCustomer).count()
+        self.assertEqual(total, 2)
+
+    def test_bulk_import_partial_success_when_not_strict(self):
+        rows = [
+            {
+                "customer_code": "",
+                "customer_name": "Dealer A",
+                "area_code": "100",
+                "city": "Colombo",
+                "district": "Colombo",
+                "province": "Western",
+                "managed_by": str(self.sales.id),
+            },
+            {
+                "customer_code": "E250999",
+                "customer_name": "",
+                "area_code": "",
+                "city": "",
+                "district": "",
+                "province": "",
+                "managed_by": "missing",
+            },
+        ]
+        payload = self._bulk_import(rows)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["inserted_count"], 1)
+        self.assertEqual(payload["data"]["failed_count"], 1)
+        self.assertIsNotNone(payload["data"]["error_report_token"])
+        total = self.app_module.db.session.query(self.NonSamproxCustomer).count()
+        self.assertEqual(total, 1)
+
+    def test_bulk_import_strict_mode_aborts_on_error(self):
+        rows = [
+            {
+                "customer_code": "E250555",
+                "customer_name": "Dealer A",
+                "area_code": "100",
+                "city": "Colombo",
+                "district": "Colombo",
+                "province": "Western",
+                "managed_by": str(self.sales.id),
+            },
+            {
+                "customer_code": "E250555",
+                "customer_name": "Dealer B",
+                "area_code": "200",
+                "city": "Galle",
+                "district": "Galle",
+                "province": "Southern",
+                "managed_by": str(self.sales.id),
+            },
+        ]
+        payload = self._bulk_import(rows, strict=True, expected_status=400)
+        self.assertFalse(payload["ok"])
+        total = self.app_module.db.session.query(self.NonSamproxCustomer).count()
+        self.assertEqual(total, 0)
+
+    def test_bulk_import_rejects_duplicate_customer_code(self):
+        existing = self._create_customer(self.sales_token, company_id=self.exsol.id, customer_name="Existing")
+        rows = [
+            {
+                "customer_code": existing["customer_code"],
+                "customer_name": "Dealer A",
+                "area_code": "100",
+                "city": "Colombo",
+                "district": "Colombo",
+                "province": "Western",
+                "managed_by": str(self.sales.id),
+            }
+        ]
+        payload = self._bulk_import(rows, expected_status=400, strict=True)
+        self.assertFalse(payload["ok"])
+        total = self.app_module.db.session.query(self.NonSamproxCustomer).count()
+        self.assertEqual(total, 1)
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience

@@ -2322,6 +2322,10 @@ body.modal-open {
     flex-direction: column;
 }
 
+.fullscreen-modal__dialog--wide {
+    width: min(1280px, 96vw);
+}
+
 .fullscreen-modal__header {
     display: flex;
     align-items: center;
@@ -2376,6 +2380,105 @@ body.modal-open {
 
 .fullscreen-modal__status--error {
     color: #b91c1c;
+}
+
+.bulk-modal__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+    margin-bottom: 0.75rem;
+}
+
+.bulk-modal__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.bulk-modal__label {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+.bulk-modal__required {
+    color: #dc2626;
+}
+
+.bulk-modal__toggle {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.bulk-modal__upload {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.bulk-modal__upload-field input[type="file"] {
+    background: #fff;
+}
+
+.bulk-modal__actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.bulk-modal__summary {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    margin-bottom: 0.75rem;
+}
+
+.bulk-modal__summary-title {
+    margin: 0 0 0.5rem 0;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.bulk-modal__summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.bulk-modal__summary-item {
+    background: #fff;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    padding: 0.65rem 0.75rem;
+}
+
+.bulk-modal__summary-label {
+    margin: 0;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.bulk-modal__summary-value {
+    margin: 0.15rem 0 0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.bulk-modal__preview {
+    margin-top: 0.75rem;
+}
+
+.bulk-row--error td {
+    background: rgba(248, 113, 113, 0.12);
+    color: #991b1b;
 }
 
 .dealers-table {

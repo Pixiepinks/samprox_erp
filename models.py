@@ -1612,6 +1612,29 @@ class PettyCashWeeklyLine(db.Model):
 
     claim = db.relationship("PettyCashWeeklyClaim", back_populates="lines")
 
+    def recalculate_total(self) -> None:
+        """Recompute row_total from all weekday amounts."""
+
+        amounts = (
+            self.mon_amount,
+            self.tue_amount,
+            self.wed_amount,
+            self.thu_amount,
+            self.fri_amount,
+            self.sat_amount,
+            self.sun_amount,
+        )
+        total = Decimal("0")
+        for amount in amounts:
+            if isinstance(amount, Decimal):
+                total += amount
+                continue
+            try:
+                total += Decimal(str(amount or 0))
+            except Exception:
+                total += Decimal("0")
+        self.row_total = total
+
 
 def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
     """Calculate great-circle distance between two points in meters."""

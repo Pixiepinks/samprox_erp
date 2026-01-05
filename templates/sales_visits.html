@@ -587,10 +587,15 @@
 
         async function loadCompanies() {
             if (companies.length) return;
-            const response = await authFetch("/api/companies");
-            const data = await response.json();
-            if (!data.ok) return;
-            companies = data.data || [];
+            try {
+                const response = await authFetch("/api/companies");
+                const data = await response.json();
+                if (!data.ok) return;
+                companies = data.data || [];
+            } catch (err) {
+                console.error("Unable to load companies", err);
+                return;
+            }
             elements.nsCompany.innerHTML = "";
             const placeholder = document.createElement("option");
             placeholder.value = "";
@@ -620,13 +625,17 @@
         async function populateManagedBySelect() {
             elements.nsManagedBy.innerHTML = "";
             let managedByChoices = [];
-            if (user.role === "admin") {
-                const response = await authFetch("/api/users");
-                const data = await response.json();
-                const items = Array.isArray(data) ? data : data?.data || [];
-                managedByChoices = items.filter((u) => u.role === "sales" || u.role === "outside_manager");
-            } else if (user.role === "outside_manager" || user.role === "sales") {
-                managedByChoices = buildManagedByOptions();
+            try {
+                if (user.role === "admin") {
+                    const response = await authFetch("/api/users");
+                    const data = await response.json();
+                    const items = Array.isArray(data) ? data : data?.data || [];
+                    managedByChoices = items.filter((u) => u.role === "sales" || u.role === "outside_manager");
+                } else if (user.role === "outside_manager" || user.role === "sales") {
+                    managedByChoices = buildManagedByOptions();
+                }
+            } catch (err) {
+                console.error("Unable to load managed-by users", err);
             }
 
             managedByChoices.forEach((optionData) => {
@@ -952,12 +961,20 @@
         }
 
         elements.openCustomerModal.addEventListener("click", async () => {
-            await loadCompanies();
-            await populateManagedBySelect();
-            await loadLocationData();
-            elements.nonSamproxForm.reset();
-            setNonSamproxMode("create");
+            let preloadFailed = false;
             clearNscMessage();
+            try {
+                await loadCompanies();
+                await populateManagedBySelect();
+                await loadLocationData();
+            } catch (err) {
+                preloadFailed = true;
+                console.error("Unable to preload non Samprox data", err);
+            }
+            if (elements.nonSamproxForm) {
+                elements.nonSamproxForm.reset();
+            }
+            setNonSamproxMode("create");
             clearCodeError();
             if (user.role === "sales") {
                 elements.nsManagedBy.value = user.id;
@@ -969,6 +986,9 @@
             elements.nsCustomerCode.placeholder = "Auto-generated";
             elements.nonSamproxError.hidden = true;
             await loadNextNonSamproxCode(elements.nsCompany.value);
+            if (preloadFailed) {
+                showNscMessage("Some customer options could not be loaded. You can still add details manually.");
+            }
             openModal(elements.nonSamproxModal);
         });
 

@@ -36,7 +36,7 @@ DEFAULT_EXPENSE_TYPES = [
     "Lunch",
     "Dinner",
     "Lodging",
-    "High Way Charges",
+    "High Way",
 ]
 
 DISALLOWED_DEFAULT_EXPENSE_TYPES = {
@@ -264,6 +264,35 @@ def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
     return removed
 
 
+def _ensure_default_lines(claim: PettyCashWeeklyClaim) -> bool:
+    existing = {(line.expense_type or "").strip().lower(): line for line in claim.lines}
+    existing_orders = [line.line_order or 0 for line in claim.lines]
+    next_order = (max(existing_orders) if existing_orders else 0) + 1
+    added = False
+
+    for expense in DEFAULT_EXPENSE_TYPES:
+        normalized = expense.strip().lower()
+        if normalized in existing:
+            continue
+        line = PettyCashWeeklyLine(
+            claim_id=claim.id,
+            line_order=next_order,
+            expense_type=expense,
+        )
+        line.recalculate_total()
+        db.session.add(line)
+        next_order += 1
+        added = True
+
+    if added:
+        _resequence_lines(claim)
+        claim.recalculate_totals()
+        db.session.commit()
+        db.session.refresh(claim)
+
+    return added
+
+
 def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:
     if _has_full_petty_cash_access(user):
         return False
@@ -357,6 +386,7 @@ def init_claim():
     )
     if existing:
         _prune_disallowed_lines(existing)
+        _ensure_default_lines(existing)
         return jsonify({"claim": _serialize_claim(existing)})
 
     sheet_no = _generate_sheet_number(week_start)
@@ -500,6 +530,7 @@ def get_claim(claim_id: int):
         return jsonify({"msg": "You are not allowed to view this claim."}), 403
 
     _prune_disallowed_lines(claim)
+    _ensure_default_lines(claim)
     return jsonify({"claim": _serialize_claim(claim)})
 
 

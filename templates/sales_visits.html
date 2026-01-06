@@ -20,7 +20,7 @@
                 </div>
             </div>
             <div class="topbar__actions">
-                <a class="button button--ghost" href="{{ url_for('ui.money_page') }}">Money</a>
+                <a class="button button--ghost" id="header-back-link" href="{{ url_for('ui.money_page') }}">Money</a>
                 <div class="user-summary">
                     <span class="user-summary__name" id="user-name"></span>
                     <span class="user-summary__role" id="user-role"></span>
@@ -246,6 +246,12 @@
             if (!allowedSalesManagerPaths.has(window.location.pathname)) {
                 window.location.replace("/sales/dashboard");
             }
+        }
+
+        const backLink = document.getElementById("header-back-link");
+        if (user?.role === "sales_manager") {
+            backLink?.setAttribute("href", "/sales/dashboard");
+            if (backLink) backLink.textContent = "Dashboard";
         }
 
         const roleLabels = {

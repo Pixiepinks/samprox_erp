@@ -53,6 +53,7 @@ class RoleEnum(str, Enum):
     finance_manager = "finance_manager"
     outside_manager = "outside_manager"
     sales_manager = "sales_manager"
+    sales_executive = "sales_executive"
     sales = "sales"
 
 
@@ -66,6 +67,9 @@ class SalesVisitApprovalStatus(str, Enum):
     not_required = "NOT_REQUIRED"
 
 
+SALES_MANAGER_ROLES: set[RoleEnum] = {RoleEnum.sales_manager, RoleEnum.sales_executive}
+
+
 # Explicitly enumerate scoped permissions per role for UI and API guards.
 ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
     RoleEnum.finance_manager: {
@@ -74,6 +78,13 @@ ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
         "responsibility_plan_create",
     },
     RoleEnum.sales_manager: {
+        "sales:dashboard",
+        "sales:data_entry",
+        "sales:reports",
+        "sales:visits:view",
+        "sales:visits:manage",
+    },
+    RoleEnum.sales_executive: {
         "sales:dashboard",
         "sales:data_entry",
         "sales:reports",

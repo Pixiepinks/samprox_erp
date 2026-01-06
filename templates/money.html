@@ -513,7 +513,7 @@
             window.location.replace("/machines");
         }
 
-        if (normalizedRole === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+        if ((normalizedRole === "sales_manager" || normalizedRole === "sales_executive") && window.location.pathname !== "/sales/dashboard") {
             window.location.replace("/sales/dashboard");
         }
 
@@ -529,6 +529,7 @@
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
             sales_manager: "Sales Manager",
+            sales_executive: "Sales Executive",
             sales: "Sales",
         };
 
@@ -555,7 +556,7 @@
         }
         if (
             salesVisitsLink &&
-            ["sales", "outside_manager", "admin", "finance_manager", "production_manager", "sales_manager"].includes(
+            ["sales", "outside_manager", "admin", "finance_manager", "production_manager", "sales_manager", "sales_executive"].includes(
                 normalizedRole,
             )
         ) {

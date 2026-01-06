@@ -106,7 +106,7 @@
         if (!token || !user) {
             window.location.href = "/";
         }
-        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+        if ((user?.role === "sales_manager" || user?.role === "sales_executive") && window.location.pathname !== "/sales/dashboard") {
             window.location.replace("/sales/dashboard");
         }
 
@@ -118,6 +118,7 @@
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
             sales_manager: "Sales Manager",
+            sales_executive: "Sales Executive",
         };
 
         document.getElementById("user-name").textContent = user?.name || "Unknown";

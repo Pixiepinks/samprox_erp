@@ -29,7 +29,7 @@ def _current_role() -> RoleEnum | None:
 @bp.before_request
 @jwt_required()
 def _block_sales_access():
-    if _current_role() in {RoleEnum.sales, RoleEnum.sales_manager}:
+    if _current_role() in {RoleEnum.sales, RoleEnum.sales_manager, RoleEnum.sales_executive}:
         return jsonify({"error": "Access denied"}), 403
 
 

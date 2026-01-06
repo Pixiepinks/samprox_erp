@@ -13,6 +13,7 @@ _ALLOWED_ROLES = {
     RoleEnum.finance_manager,
     RoleEnum.production_manager,
     RoleEnum.sales_manager,
+    RoleEnum.sales_executive,
 }
 
 
@@ -35,7 +36,7 @@ def _enforce_authentication():
 @bp.get("")
 def list_sales_users():
     users = (
-        User.query.filter(User.active.is_(True), User.role.in_([RoleEnum.sales, RoleEnum.sales_manager]))
+        User.query.filter(User.active.is_(True), User.role.in_([RoleEnum.sales, RoleEnum.sales_manager, RoleEnum.sales_executive]))
         .order_by(asc(User.name))
         .all()
     )

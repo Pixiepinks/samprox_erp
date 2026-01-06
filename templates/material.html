@@ -573,7 +573,7 @@
         if (userRole === "maintenance_manager" && window.location.pathname !== "/machines") {
             window.location.replace("/machines");
         }
-        if (userRole === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
+        if ((userRole === "sales_manager" || userRole === "sales_executive") && window.location.pathname !== "/sales/dashboard") {
             window.location.replace("/sales/dashboard");
         }
 
@@ -585,6 +585,7 @@
             technician: "Technician",
             outside_manager: "Member Of Rainbow Group",
             sales_manager: "Sales Manager",
+            sales_executive: "Sales Executive",
         };
 
         const DEFAULT_DRY_FACTOR = 0.6;

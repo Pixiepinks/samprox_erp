@@ -256,11 +256,12 @@
             technician: "Technician",
             outside_manager: "Outside Manager",
             sales_manager: "Sales Manager",
+            sales_executive: "Sales Executive",
             sales: "Sales",
         };
 
-        const salesFilterRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager"]);
-        const cityColumnRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager"]);
+        const salesFilterRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager", "sales_executive"]);
+        const cityColumnRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager", "sales_executive"]);
 
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
@@ -288,7 +289,7 @@
         }
 
         function safeRedirectTarget() {
-            if (user?.role === "sales_manager") return "/sales/dashboard";
+            if (user?.role === "sales_manager" || user?.role === "sales_executive") return "/sales/dashboard";
             if (user?.role === "sales") return "/sales_visits";
             return null;
         }
@@ -345,7 +346,7 @@
         let showCityColumn = cityColumnRoles.has(user?.role);
 
         function enforceSalesManagerRouting() {
-            if (user?.role !== "sales_manager") return;
+            if (user?.role !== "sales_manager" && user?.role !== "sales_executive") return;
             const allowedSalesManagerPaths = new Set([
                 "/sales/dashboard",
                 "/sales/data-entry",

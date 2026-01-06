@@ -176,7 +176,7 @@ def _serialize_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
 @jwt_required()
 def _guard_roles():
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager, RoleEnum.sales_executive}:
         return jsonify({"ok": False, "error": "Access denied"}), 403
 
 
@@ -250,7 +250,7 @@ def list_customers():
     company_param = request.args.get("company_id")
 
     if managed_by_param:
-        if role not in {RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+        if role not in {RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager, RoleEnum.sales_executive}:
             return jsonify({"ok": False, "error": "Not authorized to filter by managed_by"}), 403
         try:
             target_managed_by = int(managed_by_param)

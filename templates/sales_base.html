@@ -45,6 +45,7 @@
         const roleLabels = {
             admin: "Admin",
             sales_manager: "Sales Manager",
+            sales_executive: "Sales Executive",
             production_manager: "Production Manager",
             maintenance_manager: "Maintenance Manager",
             finance_manager: "Finance Manager",
@@ -52,7 +53,7 @@
             sales: "Sales",
         };
 
-        const allowedRoles = new Set(["sales_manager", "admin"]);
+        const allowedRoles = new Set(["sales_manager", "sales_executive", "admin"]);
         const normalizedRole = (user?.role || "").toLowerCase();
         if (!allowedRoles.has(normalizedRole)) {
             if (normalizedRole === "sales") {

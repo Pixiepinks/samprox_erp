@@ -21,6 +21,7 @@ from models import (
     SalesVisitAttachment,
     User,
     RoleEnum,
+    SALES_MANAGER_ROLES,
     haversine_distance_meters,
 )
 
@@ -120,7 +121,7 @@ def _serialize_visit(visit: SalesVisit) -> dict[str, Any]:
 
 
 def _is_admin(role: Optional[RoleEnum]) -> bool:
-    return role in {RoleEnum.admin, RoleEnum.sales_manager}
+    return role in {RoleEnum.admin, *SALES_MANAGER_ROLES}
 
 
 def _can_view_sales_overview(role: Optional[RoleEnum]) -> bool:
@@ -128,7 +129,7 @@ def _can_view_sales_overview(role: Optional[RoleEnum]) -> bool:
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
-        RoleEnum.sales_manager,
+        *SALES_MANAGER_ROLES,
     }
 
 
@@ -174,7 +175,7 @@ def _guard_roles():
         RoleEnum.sales,
         RoleEnum.outside_manager,
         RoleEnum.admin,
-        RoleEnum.sales_manager,
+        *SALES_MANAGER_ROLES,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
     }:
@@ -224,7 +225,7 @@ def list_visits():
     if sales_user_id_param and role in {
         RoleEnum.outside_manager,
         RoleEnum.admin,
-        RoleEnum.sales_manager,
+        *SALES_MANAGER_ROLES,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
     }:
@@ -252,7 +253,7 @@ def create_visit():
     user = _current_user()
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, *SALES_MANAGER_ROLES}:
         return jsonify({"ok": False, "error": "Not authorized to create visits"}), 403
 
     payload = request.get_json() or {}
@@ -543,7 +544,7 @@ def approve_visit(visit_id: str):
     if not visit:
         return jsonify({"ok": False, "error": "Visit not found"}), 404
 
-    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, *SALES_MANAGER_ROLES}:
         return jsonify({"ok": False, "error": "Not authorized to approve"}), 403
 
     if visit.approval_status != SalesVisitApprovalStatus.pending:
@@ -581,7 +582,7 @@ def add_attachment(visit_id: str):
     if not visit:
         return jsonify({"ok": False, "error": "Visit not found"}), 404
 
-    if role not in {RoleEnum.admin, RoleEnum.sales_manager, RoleEnum.sales, RoleEnum.outside_manager}:
+    if role not in {RoleEnum.admin, *SALES_MANAGER_ROLES, RoleEnum.sales, RoleEnum.outside_manager}:
         return jsonify({"ok": False, "error": "Not authorized to add attachments"}), 403
     if role == RoleEnum.outside_manager:
         return jsonify({"ok": False, "error": "Managers cannot add attachments"}), 403
@@ -620,7 +621,7 @@ def add_team_member():
     except (TypeError, ValueError, KeyError):
         return jsonify({"ok": False, "error": "manager_user_id and sales_user_id are required"}), 400
 
-    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, *SALES_MANAGER_ROLES}:
         return jsonify({"ok": False, "error": "Not authorized"}), 403
     if role == RoleEnum.outside_manager and manager_user_id != user.id:
         return jsonify({"ok": False, "error": "Managers can only manage their own teams"}), 403
@@ -643,7 +644,7 @@ def list_team_members():
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
-    if role in {RoleEnum.admin, RoleEnum.sales_manager}:
+    if role in {RoleEnum.admin, *SALES_MANAGER_ROLES}:
         mappings = SalesTeamMember.query.all()
     elif role == RoleEnum.outside_manager:
         mappings = SalesTeamMember.query.filter_by(manager_user_id=user.id).all()
@@ -677,7 +678,7 @@ def remove_team_member(mapping_id: str):
     user = _current_user()
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
-    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, *SALES_MANAGER_ROLES}:
         return jsonify({"ok": False, "error": "Not authorized"}), 403
 
     mapping = SalesTeamMember.query.get(mapping_id)

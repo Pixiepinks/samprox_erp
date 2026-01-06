@@ -32,6 +32,7 @@ from models import (
     MRNHeader,
     MRNLine,
     RoleEnum,
+    SALES_MANAGER_ROLES,
     Supplier,
     SalesActualEntry,
     SalesForecastEntry,
@@ -249,7 +250,7 @@ def create_app():
     @app.before_request
     def _limit_sales_manager_scope():
         role = _jwt_role()
-        if role != RoleEnum.sales_manager:
+        if role not in SALES_MANAGER_ROLES:
             return None
 
         endpoint = request.endpoint or ""

@@ -26,6 +26,7 @@ def _guard_roles():
         RoleEnum.sales,
         RoleEnum.outside_manager,
         RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,

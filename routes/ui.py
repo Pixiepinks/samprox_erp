@@ -34,6 +34,7 @@ from models import (
     FinancialStatementValue,
     IFRS_TRIAL_BALANCE_CATEGORIES,
     RoleEnum,
+    SALES_MANAGER_ROLES,
     User,
     generate_financial_year_months,
 )
@@ -251,7 +252,7 @@ def _enforce_role_page_restrictions():
         return None
 
     role = _current_role()
-    if role == RoleEnum.sales_manager:
+    if role in SALES_MANAGER_ROLES:
         allowed_endpoints = {
             "ui.login_page",
             "ui.sales_dashboard_page",
@@ -533,6 +534,7 @@ def sales_visits_page():
         RoleEnum.outside_manager,
         RoleEnum.admin,
         RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
     }:

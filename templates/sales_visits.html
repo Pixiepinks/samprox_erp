@@ -326,9 +326,14 @@
                     return;
                 }
                 if (response.status === 401 || response.status === 403) {
-                    localStorage.removeItem("samprox_token");
-                    localStorage.removeItem("samprox_user");
-                    window.location.href = "/";
+                    console.warn("Session not authorized; using cached user context");
+                    if (!user) {
+                        localStorage.removeItem("samprox_token");
+                        localStorage.removeItem("samprox_user");
+                        window.location.href = "/";
+                        return;
+                    }
+                    applyUserContext();
                     return;
                 }
                 console.error(data?.error || "Unable to load session");

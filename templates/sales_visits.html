@@ -67,6 +67,7 @@
                             <tr>
                                 <th>Visit No</th>
                                 <th>Date</th>
+                                <th class="col-sales-person">Sales Person</th>
                                 <th>Customer / Prospect</th>
                                 <th>Purpose</th>
                                 <th>Check-in</th>
@@ -79,7 +80,7 @@
                         </thead>
                         <tbody id="visit-rows">
                             <tr id="visits-empty">
-                                <td colspan="10" style="text-align:center;">No visits yet.</td>
+                                <td colspan="11" style="text-align:center;">No visits yet.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -286,6 +287,7 @@
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
         };
+        const showSalesPersonColumn = user?.role !== "sales";
 
         function authFetch(url, options = {}) {
             return fetch(url, {
@@ -444,11 +446,28 @@
             return date.toLocaleString("en-GB", { timeZone: "Asia/Colombo" });
         }
 
+        function toggleSalesPersonColumnVisibility() {
+            const cells = document.querySelectorAll(".col-sales-person");
+            cells.forEach((cell) => {
+                if (showSalesPersonColumn) {
+                    cell.hidden = false;
+                    cell.style.display = "";
+                } else {
+                    cell.hidden = true;
+                    cell.style.display = "none";
+                }
+            });
+            if (elements.visitsEmpty && elements.visitsEmpty.firstElementChild) {
+                elements.visitsEmpty.firstElementChild.colSpan = showSalesPersonColumn ? 11 : 10;
+            }
+        }
+
         function renderVisits() {
             elements.visitRows.innerHTML = "";
             if (!visits.length) {
                 elements.visitRows.appendChild(elements.visitsEmpty);
                 elements.visitsEmpty.hidden = false;
+                toggleSalesPersonColumnVisibility();
                 return;
             }
             elements.visitsEmpty.hidden = true;
@@ -457,6 +476,7 @@
                 row.innerHTML = `
                     <td>${visit.visit_no}</td>
                     <td>${visit.visit_date || ""}</td>
+                    <td class="col-sales-person">${visit.sales_user_name || ""}</td>
                     <td>${visit.customer_display_name || visit.customer_name || visit.prospect_name || "-"}</td>
                     <td>${visit.purpose || ""}</td>
                     <td>${visit.check_in_time ? formatTime(visit.check_in_time) : "—"}</td>
@@ -472,6 +492,7 @@
                 `;
                 elements.visitRows.appendChild(row);
             });
+            toggleSalesPersonColumnVisibility();
         }
 
         function renderActions(visit) {
@@ -1115,6 +1136,7 @@
             await loadNextNonSamproxCode(elements.nsCompany.value);
         });
 
+        toggleSalesPersonColumnVisibility();
         loadLocationData();
         loadTeam()
             .catch(() => {})

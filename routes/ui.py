@@ -258,13 +258,14 @@ def _enforce_role_page_restrictions():
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",
+            "ui.sales_visits_alias",
         }
         if endpoint in allowed_endpoints:
             return None
         return redirect(url_for("ui.sales_dashboard_page"))
 
     if role == RoleEnum.sales:
-        allowed_endpoints = {"ui.login_page", "ui.money_page", "ui.sales_visits_page"}
+        allowed_endpoints = {"ui.login_page", "ui.money_page", "ui.sales_visits_page", "ui.sales_visits_alias"}
         if endpoint in allowed_endpoints:
             return None
         return redirect(url_for("ui.sales_visits_page"))
@@ -275,7 +276,13 @@ def _enforce_role_page_restrictions():
         return redirect(url_for("ui.machines_page"))
 
     if role == RoleEnum.outside_manager:
-        allowed_endpoints = {"ui.login_page", "ui.responsibility_portal", "ui.money_page", "ui.sales_visits_page"}
+        allowed_endpoints = {
+            "ui.login_page",
+            "ui.responsibility_portal",
+            "ui.money_page",
+            "ui.sales_visits_page",
+            "ui.sales_visits_alias",
+        }
         if _has_rainbows_end_market_access():
             allowed_endpoints.update({"ui.market_page", "ui.market_rainbows_end_page"})
         if endpoint in allowed_endpoints:
@@ -311,6 +318,11 @@ def dashboard_redirect():
 def sales_dashboard_redirect():
     """Redirect /sales to the Sales Manager dashboard."""
     return redirect(url_for("ui.sales_dashboard_page"))
+
+@bp.get("/sales/visits")
+def sales_visits_alias():
+    """Alias route to reach the sales visits page."""
+    return redirect(url_for("ui.sales_visits_page"))
 
 
 @bp.get("/sales/dashboard")

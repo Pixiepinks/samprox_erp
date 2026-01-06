@@ -157,6 +157,16 @@ def _env_database_url() -> str | None:
     return url if url and url.strip() else None
 
 
+def _env_exsol_database_url() -> str | None:
+    url = os.getenv("EXSOL_DATABASE_URL")
+    if url is None:
+        return None
+    text = url.strip()
+    if not text:
+        return None
+    return _normalize_db_url(text)
+
+
 def current_database_url() -> str:
     return _normalize_db_url(_env_database_url() or DEFAULT_DATABASE_URL)
 
@@ -201,6 +211,8 @@ class Config:
     MAIL_FORCE_IPV4 = _env_bool("MAIL_FORCE_IPV4", False)
     MAIL_MAX_DELIVERY_SECONDS = _env_float("MAIL_MAX_DELIVERY_SECONDS", 20.0)
     MAIL_DEFAULT_BCC = _env_list("MAIL_DEFAULT_BCC") or ["prakash@rainbowsholdings.com"]
+    EXSOL_DATABASE_URL = _env_exsol_database_url()
+    EXSOL_SCHEMA = _env_str("EXSOL_SCHEMA", "exsol") or "exsol"
     COMPANY_PROFILES = _default_company_profiles()
     COMPANY_KEY = _env_str("COMPANY_KEY")
     COMPANY_NAME = _env_str("COMPANY_NAME", "Samprox International (Pvt) Ltd")

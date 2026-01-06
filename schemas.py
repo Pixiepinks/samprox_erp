@@ -503,6 +503,22 @@ class MaterialItemSchema(Schema):
     is_active = fields.Bool()
 
 
+class ExsolStockItemSchema(Schema):
+    id = fields.UUID()
+    item_code = fields.Str(required=True)
+    item_name = fields.Str(required=True)
+    category = fields.Str(allow_none=True)
+    hp = fields.Decimal(as_string=True, allow_none=True)
+    size = fields.Str(allow_none=True)
+    voltage = fields.Str(allow_none=True)
+    pressure_bar = fields.Decimal(as_string=True, allow_none=True)
+    variant = fields.Str(allow_none=True)
+    unit = fields.Str()
+    is_active = fields.Bool()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+
+
 class MRNLineSchema(Schema):
     id = fields.UUID()
     mrn_id = fields.UUID()

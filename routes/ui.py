@@ -85,6 +85,41 @@ def _current_user() -> User | None:
     return User.query.get(user_id)
 
 
+def _has_exsol_inventory_access(require_admin: bool = False) -> bool:
+    """Return True if the viewer is allowed to access Exsol inventory."""
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:  # pragma: no cover - defensive
+        claims = None
+
+    role = None
+    company_key = None
+
+    if claims:
+        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+        try:
+            role = RoleEnum(claims.get("role"))
+        except Exception:
+            role = None
+
+    if role is None:
+        user = _current_user()
+        if user:
+            role = user.role
+            company_key = (user.company_key or "").strip().lower()
+
+    if role == RoleEnum.admin:
+        return True
+
+    if require_admin:
+        return False
+
+    return company_key == "exsol-engineering"
+
+
 def _has_rainbows_end_market_access() -> bool:
     """Grant special market access to the Rainbows End Trading outside manager."""
 
@@ -341,6 +376,16 @@ def sales_data_entry_page():
 def sales_reports_page():
     """Render the Sales Manager reports shell."""
     return render_template("sales_reports.html", active_tab="reports")
+
+
+@bp.get("/exsol/inventory")
+def exsol_inventory_page():
+    """Render the Exsol inventory page."""
+
+    if not _has_exsol_inventory_access():
+        return render_template("403.html"), 403
+
+    return render_template("exsol_inventory.html")
 
 
 @bp.get("/man")

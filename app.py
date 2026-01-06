@@ -15,6 +15,7 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from config import Config, current_database_url
 from extensions import db, migrate, jwt, mail
+from exsol_storage import init_exsol_storage
 from models import (
     Company,
     Customer,
@@ -71,6 +72,7 @@ from routes import (
     sales_visits,
     dealers,
     sales_users,
+    exsol_inventory,
 )
 
 
@@ -194,6 +196,7 @@ def create_app():
     _run_database_migrations(app)
     jwt.init_app(app)
     mail.init_app(app)
+    init_exsol_storage(app)
 
     @jwt.additional_claims_loader
     def add_claims(identity):
@@ -226,6 +229,7 @@ def create_app():
     app.register_blueprint(sales_visits.bp)
     app.register_blueprint(dealers.bp)
     app.register_blueprint(sales_users.bp)
+    app.register_blueprint(exsol_inventory.bp)
 
     def _jwt_role() -> RoleEnum | None:
         try:
@@ -267,6 +271,7 @@ def create_app():
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
             "ui.sales_dashboard_redirect",
+            "ui.exsol_inventory_page",
             "health",
         }
         allowed_report_endpoints = {
@@ -286,6 +291,7 @@ def create_app():
             "/api/sales-users",
             "/api/market",
             "/api/companies",
+            "/api/exsol",
         )
         if request.path.startswith(allowed_paths):
             return None
@@ -928,6 +934,22 @@ def seed_materials() -> None:
     with app.app_context():
         seed_material_defaults()
         click.echo("✅ Material categories and default types seeded.")
+
+
+@app.cli.command("seed-exsol-inventory")
+def seed_exsol_inventory() -> None:
+    """Seed the Exsol inventory catalog into the isolated storage."""
+
+    from exsol_inventory import seed_exsol_defaults
+    from exsol_storage import ExsolStorageUnavailable
+
+    with app.app_context():
+        try:
+            count = seed_exsol_defaults()
+        except ExsolStorageUnavailable as exc:
+            click.echo(f"❌ {exc}")
+            return
+        click.echo(f"✅ Seeded {count} Exsol stock items.")
 
 
 if __name__ == "__main__":

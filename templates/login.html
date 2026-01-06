@@ -117,6 +117,12 @@
                     localStorage.setItem("samprox_user", JSON.stringify(data.user));
 
                     const normalizedRole = (data.user?.role || "").toLowerCase();
+                    const companyKey = (data.user?.company_key || "").toLowerCase();
+
+                    if (companyKey === "exsol-engineering") {
+                        window.location.href = "/exsol/inventory";
+                        return;
+                    }
 
                     if (normalizedRole === "outside_manager") {
                         window.location.href = "/responsibility_portal";

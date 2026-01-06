@@ -7,6 +7,7 @@ from flask_jwt_extended import (
     jwt_required,
     set_access_cookies,
     unset_jwt_cookies,
+    get_jwt_identity,
 )
 from sqlalchemy import func
 
@@ -91,3 +92,31 @@ def logout():
     response = jsonify({"msg": "Logged out"})
     unset_jwt_cookies(response)
     return response
+
+
+@bp.get("/session")
+@jwt_required()
+def session():
+    """Return the current authenticated user's profile."""
+
+    identity = get_jwt_identity()
+    try:
+        user_id = int(identity)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    user = User.query.get(user_id)
+    if not user or not user.active:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    return jsonify(
+        {
+            "ok": True,
+            "data": {
+                "id": user.id,
+                "name": user.name,
+                "role": user.role.value,
+                "company_key": user.company_key,
+            },
+        }
+    )

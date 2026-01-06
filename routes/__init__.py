@@ -24,6 +24,7 @@ from . import (
     non_samprox_customers,
     sales_visits,
     dealers,
+    sales_users,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "non_samprox_customers",
     "sales_visits",
     "dealers",
+    "sales_users",
 ]

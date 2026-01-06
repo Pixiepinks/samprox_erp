@@ -123,6 +123,15 @@ def _is_admin(role: Optional[RoleEnum]) -> bool:
     return role in {RoleEnum.admin, RoleEnum.sales_manager}
 
 
+def _can_view_sales_overview(role: Optional[RoleEnum]) -> bool:
+    return role in {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.sales_manager,
+    }
+
+
 def _is_owner(visit: SalesVisit, user: Optional[User]) -> bool:
     return user is not None and visit.sales_user_id == user.id
 
@@ -161,7 +170,14 @@ def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
 @jwt_required()
 def _guard_roles():
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+    if role not in {
+        RoleEnum.sales,
+        RoleEnum.outside_manager,
+        RoleEnum.admin,
+        RoleEnum.sales_manager,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+    }:
         return jsonify({"ok": False, "error": "Access denied"}), 403
 
 
@@ -195,27 +211,31 @@ def list_visits():
     sales_user_id_param = request.args.get("sales_user_id")
 
     query = SalesVisit.query
+    team_ids: set[int] = set()
 
     if role == RoleEnum.sales:
         query = query.filter(SalesVisit.sales_user_id == user.id)
     elif role == RoleEnum.outside_manager:
         team_ids = _manager_sales_ids(user.id)
         query = query.filter(SalesVisit.sales_user_id.in_(team_ids or {-1}))
-    elif _is_admin(role) and sales_user_id_param:
-        try:
-            query = query.filter(SalesVisit.sales_user_id == int(sales_user_id_param))
-        except (TypeError, ValueError):
-            return jsonify({"ok": False, "error": "Invalid sales_user_id"}), 400
+    elif not _can_view_sales_overview(role):
+        return jsonify({"ok": False, "error": "Access denied"}), 403
 
-    if role in {RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager} and sales_user_id_param:
+    if sales_user_id_param and role in {
+        RoleEnum.outside_manager,
+        RoleEnum.admin,
+        RoleEnum.sales_manager,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+    }:
         try:
             target_id = int(sales_user_id_param)
         except (TypeError, ValueError):
-            target_id = None
-        if target_id:
-            if role == RoleEnum.outside_manager and target_id not in _manager_sales_ids(user.id):
-                return jsonify({"ok": False, "error": "Not authorized for this sales user"}), 403
-            query = query.filter(SalesVisit.sales_user_id == target_id)
+            return jsonify({"ok": False, "error": "Invalid sales_user_id"}), 400
+
+        if role == RoleEnum.outside_manager and target_id not in team_ids:
+            return jsonify({"ok": False, "error": "Not authorized for this sales user"}), 403
+        query = query.filter(SalesVisit.sales_user_id == target_id)
 
     if date_from:
         query = query.filter(SalesVisit.visit_date >= date_from)
@@ -232,6 +252,8 @@ def create_visit():
     user = _current_user()
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+        return jsonify({"ok": False, "error": "Not authorized to create visits"}), 403
 
     payload = request.get_json() or {}
     customer_id = payload.get("customer_id")
@@ -521,8 +543,8 @@ def approve_visit(visit_id: str):
     if not visit:
         return jsonify({"ok": False, "error": "Visit not found"}), 404
 
-    if role == RoleEnum.sales:
-        return jsonify({"ok": False, "error": "Sales users cannot approve"}), 403
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
+        return jsonify({"ok": False, "error": "Not authorized to approve"}), 403
 
     if visit.approval_status != SalesVisitApprovalStatus.pending:
         return jsonify({"ok": False, "error": "No pending approval"}), 409
@@ -559,6 +581,8 @@ def add_attachment(visit_id: str):
     if not visit:
         return jsonify({"ok": False, "error": "Visit not found"}), 404
 
+    if role not in {RoleEnum.admin, RoleEnum.sales_manager, RoleEnum.sales, RoleEnum.outside_manager}:
+        return jsonify({"ok": False, "error": "Not authorized to add attachments"}), 403
     if role == RoleEnum.outside_manager:
         return jsonify({"ok": False, "error": "Managers cannot add attachments"}), 403
     if role == RoleEnum.sales and not _is_owner(visit, user):

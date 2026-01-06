@@ -553,7 +553,12 @@
                 mechanismLink.remove();
             }
         }
-        if (salesVisitsLink && ["sales", "outside_manager", "admin"].includes(normalizedRole)) {
+        if (
+            salesVisitsLink &&
+            ["sales", "outside_manager", "admin", "finance_manager", "production_manager", "sales_manager"].includes(
+                normalizedRole,
+            )
+        ) {
             salesVisitsLink.hidden = false;
         }
 

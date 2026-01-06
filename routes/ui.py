@@ -516,7 +516,14 @@ def sales_visits_page():
     """Render the sales visit tracking page inside the portal."""
 
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
+    if role not in {
+        RoleEnum.sales,
+        RoleEnum.outside_manager,
+        RoleEnum.admin,
+        RoleEnum.sales_manager,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+    }:
         return render_template("403.html"), 403
 
     return render_template("sales_visits.html")

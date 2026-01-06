@@ -69,6 +69,7 @@
                                 <th>Date</th>
                                 <th class="col-sales-person">Sales Person</th>
                                 <th>Customer / Prospect</th>
+                                <th class="col-city">City</th>
                                 <th>Purpose</th>
                                 <th>Check-in</th>
                                 <th>Check-out</th>
@@ -80,7 +81,7 @@
                         </thead>
                         <tbody id="visit-rows">
                             <tr id="visits-empty">
-                                <td colspan="11" style="text-align:center;">No visits yet.</td>
+                                <td colspan="12" style="text-align:center;">No visits yet.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -288,6 +289,7 @@
             "Content-Type": "application/json",
         };
         const showSalesPersonColumn = user?.role !== "sales";
+        const showCityColumn = ["admin", "finance_manager", "production_manager", "sales_manager"].includes(user?.role);
 
         function authFetch(url, options = {}) {
             return fetch(url, {
@@ -446,19 +448,22 @@
             return date.toLocaleString("en-GB", { timeZone: "Asia/Colombo" });
         }
 
-        function toggleSalesPersonColumnVisibility() {
-            const cells = document.querySelectorAll(".col-sales-person");
+        function toggleColumnVisibility(selector, visible) {
+            const cells = document.querySelectorAll(selector);
             cells.forEach((cell) => {
-                if (showSalesPersonColumn) {
-                    cell.hidden = false;
-                    cell.style.display = "";
-                } else {
-                    cell.hidden = true;
-                    cell.style.display = "none";
-                }
+                cell.hidden = !visible;
+                cell.style.display = visible ? "" : "none";
             });
+        }
+
+        function updateColumnVisibility() {
+            toggleColumnVisibility(".col-sales-person", showSalesPersonColumn);
+            toggleColumnVisibility(".col-city", showCityColumn);
+            const hiddenCount = (showSalesPersonColumn ? 0 : 1) + (showCityColumn ? 0 : 1);
+            const totalColumns = 12;
+            const visibleColumns = totalColumns - hiddenCount;
             if (elements.visitsEmpty && elements.visitsEmpty.firstElementChild) {
-                elements.visitsEmpty.firstElementChild.colSpan = showSalesPersonColumn ? 11 : 10;
+                elements.visitsEmpty.firstElementChild.colSpan = visibleColumns;
             }
         }
 
@@ -467,7 +472,7 @@
             if (!visits.length) {
                 elements.visitRows.appendChild(elements.visitsEmpty);
                 elements.visitsEmpty.hidden = false;
-                toggleSalesPersonColumnVisibility();
+                updateColumnVisibility();
                 return;
             }
             elements.visitsEmpty.hidden = true;
@@ -478,6 +483,7 @@
                     <td>${visit.visit_date || ""}</td>
                     <td class="col-sales-person">${visit.sales_user_name || ""}</td>
                     <td>${visit.customer_display_name || visit.customer_name || visit.prospect_name || "-"}</td>
+                    <td class="col-city">${visit.non_samprox_customer_city || ""}</td>
                     <td>${visit.purpose || ""}</td>
                     <td>${visit.check_in_time ? formatTime(visit.check_in_time) : "—"}</td>
                     <td>${visit.check_out_time ? formatTime(visit.check_out_time) : "—"}</td>
@@ -492,7 +498,7 @@
                 `;
                 elements.visitRows.appendChild(row);
             });
-            toggleSalesPersonColumnVisibility();
+            updateColumnVisibility();
         }
 
         function renderActions(visit) {
@@ -1136,7 +1142,7 @@
             await loadNextNonSamproxCode(elements.nsCompany.value);
         });
 
-        toggleSalesPersonColumnVisibility();
+        updateColumnVisibility();
         loadLocationData();
         loadTeam()
             .catch(() => {})

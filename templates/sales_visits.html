@@ -236,25 +236,15 @@
     </div>
 
     <script>
-        const token = localStorage.getItem("samprox_token");
-        const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+        let token = localStorage.getItem("samprox_token");
+        let user = JSON.parse(localStorage.getItem("samprox_user") || "null");
         const locationDataUrl = "{{ url_for('static', filename='data/lk_locations.json') }}";
 
-        if (!token || !user) {
+        if (!token && !user) {
             window.location.href = "/";
-        }
-        if (user?.role === "sales_manager") {
-            const allowedSalesManagerPaths = new Set(["/sales/dashboard", "/sales/data-entry", "/sales/reports", "/sales_visits"]);
-            if (!allowedSalesManagerPaths.has(window.location.pathname)) {
-                window.location.replace("/sales/dashboard");
-            }
         }
 
         const backLink = document.getElementById("header-back-link");
-        if (user?.role === "sales_manager") {
-            backLink?.setAttribute("href", "/sales/dashboard");
-            if (backLink) backLink.textContent = "Dashboard";
-        }
 
         const roleLabels = {
             admin: "Admin",
@@ -267,10 +257,11 @@
             sales: "Sales",
         };
 
+        const salesFilterRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager"]);
+        const cityColumnRoles = new Set(["admin", "finance_manager", "production_manager", "sales_manager"]);
+
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
-        userNameEl.textContent = user?.name || "";
-        userRoleEl.textContent = roleLabels[user?.role] || "";
 
         document.getElementById("logout").addEventListener("click", async () => {
             try {
@@ -283,21 +274,72 @@
             }
         });
 
-        const headers = {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-        };
-        const showSalesPersonColumn = user?.role !== "sales";
-        const showCityColumn = ["admin", "finance_manager", "production_manager", "sales_manager"].includes(user?.role);
+        function buildHeaders() {
+            const headers = {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+            return headers;
+        }
+        let showSalesPersonColumn = user?.role !== "sales";
+        let showCityColumn = cityColumnRoles.has(user?.role);
+
+        function enforceSalesManagerRouting() {
+            if (user?.role !== "sales_manager") return;
+            const allowedSalesManagerPaths = new Set(["/sales/dashboard", "/sales/data-entry", "/sales/reports", "/sales_visits"]);
+            if (!allowedSalesManagerPaths.has(window.location.pathname)) {
+                window.location.replace("/sales/dashboard");
+                return;
+            }
+            backLink?.setAttribute("href", "/sales/dashboard");
+            if (backLink) backLink.textContent = "Dashboard";
+        }
+
+        function updateRoleDerivedFlags() {
+            showSalesPersonColumn = user?.role !== "sales";
+            showCityColumn = cityColumnRoles.has(user?.role);
+        }
+
+        function applyUserContext() {
+            userNameEl.textContent = user?.name || "";
+            userRoleEl.textContent = roleLabels[user?.role] || "";
+            updateRoleDerivedFlags();
+            enforceSalesManagerRouting();
+            updateColumnVisibility();
+        }
 
         function authFetch(url, options = {}) {
             return fetch(url, {
                 credentials: "include",
-                headers,
+                headers: { ...buildHeaders(), ...(options.headers || {}) },
                 ...options,
-                headers: { ...headers, ...(options.headers || {}) },
             });
+        }
+
+        async function refreshSessionUser() {
+            try {
+                const response = await authFetch("/api/auth/session");
+                const data = await response.json();
+                if (response.ok && data?.ok && data.data) {
+                    user = data.data;
+                    localStorage.setItem("samprox_user", JSON.stringify(user));
+                    applyUserContext();
+                    return;
+                }
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem("samprox_token");
+                    localStorage.removeItem("samprox_user");
+                    window.location.href = "/";
+                    return;
+                }
+                console.error(data?.error || "Unable to load session");
+            } catch (err) {
+                console.error("Unable to load session", err);
+            }
+            applyUserContext();
         }
 
         function getElement(id) {
@@ -695,22 +737,43 @@
 
         async function loadTeam() {
             if (!["admin", "outside_manager"].includes(user.role)) return;
-            elements.filterSalesContainer.hidden = false;
             const response = await authFetch("/api/sales-visits/team");
             const data = await response.json();
             if (!data.ok) return;
             team = data.data || [];
-            const uniqueUsers = new Map();
-            team.forEach((m) => {
-                if (m.sales_user) uniqueUsers.set(m.sales_user.id, m.sales_user);
-                if (m.manager) uniqueUsers.set(m.manager.id, m.manager);
-            });
-            uniqueUsers.forEach((u) => {
-                const option = document.createElement("option");
-                option.value = u.id;
-                option.textContent = `${u.name} (${u.role})`;
-                elements.filterSales.appendChild(option);
-            });
+        }
+
+        async function loadSalesUsersFilter() {
+            elements.filterSalesContainer.hidden = true;
+            elements.filterSales.innerHTML = "";
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "All";
+            elements.filterSales.appendChild(defaultOption);
+
+            if (!salesFilterRoles.has(user?.role)) {
+                elements.filterSales.value = "";
+                return;
+            }
+
+            try {
+                const response = await authFetch("/api/sales-users");
+                const data = await response.json();
+                if (!response.ok || !data?.ok) {
+                    console.error(data?.error || "Unable to load sales users");
+                    return;
+                }
+                (data.data || []).forEach((optionUser) => {
+                    const option = document.createElement("option");
+                    option.value = optionUser.id;
+                    option.textContent = optionUser.name;
+                    elements.filterSales.appendChild(option);
+                });
+                elements.filterSalesContainer.hidden = false;
+            } catch (err) {
+                console.error("Unable to load sales users", err);
+            }
+            elements.filterSales.value = "";
         }
 
         elements.applyFilters.addEventListener("click", () => loadVisits());
@@ -1142,14 +1205,21 @@
             await loadNextNonSamproxCode(elements.nsCompany.value);
         });
 
-        updateColumnVisibility();
-        loadLocationData();
-        loadTeam()
-            .catch(() => {})
-            .finally(async () => {
-                await loadNonSamproxCustomers();
-                await loadVisits();
-            });
+        applyUserContext();
+
+        async function initializePage() {
+            await refreshSessionUser();
+            updateColumnVisibility();
+            await loadLocationData();
+            await loadSalesUsersFilter();
+            await loadTeam();
+            await loadNonSamproxCustomers();
+            await loadVisits();
+        }
+
+        initializePage().catch((err) => {
+            console.error("Failed to initialize sales visits page", err);
+        });
     </script>
 </body>
 </html>

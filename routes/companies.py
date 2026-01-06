@@ -25,6 +25,7 @@ def _guard_roles():
     if role not in {
         RoleEnum.sales,
         RoleEnum.outside_manager,
+        RoleEnum.sales_manager,
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,

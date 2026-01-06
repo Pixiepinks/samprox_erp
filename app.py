@@ -259,11 +259,13 @@ def create_app():
         allowed_endpoints = {
             "auth.login",
             "auth.logout",
+            "auth.session",
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",
+            "ui.sales_visits_alias",
             "ui.sales_dashboard_redirect",
             "health",
         }
@@ -275,9 +277,17 @@ def create_app():
 
         if endpoint in allowed_endpoints:
             return None
-        if endpoint.startswith("sales_visits.") or request.path.startswith("/sales_visits"):
+        allowed_prefixes = ("sales_visits.", "non_samprox_customers.", "sales_users.", "market.", "companies_api.")
+        if endpoint.startswith(allowed_prefixes):
             return None
-        if endpoint.startswith("market."):
+        allowed_paths = (
+            "/api/sales-visits",
+            "/api/non-samprox-customers",
+            "/api/sales-users",
+            "/api/market",
+            "/api/companies",
+        )
+        if request.path.startswith(allowed_paths):
             return None
         if endpoint in allowed_report_endpoints:
             return None

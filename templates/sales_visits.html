@@ -28,6 +28,7 @@
                 <button type="button" class="button button--secondary" id="logout">Sign out</button>
             </div>
         </header>
+        <div class="alert alert--error" id="access-alert" hidden></div>
         <main class="section">
             <header class="section__header">
                 <div>
@@ -240,11 +241,12 @@
         let user = JSON.parse(localStorage.getItem("samprox_user") || "null");
         const locationDataUrl = "{{ url_for('static', filename='data/lk_locations.json') }}";
 
-        if (!token && !user) {
+        if (!token || !user) {
             window.location.href = "/";
         }
 
         const backLink = document.getElementById("header-back-link");
+        const accessAlert = document.getElementById("access-alert");
 
         const roleLabels = {
             admin: "Admin",
@@ -263,14 +265,69 @@
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
 
+        function clearSessionAndRedirect(target = "/") {
+            localStorage.removeItem("samprox_token");
+            localStorage.removeItem("samprox_user");
+            window.location.href = target;
+        }
+
+        function showAccessDenied(message = "You do not have access to this page.") {
+            if (accessAlert) {
+                accessAlert.textContent = message;
+                accessAlert.hidden = false;
+            } else {
+                alert(message);
+            }
+        }
+
+        function hideAccessDenied() {
+            if (accessAlert) {
+                accessAlert.hidden = true;
+                accessAlert.textContent = "";
+            }
+        }
+
+        function safeRedirectTarget() {
+            if (user?.role === "sales_manager") return "/sales/dashboard";
+            if (user?.role === "sales") return "/sales_visits";
+            return null;
+        }
+
+        function handleAuthFailure(response, requestUrl) {
+            if (!response) return false;
+            if (response.status === 401) {
+                console.warn("[auth] Redirecting to login after 401", {
+                    status: response.status,
+                    requested: requestUrl,
+                    role: user?.role,
+                    path: window.location.pathname,
+                });
+                clearSessionAndRedirect("/");
+                return true;
+            }
+            if (response.status === 403) {
+                console.warn("[auth] Redirecting to safe page after 403", {
+                    status: response.status,
+                    requested: requestUrl,
+                    role: user?.role,
+                    path: window.location.pathname,
+                });
+                showAccessDenied("You do not have access to this page.");
+                const target = safeRedirectTarget();
+                if (target && window.location.pathname !== target) {
+                    window.location.replace(target);
+                }
+                return true;
+            }
+            return false;
+        }
+
         document.getElementById("logout").addEventListener("click", async () => {
             try {
                 await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
             } catch (_) {
             } finally {
-                localStorage.removeItem("samprox_token");
-                localStorage.removeItem("samprox_user");
-                window.location.href = "/";
+                clearSessionAndRedirect("/");
             }
         });
 
@@ -289,7 +346,13 @@
 
         function enforceSalesManagerRouting() {
             if (user?.role !== "sales_manager") return;
-            const allowedSalesManagerPaths = new Set(["/sales/dashboard", "/sales/data-entry", "/sales/reports", "/sales_visits"]);
+            const allowedSalesManagerPaths = new Set([
+                "/sales/dashboard",
+                "/sales/data-entry",
+                "/sales/reports",
+                "/sales_visits",
+                "/sales/visits",
+            ]);
             if (!allowedSalesManagerPaths.has(window.location.pathname)) {
                 window.location.replace("/sales/dashboard");
                 return;
@@ -306,17 +369,22 @@
         function applyUserContext() {
             userNameEl.textContent = user?.name || "";
             userRoleEl.textContent = roleLabels[user?.role] || "";
+            hideAccessDenied();
             updateRoleDerivedFlags();
             enforceSalesManagerRouting();
             updateColumnVisibility();
         }
 
-        function authFetch(url, options = {}) {
-            return fetch(url, {
+        async function authFetch(url, options = {}) {
+            const response = await fetch(url, {
                 credentials: "include",
                 headers: { ...buildHeaders(), ...(options.headers || {}) },
                 ...options,
             });
+            if (response.status === 401 || response.status === 403) {
+                handleAuthFailure(response, url);
+            }
+            return response;
         }
 
         async function refreshSessionUser() {
@@ -326,13 +394,8 @@
                 if (response.ok && data?.ok && data.data) {
                     user = data.data;
                     localStorage.setItem("samprox_user", JSON.stringify(user));
+                    hideAccessDenied();
                     applyUserContext();
-                    return;
-                }
-                if (response.status === 401 || response.status === 403) {
-                    localStorage.removeItem("samprox_token");
-                    localStorage.removeItem("samprox_user");
-                    window.location.href = "/";
                     return;
                 }
                 console.error(data?.error || "Unable to load session");

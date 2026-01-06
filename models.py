@@ -77,6 +77,8 @@ ROLE_PERMISSIONS: dict[RoleEnum, set[str]] = {
         "sales:dashboard",
         "sales:data_entry",
         "sales:reports",
+        "sales:visits:view",
+        "sales:visits:manage",
     },
     RoleEnum.sales: {
         "petty_cash_weekly_travel_claims:view",

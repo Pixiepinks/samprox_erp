@@ -120,7 +120,7 @@ def _serialize_visit(visit: SalesVisit) -> dict[str, Any]:
 
 
 def _is_admin(role: Optional[RoleEnum]) -> bool:
-    return role == RoleEnum.admin
+    return role in {RoleEnum.admin, RoleEnum.sales_manager}
 
 
 def _is_owner(visit: SalesVisit, user: Optional[User]) -> bool:
@@ -161,7 +161,7 @@ def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
 @jwt_required()
 def _guard_roles():
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin}:
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
         return jsonify({"ok": False, "error": "Access denied"}), 403
 
 
@@ -201,13 +201,13 @@ def list_visits():
     elif role == RoleEnum.outside_manager:
         team_ids = _manager_sales_ids(user.id)
         query = query.filter(SalesVisit.sales_user_id.in_(team_ids or {-1}))
-    elif role == RoleEnum.admin and sales_user_id_param:
+    elif _is_admin(role) and sales_user_id_param:
         try:
             query = query.filter(SalesVisit.sales_user_id == int(sales_user_id_param))
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid sales_user_id"}), 400
 
-    if role in {RoleEnum.outside_manager, RoleEnum.admin} and sales_user_id_param:
+    if role in {RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager} and sales_user_id_param:
         try:
             target_id = int(sales_user_id_param)
         except (TypeError, ValueError):
@@ -244,7 +244,7 @@ def create_visit():
             requested_user_id = int(payload["sales_user_id"])
         except (TypeError, ValueError):
             return jsonify({"ok": False, "error": "Invalid sales_user_id"}), 400
-        if role == RoleEnum.admin:
+        if _is_admin(role):
             target_user_id = requested_user_id
         else:
             return jsonify({"ok": False, "error": "Cannot create visits for other users"}), 403
@@ -287,7 +287,7 @@ def create_visit():
 
 
 def _can_edit_visit(visit: SalesVisit, role: RoleEnum, user: User) -> bool:
-    if role == RoleEnum.admin:
+    if _is_admin(role):
         return True
     if role == RoleEnum.sales and _is_owner(visit, user):
         return visit.approval_status != SalesVisitApprovalStatus.approved
@@ -312,7 +312,7 @@ def update_visit(visit_id: str):
 
     payload = request.get_json() or {}
 
-    if role == RoleEnum.admin and payload.get("sales_user_id"):
+    if _is_admin(role) and payload.get("sales_user_id"):
         try:
             visit.sales_user_id = int(payload["sales_user_id"])
         except (TypeError, ValueError):
@@ -351,12 +351,12 @@ def update_visit(visit_id: str):
     if payload.get("remarks") is not None:
         visit.remarks = payload.get("remarks")
 
-    if role == RoleEnum.admin and payload.get("approval_status"):
+    if _is_admin(role) and payload.get("approval_status"):
         try:
             visit.approval_status = SalesVisitApprovalStatus(payload.get("approval_status"))
         except ValueError:
             return jsonify({"ok": False, "error": "Invalid approval_status"}), 400
-    if role == RoleEnum.admin and payload.get("manual_location_override") is not None:
+    if _is_admin(role) and payload.get("manual_location_override") is not None:
         visit.manual_location_override = bool(payload.get("manual_location_override"))
     if payload.get("exception_reason") is not None:
         visit.exception_reason = payload.get("exception_reason")
@@ -413,7 +413,7 @@ def check_in(visit_id: str):
     if visit.check_in_time:
         return jsonify({"ok": False, "error": "Visit already checked-in"}), 409
 
-    if not (_is_owner(visit, user) or role == RoleEnum.admin):
+    if not (_is_owner(visit, user) or _is_admin(role)):
         return jsonify({"ok": False, "error": "Not allowed to check in"}), 403
 
     payload = request.get_json() or {}
@@ -480,7 +480,7 @@ def check_out(visit_id: str):
     if visit.check_out_time:
         return jsonify({"ok": False, "error": "Visit already checked-out"}), 409
 
-    if not (_is_owner(visit, user) or role == RoleEnum.admin):
+    if not (_is_owner(visit, user) or _is_admin(role)):
         return jsonify({"ok": False, "error": "Not allowed to check out"}), 403
 
     payload = request.get_json() or {}
@@ -596,7 +596,7 @@ def add_team_member():
     except (TypeError, ValueError, KeyError):
         return jsonify({"ok": False, "error": "manager_user_id and sales_user_id are required"}), 400
 
-    if role not in {RoleEnum.admin, RoleEnum.outside_manager}:
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
         return jsonify({"ok": False, "error": "Not authorized"}), 403
     if role == RoleEnum.outside_manager and manager_user_id != user.id:
         return jsonify({"ok": False, "error": "Managers can only manage their own teams"}), 403
@@ -619,7 +619,7 @@ def list_team_members():
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
-    if role == RoleEnum.admin:
+    if role in {RoleEnum.admin, RoleEnum.sales_manager}:
         mappings = SalesTeamMember.query.all()
     elif role == RoleEnum.outside_manager:
         mappings = SalesTeamMember.query.filter_by(manager_user_id=user.id).all()
@@ -653,7 +653,7 @@ def remove_team_member(mapping_id: str):
     user = _current_user()
     if not user or not role:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
-    if role not in {RoleEnum.admin, RoleEnum.outside_manager}:
+    if role not in {RoleEnum.admin, RoleEnum.outside_manager, RoleEnum.sales_manager}:
         return jsonify({"ok": False, "error": "Not authorized"}), 403
 
     mapping = SalesTeamMember.query.get(mapping_id)

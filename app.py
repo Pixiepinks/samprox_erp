@@ -261,6 +261,7 @@ def create_app():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
+            "ui.sales_visits_page",
             "ui.sales_dashboard_redirect",
             "health",
         }
@@ -271,6 +272,8 @@ def create_app():
         }
 
         if endpoint in allowed_endpoints:
+            return None
+        if endpoint.startswith("sales_visits.") or request.path.startswith("/sales_visits"):
             return None
         if endpoint.startswith("market."):
             return None

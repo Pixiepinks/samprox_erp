@@ -325,10 +325,17 @@
                     applyUserContext();
                     return;
                 }
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem("samprox_token");
+                    localStorage.removeItem("samprox_user");
+                    window.location.href = "/";
+                    return;
+                }
+                console.error(data?.error || "Unable to load session");
             } catch (err) {
                 console.error("Unable to load session", err);
             }
-            window.location.href = "/";
+            applyUserContext();
         }
 
         function getElement(id) {

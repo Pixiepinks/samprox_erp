@@ -236,11 +236,11 @@
     </div>
 
     <script>
-        const token = localStorage.getItem("samprox_token");
+        let token = localStorage.getItem("samprox_token");
         let user = JSON.parse(localStorage.getItem("samprox_user") || "null");
         const locationDataUrl = "{{ url_for('static', filename='data/lk_locations.json') }}";
 
-        if (!token) {
+        if (!token && !user) {
             window.location.href = "/";
         }
 
@@ -274,11 +274,16 @@
             }
         });
 
-        const headers = {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-        };
+        function buildHeaders() {
+            const headers = {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+            return headers;
+        }
         let showSalesPersonColumn = user?.role !== "sales";
         let showCityColumn = cityColumnRoles.has(user?.role);
 
@@ -309,9 +314,8 @@
         function authFetch(url, options = {}) {
             return fetch(url, {
                 credentials: "include",
-                headers,
+                headers: { ...buildHeaders(), ...(options.headers || {}) },
                 ...options,
-                headers: { ...headers, ...(options.headers || {}) },
             });
         }
 

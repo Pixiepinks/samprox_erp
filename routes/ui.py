@@ -257,6 +257,7 @@ def _enforce_role_page_restrictions():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
+            "ui.sales_visits_page",
         }
         if endpoint in allowed_endpoints:
             return None
@@ -515,7 +516,7 @@ def sales_visits_page():
     """Render the sales visit tracking page inside the portal."""
 
     role = _current_role()
-    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin}:
+    if role not in {RoleEnum.sales, RoleEnum.outside_manager, RoleEnum.admin, RoleEnum.sales_manager}:
         return render_template("403.html"), 403
 
     return render_template("sales_visits.html")

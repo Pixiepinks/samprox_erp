@@ -70,6 +70,7 @@ from routes import (
     non_samprox_customers,
     sales_visits,
     dealers,
+    sales_users,
 )
 
 
@@ -224,6 +225,7 @@ def create_app():
     app.register_blueprint(non_samprox_customers.bp)
     app.register_blueprint(sales_visits.bp)
     app.register_blueprint(dealers.bp)
+    app.register_blueprint(sales_users.bp)
 
     def _jwt_role() -> RoleEnum | None:
         try:

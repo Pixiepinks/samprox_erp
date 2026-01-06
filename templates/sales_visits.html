@@ -241,8 +241,11 @@
         if (!token || !user) {
             window.location.href = "/";
         }
-        if (user?.role === "sales_manager" && window.location.pathname !== "/sales/dashboard") {
-            window.location.replace("/sales/dashboard");
+        if (user?.role === "sales_manager") {
+            const allowedSalesManagerPaths = new Set(["/sales/dashboard", "/sales/data-entry", "/sales/reports", "/sales_visits"]);
+            if (!allowedSalesManagerPaths.has(window.location.pathname)) {
+                window.location.replace("/sales/dashboard");
+            }
         }
 
         const roleLabels = {

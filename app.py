@@ -45,6 +45,7 @@ from models import (
     TeamMemberStatus,
     PayCategory,
     TeamWorkCalendarDay,
+    normalize_role,
 )
 from routes import (
     auth,
@@ -248,10 +249,7 @@ def create_app():
         if not claims:
             return None
 
-        try:
-            return RoleEnum(claims.get("role"))
-        except Exception:
-            return None
+        return normalize_role(claims.get("role"))
 
     @app.before_request
     def _limit_sales_manager_scope():
@@ -271,6 +269,7 @@ def create_app():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
+            "ui.sales_production_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
             "ui.sales_dashboard_redirect",

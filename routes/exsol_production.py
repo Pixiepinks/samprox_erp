@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 import io
 import re
+import uuid
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request, send_file
@@ -145,6 +146,18 @@ def _normalize_serial_mode(value: Any) -> str | None:
     return None
 
 
+def _normalize_uuid(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return str(uuid.UUID(text))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def _serialize_entry(entry: ExsolProductionEntry, serial: ExsolProductionSerial, user_lookup: dict[int, str]):
     return {
         "id": entry.id,
@@ -256,9 +269,10 @@ def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str
         raise ExsolProductionValidationError(error_list)
 
     item_ids = {
-        (row.get("item_id") or "").strip()
+        normalized
         for row in rows
-        if (row.get("item_id") or "").strip()
+        for normalized in (_normalize_uuid(row.get("item_id")),)
+        if normalized
     }
     item_codes = {
         (row.get("item_code") or "").strip()
@@ -288,7 +302,8 @@ def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str
         if not production_date:
             errors[idx].append("Production date is required.")
 
-        item_id = (row.get("item_id") or "").strip()
+        item_id_raw = (row.get("item_id") or "").strip()
+        item_id = _normalize_uuid(item_id_raw) or ""
         item_code = (row.get("item_code") or "").strip()
         if not item_id and not item_code:
             errors[idx].append("Item code is required.")

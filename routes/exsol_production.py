@@ -11,7 +11,7 @@ from typing import Any
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -181,6 +181,43 @@ def _load_user_lookup(user_ids: set[int]) -> dict[int, str]:
         return {}
     users = User.query.filter(User.id.in_(user_ids)).all()
     return {user.id: user.name for user in users}
+
+
+def _ensure_exsol_sequences() -> None:
+    if db.session.bind.dialect.name != "postgresql":
+        return
+    entries_seq = "exsol_production_entries_id_seq"
+    serials_seq = "exsol_production_serials_id_seq"
+    db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {entries_seq}"))
+    db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {serials_seq}"))
+    db.session.execute(
+        text(
+            "ALTER TABLE exsol_production_entries "
+            f"ALTER COLUMN id SET DEFAULT nextval('{entries_seq}')"
+        )
+    )
+    db.session.execute(
+        text(
+            "ALTER TABLE exsol_production_serials "
+            f"ALTER COLUMN id SET DEFAULT nextval('{serials_seq}')"
+        )
+    )
+    db.session.execute(
+        text(
+            "SELECT setval("
+            f"'{entries_seq}', "
+            "COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), "
+            "true)"
+        )
+    )
+    db.session.execute(
+        text(
+            "SELECT setval("
+            f"'{serials_seq}', "
+            "COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), "
+            "true)"
+        )
+    )
 
 
 def _get_exsol_company_id() -> int | None:
@@ -539,6 +576,7 @@ def bulk_create_entries():
         return _build_error("Unable to save production entries right now.", 500)
 
     try:
+        _ensure_exsol_sequences()
         with db.session.begin():
             for entry in entries:
                 db.session.add(entry)
@@ -781,6 +819,7 @@ def upload_excel():
         return _build_error("Unable to save production entries right now.", 500)
 
     try:
+        _ensure_exsol_sequences()
         with db.session.begin():
             for entry in entries:
                 db.session.add(entry)

@@ -2490,6 +2490,41 @@ body.modal-open {
     margin-top: 0.75rem;
 }
 
+.production-filters .form-grid {
+    margin-bottom: 0.75rem;
+}
+
+.bulk-grid__input,
+.bulk-grid__textarea {
+    width: 100%;
+    min-width: 140px;
+}
+
+.bulk-grid__textarea {
+    resize: vertical;
+}
+
+.bulk-grid__preview {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    color: #475569;
+}
+
+.bulk-grid__preview details {
+    display: inline-block;
+}
+
+.bulk-grid__errors {
+    margin: 0.35rem 0 0;
+    padding-left: 1.1rem;
+    font-size: 0.75rem;
+    color: #b91c1c;
+}
+
+.bulk-grid__errors li {
+    margin-bottom: 0.2rem;
+}
+
 .bulk-row--error td {
     background: rgba(248, 113, 113, 0.12);
     color: #991b1b;

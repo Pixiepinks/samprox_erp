@@ -121,6 +121,32 @@ def _has_exsol_inventory_access(require_admin: bool = False) -> bool:
     return company_key == "exsol-engineering"
 
 
+def _has_exsol_production_access() -> bool:
+    """Return True if the viewer is allowed to access Exsol production entry."""
+
+    role = _current_role()
+    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
+        return False
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:
+        claims = None
+
+    company_key = None
+    if claims:
+        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+
+    if not company_key:
+        user = _current_user()
+        if user:
+            company_key = (user.company_key or "").strip().lower()
+
+    return company_key == "exsol-engineering"
+
+
 def _has_rainbows_end_market_access() -> bool:
     """Grant special market access to the Rainbows End Trading outside manager."""
 
@@ -292,6 +318,7 @@ def _enforce_role_page_restrictions():
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
+            "ui.sales_production_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
@@ -377,6 +404,16 @@ def sales_data_entry_page():
 def sales_reports_page():
     """Render the Sales Manager reports shell."""
     return render_template("sales_reports.html", active_tab="reports")
+
+
+@bp.get("/sales/production")
+def sales_production_page():
+    """Render the Exsol production entry workspace."""
+
+    if not _has_exsol_production_access():
+        return render_template("403.html"), 403
+
+    return render_template("exsol_production.html", active_tab="data-entry")
 
 
 @bp.get("/exsol/inventory")

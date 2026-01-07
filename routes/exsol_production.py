@@ -5,12 +5,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 import io
 import re
+import uuid
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -145,6 +146,18 @@ def _normalize_serial_mode(value: Any) -> str | None:
     return None
 
 
+def _normalize_uuid(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return str(uuid.UUID(text))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def _serialize_entry(entry: ExsolProductionEntry, serial: ExsolProductionSerial, user_lookup: dict[int, str]):
     return {
         "id": entry.id,
@@ -168,6 +181,43 @@ def _load_user_lookup(user_ids: set[int]) -> dict[int, str]:
         return {}
     users = User.query.filter(User.id.in_(user_ids)).all()
     return {user.id: user.name for user in users}
+
+
+def _ensure_exsol_sequences() -> None:
+    if db.session.bind.dialect.name != "postgresql":
+        return
+    entries_seq = "exsol_production_entries_id_seq"
+    serials_seq = "exsol_production_serials_id_seq"
+    db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {entries_seq}"))
+    db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {serials_seq}"))
+    db.session.execute(
+        text(
+            "ALTER TABLE exsol_production_entries "
+            f"ALTER COLUMN id SET DEFAULT nextval('{entries_seq}')"
+        )
+    )
+    db.session.execute(
+        text(
+            "ALTER TABLE exsol_production_serials "
+            f"ALTER COLUMN id SET DEFAULT nextval('{serials_seq}')"
+        )
+    )
+    db.session.execute(
+        text(
+            "SELECT setval("
+            f"'{entries_seq}', "
+            "COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), "
+            "true)"
+        )
+    )
+    db.session.execute(
+        text(
+            "SELECT setval("
+            f"'{serials_seq}', "
+            "COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), "
+            "true)"
+        )
+    )
 
 
 def _get_exsol_company_id() -> int | None:
@@ -256,9 +306,10 @@ def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str
         raise ExsolProductionValidationError(error_list)
 
     item_ids = {
-        (row.get("item_id") or "").strip()
+        normalized
         for row in rows
-        if (row.get("item_id") or "").strip()
+        for normalized in (_normalize_uuid(row.get("item_id")),)
+        if normalized
     }
     item_codes = {
         (row.get("item_code") or "").strip()
@@ -288,7 +339,8 @@ def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str
         if not production_date:
             errors[idx].append("Production date is required.")
 
-        item_id = (row.get("item_id") or "").strip()
+        item_id_raw = (row.get("item_id") or "").strip()
+        item_id = _normalize_uuid(item_id_raw) or ""
         item_code = (row.get("item_code") or "").strip()
         if not item_id and not item_code:
             errors[idx].append("Item code is required.")
@@ -524,6 +576,7 @@ def bulk_create_entries():
         return _build_error("Unable to save production entries right now.", 500)
 
     try:
+        _ensure_exsol_sequences()
         with db.session.begin():
             for entry in entries:
                 db.session.add(entry)
@@ -766,6 +819,7 @@ def upload_excel():
         return _build_error("Unable to save production entries right now.", 500)
 
     try:
+        _ensure_exsol_sequences()
         with db.session.begin():
             for entry in entries:
                 db.session.add(entry)

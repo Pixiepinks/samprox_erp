@@ -22,7 +22,7 @@ def _ensure_sequence(table: str) -> None:
     )
     op.execute(
         "SELECT setval("
-        f"'{sequence}', COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
+        f"'{sequence}', COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false"
         ")"
     )
     op.execute(

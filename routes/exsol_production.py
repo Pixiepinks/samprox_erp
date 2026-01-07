@@ -33,6 +33,7 @@ EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
 SHIFT_OPTIONS = {"Morning", "Evening", "Night"}
 SERIAL_REGEX = re.compile(r"^[0-9]{8}$")
 MAX_BULK_QUANTITY = 500
+_EXSOL_SEQUENCES_READY = False
 
 
 @dataclass
@@ -184,6 +185,9 @@ def _load_user_lookup(user_ids: set[int]) -> dict[int, str]:
 
 
 def _ensure_exsol_sequences() -> None:
+    global _EXSOL_SEQUENCES_READY
+    if _EXSOL_SEQUENCES_READY:
+        return
     bind = db.session.get_bind()
     if not bind or bind.dialect.name != "postgresql":
         return
@@ -221,6 +225,7 @@ def _ensure_exsol_sequences() -> None:
                     "true)"
                 )
             )
+        _EXSOL_SEQUENCES_READY = True
     except SQLAlchemyError as exc:
         current_app.logger.warning(
             {

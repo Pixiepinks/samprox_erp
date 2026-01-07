@@ -26,6 +26,7 @@ from . import (
     dealers,
     sales_users,
     exsol_inventory,
+    exsol_production,
 )
 
 __all__ = [
@@ -56,4 +57,5 @@ __all__ = [
     "dealers",
     "sales_users",
     "exsol_inventory",
+    "exsol_production",
 ]

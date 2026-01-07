@@ -519,6 +519,23 @@ class ExsolStockItemSchema(Schema):
     updated_at = fields.DateTime()
 
 
+class ExsolProductionEntrySchema(Schema):
+    id = fields.UUID()
+    company = fields.Str()
+    production_date = fields.Date()
+    item_code = fields.Str()
+    item_name = fields.Str()
+    serial_number = fields.Str()
+    production_shift = fields.Str()
+    remarks = fields.Str(allow_none=True)
+    created_by = fields.Int()
+    created_role = fields.Str()
+    created_at = fields.DateTime()
+    is_confirmed = fields.Bool()
+    confirmed_by = fields.Int(allow_none=True)
+    confirmed_at = fields.DateTime(allow_none=True)
+
+
 class MRNLineSchema(Schema):
     id = fields.UUID()
     mrn_id = fields.UUID()

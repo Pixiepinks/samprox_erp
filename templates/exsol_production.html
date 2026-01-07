@@ -1,0 +1,966 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "data-entry" %}
+{% block page_title %}Production Entry (Exsol) | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Exsol Engineering</p>
+            <h1>Production Entry (Exsol)</h1>
+            <p class="section__description">
+                Capture high-volume Exsol pump production with bulk serial generation, validations, and confirmation controls.
+            </p>
+        </div>
+        <div class="section__actions">
+            <button type="button" class="button button--primary" id="bulk-entry-button">Bulk Production Entry</button>
+            <button type="button" class="button button--ghost" id="confirm-entry-button" disabled>
+                Confirm Production Entry
+            </button>
+        </div>
+    </header>
+
+    <div class="card production-filters">
+        <div class="form-grid">
+            <label class="form-field">
+                <span>Start date</span>
+                <input type="date" id="filter-start-date" />
+            </label>
+            <label class="form-field">
+                <span>End date</span>
+                <input type="date" id="filter-end-date" />
+            </label>
+            <label class="form-field">
+                <span>Item</span>
+                <select id="filter-item-code">
+                    <option value="">All items</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Shift</span>
+                <select id="filter-shift">
+                    <option value="">All shifts</option>
+                    <option value="Morning">Morning</option>
+                    <option value="Evening">Evening</option>
+                    <option value="Night">Night</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Created by</span>
+                <select id="filter-created-by">
+                    <option value="">All users</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Status</span>
+                <select id="filter-confirmed">
+                    <option value="">All</option>
+                    <option value="false">Unconfirmed</option>
+                    <option value="true">Confirmed</option>
+                </select>
+            </label>
+        </div>
+        <div class="card__actions">
+            <button type="button" class="button button--primary" id="apply-filters">Apply filters</button>
+            <button type="button" class="button button--ghost" id="reset-filters">Reset</button>
+        </div>
+    </div>
+
+    <div class="alert" id="production-error" hidden></div>
+    <p class="empty-state" id="production-empty">Loading production entries…</p>
+    <div class="table-wrapper" id="production-table-wrapper" hidden>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th scope="col">
+                        <input type="checkbox" id="select-all-entries" aria-label="Select all unconfirmed entries" />
+                    </th>
+                    <th scope="col">Production date</th>
+                    <th scope="col">Item code</th>
+                    <th scope="col">Item name</th>
+                    <th scope="col">Serial number</th>
+                    <th scope="col">Shift</th>
+                    <th scope="col">Created by</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Created at</th>
+                    <th scope="col" class="data-table__actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="production-table-body"></tbody>
+        </table>
+    </div>
+</section>
+
+<div class="fullscreen-modal" id="bulk-modal" hidden>
+    <div class="fullscreen-modal__backdrop" data-modal-close></div>
+    <div class="fullscreen-modal__dialog fullscreen-modal__dialog--wide" role="dialog" aria-modal="true">
+        <header class="fullscreen-modal__header">
+            <div>
+                <h2>Bulk Production Entry</h2>
+                <p class="section__description">
+                    Enter Exsol production in bulk using the grid or Excel template. Serials are validated server-side.
+                </p>
+            </div>
+            <button type="button" class="fullscreen-modal__close" data-modal-close aria-label="Close">&times;</button>
+        </header>
+        <div class="fullscreen-modal__body">
+            <div class="bulk-modal__controls">
+                <label class="bulk-modal__field">
+                    <span class="bulk-modal__label">Entry mode</span>
+                    <select id="bulk-mode">
+                        <option value="manual" selected>Manual Grid Entry</option>
+                        <option value="excel">Excel Upload</option>
+                    </select>
+                </label>
+                <label class="bulk-modal__field bulk-modal__toggle">
+                    <input type="checkbox" id="serial-mode-toggle" checked />
+                    <span class="bulk-modal__label">Serial Range mode (default)</span>
+                </label>
+            </div>
+
+            <div id="bulk-manual-section">
+                <div class="bulk-modal__upload">
+                    <div class="bulk-modal__field">
+                        <span class="bulk-modal__label">Paste rows (optional)</span>
+                        <textarea
+                            id="bulk-paste"
+                            rows="2"
+                            placeholder="production_date, item_code, production_shift, quantity, starting_serial or serial_numbers, remarks"
+                        ></textarea>
+                    </div>
+                    <button type="button" class="button button--ghost" id="apply-paste">Apply paste</button>
+                </div>
+                <div class="fullscreen-modal__table-wrapper">
+                    <table class="data-table" id="bulk-grid">
+                        <thead>
+                            <tr>
+                                <th scope="col">Production date</th>
+                                <th scope="col">Item code</th>
+                                <th scope="col">Item name</th>
+                                <th scope="col">Shift</th>
+                                <th scope="col">Quantity</th>
+                                <th scope="col">Serial mode</th>
+                                <th scope="col">Serial input</th>
+                                <th scope="col">Remarks</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulk-grid-body"></tbody>
+                    </table>
+                </div>
+                <div class="bulk-modal__actions">
+                    <button type="button" class="button button--ghost" id="add-row">Add row</button>
+                    <button type="button" class="button button--primary" id="submit-bulk">Save entries</button>
+                </div>
+                <div class="alert" id="bulk-error" hidden></div>
+                <div class="bulk-modal__summary" id="bulk-summary" hidden>
+                    <h3 class="bulk-modal__summary-title">Saved summary</h3>
+                    <div class="bulk-modal__summary-grid">
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Rows processed</span>
+                            <span class="bulk-modal__summary-value" id="summary-rows">0</span>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Quantity</span>
+                            <span class="bulk-modal__summary-value" id="summary-qty">0</span>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Serials created</span>
+                            <span class="bulk-modal__summary-value" id="summary-serials">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bulk-excel-section" hidden>
+                <div class="bulk-modal__upload">
+                    <div class="bulk-modal__field bulk-modal__upload-field">
+                        <span class="bulk-modal__label">Excel file</span>
+                        <input type="file" id="excel-file" accept=".xlsx" />
+                    </div>
+                    <div class="bulk-modal__actions">
+                        <button type="button" class="button button--ghost" id="download-template">Download template</button>
+                        <button type="button" class="button button--primary" id="upload-excel">Upload Excel</button>
+                    </div>
+                </div>
+                <div class="alert" id="excel-error" hidden></div>
+                <div class="bulk-modal__summary" id="excel-summary" hidden>
+                    <h3 class="bulk-modal__summary-title">Upload summary</h3>
+                    <div class="bulk-modal__summary-grid">
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Rows processed</span>
+                            <span class="bulk-modal__summary-value" id="excel-summary-rows">0</span>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Quantity</span>
+                            <span class="bulk-modal__summary-value" id="excel-summary-qty">0</span>
+                        </div>
+                        <div class="bulk-modal__summary-item">
+                            <span class="bulk-modal__summary-label">Serials created</span>
+                            <span class="bulk-modal__summary-value" id="excel-summary-serials">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal modal--app" id="edit-modal" hidden aria-hidden="true">
+    <div class="modal__overlay" data-edit-close></div>
+    <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+        <header class="modal__header modal__header--with-actions">
+            <div>
+                <h2 class="modal__title" id="edit-modal-title">Edit Production Entry</h2>
+                <p class="modal__subtitle">Only unconfirmed entries from today can be edited.</p>
+            </div>
+            <button type="button" class="modal__close" data-edit-close aria-label="Close edit form">&times;</button>
+        </header>
+        <div class="modal__body">
+            <form class="modal__form" id="edit-form">
+                <div class="modal__grid">
+                    <label class="modal__field">
+                        <span class="modal__label">Production date</span>
+                        <input type="text" class="modal__input" id="edit-date" readonly />
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Item code</span>
+                        <select class="modal__select" id="edit-item-code"></select>
+                    </label>
+                    <label class="modal__field">
+                        <span class="modal__label">Shift</span>
+                        <select class="modal__select" id="edit-shift">
+                            <option value="Morning">Morning</option>
+                            <option value="Evening">Evening</option>
+                            <option value="Night">Night</option>
+                        </select>
+                    </label>
+                    <label class="modal__field modal__field--full">
+                        <span class="modal__label">Remarks</span>
+                        <textarea class="modal__textarea" id="edit-remarks" rows="3"></textarea>
+                    </label>
+                </div>
+                <p class="modal__feedback" id="edit-feedback"></p>
+                <div class="modal__actions">
+                    <button type="button" class="button button--ghost" data-edit-close>Cancel</button>
+                    <button type="submit" class="button button--primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem("samprox_token");
+    const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+    const normalizedRole = (user?.role || "").toLowerCase();
+    const companyKey = (user?.company_key || user?.company || "").toLowerCase();
+    if (
+        !token ||
+        !["sales_manager", "sales_executive"].includes(normalizedRole) ||
+        (companyKey && companyKey !== "exsol-engineering")
+    ) {
+        window.location.href = "/";
+    }
+
+    const apiHeaders = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+    };
+
+    const bulkModal = document.getElementById("bulk-modal");
+    const bulkMode = document.getElementById("bulk-mode");
+    const serialModeToggle = document.getElementById("serial-mode-toggle");
+    const bulkManualSection = document.getElementById("bulk-manual-section");
+    const bulkExcelSection = document.getElementById("bulk-excel-section");
+    const bulkGridBody = document.getElementById("bulk-grid-body");
+    const addRowButton = document.getElementById("add-row");
+    const submitBulkButton = document.getElementById("submit-bulk");
+    const bulkError = document.getElementById("bulk-error");
+    const bulkSummary = document.getElementById("bulk-summary");
+    const summaryRows = document.getElementById("summary-rows");
+    const summaryQty = document.getElementById("summary-qty");
+    const summarySerials = document.getElementById("summary-serials");
+    const bulkPaste = document.getElementById("bulk-paste");
+    const applyPasteButton = document.getElementById("apply-paste");
+
+    const excelFileInput = document.getElementById("excel-file");
+    const uploadExcelButton = document.getElementById("upload-excel");
+    const downloadTemplateButton = document.getElementById("download-template");
+    const excelError = document.getElementById("excel-error");
+    const excelSummary = document.getElementById("excel-summary");
+    const excelSummaryRows = document.getElementById("excel-summary-rows");
+    const excelSummaryQty = document.getElementById("excel-summary-qty");
+    const excelSummarySerials = document.getElementById("excel-summary-serials");
+
+    const productionError = document.getElementById("production-error");
+    const productionEmpty = document.getElementById("production-empty");
+    const productionTableWrapper = document.getElementById("production-table-wrapper");
+    const productionTableBody = document.getElementById("production-table-body");
+    const confirmButton = document.getElementById("confirm-entry-button");
+    const selectAllCheckbox = document.getElementById("select-all-entries");
+
+    const filters = {
+        start: document.getElementById("filter-start-date"),
+        end: document.getElementById("filter-end-date"),
+        item: document.getElementById("filter-item-code"),
+        shift: document.getElementById("filter-shift"),
+        createdBy: document.getElementById("filter-created-by"),
+        confirmed: document.getElementById("filter-confirmed"),
+        apply: document.getElementById("apply-filters"),
+        reset: document.getElementById("reset-filters"),
+    };
+
+    const editModal = document.getElementById("edit-modal");
+    const editForm = document.getElementById("edit-form");
+    const editDate = document.getElementById("edit-date");
+    const editItemCode = document.getElementById("edit-item-code");
+    const editShift = document.getElementById("edit-shift");
+    const editRemarks = document.getElementById("edit-remarks");
+    const editFeedback = document.getElementById("edit-feedback");
+
+    let itemsCache = [];
+    let entriesCache = [];
+    let selectedEntryIds = new Set();
+    let editTargetId = null;
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const fetchJson = async (url, options = {}) => {
+        const response = await fetch(url, options);
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            const message = data?.error || data?.msg || "Request failed.";
+            const error = new Error(message);
+            error.errors = data?.errors;
+            throw error;
+        }
+        return data;
+    };
+
+    const toggleModal = (open) => {
+        if (!bulkModal) return;
+        bulkModal.hidden = !open;
+        document.body.classList.toggle("modal-open", open);
+    };
+
+    const toggleEditModal = (open) => {
+        if (!editModal) return;
+        editModal.hidden = !open;
+        editModal.setAttribute("aria-hidden", (!open).toString());
+    };
+
+    const renderItemsOptions = (selectEl) => {
+        if (!selectEl) return;
+        selectEl.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Select item";
+        selectEl.appendChild(placeholder);
+        itemsCache.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.item_code;
+            option.textContent = `${item.item_code} - ${item.item_name}`;
+            selectEl.appendChild(option);
+        });
+    };
+
+    const loadItems = async () => {
+        const items = await fetchJson("/api/exsol/stock-items", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        itemsCache = items || [];
+        renderItemsOptions(filters.item);
+        renderItemsOptions(editItemCode);
+    };
+
+    const formatDateTime = (value) => {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString();
+    };
+
+    const renderEntries = () => {
+        productionTableBody.innerHTML = "";
+        productionError.hidden = true;
+        if (!entriesCache.length) {
+            productionEmpty.textContent = "No production entries found.";
+            productionEmpty.hidden = false;
+            productionTableWrapper.hidden = true;
+            return;
+        }
+
+        productionEmpty.hidden = true;
+        productionTableWrapper.hidden = false;
+        const createdBySet = new Map();
+
+        entriesCache.forEach((entry) => {
+            createdBySet.set(entry.created_by, entry.created_by_name);
+            const tr = document.createElement("tr");
+            const isEditable = !entry.is_confirmed && entry.production_date === todayIso;
+
+            const checkboxTd = document.createElement("td");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.disabled = entry.is_confirmed;
+            checkbox.checked = selectedEntryIds.has(entry.id);
+            checkbox.addEventListener("change", () => {
+                if (checkbox.checked) {
+                    selectedEntryIds.add(entry.id);
+                } else {
+                    selectedEntryIds.delete(entry.id);
+                }
+                updateConfirmButton();
+            });
+            checkboxTd.appendChild(checkbox);
+            tr.appendChild(checkboxTd);
+
+            const cells = [
+                entry.production_date,
+                entry.item_code,
+                entry.item_name,
+                entry.serial_number,
+                entry.production_shift,
+                entry.created_by_name || "Unknown",
+                entry.is_confirmed ? "Confirmed" : "Unconfirmed",
+                formatDateTime(entry.created_at),
+            ];
+
+            cells.forEach((value) => {
+                const td = document.createElement("td");
+                td.textContent = value || "-";
+                tr.appendChild(td);
+            });
+
+            const actionTd = document.createElement("td");
+            actionTd.className = "data-table__actions";
+            if (isEditable) {
+                const editButton = document.createElement("button");
+                editButton.type = "button";
+                editButton.className = "data-table__link";
+                editButton.textContent = "Edit";
+                editButton.addEventListener("click", () => openEditModal(entry));
+                actionTd.appendChild(editButton);
+            } else {
+                actionTd.textContent = "-";
+            }
+            tr.appendChild(actionTd);
+            productionTableBody.appendChild(tr);
+        });
+
+        updateCreatedByFilter(createdBySet);
+        updateConfirmButton();
+    };
+
+    const updateCreatedByFilter = (createdBySet) => {
+        if (!filters.createdBy) return;
+        const currentValue = filters.createdBy.value;
+        filters.createdBy.innerHTML = '<option value="">All users</option>';
+        Array.from(createdBySet.entries())
+            .sort((a, b) => (a[1] || "").localeCompare(b[1] || ""))
+            .forEach(([id, name]) => {
+                const option = document.createElement("option");
+                option.value = id;
+                option.textContent = name || `User ${id}`;
+                filters.createdBy.appendChild(option);
+            });
+        filters.createdBy.value = currentValue;
+    };
+
+    const updateConfirmButton = () => {
+        confirmButton.disabled = selectedEntryIds.size === 0;
+        if (selectAllCheckbox) {
+            const selectable = entriesCache.filter((entry) => !entry.is_confirmed);
+            selectAllCheckbox.checked =
+                selectable.length > 0 && selectable.every((entry) => selectedEntryIds.has(entry.id));
+        }
+    };
+
+    const loadEntries = async () => {
+        const params = new URLSearchParams();
+        if (filters.start.value) params.set("start_date", filters.start.value);
+        if (filters.end.value) params.set("end_date", filters.end.value);
+        if (filters.item.value) params.set("item_code", filters.item.value);
+        if (filters.shift.value) params.set("production_shift", filters.shift.value);
+        if (filters.createdBy.value) params.set("created_by", filters.createdBy.value);
+        if (filters.confirmed.value) params.set("confirmed", filters.confirmed.value);
+
+        productionEmpty.textContent = "Loading production entries…";
+        productionEmpty.hidden = false;
+        productionTableWrapper.hidden = true;
+        productionError.hidden = true;
+
+        try {
+            entriesCache = await fetchJson(`/api/exsol/production/entries?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            renderEntries();
+        } catch (error) {
+            productionError.textContent = error.message || "Unable to load production entries.";
+            productionError.hidden = false;
+            productionEmpty.textContent = "Unable to load production entries.";
+            productionTableWrapper.hidden = true;
+        }
+    };
+
+    const addRow = (rowData = {}) => {
+        const rowId = `row-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const tr = document.createElement("tr");
+        tr.dataset.rowId = rowId;
+
+        const dateCell = document.createElement("td");
+        const dateInput = document.createElement("input");
+        dateInput.type = "date";
+        dateInput.value = rowData.production_date || todayIso;
+        dateInput.className = "bulk-grid__input";
+        dateInput.dataset.field = "production_date";
+        dateCell.appendChild(dateInput);
+        tr.appendChild(dateCell);
+
+        const itemCell = document.createElement("td");
+        const itemSelect = document.createElement("select");
+        itemSelect.className = "bulk-grid__input";
+        itemSelect.dataset.field = "item_code";
+        renderItemsOptions(itemSelect);
+        itemSelect.value = rowData.item_code || "";
+        itemCell.appendChild(itemSelect);
+        tr.appendChild(itemCell);
+
+        const nameCell = document.createElement("td");
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = rowData.item_name || "";
+        nameSpan.dataset.field = "item_name";
+        nameCell.appendChild(nameSpan);
+        tr.appendChild(nameCell);
+
+        const shiftCell = document.createElement("td");
+        const shiftSelect = document.createElement("select");
+        shiftSelect.className = "bulk-grid__input";
+        shiftSelect.dataset.field = "production_shift";
+        ["Morning", "Evening", "Night"].forEach((shift) => {
+            const option = document.createElement("option");
+            option.value = shift;
+            option.textContent = shift;
+            shiftSelect.appendChild(option);
+        });
+        shiftSelect.value = rowData.production_shift || "Morning";
+        shiftCell.appendChild(shiftSelect);
+        tr.appendChild(shiftCell);
+
+        const qtyCell = document.createElement("td");
+        const qtyInput = document.createElement("input");
+        qtyInput.type = "number";
+        qtyInput.min = "1";
+        qtyInput.className = "bulk-grid__input";
+        qtyInput.dataset.field = "quantity";
+        qtyInput.value = rowData.quantity || "";
+        qtyCell.appendChild(qtyInput);
+        tr.appendChild(qtyCell);
+
+        const modeCell = document.createElement("td");
+        const modeSelect = document.createElement("select");
+        modeSelect.dataset.field = "serial_mode";
+        ["range", "manual"].forEach((mode) => {
+            const option = document.createElement("option");
+            option.value = mode;
+            option.textContent = mode === "range" ? "Serial Range" : "Manual List";
+            modeSelect.appendChild(option);
+        });
+        modeSelect.value = rowData.serial_mode || "range";
+        modeCell.appendChild(modeSelect);
+        tr.appendChild(modeCell);
+
+        const serialCell = document.createElement("td");
+        const serialRangeInput = document.createElement("input");
+        serialRangeInput.type = "text";
+        serialRangeInput.placeholder = "Starting serial (8 digits)";
+        serialRangeInput.className = "bulk-grid__input serial-range-input";
+        serialRangeInput.dataset.field = "starting_serial";
+        serialRangeInput.value = rowData.starting_serial || "";
+
+        const serialListInput = document.createElement("textarea");
+        serialListInput.rows = 2;
+        serialListInput.placeholder = "Comma or newline separated serials";
+        serialListInput.className = "bulk-grid__textarea serial-list-input";
+        serialListInput.dataset.field = "serial_numbers";
+        serialListInput.value = rowData.serial_numbers || "";
+
+        const preview = document.createElement("div");
+        preview.className = "bulk-grid__preview";
+
+        const errorList = document.createElement("ul");
+        errorList.className = "bulk-grid__errors";
+
+        serialCell.appendChild(serialRangeInput);
+        serialCell.appendChild(serialListInput);
+        serialCell.appendChild(preview);
+        serialCell.appendChild(errorList);
+        tr.appendChild(serialCell);
+
+        const remarksCell = document.createElement("td");
+        const remarksInput = document.createElement("input");
+        remarksInput.type = "text";
+        remarksInput.className = "bulk-grid__input";
+        remarksInput.dataset.field = "remarks";
+        remarksInput.value = rowData.remarks || "";
+        remarksCell.appendChild(remarksInput);
+        tr.appendChild(remarksCell);
+
+        const actionCell = document.createElement("td");
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "button button--ghost";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => {
+            tr.remove();
+            updateConfirmButton();
+        });
+        actionCell.appendChild(removeButton);
+        tr.appendChild(actionCell);
+
+        const updateItemName = () => {
+            const selected = itemsCache.find((item) => item.item_code === itemSelect.value);
+            nameSpan.textContent = selected?.item_name || "";
+        };
+
+        const updatePreview = () => {
+            preview.textContent = "";
+            if (modeSelect.value !== "range") return;
+            const qty = Number(qtyInput.value);
+            const start = serialRangeInput.value.trim();
+            if (!start || !qty) return;
+            const startInt = Number(start);
+            if (!Number.isInteger(startInt) || start.length !== 8) return;
+            const endInt = startInt + qty - 1;
+            if (endInt > 99999999) return;
+            const startLabel = start.toString().padStart(8, "0");
+            const endLabel = endInt.toString().padStart(8, "0");
+            const details = document.createElement("details");
+            const summary = document.createElement("summary");
+            summary.textContent = "View list";
+            details.appendChild(summary);
+            const list = document.createElement("div");
+            const items = [];
+            for (let i = 0; i < Math.min(qty, 10); i += 1) {
+                items.push((startInt + i).toString().padStart(8, "0"));
+            }
+            if (qty > 20) {
+                items.push("…");
+                for (let i = qty - 10; i < qty; i += 1) {
+                    items.push((startInt + i).toString().padStart(8, "0"));
+                }
+            } else if (qty > 10) {
+                for (let i = 10; i < qty; i += 1) {
+                    items.push((startInt + i).toString().padStart(8, "0"));
+                }
+            }
+            list.textContent = items.join(", ");
+            details.appendChild(list);
+            preview.textContent = `Serials will be generated: ${startLabel} to ${endLabel} (${qty} serials). `;
+            preview.appendChild(details);
+        };
+
+        const toggleSerialMode = () => {
+            const isRange = modeSelect.value === "range";
+            serialRangeInput.hidden = !isRange;
+            serialListInput.hidden = isRange;
+            updatePreview();
+        };
+
+        itemSelect.addEventListener("change", updateItemName);
+        modeSelect.addEventListener("change", toggleSerialMode);
+        serialRangeInput.addEventListener("input", updatePreview);
+        qtyInput.addEventListener("input", updatePreview);
+
+        updateItemName();
+        toggleSerialMode();
+        bulkGridBody.appendChild(tr);
+    };
+
+    const resetBulkFeedback = () => {
+        bulkError.hidden = true;
+        bulkError.textContent = "";
+        bulkSummary.hidden = true;
+    };
+
+    const clearRowErrors = () => {
+        bulkGridBody.querySelectorAll(".bulk-grid__errors").forEach((list) => {
+            list.innerHTML = "";
+        });
+    };
+
+    const applyRowErrors = (errors) => {
+        clearRowErrors();
+        errors.forEach((error) => {
+            const row = bulkGridBody.querySelectorAll("tr")[error.row_index];
+            if (!row) return;
+            const list = row.querySelector(".bulk-grid__errors");
+            if (!list) return;
+            list.innerHTML = "";
+            error.messages.forEach((message) => {
+                const li = document.createElement("li");
+                li.textContent = message;
+                list.appendChild(li);
+            });
+        });
+    };
+
+    const collectRows = () => {
+        const rows = [];
+        bulkGridBody.querySelectorAll("tr").forEach((row) => {
+        const rowData = {};
+        row.querySelectorAll("[data-field]").forEach((field) => {
+            if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+                rowData[field.dataset.field] = field.value;
+            }
+        });
+        rows.push({
+            production_date: rowData.production_date || "",
+            item_code: rowData.item_code || "",
+            production_shift: rowData.production_shift || "",
+            quantity: rowData.quantity || "",
+            serial_mode: rowData.serial_mode || "range",
+            starting_serial: rowData.starting_serial || "",
+            serial_numbers: rowData.serial_numbers || "",
+            remarks: rowData.remarks || "",
+        });
+        });
+        return rows;
+    };
+
+    const submitBulkEntries = async () => {
+        resetBulkFeedback();
+        const rows = collectRows();
+        if (!rows.length) {
+            bulkError.textContent = "Add at least one row before saving.";
+            bulkError.hidden = false;
+            return;
+        }
+        try {
+            const response = await fetchJson("/api/exsol/production/bulk", {
+                method: "POST",
+                headers: apiHeaders,
+                body: JSON.stringify({ rows }),
+            });
+            bulkSummary.hidden = false;
+            summaryRows.textContent = response.summary?.rows_processed ?? 0;
+            summaryQty.textContent = response.summary?.total_quantity ?? 0;
+            summarySerials.textContent = response.summary?.total_serials ?? 0;
+            await loadEntries();
+        } catch (error) {
+            if (error?.errors) {
+                applyRowErrors(error.errors);
+            } else {
+                bulkError.textContent = error.message || "Unable to save entries.";
+                bulkError.hidden = false;
+            }
+        }
+    };
+
+    const handlePasteRows = () => {
+        const raw = bulkPaste.value.trim();
+        if (!raw) return;
+        const lines = raw.split(/\r?\n/).filter(Boolean);
+        lines.forEach((line) => {
+            const parts = line.split(/,\s*|\t/);
+            const [production_date, item_code, production_shift, quantity, serial_input, remarks] = parts;
+            const rowData = {
+                production_date: production_date || todayIso,
+                item_code: item_code || "",
+                production_shift: production_shift || "Morning",
+                quantity: quantity || "",
+                remarks: remarks || "",
+            };
+            if (serialModeToggle.checked) {
+                rowData.serial_mode = "range";
+                rowData.starting_serial = serial_input || "";
+            } else {
+                rowData.serial_mode = "manual";
+                rowData.serial_numbers = serial_input || "";
+            }
+            addRow(rowData);
+        });
+        bulkPaste.value = "";
+    };
+
+    const openEditModal = (entry) => {
+        editTargetId = entry.id;
+        editDate.value = entry.production_date || todayIso;
+        editShift.value = entry.production_shift || "Morning";
+        editRemarks.value = entry.remarks || "";
+        renderItemsOptions(editItemCode);
+        editItemCode.value = entry.item_code || "";
+        editFeedback.textContent = "";
+        editFeedback.classList.remove("modal__feedback--error", "modal__feedback--success");
+        toggleEditModal(true);
+    };
+
+    const submitEditForm = async (event) => {
+        event.preventDefault();
+        if (!editTargetId) return;
+        editFeedback.textContent = "";
+        editFeedback.classList.remove("modal__feedback--error", "modal__feedback--success");
+        try {
+            await fetchJson(`/api/exsol/production/entries/${editTargetId}`, {
+                method: "PATCH",
+                headers: apiHeaders,
+                body: JSON.stringify({
+                    item_code: editItemCode.value,
+                    production_shift: editShift.value,
+                    remarks: editRemarks.value,
+                }),
+            });
+            editFeedback.textContent = "Entry updated.";
+            editFeedback.classList.add("modal__feedback--success", "modal__feedback--visible");
+            await loadEntries();
+            setTimeout(() => toggleEditModal(false), 600);
+        } catch (error) {
+            editFeedback.textContent = error.message || "Unable to update entry.";
+            editFeedback.classList.add("modal__feedback--error", "modal__feedback--visible");
+        }
+    };
+
+    const uploadExcel = async () => {
+        excelError.hidden = true;
+        excelSummary.hidden = true;
+        const file = excelFileInput.files?.[0];
+        if (!file) {
+            excelError.textContent = "Select an Excel file first.";
+            excelError.hidden = false;
+            return;
+        }
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+            const response = await fetch("/api/exsol/production/excel", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                if (data?.errors) {
+                    const details = data.errors
+                        .map((error) => `Row ${error.row_index + 1}: ${error.messages.join("; ")}`)
+                        .join(" | ");
+                    throw new Error(details || "Unable to upload Excel.");
+                }
+                throw new Error(data?.error || "Unable to upload Excel.");
+            }
+            excelSummary.hidden = false;
+            excelSummaryRows.textContent = data.summary?.rows_processed ?? 0;
+            excelSummaryQty.textContent = data.summary?.total_quantity ?? 0;
+            excelSummarySerials.textContent = data.summary?.total_serials ?? 0;
+            await loadEntries();
+        } catch (error) {
+            excelError.textContent = error.message || "Unable to upload Excel.";
+            excelError.hidden = false;
+        }
+    };
+
+    const downloadTemplate = async () => {
+        try {
+            const response = await fetch("/api/exsol/production/template", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to download template.");
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "exsol_production_template.xlsx";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            excelError.textContent = error.message || "Unable to download template.";
+            excelError.hidden = false;
+        }
+    };
+
+    const confirmEntries = async () => {
+        if (!selectedEntryIds.size) return;
+        try {
+            await fetchJson("/api/exsol/production/confirm", {
+                method: "POST",
+                headers: apiHeaders,
+                body: JSON.stringify({ entry_ids: Array.from(selectedEntryIds) }),
+            });
+            selectedEntryIds.clear();
+            await loadEntries();
+        } catch (error) {
+            productionError.textContent = error.message || "Unable to confirm entries.";
+            productionError.hidden = false;
+        }
+    };
+
+    const switchBulkMode = () => {
+        const isManual = bulkMode.value === "manual";
+        bulkManualSection.hidden = !isManual;
+        bulkExcelSection.hidden = isManual;
+    };
+
+    document.querySelectorAll("[data-modal-close]").forEach((button) => {
+        button.addEventListener("click", () => toggleModal(false));
+    });
+    document.querySelectorAll("[data-edit-close]").forEach((button) => {
+        button.addEventListener("click", () => toggleEditModal(false));
+    });
+
+    document.getElementById("bulk-entry-button")?.addEventListener("click", () => {
+        resetBulkFeedback();
+        bulkGridBody.innerHTML = "";
+        addRow();
+        toggleModal(true);
+    });
+
+    bulkMode?.addEventListener("change", switchBulkMode);
+    serialModeToggle?.addEventListener("change", () => {
+        bulkGridBody.querySelectorAll("tr").forEach((row) => {
+            const modeSelect = row.querySelector('[data-field="serial_mode"]');
+            if (!modeSelect) return;
+            modeSelect.value = serialModeToggle.checked ? "range" : "manual";
+            modeSelect.dispatchEvent(new Event("change"));
+        });
+    });
+
+    addRowButton?.addEventListener("click", () => addRow());
+    submitBulkButton?.addEventListener("click", submitBulkEntries);
+    applyPasteButton?.addEventListener("click", handlePasteRows);
+    uploadExcelButton?.addEventListener("click", uploadExcel);
+    downloadTemplateButton?.addEventListener("click", downloadTemplate);
+    confirmButton?.addEventListener("click", confirmEntries);
+    editForm?.addEventListener("submit", submitEditForm);
+
+    selectAllCheckbox?.addEventListener("change", () => {
+        if (!selectAllCheckbox.checked) {
+            selectedEntryIds.clear();
+        } else {
+            entriesCache
+                .filter((entry) => !entry.is_confirmed)
+                .forEach((entry) => selectedEntryIds.add(entry.id));
+        }
+        renderEntries();
+    });
+
+    filters.apply?.addEventListener("click", loadEntries);
+    filters.reset?.addEventListener("click", () => {
+        Object.values(filters).forEach((input) => {
+            if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement) {
+                input.value = "";
+            }
+        });
+        loadEntries();
+    });
+
+    loadItems()
+        .then(loadEntries)
+        .catch((error) => {
+            productionError.textContent = error.message || "Unable to load Exsol items.";
+            productionError.hidden = false;
+        });
+</script>
+{% endblock %}

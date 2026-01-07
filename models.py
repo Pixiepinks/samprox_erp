@@ -899,6 +899,25 @@ class MaterialItem(db.Model):
     )
 
 
+class ExsolInventoryItem(db.Model):
+    __tablename__ = "exsol_inventory_items"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
+    item_code = db.Column(db.String(50), nullable=False)
+    item_name = db.Column(db.String(255), nullable=False)
+    uom = db.Column(db.String(30))
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    company = db.relationship("Company", backref="exsol_inventory_items")
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "item_code", name="uq_exsol_inventory_items_company_code"),
+    )
+
+
 class MRNHeader(db.Model):
     __tablename__ = "mrn_headers"
 

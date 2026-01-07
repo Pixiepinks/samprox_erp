@@ -921,7 +921,7 @@ class ExsolInventoryItem(db.Model):
 class ExsolProductionEntry(db.Model):
     __tablename__ = "exsol_production_entries"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
     production_date = db.Column(db.Date, nullable=False)
     item_code = db.Column(db.String(120), nullable=False)
@@ -954,7 +954,7 @@ class ExsolProductionEntry(db.Model):
 class ExsolProductionSerial(db.Model):
     __tablename__ = "exsol_production_serials"
 
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     entry_id = db.Column(
         db.BigInteger,
         db.ForeignKey("exsol_production_entries.id", ondelete="CASCADE"),

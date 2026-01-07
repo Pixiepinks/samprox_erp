@@ -184,7 +184,8 @@ def _load_user_lookup(user_ids: set[int]) -> dict[int, str]:
 
 
 def _ensure_exsol_sequences() -> None:
-    if db.session.bind.dialect.name != "postgresql":
+    bind = db.session.get_bind()
+    if not bind or bind.dialect.name != "postgresql":
         return
     entries_seq = "exsol_production_entries_id_seq"
     serials_seq = "exsol_production_serials_id_seq"

@@ -207,7 +207,7 @@ def _ensure_exsol_sequences() -> None:
         text(
             "SELECT setval("
             f"'{entries_seq}', "
-            "COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), "
+            "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), 1), "
             "true)"
         )
     )
@@ -215,7 +215,7 @@ def _ensure_exsol_sequences() -> None:
         text(
             "SELECT setval("
             f"'{serials_seq}', "
-            "COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), "
+            "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), 1), "
             "true)"
         )
     )

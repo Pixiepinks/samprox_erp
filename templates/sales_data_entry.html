@@ -12,7 +12,42 @@
             </p>
         </div>
     </header>
-    <div class="card">
+    <div class="section__grid hidden" id="sales-action-tiles" aria-live="polite">
+        <a
+            class="tile tile--link"
+            href="/sales/invoice"
+            role="link"
+            aria-label="Create Invoice"
+            onkeydown="if(event.key === ' ' || event.key === 'Spacebar'){event.preventDefault(); event.currentTarget.click();}"
+        >
+            <div class="system-status__item-icon" aria-hidden="true">🧾</div>
+            <h2 class="tile__title">Create Invoice</h2>
+            <p class="tile__description">Create and manage sales invoices.</p>
+        </a>
+        <a
+            class="tile tile--link"
+            href="/sales/receipts"
+            role="link"
+            aria-label="Record Receipts"
+            onkeydown="if(event.key === ' ' || event.key === 'Spacebar'){event.preventDefault(); event.currentTarget.click();}"
+        >
+            <div class="system-status__item-icon" aria-hidden="true">💳</div>
+            <h2 class="tile__title">Record Receipts</h2>
+            <p class="tile__description">Record customer payments and receipts.</p>
+        </a>
+        <a
+            class="tile tile--link"
+            href="/sales/production"
+            role="link"
+            aria-label="Record Production"
+            onkeydown="if(event.key === ' ' || event.key === 'Spacebar'){event.preventDefault(); event.currentTarget.click();}"
+        >
+            <div class="system-status__item-icon" aria-hidden="true">🏭</div>
+            <h2 class="tile__title">Record Production</h2>
+            <p class="tile__description">Log production output related to sales orders.</p>
+        </a>
+    </div>
+    <div class="card" id="sales-entry-form">
         <div class="form-grid">
             <label class="form-field">
                 <span>Entry type</span>
@@ -46,4 +81,22 @@
         </div>
     </div>
 </section>
+<script>
+    (function () {
+        const userRole = (JSON.parse(localStorage.getItem("samprox_user") || "null")?.role || "").toLowerCase();
+        const isSalesManager = userRole === "sales_manager";
+        const isSalesExecutive = userRole === "sales_executive";
+
+        const actionTiles = document.getElementById("sales-action-tiles");
+        const entryForm = document.getElementById("sales-entry-form");
+
+        if (isSalesManager || isSalesExecutive) {
+            actionTiles?.classList.remove("hidden");
+            entryForm?.classList.add("hidden");
+        } else {
+            actionTiles?.classList.add("hidden");
+            entryForm?.classList.remove("hidden");
+        }
+    })();
+</script>
 {% endblock %}

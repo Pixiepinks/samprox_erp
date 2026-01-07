@@ -256,8 +256,8 @@
     const companyKey = (user?.company_key || user?.company || "").toLowerCase();
     if (
         !token ||
-        !["sales_manager", "sales_executive"].includes(normalizedRole) ||
-        (companyKey && companyKey !== "exsol-engineering")
+        !["sales_manager", "sales_executive", "admin"].includes(normalizedRole) ||
+        (normalizedRole !== "admin" && companyKey && companyKey !== "exsol-engineering")
     ) {
         window.location.href = "/";
     }
@@ -576,13 +576,13 @@
         const modeCell = document.createElement("td");
         const modeSelect = document.createElement("select");
         modeSelect.dataset.field = "serial_mode";
-        ["range", "manual"].forEach((mode) => {
+        ["SerialRange", "Manual"].forEach((mode) => {
             const option = document.createElement("option");
             option.value = mode;
-            option.textContent = mode === "range" ? "Serial Range" : "Manual List";
+            option.textContent = mode === "SerialRange" ? "Serial Range" : "Manual List";
             modeSelect.appendChild(option);
         });
-        modeSelect.value = rowData.serial_mode || "range";
+        modeSelect.value = rowData.serial_mode || "SerialRange";
         modeCell.appendChild(modeSelect);
         tr.appendChild(modeCell);
 
@@ -591,8 +591,8 @@
         serialRangeInput.type = "text";
         serialRangeInput.placeholder = "Starting serial (8 digits)";
         serialRangeInput.className = "bulk-grid__input serial-range-input";
-        serialRangeInput.dataset.field = "starting_serial";
-        serialRangeInput.value = rowData.starting_serial || "";
+        serialRangeInput.dataset.field = "start_serial";
+        serialRangeInput.value = rowData.start_serial || "";
 
         const serialListInput = document.createElement("textarea");
         serialListInput.rows = 2;
@@ -642,7 +642,7 @@
 
         const updatePreview = () => {
             preview.textContent = "";
-            if (modeSelect.value !== "range") return;
+            if (modeSelect.value !== "SerialRange") return;
             const qty = Number(qtyInput.value);
             const start = serialRangeInput.value.trim();
             if (!start || !qty) return;
@@ -678,7 +678,7 @@
         };
 
         const toggleSerialMode = () => {
-            const isRange = modeSelect.value === "range";
+            const isRange = modeSelect.value === "SerialRange";
             serialRangeInput.hidden = !isRange;
             serialListInput.hidden = isRange;
             updatePreview();
@@ -722,6 +722,14 @@
         });
     };
 
+    const splitSerials = (value) => {
+        if (!value) return [];
+        return value
+            .split(/[\s,]+/)
+            .map((serial) => serial.trim())
+            .filter(Boolean);
+    };
+
     const collectRows = () => {
         const rows = [];
         bulkGridBody.querySelectorAll("tr").forEach((row) => {
@@ -732,14 +740,17 @@
             }
         });
         const selectedItem = itemsCache.find((item) => item.id === rowData.item_id);
+        const serialMode = rowData.serial_mode || "SerialRange";
+        const serialList = splitSerials(rowData.serial_numbers || "");
         rows.push({
             production_date: rowData.production_date || "",
             item_id: rowData.item_id || "",
             item_code: selectedItem?.item_code || rowData.item_code || "",
             production_shift: rowData.production_shift || "",
             quantity: rowData.quantity || "",
-            serial_mode: rowData.serial_mode || "range",
-            starting_serial: rowData.starting_serial || "",
+            serial_mode: serialMode,
+            start_serial: rowData.start_serial || "",
+            serials: serialMode === "Manual" ? serialList : [],
             serial_numbers: rowData.serial_numbers || "",
             remarks: rowData.remarks || "",
         });
@@ -765,6 +776,8 @@
             summaryRows.textContent = response.summary?.rows_processed ?? 0;
             summaryQty.textContent = response.summary?.total_quantity ?? 0;
             summarySerials.textContent = response.summary?.total_serials ?? 0;
+            bulkGridBody.innerHTML = "";
+            addRow();
             await loadEntries();
         } catch (error) {
             if (error?.errors) {
@@ -793,10 +806,10 @@
                 remarks: remarks || "",
             };
             if (serialModeToggle.checked) {
-                rowData.serial_mode = "range";
-                rowData.starting_serial = serial_input || "";
+                rowData.serial_mode = "SerialRange";
+                rowData.start_serial = serial_input || "";
             } else {
-                rowData.serial_mode = "manual";
+                rowData.serial_mode = "Manual";
                 rowData.serial_numbers = serial_input || "";
             }
             addRow(rowData);
@@ -944,7 +957,7 @@
         bulkGridBody.querySelectorAll("tr").forEach((row) => {
             const modeSelect = row.querySelector('[data-field="serial_mode"]');
             if (!modeSelect) return;
-            modeSelect.value = serialModeToggle.checked ? "range" : "manual";
+            modeSelect.value = serialModeToggle.checked ? "SerialRange" : "Manual";
             modeSelect.dispatchEvent(new Event("change"));
         });
     });

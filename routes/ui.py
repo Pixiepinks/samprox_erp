@@ -128,23 +128,7 @@ def _has_exsol_production_access() -> bool:
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
         return False
 
-    claims = None
-    try:
-        verify_jwt_in_request(optional=True)
-        claims = get_jwt()
-    except Exception:
-        claims = None
-
-    company_key = None
-    if claims:
-        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
-
-    if not company_key:
-        user = _current_user()
-        if user:
-            company_key = (user.company_key or "").strip().lower()
-
-    return company_key == "exsol-engineering"
+    return True
 
 
 def _has_rainbows_end_market_access() -> bool:

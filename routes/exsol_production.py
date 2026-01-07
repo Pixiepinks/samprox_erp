@@ -25,7 +25,6 @@ from models import RoleEnum, User
 bp = Blueprint("exsol_production", __name__, url_prefix="/api/exsol/production")
 
 EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
-EXSOL_COMPANY_KEY = "exsol-engineering"
 SHIFT_OPTIONS = {"Morning", "Evening", "Night"}
 SERIAL_REGEX = re.compile(r"^[0-9]{8}$")
 
@@ -48,7 +47,6 @@ def _has_exsol_production_access() -> bool:
     except Exception:
         return False
 
-    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
     role_raw = claims.get("role")
     try:
         role = RoleEnum(role_raw)
@@ -58,7 +56,7 @@ def _has_exsol_production_access() -> bool:
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
         return False
 
-    return company_key == EXSOL_COMPANY_KEY
+    return True
 
 
 def _parse_date(value: Any) -> date | None:

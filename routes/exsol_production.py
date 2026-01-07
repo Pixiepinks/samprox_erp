@@ -190,38 +190,38 @@ def _ensure_exsol_sequences() -> None:
     entries_seq = "exsol_production_entries_id_seq"
     serials_seq = "exsol_production_serials_id_seq"
     try:
-        db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {entries_seq}"))
-        db.session.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {serials_seq}"))
-        db.session.execute(
-            text(
-                "ALTER TABLE exsol_production_entries "
-                f"ALTER COLUMN id SET DEFAULT nextval('{entries_seq}')"
+        with bind.begin() as connection:
+            connection.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {entries_seq}"))
+            connection.execute(text(f"CREATE SEQUENCE IF NOT EXISTS {serials_seq}"))
+            connection.execute(
+                text(
+                    "ALTER TABLE exsol_production_entries "
+                    f"ALTER COLUMN id SET DEFAULT nextval('{entries_seq}')"
+                )
             )
-        )
-        db.session.execute(
-            text(
-                "ALTER TABLE exsol_production_serials "
-                f"ALTER COLUMN id SET DEFAULT nextval('{serials_seq}')"
+            connection.execute(
+                text(
+                    "ALTER TABLE exsol_production_serials "
+                    f"ALTER COLUMN id SET DEFAULT nextval('{serials_seq}')"
+                )
             )
-        )
-        db.session.execute(
-            text(
-                "SELECT setval("
-                f"'{entries_seq}', "
-                "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), 1), "
-                "true)"
+            connection.execute(
+                text(
+                    "SELECT setval("
+                    f"'{entries_seq}', "
+                    "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_entries), 0), 1), "
+                    "true)"
+                )
             )
-        )
-        db.session.execute(
-            text(
-                "SELECT setval("
-                f"'{serials_seq}', "
-                "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), 1), "
-                "true)"
+            connection.execute(
+                text(
+                    "SELECT setval("
+                    f"'{serials_seq}', "
+                    "GREATEST(COALESCE((SELECT MAX(id) FROM exsol_production_serials), 0), 1), "
+                    "true)"
+                )
             )
-        )
     except SQLAlchemyError as exc:
-        db.session.rollback()
         current_app.logger.warning(
             {
                 "event": "exsol_sequence_setup_failed",

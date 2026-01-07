@@ -10,16 +10,11 @@ from typing import Any
 from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
 
-from exsol_storage import (
-    ExsolProductionEntry,
-    ExsolStockItem,
-    ExsolStorageUnavailable,
-    get_exsol_storage,
-)
-from models import RoleEnum, User, normalize_role
+from exsol_storage import ExsolProductionEntry, ExsolStorageUnavailable, get_exsol_storage
+from models import Company, ExsolInventoryItem, RoleEnum, User, normalize_role
 
 
 bp = Blueprint("exsol_production", __name__, url_prefix="/api/exsol/production")
@@ -160,6 +155,33 @@ def _coerce_serial_text(value: Any) -> str | None:
     return text or None
 
 
+def _get_exsol_company_id() -> int | None:
+    company = Company.query.filter(Company.name == EXSOL_COMPANY_NAME).one_or_none()
+    return company.id if company else None
+
+
+def _lookup_exsol_item(company_id: int, item_id: str | None, item_code: str | None) -> ExsolInventoryItem | None:
+    if item_id:
+        return (
+            ExsolInventoryItem.query.filter(
+                ExsolInventoryItem.company_id == company_id,
+                ExsolInventoryItem.id == item_id,
+                ExsolInventoryItem.is_active.is_(True),
+            )
+            .one_or_none()
+        )
+    if item_code:
+        return (
+            ExsolInventoryItem.query.filter(
+                ExsolInventoryItem.company_id == company_id,
+                ExsolInventoryItem.is_active.is_(True),
+                func.lower(ExsolInventoryItem.item_code) == item_code.lower(),
+            )
+            .one_or_none()
+        )
+    return None
+
+
 def _normalize_row_payload(row: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
     if "starting_serial" in normalized:
@@ -179,17 +201,43 @@ def _validate_and_build_entries(rows: list[dict[str, Any]], user_id: int, role_n
     entries: list[ExsolProductionEntry] = []
 
     try:
+        company_id = _get_exsol_company_id()
+        if not company_id:
+            error_list = [
+                {"row_index": idx, "messages": ["Exsol company is not configured."]}
+                for idx in range(len(rows))
+            ]
+            raise ExsolProductionValidationError(error_list)
+
+        item_ids = {
+            (row.get("item_id") or "").strip()
+            for row in rows
+            if (row.get("item_id") or "").strip()
+        }
         item_codes = {
             (row.get("item_code") or "").strip()
             for row in rows
             if (row.get("item_code") or "").strip()
         }
-        items = (
-            session.query(ExsolStockItem)
-            .filter(func.lower(ExsolStockItem.item_code).in_({code.lower() for code in item_codes}))
-            .all()
-        )
-        item_lookup = {item.item_code.lower(): item for item in items}
+        filters = []
+        if item_ids:
+            filters.append(ExsolInventoryItem.id.in_(item_ids))
+        if item_codes:
+            filters.append(
+                func.lower(ExsolInventoryItem.item_code).in_({code.lower() for code in item_codes})
+            )
+        items: list[ExsolInventoryItem] = []
+        if filters:
+            items = (
+                ExsolInventoryItem.query.filter(
+                    ExsolInventoryItem.company_id == company_id,
+                    ExsolInventoryItem.is_active.is_(True),
+                )
+                .filter(or_(*filters))
+                .all()
+            )
+        item_lookup_by_code = {item.item_code.lower(): item for item in items}
+        item_lookup_by_id = {str(item.id): item for item in items}
 
         for idx, raw_row in enumerate(rows):
             row = _normalize_row_payload(raw_row)
@@ -197,14 +245,16 @@ def _validate_and_build_entries(rows: list[dict[str, Any]], user_id: int, role_n
             if not production_date:
                 errors[idx].append("Production date is required.")
 
+            item_id = (row.get("item_id") or "").strip()
             item_code = (row.get("item_code") or "").strip()
-            if not item_code:
+            if not item_id and not item_code:
                 errors[idx].append("Item code is required.")
                 item = None
             else:
-                item = item_lookup.get(item_code.lower())
+                item = item_lookup_by_id.get(item_id) if item_id else item_lookup_by_code.get(item_code.lower())
                 if not item:
-                    errors[idx].append(f"Item code {item_code} is not an Exsol stock item.")
+                    label = item_code or item_id
+                    errors[idx].append(f"Item {label} is not an Exsol inventory item.")
 
             production_shift = (row.get("production_shift") or "").strip()
             if production_shift not in SHIFT_OPTIONS:
@@ -526,17 +576,17 @@ def update_entry(entry_id: str):
         if "remarks" in payload:
             updates["remarks"] = (payload.get("remarks") or "").strip() or None
 
-        if "item_code" in payload:
+        if "item_code" in payload or "item_id" in payload:
+            item_id = (payload.get("item_id") or "").strip()
             item_code = (payload.get("item_code") or "").strip()
-            if not item_code:
+            if not item_id and not item_code:
                 return _build_error("Item code is required.", 400)
-            item = (
-                session.query(ExsolStockItem)
-                .filter(func.lower(ExsolStockItem.item_code) == item_code.lower())
-                .one_or_none()
-            )
+            company_id = _get_exsol_company_id()
+            if not company_id:
+                return _build_error("Exsol company not configured.", 500)
+            item = _lookup_exsol_item(company_id, item_id, item_code)
             if not item:
-                return _build_error("Item code is not an Exsol stock item.", 400)
+                return _build_error("Item is not an Exsol inventory item.", 400)
             updates["item_code"] = item.item_code
             updates["item_name"] = item.item_name
 

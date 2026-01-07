@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
-from flask import current_app
 from sqlalchemy import func, or_
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
-from exsol_storage import ExsolStorageUnavailable, ExsolStockItem, get_exsol_storage
+from extensions import db
+from models import Company, ExsolInventoryItem
 
 
 @dataclass
@@ -21,88 +19,66 @@ class ExsolInventoryError(Exception):
         return "Exsol inventory validation error"
 
 
+EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
+
+
 DEFAULT_EXSOL_ITEMS: List[Dict[str, Any]] = [
-    {"item_code": "EXS-PMP-050-1X1", "item_name": 'EXS Water Pump 0.50 HP 1" x 1"', "category": "Water Pump", "hp": "0.50", "size": '1" x 1"'},
-    {"item_code": "EXS-PMP-075-1X1", "item_name": 'EXS Water Pump 0.75 HP 1" x 1"', "category": "Water Pump", "hp": "0.75", "size": '1" x 1"'},
-    {"item_code": "EXS-PMP-100-1X1", "item_name": 'EXS Water Pump 1.00 HP 1" x 1"', "category": "Water Pump", "hp": "1.00", "size": '1" x 1"'},
-    {"item_code": "EXS-PMP-150-1X1", "item_name": 'EXS Water Pump 1.50 HP 1" x 1"', "category": "Water Pump", "hp": "1.50", "size": '1" x 1"'},
-    {"item_code": "EXS-PMP-200-2X2", "item_name": 'EXS Water Pump 2.00 HP 2" x 2"', "category": "Water Pump", "hp": "2.00", "size": '2" x 2"'},
-    {"item_code": "EXS-PMP-060-1X1", "item_name": 'EXS 60 Water Pump 0.50 HP 1" x 1"', "category": "Water Pump", "hp": "0.50", "size": '1" x 1"'},
-    {"item_code": "EXSCU-PCP-050", "item_name": "EXSCU Pressure Controller Pump 0.50 HP", "category": "Pressure Controller Pump", "hp": "0.50"},
-    {"item_code": "EXSCU-PCP-075", "item_name": "EXSCU Pressure Controller Pump 0.75 HP", "category": "Pressure Controller Pump", "hp": "0.75"},
-    {"item_code": "EXSCU-PCP-100", "item_name": "EXSCU Pressure Controller Pump 1.00 HP", "category": "Pressure Controller Pump", "hp": "1.00"},
-    {"item_code": "EXSCU-PCP-060", "item_name": "EXSCU 60 Pressure Controller Pump", "category": "Pressure Controller Pump"},
-    {"item_code": "ACC-PC-220-15B-BLU", "item_name": "Pressure Control 220–240V 1.5 bar (Blue)", "category": "Accessory", "voltage": "220–240V", "pressure_bar": "1.5", "variant": "Blue"},
-    {"item_code": "ACC-PC-220-15B-LCL", "item_name": "Pressure Control 220–240V 1.5 bar (LCL)", "category": "Accessory", "voltage": "220–240V", "pressure_bar": "1.5", "variant": "LCL"},
+    {"item_code": "EXS-PMP-050-1X1", "item_name": 'EXS Water Pump 0.50 HP 1" x 1"', "uom": "NOS"},
+    {"item_code": "EXS-PMP-075-1X1", "item_name": 'EXS Water Pump 0.75 HP 1" x 1"', "uom": "NOS"},
+    {"item_code": "EXS-PMP-100-1X1", "item_name": 'EXS Water Pump 1.00 HP 1" x 1"', "uom": "NOS"},
+    {"item_code": "EXS-PMP-150-1X1", "item_name": 'EXS Water Pump 1.50 HP 1" x 1"', "uom": "NOS"},
+    {"item_code": "EXS-PMP-200-2X2", "item_name": 'EXS Water Pump 2.00 HP 2" x 2"', "uom": "NOS"},
+    {"item_code": "EXS-PMP-060-1X1", "item_name": 'EXS 60 Water Pump 0.50 HP 1" x 1"', "uom": "NOS"},
+    {"item_code": "EXSCU-PCP-050", "item_name": "EXSCU Pressure Controller Pump 0.50 HP", "uom": "NOS"},
+    {"item_code": "EXSCU-PCP-075", "item_name": "EXSCU Pressure Controller Pump 0.75 HP", "uom": "NOS"},
+    {"item_code": "EXSCU-PCP-100", "item_name": "EXSCU Pressure Controller Pump 1.00 HP", "uom": "NOS"},
+    {"item_code": "EXSCU-PCP-060", "item_name": "EXSCU 60 Pressure Controller Pump", "uom": "NOS"},
+    {"item_code": "ACC-PC-220-15B-BLU", "item_name": "Pressure Control 220–240V 1.5 bar (Blue)", "uom": "NOS"},
+    {"item_code": "ACC-PC-220-15B-LCL", "item_name": "Pressure Control 220–240V 1.5 bar (LCL)", "uom": "NOS"},
 ]
 
 
-def _get_session() -> Session:
-    storage = get_exsol_storage()
-    return storage.session()
-
-
-def _parse_decimal(value: Any) -> Optional[Decimal]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if text == "":
-        return None
-    try:
-        return Decimal(text)
-    except (InvalidOperation, ValueError):
-        return None
+def _get_company_id() -> int:
+    company = Company.query.filter(Company.name == EXSOL_COMPANY_NAME).one_or_none()
+    if not company:
+        raise ExsolInventoryError({"company": "Exsol company is not configured."})
+    return company.id
 
 
 def validate_item_payload(payload: Dict[str, Any]) -> Dict[str, str]:
     errors: Dict[str, str] = {}
     code = (payload.get("item_code") or "").strip()
     name = (payload.get("item_name") or "").strip()
-    category = (payload.get("category") or "").strip()
 
     if not code:
         errors["item_code"] = "Item code is required."
     if not name:
         errors["item_name"] = "Item name is required."
-    if not category:
-        errors["category"] = "Category is required."
-
-    if "hp" in payload and payload.get("hp") not in (None, "") and _parse_decimal(payload.get("hp")) is None:
-        errors["hp"] = "hp must be numeric."
-    if "pressure_bar" in payload and payload.get("pressure_bar") not in (None, "") and _parse_decimal(payload.get("pressure_bar")) is None:
-        errors["pressure_bar"] = "pressure_bar must be numeric."
 
     return errors
 
 
-def upsert_exsol_item(payload: Dict[str, Any], *, session: Optional[Session] = None) -> ExsolStockItem:
+def upsert_exsol_item(payload: Dict[str, Any], *, session=None) -> ExsolInventoryItem:
     errors = validate_item_payload(payload)
     if errors:
         raise ExsolInventoryError(errors)
 
     code = (payload.get("item_code") or "").strip()
+    company_id = _get_company_id()
     managed_session = session is None
-    session = session or _get_session()
+    session = session or db.session
 
     try:
         existing = (
-            session.query(ExsolStockItem)
-            .filter(func.lower(ExsolStockItem.item_code) == code.lower())
+            session.query(ExsolInventoryItem)
+            .filter(ExsolInventoryItem.company_id == company_id)
+            .filter(func.lower(ExsolInventoryItem.item_code) == code.lower())
             .one_or_none()
         )
 
-        hp_val = _parse_decimal(payload.get("hp"))
-        pressure_val = _parse_decimal(payload.get("pressure_bar"))
-
         fields = {
             "item_name": (payload.get("item_name") or "").strip(),
-            "category": (payload.get("category") or "").strip(),
-            "hp": hp_val,
-            "size": (payload.get("size") or "").strip() or None,
-            "voltage": (payload.get("voltage") or "").strip() or None,
-            "pressure_bar": pressure_val,
-            "variant": (payload.get("variant") or "").strip() or None,
-            "unit": (payload.get("unit") or "").strip() or "NOS",
+            "uom": (payload.get("uom") or "").strip() or None,
             "is_active": bool(payload.get("is_active", True)),
         }
 
@@ -114,7 +90,7 @@ def upsert_exsol_item(payload: Dict[str, Any], *, session: Optional[Session] = N
             session.add(existing)
             target = existing
         else:
-            target = ExsolStockItem(item_code=code, **fields)
+            target = ExsolInventoryItem(company_id=company_id, item_code=code, **fields)
             session.add(target)
 
         if managed_session:
@@ -132,23 +108,22 @@ def upsert_exsol_item(payload: Dict[str, Any], *, session: Optional[Session] = N
                 pass
 
 
-def list_exsol_items(search: Optional[str] = None, limit: int = 200) -> list[ExsolStockItem]:
-    session = _get_session()
+def list_exsol_items(search: Optional[str] = None, limit: int = 200) -> list[ExsolInventoryItem]:
+    company_id = _get_company_id()
+    session = db.session
     try:
-        stmt = session.query(ExsolStockItem)
+        stmt = session.query(ExsolInventoryItem).filter(ExsolInventoryItem.company_id == company_id)
         if search:
             like = f"%{search.strip()}%"
             stmt = stmt.filter(
                 or_(
-                    ExsolStockItem.item_code.ilike(like),
-                    ExsolStockItem.item_name.ilike(like),
-                    ExsolStockItem.category.ilike(like),
-                    ExsolStockItem.variant.ilike(like),
+                    ExsolInventoryItem.item_code.ilike(like),
+                    ExsolInventoryItem.item_name.ilike(like),
                 )
             )
         limit = max(1, min(limit, 500))
         items = (
-            stmt.order_by(ExsolStockItem.item_name.asc(), ExsolStockItem.item_code.asc())
+            stmt.order_by(ExsolInventoryItem.item_name.asc(), ExsolInventoryItem.item_code.asc())
             .limit(limit)
             .all()
         )
@@ -163,7 +138,7 @@ def list_exsol_items(search: Optional[str] = None, limit: int = 200) -> list[Exs
 def seed_exsol_defaults() -> int:
     """Idempotently seed the default Exsol catalog."""
 
-    session = _get_session()
+    session = db.session
     created_or_updated = 0
     try:
         for payload in DEFAULT_EXSOL_ITEMS:

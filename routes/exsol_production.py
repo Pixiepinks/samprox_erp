@@ -592,9 +592,9 @@ def bulk_create_entries():
 
     try:
         _ensure_exsol_sequences()
-        with db.session.begin():
-            for entry in entries:
-                db.session.add(entry)
+        for entry in entries:
+            db.session.add(entry)
+        db.session.commit()
         entry_ids = [entry.id for entry in entries]
     except IntegrityError:
         db.session.rollback()
@@ -652,15 +652,15 @@ def confirm_entries():
     now = datetime.utcnow()
     updated = 0
     try:
-        with db.session.begin():
-            for entry in entries:
-                if entry.is_confirmed:
-                    continue
-                entry.is_confirmed = True
-                entry.confirmed_by_user_id = user_id
-                entry.confirmed_at = now
-                updated += 1
-                db.session.add(entry)
+        for entry in entries:
+            if entry.is_confirmed:
+                continue
+            entry.is_confirmed = True
+            entry.confirmed_by_user_id = user_id
+            entry.confirmed_at = now
+            updated += 1
+            db.session.add(entry)
+        db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         return _build_error("Unable to confirm entries right now.", 500)
@@ -719,10 +719,10 @@ def update_entry(entry_id: int):
         return _build_error("No valid fields to update.", 400)
 
     try:
-        with db.session.begin():
-            for key, value in updates.items():
-                setattr(entry, key, value)
-            db.session.add(entry)
+        for key, value in updates.items():
+            setattr(entry, key, value)
+        db.session.add(entry)
+        db.session.commit()
     except SQLAlchemyError:
         db.session.rollback()
         return _build_error("Unable to update entry right now.", 500)
@@ -835,9 +835,9 @@ def upload_excel():
 
     try:
         _ensure_exsol_sequences()
-        with db.session.begin():
-            for entry in entries:
-                db.session.add(entry)
+        for entry in entries:
+            db.session.add(entry)
+        db.session.commit()
     except IntegrityError:
         db.session.rollback()
         _log_bulk_failure("unique_constraint_violation", user_id, role_name, rows, serials=serials_created)

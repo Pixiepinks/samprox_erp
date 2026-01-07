@@ -57,6 +57,46 @@ class RoleEnum(str, Enum):
     sales = "sales"
 
 
+ROLE_ALIASES: dict[str, RoleEnum] = {
+    "sales execative": RoleEnum.sales_executive,
+    "sales executive": RoleEnum.sales_executive,
+    "sales manger": RoleEnum.sales_manager,
+    "sales manager": RoleEnum.sales_manager,
+}
+
+
+def normalize_role(value: RoleEnum | str | None) -> RoleEnum | None:
+    if isinstance(value, RoleEnum):
+        return value
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    lowered = cleaned.lower()
+    try:
+        return RoleEnum(lowered)
+    except ValueError:
+        pass
+
+    normalized = re.sub(r"[_-]+", " ", lowered)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return None
+    if normalized in ROLE_ALIASES:
+        return ROLE_ALIASES[normalized]
+
+    underscored = normalized.replace(" ", "_")
+    try:
+        return RoleEnum(underscored)
+    except ValueError:
+        return None
+
+
 COLOMBO_TZ = ZoneInfo("Asia/Colombo")
 
 

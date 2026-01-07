@@ -19,7 +19,7 @@ from exsol_storage import (
     ExsolStorageUnavailable,
     get_exsol_storage,
 )
-from models import RoleEnum, User
+from models import RoleEnum, User, normalize_role
 
 
 bp = Blueprint("exsol_production", __name__, url_prefix="/api/exsol/production")
@@ -49,10 +49,7 @@ def _has_exsol_production_access() -> bool:
 
     role_raw = claims.get("role")
     company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
-    try:
-        role = RoleEnum(role_raw)
-    except Exception:
-        role = None
+    role = normalize_role(role_raw)
 
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
         return False

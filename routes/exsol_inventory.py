@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from exsol_inventory import ExsolInventoryError, list_exsol_items, seed_exsol_defaults, upsert_exsol_item
 from exsol_storage import ExsolStorageUnavailable
-from models import RoleEnum
+from models import RoleEnum, normalize_role
 from schemas import ExsolStockItemSchema
 
 bp = Blueprint("exsol_inventory", __name__, url_prefix="/api/exsol")
@@ -24,10 +24,7 @@ def _has_exsol_access(require_admin: bool = False) -> bool:
     role_raw = claims.get("role")
     company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
 
-    try:
-        role = RoleEnum(role_raw)
-    except Exception:
-        role = None
+    role = normalize_role(role_raw)
 
     if role == RoleEnum.admin:
         return True

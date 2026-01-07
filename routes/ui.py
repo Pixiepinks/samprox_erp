@@ -36,6 +36,7 @@ from models import (
     RoleEnum,
     SALES_MANAGER_ROLES,
     User,
+    normalize_role,
     generate_financial_year_months,
 )
 
@@ -59,11 +60,7 @@ def _current_role() -> RoleEnum | None:
     if not role:
         return None
 
-    try:
-        normalized_role = role.lower() if isinstance(role, str) else role
-        return RoleEnum(normalized_role)
-    except ValueError:
-        return None
+    return normalize_role(role)
 
 
 def _current_user() -> User | None:
@@ -101,10 +98,7 @@ def _has_exsol_inventory_access(require_admin: bool = False) -> bool:
 
     if claims:
         company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
-        try:
-            role = RoleEnum(claims.get("role"))
-        except Exception:
-            role = None
+        role = normalize_role(claims.get("role"))
 
     if role is None:
         user = _current_user()

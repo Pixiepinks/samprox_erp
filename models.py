@@ -7,7 +7,7 @@ from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 from math import radians, sin, cos, sqrt, atan2
 
-from sqlalchemy import CheckConstraint, UniqueConstraint, event, func, select
+from sqlalchemy import CheckConstraint, Index, UniqueConstraint, event, func, select
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from extensions import db
@@ -915,6 +915,65 @@ class ExsolInventoryItem(db.Model):
 
     __table_args__ = (
         UniqueConstraint("company_id", "item_code", name="uq_exsol_inventory_items_company_code"),
+    )
+
+
+class ExsolProductionEntry(db.Model):
+    __tablename__ = "exsol_production_entries"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    production_date = db.Column(db.Date, nullable=False)
+    item_code = db.Column(db.String(120), nullable=False)
+    item_name = db.Column(db.String(255), nullable=True)
+    shift = db.Column(db.String(40), nullable=True)
+    quantity = db.Column(db.Integer, nullable=False)
+    serial_mode = db.Column(db.String(20), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_by_name = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_confirmed = db.Column(db.Boolean, nullable=False, default=False)
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+
+    serials = db.relationship(
+        "ExsolProductionSerial",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="ck_exsol_production_entries_quantity_positive"),
+        Index("ix_exsol_production_entries_company_date", "company_key", "production_date"),
+        Index("ix_exsol_production_entries_company_item", "company_key", "item_code"),
+    )
+
+
+class ExsolProductionSerial(db.Model):
+    __tablename__ = "exsol_production_serials"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    entry_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("exsol_production_entries.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    serial_no = db.Column(db.String(8), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    entry = db.relationship("ExsolProductionEntry", back_populates="serials")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_key",
+            "serial_no",
+            name="uq_exsol_production_serial_company_serial",
+        ),
+        Index("ix_exsol_production_serial_company_entry", "company_key", "entry_id"),
     )
 
 

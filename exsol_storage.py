@@ -6,20 +6,7 @@ import uuid
 from typing import Optional
 
 from flask import current_app
-from sqlalchemy import (
-    Boolean,
-    Column,
-    Date,
-    DateTime,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    UniqueConstraint,
-    create_engine,
-    text,
-)
+from sqlalchemy import Boolean, Column, DateTime, Numeric, String, create_engine, text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 
@@ -76,30 +63,6 @@ class ExsolStockItem(ExsolBase):
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-
-class ExsolProductionEntry(ExsolBase):
-    __tablename__ = "exsol_production_entries"
-    __table_args__ = (
-        UniqueConstraint("company", "serial_number", name="uq_exsol_production_company_serial"),
-        Index("ix_exsol_production_company_date", "company", "production_date"),
-        Index("ix_exsol_production_company_item_date", "company", "item_code", "production_date"),
-    )
-
-    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
-    company = Column(String(255), nullable=False)
-    production_date = Column(Date, nullable=False)
-    item_code = Column(String(120), nullable=False)
-    item_name = Column(String(255), nullable=False)
-    serial_number = Column(String(8), nullable=False)
-    production_shift = Column(String(20), nullable=False)
-    remarks = Column(Text, nullable=True)
-    created_by = Column(Integer, nullable=False)
-    created_role = Column(String(120), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    is_confirmed = Column(Boolean, nullable=False, default=False, server_default="0")
-    confirmed_by = Column(Integer, nullable=True)
-    confirmed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 def _ensure_schema(engine, schema_name: str) -> None:

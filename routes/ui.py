@@ -119,7 +119,7 @@ def _has_exsol_production_access() -> bool:
     """Return True if the viewer is allowed to access Exsol production entry."""
 
     role = _current_role()
-    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
+    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
         return False
 
     claims = None
@@ -138,7 +138,7 @@ def _has_exsol_production_access() -> bool:
         if user:
             company_key = (user.company_key or "").strip().lower()
 
-    if company_key and company_key != "exsol-engineering":
+    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
         return False
 
     return True

@@ -253,7 +253,12 @@
     const token = localStorage.getItem("samprox_token");
     const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
     const normalizedRole = (user?.role || "").toLowerCase();
-    if (!token || !["sales_manager", "sales_executive"].includes(normalizedRole)) {
+    const companyKey = (user?.company_key || user?.company || "").toLowerCase();
+    if (
+        !token ||
+        !["sales_manager", "sales_executive"].includes(normalizedRole) ||
+        (companyKey && companyKey !== "exsol-engineering")
+    ) {
         window.location.href = "/";
     }
 

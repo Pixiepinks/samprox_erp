@@ -35,7 +35,10 @@ def _has_exsol_access(require_admin: bool = False) -> bool:
     if require_admin:
         return False
 
-    return company_key == "exsol-engineering"
+    if company_key and company_key != "exsol-engineering":
+        return False
+
+    return role in {RoleEnum.sales_manager, RoleEnum.sales_executive} or company_key == "exsol-engineering"
 
 
 def _build_error(message: str, status: int = 400):

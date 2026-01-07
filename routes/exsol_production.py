@@ -48,12 +48,16 @@ def _has_exsol_production_access() -> bool:
         return False
 
     role_raw = claims.get("role")
+    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
     try:
         role = RoleEnum(role_raw)
     except Exception:
         role = None
 
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive}:
+        return False
+
+    if company_key and company_key != "exsol-engineering":
         return False
 
     return True

@@ -349,7 +349,7 @@
         editModal.setAttribute("aria-hidden", (!open).toString());
     };
 
-    const renderItemsOptions = (selectEl) => {
+    const renderItemsOptions = (selectEl, valueKey = "id") => {
         if (!selectEl) return;
         selectEl.innerHTML = "";
         const placeholder = document.createElement("option");
@@ -358,19 +358,25 @@
         selectEl.appendChild(placeholder);
         itemsCache.forEach((item) => {
             const option = document.createElement("option");
-            option.value = item.item_code;
+            option.value = item[valueKey] || "";
             option.textContent = `${item.item_code} - ${item.item_name}`;
             selectEl.appendChild(option);
         });
     };
 
     const loadItems = async () => {
-        const items = await fetchJson("/api/exsol/stock-items", {
+        const items = await fetchJson("/api/exsol/inventory-items", {
             headers: { Authorization: `Bearer ${token}` },
         });
         itemsCache = items || [];
-        renderItemsOptions(filters.item);
+        renderItemsOptions(filters.item, "item_code");
         renderItemsOptions(editItemCode);
+        if (!itemsCache.length) {
+            productionError.textContent = "No Exsol items found. Please add Exsol Inventory Items first.";
+            productionError.hidden = false;
+        } else {
+            productionError.hidden = true;
+        }
     };
 
     const formatDateTime = (value) => {
@@ -520,10 +526,20 @@
         const itemCell = document.createElement("td");
         const itemSelect = document.createElement("select");
         itemSelect.className = "bulk-grid__input";
-        itemSelect.dataset.field = "item_code";
+        itemSelect.dataset.field = "item_id";
         renderItemsOptions(itemSelect);
-        itemSelect.value = rowData.item_code || "";
+        if (rowData.item_id) {
+            itemSelect.value = rowData.item_id;
+        } else if (rowData.item_code) {
+            const match = itemsCache.find((item) => item.item_code === rowData.item_code);
+            itemSelect.value = match?.id || "";
+        }
+        const itemCodeInput = document.createElement("input");
+        itemCodeInput.type = "hidden";
+        itemCodeInput.dataset.field = "item_code";
+        itemCodeInput.value = rowData.item_code || "";
         itemCell.appendChild(itemSelect);
+        itemCell.appendChild(itemCodeInput);
         tr.appendChild(itemCell);
 
         const nameCell = document.createElement("td");
@@ -619,8 +635,9 @@
         tr.appendChild(actionCell);
 
         const updateItemName = () => {
-            const selected = itemsCache.find((item) => item.item_code === itemSelect.value);
+            const selected = itemsCache.find((item) => item.id === itemSelect.value);
             nameSpan.textContent = selected?.item_name || "";
+            itemCodeInput.value = selected?.item_code || "";
         };
 
         const updatePreview = () => {
@@ -714,9 +731,11 @@
                 rowData[field.dataset.field] = field.value;
             }
         });
+        const selectedItem = itemsCache.find((item) => item.id === rowData.item_id);
         rows.push({
             production_date: rowData.production_date || "",
-            item_code: rowData.item_code || "",
+            item_id: rowData.item_id || "",
+            item_code: selectedItem?.item_code || rowData.item_code || "",
             production_shift: rowData.production_shift || "",
             quantity: rowData.quantity || "",
             serial_mode: rowData.serial_mode || "range",
@@ -764,8 +783,10 @@
         lines.forEach((line) => {
             const parts = line.split(/,\s*|\t/);
             const [production_date, item_code, production_shift, quantity, serial_input, remarks] = parts;
+            const matched = itemsCache.find((item) => item.item_code === (item_code || "").trim());
             const rowData = {
                 production_date: production_date || todayIso,
+                item_id: matched?.id || "",
                 item_code: item_code || "",
                 production_shift: production_shift || "Morning",
                 quantity: quantity || "",
@@ -789,7 +810,8 @@
         editShift.value = entry.production_shift || "Morning";
         editRemarks.value = entry.remarks || "";
         renderItemsOptions(editItemCode);
-        editItemCode.value = entry.item_code || "";
+        const editItemMatch = itemsCache.find((item) => item.item_code === entry.item_code);
+        editItemCode.value = editItemMatch?.id || "";
         editFeedback.textContent = "";
         editFeedback.classList.remove("modal__feedback--error", "modal__feedback--success");
         toggleEditModal(true);
@@ -805,7 +827,7 @@
                 method: "PATCH",
                 headers: apiHeaders,
                 body: JSON.stringify({
-                    item_code: editItemCode.value,
+                    item_id: editItemCode.value,
                     production_shift: editShift.value,
                     remarks: editRemarks.value,
                 }),

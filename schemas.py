@@ -503,6 +503,16 @@ class MaterialItemSchema(Schema):
     is_active = fields.Bool()
 
 
+class ExsolInventoryItemSchema(Schema):
+    id = fields.UUID()
+    item_code = fields.Str(required=True)
+    item_name = fields.Str(required=True)
+    uom = fields.Str(allow_none=True)
+    is_active = fields.Bool()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+
+
 class ExsolStockItemSchema(Schema):
     id = fields.UUID()
     item_code = fields.Str(required=True)

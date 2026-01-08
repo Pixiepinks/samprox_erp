@@ -268,6 +268,8 @@
     };
 
     const bulkModal = document.getElementById("bulk-modal");
+    const bulkModalDialog = bulkModal?.querySelector(".fullscreen-modal__dialog");
+    const bulkModalCloseTargets = bulkModal?.querySelectorAll("[data-modal-close]") || [];
     const bulkMode = document.getElementById("bulk-mode");
     const serialModeToggle = document.getElementById("serial-mode-toggle");
     const bulkManualSection = document.getElementById("bulk-manual-section");
@@ -337,10 +339,30 @@
         return data;
     };
 
-    const toggleModal = (open) => {
+    let isBulkProductionModalOpen = false;
+    const handleBulkModalKeydown = (event) => {
+        if (event.key !== "Escape") return;
+        closeBulkModal(event);
+    };
+
+    const setBulkModalOpen = (open) => {
         if (!bulkModal) return;
+        isBulkProductionModalOpen = open;
         bulkModal.hidden = !open;
         document.body.classList.toggle("modal-open", open);
+        if (open) {
+            document.addEventListener("keydown", handleBulkModalKeydown);
+        } else {
+            document.removeEventListener("keydown", handleBulkModalKeydown);
+        }
+    };
+
+    const closeBulkModal = (event) => {
+        if (event) {
+            event.preventDefault();
+        }
+        resetBulkFeedback();
+        setBulkModalOpen(false);
     };
 
     const toggleEditModal = (open) => {
@@ -944,8 +966,11 @@
         bulkExcelSection.hidden = isManual;
     };
 
-    document.querySelectorAll("[data-modal-close]").forEach((button) => {
-        button.addEventListener("click", () => toggleModal(false));
+    bulkModalCloseTargets.forEach((button) => {
+        button.addEventListener("click", closeBulkModal, { capture: true });
+    });
+    bulkModalDialog?.addEventListener("click", (event) => {
+        event.stopPropagation();
     });
     document.querySelectorAll("[data-edit-close]").forEach((button) => {
         button.addEventListener("click", () => toggleEditModal(false));
@@ -955,7 +980,7 @@
         resetBulkFeedback();
         bulkGridBody.innerHTML = "";
         addRow();
-        toggleModal(true);
+        setBulkModalOpen(true);
     });
 
     bulkMode?.addEventListener("change", switchBulkMode);

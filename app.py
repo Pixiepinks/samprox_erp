@@ -194,6 +194,7 @@ def create_app():
     database_url = current_database_url()
     _ensure_database_exists(database_url)
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    app.config["SQLALCHEMY_SESSION_OPTIONS"] = {"expire_on_commit": False}
     db.init_app(app)
     migrate.init_app(app, db)
     _run_database_migrations(app)

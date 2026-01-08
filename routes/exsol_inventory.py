@@ -82,10 +82,13 @@ def create_inventory_item():
 
     payload = request.get_json(silent=True) or {}
     try:
-        item = upsert_exsol_item(payload)
+        item = upsert_exsol_item(payload, session=db.session)
+        db.session.commit()
+        db.session.refresh(item)
     except ExsolInventoryError as exc:
         return jsonify({"errors": exc.errors}), 400
     except SQLAlchemyError:
+        db.session.rollback()
         return _build_error("Unable to save Exsol item right now.", 500)
     return jsonify(item_schema.dump(item)), 201
 
@@ -155,10 +158,13 @@ def create_stock_item():
 
     payload = request.get_json(silent=True) or {}
     try:
-        item = upsert_exsol_item(payload)
+        item = upsert_exsol_item(payload, session=db.session)
+        db.session.commit()
+        db.session.refresh(item)
     except ExsolInventoryError as exc:
         return jsonify({"errors": exc.errors}), 400
     except SQLAlchemyError:
+        db.session.rollback()
         return _build_error("Unable to save Exsol item right now.", 500)
     return jsonify(item_schema.dump(item)), 201
 

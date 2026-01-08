@@ -754,7 +754,9 @@ def _insert_bulk_chunk(
                         "INSERT INTO exsol_production_serials "
                         "(company_key, serial_no, entry_id, created_at) "
                         "SELECT :company_key, to_char(gs, 'FM00000000'), :entry_id, now() "
-                        "FROM generate_series(:start_serial::bigint, :end_serial::bigint) gs"
+                        "FROM generate_series("
+                        "CAST(:start_serial AS bigint), CAST(:end_serial AS bigint)"
+                        ") gs"
                     ),
                     {
                         "company_key": EXSOL_COMPANY_KEY,
@@ -1055,6 +1057,7 @@ def bulk_create_entries():
             }
         )
     except Exception as exc:  # noqa: BLE001
+        db.session.rollback()
         duration_ms = int((time.monotonic() - start_time) * 1000)
         _log_bulk_error(
             {

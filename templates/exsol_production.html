@@ -90,120 +90,122 @@
     </div>
 </section>
 
-<div class="fullscreen-modal" id="bulk-modal" hidden>
-    <div class="fullscreen-modal__backdrop" data-modal-close></div>
-    <div class="fullscreen-modal__dialog fullscreen-modal__dialog--wide" role="dialog" aria-modal="true">
-        <header class="fullscreen-modal__header">
-            <div>
-                <h2>Bulk Production Entry</h2>
-                <p class="section__description">
-                    Enter Exsol production in bulk using the grid or Excel template. Serials are validated server-side.
-                </p>
-            </div>
-            <button type="button" class="fullscreen-modal__close" data-modal-close aria-label="Close">&times;</button>
-        </header>
-        <div class="fullscreen-modal__body">
-            <div class="bulk-modal__controls">
-                <label class="bulk-modal__field">
-                    <span class="bulk-modal__label">Entry mode</span>
-                    <select id="bulk-mode">
-                        <option value="manual" selected>Manual Grid Entry</option>
-                        <option value="excel">Excel Upload</option>
-                    </select>
-                </label>
-                <label class="bulk-modal__field bulk-modal__toggle">
-                    <input type="checkbox" id="serial-mode-toggle" checked />
-                    <span class="bulk-modal__label">Serial Range mode (default)</span>
-                </label>
-            </div>
+<template id="bulk-modal-template">
+    <div class="fullscreen-modal" id="bulk-modal">
+        <div class="fullscreen-modal__backdrop" data-modal-close></div>
+        <div class="fullscreen-modal__dialog fullscreen-modal__dialog--wide" role="dialog" aria-modal="true">
+            <header class="fullscreen-modal__header">
+                <div>
+                    <h2>Bulk Production Entry</h2>
+                    <p class="section__description">
+                        Enter Exsol production in bulk using the grid or Excel template. Serials are validated server-side.
+                    </p>
+                </div>
+                <button type="button" class="fullscreen-modal__close" data-modal-close aria-label="Close">&times;</button>
+            </header>
+            <div class="fullscreen-modal__body">
+                <div class="bulk-modal__controls">
+                    <label class="bulk-modal__field">
+                        <span class="bulk-modal__label">Entry mode</span>
+                        <select id="bulk-mode">
+                            <option value="manual" selected>Manual Grid Entry</option>
+                            <option value="excel">Excel Upload</option>
+                        </select>
+                    </label>
+                    <label class="bulk-modal__field bulk-modal__toggle">
+                        <input type="checkbox" id="serial-mode-toggle" checked />
+                        <span class="bulk-modal__label">Serial Range mode (default)</span>
+                    </label>
+                </div>
 
-            <div id="bulk-manual-section">
-                <div class="bulk-modal__upload">
-                    <div class="bulk-modal__field">
-                        <span class="bulk-modal__label">Paste rows (optional)</span>
-                        <textarea
-                            id="bulk-paste"
-                            rows="2"
-                            placeholder="production_date, item_code, production_shift, quantity, starting_serial or serial_numbers, remarks"
-                        ></textarea>
+                <div id="bulk-manual-section">
+                    <div class="bulk-modal__upload">
+                        <div class="bulk-modal__field">
+                            <span class="bulk-modal__label">Paste rows (optional)</span>
+                            <textarea
+                                id="bulk-paste"
+                                rows="2"
+                                placeholder="production_date, item_code, production_shift, quantity, starting_serial or serial_numbers, remarks"
+                            ></textarea>
+                        </div>
+                        <button type="button" class="button button--ghost" id="apply-paste">Apply paste</button>
                     </div>
-                    <button type="button" class="button button--ghost" id="apply-paste">Apply paste</button>
-                </div>
-                <div class="fullscreen-modal__table-wrapper">
-                    <table class="data-table" id="bulk-grid">
-                        <thead>
-                            <tr>
-                                <th scope="col">Production date</th>
-                                <th scope="col">Item code</th>
-                                <th scope="col">Item name</th>
-                                <th scope="col">Shift</th>
-                                <th scope="col">Quantity</th>
-                                <th scope="col">Serial mode</th>
-                                <th scope="col">Serial input</th>
-                                <th scope="col">Remarks</th>
-                                <th scope="col">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="bulk-grid-body"></tbody>
-                    </table>
-                </div>
-                <div class="bulk-modal__actions">
-                    <button type="button" class="button button--ghost" id="add-row">Add row</button>
-                    <button type="button" class="button button--primary" id="submit-bulk">Save entries</button>
-                </div>
-                <div class="alert" id="bulk-error" hidden></div>
-                <div class="bulk-modal__summary" id="bulk-summary" hidden>
-                    <h3 class="bulk-modal__summary-title">Saved summary</h3>
-                    <div class="bulk-modal__summary-grid">
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Rows processed</span>
-                            <span class="bulk-modal__summary-value" id="summary-rows">0</span>
-                        </div>
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Quantity</span>
-                            <span class="bulk-modal__summary-value" id="summary-qty">0</span>
-                        </div>
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Serials created</span>
-                            <span class="bulk-modal__summary-value" id="summary-serials">0</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="bulk-excel-section" hidden>
-                <div class="bulk-modal__upload">
-                    <div class="bulk-modal__field bulk-modal__upload-field">
-                        <span class="bulk-modal__label">Excel file</span>
-                        <input type="file" id="excel-file" accept=".xlsx" />
+                    <div class="fullscreen-modal__table-wrapper">
+                        <table class="data-table" id="bulk-grid">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Production date</th>
+                                    <th scope="col">Item code</th>
+                                    <th scope="col">Item name</th>
+                                    <th scope="col">Shift</th>
+                                    <th scope="col">Quantity</th>
+                                    <th scope="col">Serial mode</th>
+                                    <th scope="col">Serial input</th>
+                                    <th scope="col">Remarks</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bulk-grid-body"></tbody>
+                        </table>
                     </div>
                     <div class="bulk-modal__actions">
-                        <button type="button" class="button button--ghost" id="download-template">Download template</button>
-                        <button type="button" class="button button--primary" id="upload-excel">Upload Excel</button>
+                        <button type="button" class="button button--ghost" id="add-row">Add row</button>
+                        <button type="button" class="button button--primary" id="submit-bulk">Save entries</button>
+                    </div>
+                    <div class="alert" id="bulk-error" hidden></div>
+                    <div class="bulk-modal__summary" id="bulk-summary" hidden>
+                        <h3 class="bulk-modal__summary-title">Saved summary</h3>
+                        <div class="bulk-modal__summary-grid">
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Rows processed</span>
+                                <span class="bulk-modal__summary-value" id="summary-rows">0</span>
+                            </div>
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Quantity</span>
+                                <span class="bulk-modal__summary-value" id="summary-qty">0</span>
+                            </div>
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Serials created</span>
+                                <span class="bulk-modal__summary-value" id="summary-serials">0</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="alert" id="excel-error" hidden></div>
-                <div class="bulk-modal__summary" id="excel-summary" hidden>
-                    <h3 class="bulk-modal__summary-title">Upload summary</h3>
-                    <div class="bulk-modal__summary-grid">
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Rows processed</span>
-                            <span class="bulk-modal__summary-value" id="excel-summary-rows">0</span>
+
+                <div id="bulk-excel-section" hidden>
+                    <div class="bulk-modal__upload">
+                        <div class="bulk-modal__field bulk-modal__upload-field">
+                            <span class="bulk-modal__label">Excel file</span>
+                            <input type="file" id="excel-file" accept=".xlsx" />
                         </div>
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Quantity</span>
-                            <span class="bulk-modal__summary-value" id="excel-summary-qty">0</span>
+                        <div class="bulk-modal__actions">
+                            <button type="button" class="button button--ghost" id="download-template">Download template</button>
+                            <button type="button" class="button button--primary" id="upload-excel">Upload Excel</button>
                         </div>
-                        <div class="bulk-modal__summary-item">
-                            <span class="bulk-modal__summary-label">Serials created</span>
-                            <span class="bulk-modal__summary-value" id="excel-summary-serials">0</span>
+                    </div>
+                    <div class="alert" id="excel-error" hidden></div>
+                    <div class="bulk-modal__summary" id="excel-summary" hidden>
+                        <h3 class="bulk-modal__summary-title">Upload summary</h3>
+                        <div class="bulk-modal__summary-grid">
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Rows processed</span>
+                                <span class="bulk-modal__summary-value" id="excel-summary-rows">0</span>
+                            </div>
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Quantity</span>
+                                <span class="bulk-modal__summary-value" id="excel-summary-qty">0</span>
+                            </div>
+                            <div class="bulk-modal__summary-item">
+                                <span class="bulk-modal__summary-label">Serials created</span>
+                                <span class="bulk-modal__summary-value" id="excel-summary-serials">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
+</template>
 
 <div class="modal modal--app" id="edit-modal" hidden aria-hidden="true">
     <div class="modal__overlay" data-edit-close></div>
@@ -267,32 +269,11 @@
         "Content-Type": "application/json",
     };
 
-    const bulkModal = document.getElementById("bulk-modal");
-    const bulkModalDialog = bulkModal?.querySelector(".fullscreen-modal__dialog");
-    const bulkModalCloseTargets = bulkModal?.querySelectorAll("[data-modal-close]") || [];
-    const bulkMode = document.getElementById("bulk-mode");
-    const serialModeToggle = document.getElementById("serial-mode-toggle");
-    const bulkManualSection = document.getElementById("bulk-manual-section");
-    const bulkExcelSection = document.getElementById("bulk-excel-section");
-    const bulkGridBody = document.getElementById("bulk-grid-body");
-    const addRowButton = document.getElementById("add-row");
-    const submitBulkButton = document.getElementById("submit-bulk");
-    const bulkError = document.getElementById("bulk-error");
-    const bulkSummary = document.getElementById("bulk-summary");
-    const summaryRows = document.getElementById("summary-rows");
-    const summaryQty = document.getElementById("summary-qty");
-    const summarySerials = document.getElementById("summary-serials");
-    const bulkPaste = document.getElementById("bulk-paste");
-    const applyPasteButton = document.getElementById("apply-paste");
-
-    const excelFileInput = document.getElementById("excel-file");
-    const uploadExcelButton = document.getElementById("upload-excel");
-    const downloadTemplateButton = document.getElementById("download-template");
-    const excelError = document.getElementById("excel-error");
-    const excelSummary = document.getElementById("excel-summary");
-    const excelSummaryRows = document.getElementById("excel-summary-rows");
-    const excelSummaryQty = document.getElementById("excel-summary-qty");
-    const excelSummarySerials = document.getElementById("excel-summary-serials");
+    const bulkModalTemplate = document.getElementById("bulk-modal-template");
+    let bulkModal = null;
+    let bulkModalDialog = null;
+    let bulkModalCloseTargets = [];
+    let bulkModalElements = null;
 
     const productionError = document.getElementById("production-error");
     const productionEmpty = document.getElementById("production-empty");
@@ -345,15 +326,84 @@
         closeBulkModal(event);
     };
 
+    const mountBulkModal = () => {
+        if (bulkModal) return bulkModal;
+        if (!bulkModalTemplate) return null;
+        const fragment = bulkModalTemplate.content.cloneNode(true);
+        document.body.appendChild(fragment);
+        bulkModal = document.getElementById("bulk-modal");
+        bulkModalDialog = bulkModal?.querySelector(".fullscreen-modal__dialog");
+        bulkModalCloseTargets = bulkModal?.querySelectorAll("[data-modal-close]") || [];
+        bulkModalElements = {
+            bulkMode: bulkModal?.querySelector("#bulk-mode"),
+            serialModeToggle: bulkModal?.querySelector("#serial-mode-toggle"),
+            bulkManualSection: bulkModal?.querySelector("#bulk-manual-section"),
+            bulkExcelSection: bulkModal?.querySelector("#bulk-excel-section"),
+            bulkGridBody: bulkModal?.querySelector("#bulk-grid-body"),
+            addRowButton: bulkModal?.querySelector("#add-row"),
+            submitBulkButton: bulkModal?.querySelector("#submit-bulk"),
+            bulkError: bulkModal?.querySelector("#bulk-error"),
+            bulkSummary: bulkModal?.querySelector("#bulk-summary"),
+            summaryRows: bulkModal?.querySelector("#summary-rows"),
+            summaryQty: bulkModal?.querySelector("#summary-qty"),
+            summarySerials: bulkModal?.querySelector("#summary-serials"),
+            bulkPaste: bulkModal?.querySelector("#bulk-paste"),
+            applyPasteButton: bulkModal?.querySelector("#apply-paste"),
+            excelFileInput: bulkModal?.querySelector("#excel-file"),
+            uploadExcelButton: bulkModal?.querySelector("#upload-excel"),
+            downloadTemplateButton: bulkModal?.querySelector("#download-template"),
+            excelError: bulkModal?.querySelector("#excel-error"),
+            excelSummary: bulkModal?.querySelector("#excel-summary"),
+            excelSummaryRows: bulkModal?.querySelector("#excel-summary-rows"),
+            excelSummaryQty: bulkModal?.querySelector("#excel-summary-qty"),
+            excelSummarySerials: bulkModal?.querySelector("#excel-summary-serials"),
+        };
+
+        bulkModalCloseTargets.forEach((button) => {
+            button.addEventListener("click", closeBulkModal, { capture: true });
+        });
+        bulkModal?.querySelector(".fullscreen-modal__backdrop")?.addEventListener("mousedown", closeBulkModal);
+        bulkModalDialog?.addEventListener("mousedown", (event) => {
+            event.stopPropagation();
+        });
+
+        bulkModalElements.bulkMode?.addEventListener("change", switchBulkMode);
+        bulkModalElements.serialModeToggle?.addEventListener("change", () => {
+            bulkModalElements.bulkGridBody?.querySelectorAll("tr").forEach((row) => {
+                const modeSelect = row.querySelector('[data-field="serial_mode"]');
+                if (!modeSelect) return;
+                modeSelect.value = bulkModalElements.serialModeToggle.checked ? "SerialRange" : "Manual";
+                modeSelect.dispatchEvent(new Event("change"));
+            });
+        });
+        bulkModalElements.addRowButton?.addEventListener("click", () => addRow());
+        bulkModalElements.submitBulkButton?.addEventListener("click", submitBulkEntries);
+        bulkModalElements.applyPasteButton?.addEventListener("click", handlePasteRows);
+        bulkModalElements.uploadExcelButton?.addEventListener("click", uploadExcel);
+        bulkModalElements.downloadTemplateButton?.addEventListener("click", downloadTemplate);
+        switchBulkMode();
+        return bulkModal;
+    };
+
+    const unmountBulkModal = () => {
+        bulkModal?.remove();
+        bulkModal = null;
+        bulkModalDialog = null;
+        bulkModalCloseTargets = [];
+        bulkModalElements = null;
+    };
+
     const setBulkModalOpen = (open) => {
-        if (!bulkModal) return;
+        if (open) {
+            mountBulkModal();
+        }
         isBulkProductionModalOpen = open;
-        bulkModal.hidden = !open;
         document.body.classList.toggle("modal-open", open);
         if (open) {
-            document.addEventListener("keydown", handleBulkModalKeydown);
+            window.addEventListener("keydown", handleBulkModalKeydown);
         } else {
-            document.removeEventListener("keydown", handleBulkModalKeydown);
+            window.removeEventListener("keydown", handleBulkModalKeydown);
+            unmountBulkModal();
         }
     };
 
@@ -532,6 +582,8 @@
     };
 
     const addRow = (rowData = {}) => {
+        const bulkGridBody = bulkModalElements?.bulkGridBody;
+        if (!bulkGridBody) return;
         const rowId = `row-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const tr = document.createElement("tr");
         tr.dataset.rowId = rowId;
@@ -717,18 +769,25 @@
     };
 
     const resetBulkFeedback = () => {
+        const bulkError = bulkModalElements?.bulkError;
+        const bulkSummary = bulkModalElements?.bulkSummary;
+        if (!bulkError || !bulkSummary) return;
         bulkError.hidden = true;
         bulkError.textContent = "";
         bulkSummary.hidden = true;
     };
 
     const clearRowErrors = () => {
+        const bulkGridBody = bulkModalElements?.bulkGridBody;
+        if (!bulkGridBody) return;
         bulkGridBody.querySelectorAll(".bulk-grid__errors").forEach((list) => {
             list.innerHTML = "";
         });
     };
 
     const applyRowErrors = (errors) => {
+        const bulkGridBody = bulkModalElements?.bulkGridBody;
+        if (!bulkGridBody) return;
         clearRowErrors();
         errors.forEach((error) => {
             const row = bulkGridBody.querySelectorAll("tr")[error.row_index];
@@ -754,33 +813,45 @@
 
     const collectRows = () => {
         const rows = [];
+        const bulkGridBody = bulkModalElements?.bulkGridBody;
+        if (!bulkGridBody) return rows;
         bulkGridBody.querySelectorAll("tr").forEach((row) => {
-        const rowData = {};
-        row.querySelectorAll("[data-field]").forEach((field) => {
-            if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
-                rowData[field.dataset.field] = field.value;
-            }
-        });
-        const selectedItem = itemsCache.find((item) => item.id === rowData.item_id);
-        const serialMode = rowData.serial_mode || "SerialRange";
-        const serialList = splitSerials(rowData.serial_numbers || "");
-        rows.push({
-            production_date: rowData.production_date || "",
-            item_id: rowData.item_id || "",
-            item_code: selectedItem?.item_code || rowData.item_code || "",
-            production_shift: rowData.production_shift || "",
-            quantity: rowData.quantity || "",
-            serial_mode: serialMode,
-            start_serial: rowData.start_serial || "",
-            serials: serialMode === "Manual" ? serialList : [],
-            serial_numbers: rowData.serial_numbers || "",
-            remarks: rowData.remarks || "",
-        });
+            const rowData = {};
+            row.querySelectorAll("[data-field]").forEach((field) => {
+                if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
+                    rowData[field.dataset.field] = field.value;
+                }
+            });
+            const selectedItem = itemsCache.find((item) => item.id === rowData.item_id);
+            const serialMode = rowData.serial_mode || "SerialRange";
+            const serialList = splitSerials(rowData.serial_numbers || "");
+            rows.push({
+                production_date: rowData.production_date || "",
+                item_id: rowData.item_id || "",
+                item_code: selectedItem?.item_code || rowData.item_code || "",
+                production_shift: rowData.production_shift || "",
+                quantity: rowData.quantity || "",
+                serial_mode: serialMode,
+                start_serial: rowData.start_serial || "",
+                serials: serialMode === "Manual" ? serialList : [],
+                serial_numbers: rowData.serial_numbers || "",
+                remarks: rowData.remarks || "",
+            });
         });
         return rows;
     };
 
     const submitBulkEntries = async () => {
+        const bulkGridBody = bulkModalElements?.bulkGridBody;
+        const bulkError = bulkModalElements?.bulkError;
+        const bulkSummary = bulkModalElements?.bulkSummary;
+        const summaryRows = bulkModalElements?.summaryRows;
+        const summaryQty = bulkModalElements?.summaryQty;
+        const summarySerials = bulkModalElements?.summarySerials;
+        const submitBulkButton = bulkModalElements?.submitBulkButton;
+        if (!bulkGridBody || !bulkError || !bulkSummary || !summaryRows || !summaryQty || !summarySerials || !submitBulkButton) {
+            return;
+        }
         resetBulkFeedback();
         const rows = collectRows();
         if (!rows.length) {
@@ -818,6 +889,9 @@
     };
 
     const handlePasteRows = () => {
+        const bulkPaste = bulkModalElements?.bulkPaste;
+        const serialModeToggle = bulkModalElements?.serialModeToggle;
+        if (!bulkPaste || !serialModeToggle) return;
         const raw = bulkPaste.value.trim();
         if (!raw) return;
         const lines = raw.split(/\r?\n/).filter(Boolean);
@@ -884,6 +958,22 @@
     };
 
     const uploadExcel = async () => {
+        const excelFileInput = bulkModalElements?.excelFileInput;
+        const excelError = bulkModalElements?.excelError;
+        const excelSummary = bulkModalElements?.excelSummary;
+        const excelSummaryRows = bulkModalElements?.excelSummaryRows;
+        const excelSummaryQty = bulkModalElements?.excelSummaryQty;
+        const excelSummarySerials = bulkModalElements?.excelSummarySerials;
+        if (
+            !excelFileInput ||
+            !excelError ||
+            !excelSummary ||
+            !excelSummaryRows ||
+            !excelSummaryQty ||
+            !excelSummarySerials
+        ) {
+            return;
+        }
         excelError.hidden = true;
         excelSummary.hidden = true;
         const file = excelFileInput.files?.[0];
@@ -922,6 +1012,8 @@
     };
 
     const downloadTemplate = async () => {
+        const excelError = bulkModalElements?.excelError;
+        if (!excelError) return;
         try {
             const response = await fetch("/api/exsol/production/template", {
                 headers: { Authorization: `Bearer ${token}` },
@@ -961,43 +1053,26 @@
     };
 
     const switchBulkMode = () => {
+        const bulkMode = bulkModalElements?.bulkMode;
+        const bulkManualSection = bulkModalElements?.bulkManualSection;
+        const bulkExcelSection = bulkModalElements?.bulkExcelSection;
+        if (!bulkMode || !bulkManualSection || !bulkExcelSection) return;
         const isManual = bulkMode.value === "manual";
         bulkManualSection.hidden = !isManual;
         bulkExcelSection.hidden = isManual;
     };
-
-    bulkModalCloseTargets.forEach((button) => {
-        button.addEventListener("click", closeBulkModal, { capture: true });
-    });
-    bulkModalDialog?.addEventListener("click", (event) => {
-        event.stopPropagation();
-    });
     document.querySelectorAll("[data-edit-close]").forEach((button) => {
         button.addEventListener("click", () => toggleEditModal(false));
     });
 
     document.getElementById("bulk-entry-button")?.addEventListener("click", () => {
-        resetBulkFeedback();
-        bulkGridBody.innerHTML = "";
-        addRow();
         setBulkModalOpen(true);
+        resetBulkFeedback();
+        if (bulkModalElements?.bulkGridBody) {
+            bulkModalElements.bulkGridBody.innerHTML = "";
+        }
+        addRow();
     });
-
-    bulkMode?.addEventListener("change", switchBulkMode);
-    serialModeToggle?.addEventListener("change", () => {
-        bulkGridBody.querySelectorAll("tr").forEach((row) => {
-            const modeSelect = row.querySelector('[data-field="serial_mode"]');
-            if (!modeSelect) return;
-            modeSelect.value = serialModeToggle.checked ? "SerialRange" : "Manual";
-            modeSelect.dispatchEvent(new Event("change"));
-        });
-    });
-
-    addRowButton?.addEventListener("click", () => addRow());
-    submitBulkButton?.addEventListener("click", submitBulkEntries);
-    applyPasteButton?.addEventListener("click", handlePasteRows);
-    uploadExcelButton?.addEventListener("click", uploadExcel);
-    downloadTemplateButton?.addEventListener("click", downloadTemplate);
     confirmButton?.addEventListener("click", confirmEntries);
     editForm?.addEventListener("submit", submitEditForm);
 

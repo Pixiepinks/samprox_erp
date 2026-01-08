@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import io
 import re
+import time
 import uuid
 from typing import Any
+from bisect import bisect_right
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import func, or_, text
+from sqlalchemy import func, insert, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -33,16 +34,8 @@ EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
 SHIFT_OPTIONS = {"Morning", "Evening", "Night"}
 SERIAL_REGEX = re.compile(r"^[0-9]{8}$")
 MAX_BULK_QUANTITY = 500
+MAX_BULK_CHUNK_SIZE = 50
 _EXSOL_SEQUENCES_READY = False
-
-
-@dataclass
-class ExsolProductionValidationError(Exception):
-    errors: list[dict[str, Any]]
-
-    def __str__(self) -> str:  # pragma: no cover - utility
-        return "Exsol production validation error"
-
 
 def _build_error(message: str, status: int = 400, details: list[str] | None = None):
     payload: dict[str, Any] = {"ok": False, "error": message}
@@ -119,21 +112,6 @@ def _normalize_serial(value: Any) -> str | None:
     if SERIAL_REGEX.match(text):
         return text
     return None
-
-
-def _generate_serials(starting_serial: str, quantity: int, errors: list[str]) -> list[str]:
-    normalized = _normalize_serial(starting_serial)
-    if not normalized:
-        errors.append("Starting serial must be exactly 8 digits.")
-        return []
-
-    start_int = int(normalized)
-    end_int = start_int + quantity - 1
-    if end_int > 99999999:
-        errors.append("Serial range exceeds 8 digits. Adjust the starting serial or quantity.")
-        return []
-
-    return [str(start_int + offset).zfill(8) for offset in range(quantity)]
 
 
 def _normalize_serial_mode(value: Any) -> str | None:
@@ -265,60 +243,63 @@ def _lookup_exsol_item(company_id: int, item_id: str | None, item_code: str | No
 def _summarize_payload(rows: list[dict[str, Any]]) -> dict[str, Any]:
     quantities = []
     serial_counts = []
+    serial_min = None
+    serial_max = None
     for row in rows:
         quantity = _parse_quantity(row.get("quantity"))
         if quantity:
             quantities.append(quantity)
-        serials = row.get("serials") or row.get("serial_numbers")
-        serial_list = _split_serials(serials)
-        serial_counts.append(len(serial_list))
-    return {
+        serial_mode = _normalize_serial_mode(row.get("serial_mode"))
+        if serial_mode == "Manual":
+            serials = row.get("serials") or row.get("serial_numbers")
+            serial_list = [_normalize_serial(value) for value in _split_serials(serials)]
+            serial_list = [value for value in serial_list if value]
+            if serial_list:
+                serial_min = min(serial_min or serial_list[0], min(serial_list))
+                serial_max = max(serial_max or serial_list[0], max(serial_list))
+            serial_counts.append(len(serial_list))
+        elif serial_mode == "SerialRange":
+            start_serial = _normalize_serial(row.get("start_serial") or row.get("starting_serial"))
+            if start_serial and quantity:
+                start_int = int(start_serial)
+                end_int = start_int + quantity - 1
+                if end_int <= 99999999:
+                    first = str(start_int).zfill(8)
+                    last = str(end_int).zfill(8)
+                    serial_min = min(serial_min or first, first)
+                    serial_max = max(serial_max or last, last)
+                    serial_counts.append(quantity)
+    summary = {
         "rows": len(rows),
         "quantity_total": sum(quantities),
         "serial_count_total": sum(serial_counts),
     }
+    if serial_min and serial_max:
+        summary["serial_summary"] = {"count": sum(serial_counts), "first": serial_min, "last": serial_max}
+    return summary
 
 
-def _log_bulk_failure(
-    message: str,
-    user_id: int | None,
-    role_name: str | None,
+def _chunk_rows(rows: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+    return [rows[i : i + size] for i in range(0, len(rows), size)]
+
+
+def _log_bulk_event(event: str, payload: dict[str, Any]) -> None:
+    current_app.logger.info({"event": event, **payload})
+
+
+def _log_bulk_error(payload: dict[str, Any]) -> None:
+    current_app.logger.error({"event": "exsol_production_bulk_error", **payload})
+
+
+def _prepare_bulk_chunk(
     rows: list[dict[str, Any]],
-    errors: list[dict[str, Any]] | None = None,
-    serials: list[str] | None = None,
-) -> None:
-    serial_summary = None
-    if serials:
-        serial_summary = {
-            "count": len(serials),
-            "first": serials[0],
-            "last": serials[-1],
-        }
-    current_app.logger.warning(
-        {
-            "event": "exsol_production_bulk_failure",
-            "message": message,
-            "user_id": user_id,
-            "role": role_name,
-            "payload": _summarize_payload(rows),
-            "serial_summary": serial_summary,
-            "errors": errors,
-        }
-    )
-
-
-def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str, user_name: str):
-    errors: dict[int, list[str]] = defaultdict(list)
-    row_serials: dict[int, list[str]] = {}
-    row_data: dict[int, dict[str, Any]] = {}
-
-    company_id = _get_exsol_company_id()
-    if not company_id:
-        error_list = [
-            {"row_index": idx, "messages": ["Exsol company is not configured."]}
-            for idx in range(len(rows))
-        ]
-        raise ExsolProductionValidationError(error_list)
+    base_index: int,
+    company_id: int,
+    user_id: int,
+    role_name: str,
+    user_name: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    errors: dict[int, list[dict[str, str]]] = defaultdict(list)
 
     item_ids = {
         normalized
@@ -349,156 +330,398 @@ def _validate_bulk_rows(rows: list[dict[str, Any]], user_id: int, role_name: str
     item_lookup_by_code = {item.item_code.lower(): item for item in items}
     item_lookup_by_id = {str(item.id): item for item in items}
 
-    for idx, row in enumerate(rows):
+    entry_rows: list[dict[str, Any]] = []
+    row_specs: list[dict[str, Any]] = []
+    for offset, row in enumerate(rows):
+        idx = base_index + offset
         production_date = _parse_date(row.get("production_date"))
         if not production_date:
-            errors[idx].append("Production date is required.")
+            errors[idx].append({"row": idx, "field": "production_date", "message": "Production date is required."})
 
         item_id_raw = (row.get("item_id") or "").strip()
         item_id = _normalize_uuid(item_id_raw) or ""
         item_code = (row.get("item_code") or "").strip()
         if not item_id and not item_code:
-            errors[idx].append("Item code is required.")
+            errors[idx].append({"row": idx, "field": "item_code", "message": "Item code is required."})
             item = None
         else:
             item = item_lookup_by_id.get(item_id) if item_id else item_lookup_by_code.get(item_code.lower())
             if not item:
                 label = item_code or item_id
-                errors[idx].append(f"Item {label} is not an Exsol inventory item.")
+                errors[idx].append(
+                    {"row": idx, "field": "item_code", "message": f"Item {label} is not an Exsol inventory item."}
+                )
 
         shift = (row.get("shift") or row.get("production_shift") or "").strip()
         if shift and shift not in SHIFT_OPTIONS:
-            errors[idx].append("Production shift must be Morning, Evening, or Night.")
+            errors[idx].append(
+                {
+                    "row": idx,
+                    "field": "production_shift",
+                    "message": "Production shift must be Morning, Evening, or Night.",
+                }
+            )
 
         quantity = _parse_quantity(row.get("quantity"))
         if quantity is not None and quantity > MAX_BULK_QUANTITY:
-            errors[idx].append(f"Quantity cannot exceed {MAX_BULK_QUANTITY}.")
+            errors[idx].append(
+                {"row": idx, "field": "quantity", "message": f"Quantity cannot exceed {MAX_BULK_QUANTITY}."}
+            )
 
         serial_mode = _normalize_serial_mode(row.get("serial_mode"))
         if not serial_mode:
-            errors[idx].append("Serial mode must be SerialRange or Manual.")
+            errors[idx].append(
+                {"row": idx, "field": "serial_mode", "message": "Serial mode must be SerialRange or Manual."}
+            )
 
         serials: list[str] = []
+        start_int = None
+        end_int = None
+        start_serial = None
+        end_serial = None
         if serial_mode == "Manual":
             raw_serials = row.get("serials") or row.get("serial_numbers")
             serials = [_normalize_serial(value) or "" for value in _split_serials(raw_serials)]
             invalid_serials = [value for value in serials if not SERIAL_REGEX.match(value)]
             serials = [value for value in serials if SERIAL_REGEX.match(value)]
             if invalid_serials:
-                errors[idx].append("All serial numbers must be exactly 8 digits.")
+                errors[idx].append(
+                    {"row": idx, "field": "serials", "message": "All serial numbers must be exactly 8 digits."}
+                )
             if not serials:
-                errors[idx].append("Serial numbers are required for manual entry.")
+                errors[idx].append(
+                    {"row": idx, "field": "serials", "message": "Serial numbers are required for manual entry."}
+                )
             if quantity is None:
                 quantity = len(serials)
             elif quantity and len(serials) != quantity:
-                errors[idx].append("Quantity must match the number of serials provided.")
+                errors[idx].append(
+                    {"row": idx, "field": "quantity", "message": "Quantity must match the number of serials provided."}
+                )
             if quantity and quantity > MAX_BULK_QUANTITY:
-                errors[idx].append(f"Quantity cannot exceed {MAX_BULK_QUANTITY}.")
+                errors[idx].append(
+                    {"row": idx, "field": "quantity", "message": f"Quantity cannot exceed {MAX_BULK_QUANTITY}."}
+                )
         elif serial_mode == "SerialRange":
             starting_serial = row.get("start_serial") or row.get("starting_serial")
             if not starting_serial:
-                errors[idx].append("Starting serial is required for serial range mode.")
+                errors[idx].append(
+                    {"row": idx, "field": "serial_start", "message": "Starting serial is required for serial range."}
+                )
             if quantity is None:
-                errors[idx].append("Quantity must be provided to generate serials.")
+                errors[idx].append(
+                    {"row": idx, "field": "quantity", "message": "Quantity must be provided to generate serials."}
+                )
             else:
-                serials = _generate_serials(str(starting_serial or ""), quantity, errors[idx])
+                normalized = _normalize_serial(str(starting_serial or ""))
+                if not normalized:
+                    errors[idx].append(
+                        {"row": idx, "field": "serial_start", "message": "Starting serial must be exactly 8 digits."}
+                    )
+                else:
+                    start_int = int(normalized)
+                    end_int = start_int + quantity - 1
+                    if end_int > 99999999:
+                        errors[idx].append(
+                            {
+                                "row": idx,
+                                "field": "serial_start",
+                                "message": "Serial range exceeds 8 digits. Adjust the starting serial or quantity.",
+                            }
+                        )
+                    else:
+                        start_serial = str(start_int).zfill(8)
+                        end_serial = str(end_int).zfill(8)
 
         if quantity is None:
-            errors[idx].append("Quantity must be a positive integer.")
+            errors[idx].append(
+                {"row": idx, "field": "quantity", "message": "Quantity must be a positive integer."}
+            )
 
         if errors[idx]:
             continue
 
-        row_serials[idx] = serials
-        row_data[idx] = {
-            "production_date": production_date,
-            "item_code": item.item_code if item else item_code,
-            "item_name": item.item_name if item else (row.get("item_name") or item_code),
-            "shift": shift or None,
-            "quantity": quantity,
-            "serial_mode": serial_mode,
-            "created_by_user_id": user_id,
-            "created_by_name": user_name or None,
-            "created_role": role_name,
-        }
+        if serial_mode == "Manual":
+            seen_serials: set[str] = set()
+            for serial in serials:
+                if serial in seen_serials:
+                    errors[idx].append(
+                        {"row": idx, "field": "serials", "message": f"Serial {serial} is duplicated in this row."}
+                    )
+                seen_serials.add(serial)
 
-    serial_to_rows: dict[str, list[int]] = defaultdict(list)
-    for idx, serials in row_serials.items():
-        seen_serials: set[str] = set()
-        for serial in serials:
-            serial_to_rows[serial].append(idx)
-            if serial in seen_serials:
-                errors[idx].append(f"Serial {serial} is duplicated in this row.")
-            seen_serials.add(serial)
-
-    for serial, row_indexes in serial_to_rows.items():
-        if len(row_indexes) > 1:
-            for row_idx in row_indexes:
-                errors[row_idx].append(f"Serial {serial} is duplicated in this batch.")
-
-    existing_lookup: dict[str, tuple[date | None, int | None]] = {}
-    if serial_to_rows:
-        existing_serials = (
-            db.session.query(
-                ExsolProductionSerial.serial_no,
-                ExsolProductionEntry.production_date,
-                ExsolProductionEntry.created_by_user_id,
-            )
-            .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
-            .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
-            .filter(ExsolProductionSerial.serial_no.in_(list(serial_to_rows.keys())))
-            .all()
+        row_specs.append(
+            {
+                "row_index": idx,
+                "item": item,
+                "item_code": item.item_code if item else item_code,
+                "item_name": item.item_name if item else (row.get("item_name") or item_code),
+                "production_date": production_date,
+                "shift": shift or None,
+                "quantity": quantity,
+                "serial_mode": serial_mode,
+                "serials": serials,
+                "start_int": start_int,
+                "end_int": end_int,
+                "start_serial": start_serial,
+                "end_serial": end_serial,
+            }
         )
-        for serial_no, production_date, created_by in existing_serials:
-            existing_lookup[serial_no] = (production_date, created_by)
 
-    if existing_lookup:
-        user_lookup = _load_user_lookup({user_id for _, user_id in existing_lookup.values() if user_id})
-        for idx, serials in row_serials.items():
-            conflicts = [serial for serial in serials if serial in existing_lookup]
-            if not conflicts:
-                continue
-            messages = []
-            for serial in conflicts[:10]:
-                used_on, created_by = existing_lookup[serial]
-                used_label = used_on.isoformat() if used_on else "unknown date"
-                user_name = user_lookup.get(created_by, "Unknown")
-                messages.append(f"Serial {serial} already exists (used on {used_label} by {user_name}).")
-            if len(conflicts) > 10:
-                messages.append(f"and {len(conflicts) - 10} more…")
-            errors[idx].extend(messages)
-
-    if any(errors.values()):
-        error_list = [
-            {"row_index": idx, "messages": msgs}
-            for idx, msgs in sorted(errors.items())
-            if msgs
-        ]
-        raise ExsolProductionValidationError(error_list)
-
-    entries: list[ExsolProductionEntry] = []
-    serials_created: list[str] = []
-    for idx, serials in row_serials.items():
-        data = row_data[idx]
-        entry = ExsolProductionEntry(
-            company_key=EXSOL_COMPANY_KEY,
-            production_date=data["production_date"],
-            item_code=data["item_code"],
-            item_name=data["item_name"],
-            shift=data["shift"],
-            quantity=data["quantity"],
-            serial_mode=data["serial_mode"],
-            created_by_user_id=data["created_by_user_id"],
-            created_by_name=data["created_by_name"],
+        entry_rows.append(
+            {
+                "company_key": EXSOL_COMPANY_KEY,
+                "production_date": production_date,
+                "item_code": item.item_code if item else item_code,
+                "item_name": item.item_name if item else (row.get("item_name") or item_code),
+                "shift": shift or None,
+                "quantity": quantity,
+                "serial_mode": serial_mode,
+                "created_by_user_id": user_id,
+                "created_by_name": user_name or None,
+            }
         )
-        for serial in serials:
-            entry.serials.append(
-                ExsolProductionSerial(company_key=EXSOL_COMPANY_KEY, serial_no=serial)
-            )
-            serials_created.append(serial)
-        entries.append(entry)
 
-    return entries, serials_created
+    error_list = []
+    for idx, messages in errors.items():
+        error_list.extend(messages)
+    return entry_rows, row_specs, error_list
+
+
+def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[str, str]]:
+    errors: list[dict[str, str]] = []
+    manual_serials: dict[str, int] = {}
+    manual_serial_values: list[tuple[str, int]] = []
+    ranges: list[tuple[int, int, int]] = []
+
+    for spec in row_specs:
+        idx = spec["row_index"]
+        if spec["serial_mode"] == "Manual":
+            for serial in spec["serials"]:
+                if serial in manual_serials:
+                    errors.append(
+                        {"row": idx, "field": "serials", "message": f"Serial {serial} is duplicated in this batch."}
+                    )
+                    errors.append(
+                        {
+                            "row": manual_serials[serial],
+                            "field": "serials",
+                            "message": f"Serial {serial} is duplicated in this batch.",
+                        }
+                    )
+                manual_serials[serial] = idx
+                manual_serial_values.append((serial, idx))
+        elif spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
+            ranges.append((spec["start_int"], spec["end_int"], idx))
+
+    if ranges:
+        ranges_sorted = sorted(ranges, key=lambda value: value[0])
+        prev_start, prev_end, prev_idx = ranges_sorted[0]
+        for start, end, idx in ranges_sorted[1:]:
+            if start <= prev_end:
+                errors.append(
+                    {
+                        "row": idx,
+                        "field": "serial_start",
+                        "message": f"Serial range overlaps existing range starting {str(prev_start).zfill(8)}.",
+                    }
+                )
+                errors.append(
+                    {
+                        "row": prev_idx,
+                        "field": "serial_start",
+                        "message": f"Serial range overlaps existing range starting {str(start).zfill(8)}.",
+                    }
+                )
+            if end > prev_end:
+                prev_start, prev_end, prev_idx = start, end, idx
+
+    if ranges and manual_serial_values:
+        ranges_sorted = sorted(ranges, key=lambda value: value[0])
+        range_starts = [start for start, _, _ in ranges_sorted]
+        for serial, idx in manual_serial_values:
+            serial_int = int(serial)
+            position = bisect_right(range_starts, serial_int) - 1
+            if position >= 0:
+                range_start, range_end, range_idx = ranges_sorted[position]
+                if range_start <= serial_int <= range_end:
+                    errors.append(
+                        {
+                            "row": idx,
+                            "field": "serials",
+                            "message": f"Serial {serial} is duplicated in this batch.",
+                        }
+                    )
+                    errors.append(
+                        {
+                            "row": range_idx,
+                            "field": "serial_start",
+                            "message": f"Serial {serial} is duplicated in this batch.",
+                        }
+                    )
+
+    return errors
+
+
+def _find_existing_serials(
+    row_specs: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    manual_serials_by_item: dict[str, list[str]] = defaultdict(list)
+    range_specs_by_item: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for spec in row_specs:
+        item_code = spec["item_code"]
+        if spec["serial_mode"] == "Manual":
+            manual_serials_by_item[item_code].extend(spec["serials"])
+        elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
+            range_specs_by_item[item_code].append((spec["start_serial"], spec["end_serial"]))
+
+    if not manual_serials_by_item and not range_specs_by_item:
+        return {}
+
+    filters = []
+    for item_code, serials in manual_serials_by_item.items():
+        if serials:
+            filters.append(
+                (ExsolProductionEntry.item_code == item_code)
+                & (ExsolProductionSerial.serial_no.in_(serials))
+            )
+    for item_code, ranges in range_specs_by_item.items():
+        for start_serial, end_serial in ranges:
+            filters.append(
+                (ExsolProductionEntry.item_code == item_code)
+                & (ExsolProductionSerial.serial_no.between(start_serial, end_serial))
+            )
+
+    existing_serials = (
+        db.session.query(ExsolProductionSerial.serial_no, ExsolProductionEntry.item_code)
+        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+        .filter(or_(*filters))
+        .all()
+    )
+    existing_by_item: dict[str, list[str]] = defaultdict(list)
+    for serial_no, item_code in existing_serials:
+        existing_by_item[item_code].append(serial_no)
+    return existing_by_item
+
+
+def _check_existing_serial_errors(
+    row_specs: list[dict[str, Any]],
+    existing_lookup: dict[str, list[str]],
+) -> list[dict[str, str]]:
+    errors: list[dict[str, str]] = []
+    for spec in row_specs:
+        idx = spec["row_index"]
+        item_code = spec["item_code"]
+        existing_serials = existing_lookup.get(item_code, [])
+        if spec["serial_mode"] == "Manual":
+            conflicts = [serial for serial in spec["serials"] if serial in existing_serials]
+            for serial in conflicts:
+                errors.append(
+                    {
+                        "row": idx,
+                        "field": "serial_start",
+                        "message": f"Serial already exists: {serial}",
+                    }
+                )
+        elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
+            if existing_serials:
+                existing_serials_sorted = sorted(existing_serials)
+                position = bisect_right(existing_serials_sorted, spec["end_serial"]) - 1
+                if position >= 0:
+                    candidate = existing_serials_sorted[position]
+                    if spec["start_serial"] <= candidate <= spec["end_serial"]:
+                        errors.append(
+                            {
+                                "row": idx,
+                                "field": "serial_start",
+                                "message": f"Serial already exists: {candidate}",
+                            }
+                        )
+    return errors
+
+
+def _insert_bulk_chunk(
+    entry_rows: list[dict[str, Any]],
+    row_specs: list[dict[str, Any]],
+) -> tuple[int, int]:
+    if not entry_rows:
+        return 0, 0
+
+    now = datetime.utcnow()
+    for offset, row in enumerate(entry_rows):
+        row.setdefault("created_at", now + timedelta(microseconds=offset))
+
+    _ensure_exsol_sequences()
+    bind = db.session.get_bind()
+    dialect_name = bind.dialect.name if bind else ""
+    entry_ids: list[int] = []
+    if dialect_name == "postgresql":
+        insert_stmt = insert(ExsolProductionEntry).returning(ExsolProductionEntry.id)
+        result = db.session.execute(insert_stmt, entry_rows)
+        entry_ids = [row_id for row_id in result.scalars().all()]
+    else:
+        max_id = db.session.query(func.max(ExsolProductionEntry.id)).scalar() or 0
+        for offset, row in enumerate(entry_rows, start=1):
+            row["id"] = max_id + offset
+        insert_stmt = insert(ExsolProductionEntry)
+        db.session.execute(insert_stmt, entry_rows)
+        entry_ids = [row["id"] for row in entry_rows]
+
+    total_serials = 0
+    serial_insert_rows: list[dict[str, Any]] = []
+    bind = db.session.get_bind()
+    dialect_name = bind.dialect.name if bind else ""
+
+    for entry_id, spec in zip(entry_ids, row_specs):
+        if spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
+            total_serials += spec["quantity"]
+            if dialect_name == "postgresql":
+                db.session.execute(
+                    text(
+                        "INSERT INTO exsol_production_serials "
+                        "(company_key, serial_no, entry_id, created_at) "
+                        "SELECT :company_key, to_char(gs, 'FM00000000'), :entry_id, now() "
+                        "FROM generate_series(:start_serial::bigint, :end_serial::bigint) gs"
+                    ),
+                    {
+                        "company_key": EXSOL_COMPANY_KEY,
+                        "entry_id": entry_id,
+                        "start_serial": spec["start_int"],
+                        "end_serial": spec["end_int"],
+                    },
+                )
+            else:
+                for serial_value in range(spec["start_int"], spec["end_int"] + 1):
+                    serial_insert_rows.append(
+                        {
+                            "company_key": EXSOL_COMPANY_KEY,
+                            "serial_no": str(serial_value).zfill(8),
+                            "entry_id": entry_id,
+                            "created_at": datetime.utcnow(),
+                        }
+                    )
+        else:
+            for serial in spec["serials"]:
+                serial_insert_rows.append(
+                    {
+                        "company_key": EXSOL_COMPANY_KEY,
+                        "serial_no": serial,
+                        "entry_id": entry_id,
+                        "created_at": datetime.utcnow(),
+                    }
+                )
+            total_serials += len(spec["serials"])
+
+    if serial_insert_rows:
+        if dialect_name != "postgresql":
+            max_serial_id = db.session.query(func.max(ExsolProductionSerial.id)).scalar() or 0
+            for offset, row in enumerate(serial_insert_rows, start=1):
+                row["id"] = max_serial_id + offset
+        serial_insert_stmt = insert(ExsolProductionSerial)
+        db.session.execute(serial_insert_stmt, serial_insert_rows)
+
+    return len(entry_ids), total_serials
 
 
 @bp.get("/entries")
@@ -565,6 +788,8 @@ def bulk_create_entries():
     if not _has_exsol_production_access():
         return _build_error("Access denied", 403)
 
+    start_time = time.monotonic()
+    request_id = str(uuid.uuid4())
     payload = request.get_json(silent=True) or {}
     rows = payload.get("rows") or []
     if not isinstance(rows, list) or not rows:
@@ -581,47 +806,127 @@ def bulk_create_entries():
     user = User.query.get(user_id)
     user_name = user.name if user else ""
 
-    try:
-        entries, serials_created = _validate_bulk_rows(rows, user_id, role_name, user_name)
-    except ExsolProductionValidationError as exc:
-        _log_bulk_failure("validation_error", user_id, role_name, rows, errors=exc.errors)
-        return jsonify({"ok": False, "errors": exc.errors}), 400
-    except SQLAlchemyError:
-        _log_bulk_failure("database_error", user_id, role_name, rows)
-        return _build_error("Unable to save production entries right now.", 500)
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company is not configured.", 500)
 
-    try:
-        _ensure_exsol_sequences()
-        for entry in entries:
-            db.session.add(entry)
-        db.session.commit()
-        entry_ids = [entry.id for entry in entries]
-    except IntegrityError:
-        db.session.rollback()
-        _log_bulk_failure("unique_constraint_violation", user_id, role_name, rows, serials=serials_created)
-        return _build_error(
-            "One or more serials already exist. Please refresh and try again.",
-            400,
-        )
-    except SQLAlchemyError:
-        db.session.rollback()
-        _log_bulk_failure("database_error", user_id, role_name, rows, serials=serials_created)
-        return _build_error("Unable to save production entries right now.", 500)
-
-    summary = {
-        "rows_processed": len(entries),
-        "total_quantity": sum(entry.quantity for entry in entries),
-        "total_serials": len(serials_created),
-    }
-    return jsonify(
+    _log_bulk_event(
+        "exsol_production_bulk_start",
         {
-            "ok": True,
-            "entry_ids": entry_ids,
-            "created_count": len(entries),
-            "serials_created": serials_created,
-            "summary": summary,
-        }
+            "user_id": user_id,
+            "role": role_name,
+            "payload": _summarize_payload(rows),
+            "request_id": request_id,
+        },
     )
+
+    inserted_rows = 0
+    inserted_serials = 0
+    errors: list[dict[str, Any]] = []
+
+    try:
+        for chunk_index, chunk in enumerate(_chunk_rows(rows, MAX_BULK_CHUNK_SIZE)):
+            base_index = chunk_index * MAX_BULK_CHUNK_SIZE
+            entry_rows, row_specs, chunk_errors = _prepare_bulk_chunk(
+                chunk,
+                base_index,
+                company_id,
+                user_id,
+                role_name,
+                user_name,
+            )
+            if chunk_errors:
+                errors.extend(chunk_errors)
+                continue
+
+            batch_errors = _find_batch_duplicate_errors(row_specs)
+            if batch_errors:
+                errors.extend(batch_errors)
+                continue
+
+            existing_lookup = _find_existing_serials(row_specs)
+            existing_errors = _check_existing_serial_errors(row_specs, existing_lookup)
+            if existing_errors:
+                errors.extend(existing_errors)
+                continue
+
+            try:
+                chunk_rows_inserted, chunk_serials_inserted = _insert_bulk_chunk(
+                    entry_rows,
+                    row_specs,
+                )
+                db.session.commit()
+                inserted_rows += chunk_rows_inserted
+                inserted_serials += chunk_serials_inserted
+            except IntegrityError:
+                db.session.rollback()
+                existing_lookup = _find_existing_serials(row_specs)
+                existing_errors = _check_existing_serial_errors(row_specs, existing_lookup)
+                if existing_errors:
+                    errors.extend(existing_errors)
+                else:
+                    for spec in row_specs:
+                        errors.append(
+                            {
+                                "row": spec["row_index"],
+                                "field": "serial_start",
+                                "message": "Serial already exists.",
+                            }
+                        )
+            except SQLAlchemyError as exc:
+                db.session.rollback()
+                raise exc
+
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        if errors:
+            _log_bulk_error(
+                {
+                    "user_id": user_id,
+                    "role": role_name,
+                    "payload": _summarize_payload(rows),
+                    "duration_ms": duration_ms,
+                    "request_id": request_id,
+                    "error_type": "validation_failed",
+                }
+            )
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": "validation_failed",
+                        "errors": errors,
+                        "inserted_rows": inserted_rows,
+                        "inserted_serials": inserted_serials,
+                    }
+                ),
+                400,
+            )
+
+        _log_bulk_event(
+            "exsol_production_bulk_done",
+            {
+                "duration_ms": duration_ms,
+                "inserted_counts": {"rows": inserted_rows, "serials": inserted_serials},
+                "request_id": request_id,
+            },
+        )
+        return jsonify({"ok": True, "inserted_rows": inserted_rows, "inserted_serials": inserted_serials})
+    except Exception as exc:  # noqa: BLE001
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        _log_bulk_error(
+            {
+                "user_id": user_id,
+                "role": role_name,
+                "payload": _summarize_payload(rows),
+                "duration_ms": duration_ms,
+                "request_id": request_id,
+                "error_type": type(exc).__name__,
+            }
+        )
+        return (
+            jsonify({"ok": False, "message": "server_error", "request_id": request_id}),
+            500,
+        )
 
 
 @bp.post("/confirm")

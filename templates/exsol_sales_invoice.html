@@ -1,0 +1,305 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "data-entry" %}
+{% block page_title %}Create Invoice (Exsol) | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Exsol Engineering</p>
+            <h1>Create Invoice</h1>
+            <p class="section__description">
+                Capture Exsol Engineering (Pvt) Ltd sales invoices with Exsol-only items and serials.
+            </p>
+        </div>
+    </header>
+
+    <div class="card">
+        <form id="invoice-form">
+            <div class="form-grid">
+                <label class="form-field">
+                    <span>Invoice No</span>
+                    <input type="text" id="invoice-no" name="invoice-no" required />
+                </label>
+                <label class="form-field">
+                    <span>Date</span>
+                    <input type="date" id="invoice-date" name="invoice-date" required />
+                </label>
+                <label class="form-field">
+                    <span>Customer Name</span>
+                    <input type="text" id="customer-name" name="customer-name" required />
+                </label>
+                <label class="form-field">
+                    <span>City</span>
+                    <input type="text" id="customer-city" name="customer-city" />
+                </label>
+                <label class="form-field">
+                    <span>District</span>
+                    <input type="text" id="customer-district" name="customer-district" />
+                </label>
+                <label class="form-field">
+                    <span>Province</span>
+                    <input type="text" id="customer-province" name="customer-province" />
+                </label>
+                <label class="form-field form-field--wide">
+                    <span>Sales Representative</span>
+                    <input type="text" id="sales-rep" name="sales-rep" readonly />
+                </label>
+                <label class="form-field">
+                    <span>Item Name</span>
+                    <select id="item-code" name="item-code" required>
+                        <option value="">Select item</option>
+                    </select>
+                </label>
+                <label class="form-field form-field--wide">
+                    <span>Serial Numbers</span>
+                    <select id="serial-numbers" name="serial-numbers" multiple size="6" required></select>
+                </label>
+                <label class="form-field">
+                    <span>Qty</span>
+                    <input type="number" id="quantity" name="quantity" readonly />
+                </label>
+                <label class="form-field">
+                    <span>MRP</span>
+                    <input type="number" id="mrp" name="mrp" min="0" step="0.01" required />
+                </label>
+                <div class="form-field">
+                    <span>Trade Discount</span>
+                    <div class="discount-options">
+                        <label class="discount-option">
+                            <input type="radio" name="discount-rate" value="26" checked />
+                            26%
+                        </label>
+                        <label class="discount-option">
+                            <input type="radio" name="discount-rate" value="31" />
+                            31%
+                        </label>
+                    </div>
+                </div>
+                <label class="form-field">
+                    <span>Discount Value</span>
+                    <input type="number" id="discount-value" name="discount-value" readonly />
+                </label>
+                <label class="form-field">
+                    <span>Dealer Price</span>
+                    <input type="number" id="dealer-price" name="dealer-price" readonly />
+                </label>
+            </div>
+            <div class="card__actions">
+                <button type="submit" class="button button--primary" id="save-invoice">Save</button>
+            </div>
+            <div class="alert" id="invoice-error" hidden></div>
+            <div class="alert alert--success" id="invoice-success" hidden></div>
+        </form>
+    </div>
+</section>
+
+<style>
+    .discount-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .discount-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 600;
+        color: #0f172a;
+    }
+</style>
+
+<script>
+    const token = localStorage.getItem("samprox_token");
+    const user = JSON.parse(localStorage.getItem("samprox_user") || "null");
+
+    if (!token || !user) {
+        window.location.href = "/";
+    }
+
+    const allowedRoles = new Set(["sales_manager", "sales_executive"]);
+    const normalizedRole = (user?.role || "").toLowerCase();
+    if (!allowedRoles.has(normalizedRole)) {
+        window.location.replace("/sales/data-entry");
+    }
+
+    const invoiceForm = document.getElementById("invoice-form");
+    const invoiceError = document.getElementById("invoice-error");
+    const invoiceSuccess = document.getElementById("invoice-success");
+    const invoiceNoInput = document.getElementById("invoice-no");
+    const invoiceDateInput = document.getElementById("invoice-date");
+    const customerNameInput = document.getElementById("customer-name");
+    const customerCityInput = document.getElementById("customer-city");
+    const customerDistrictInput = document.getElementById("customer-district");
+    const customerProvinceInput = document.getElementById("customer-province");
+    const salesRepInput = document.getElementById("sales-rep");
+    const itemCodeSelect = document.getElementById("item-code");
+    const serialSelect = document.getElementById("serial-numbers");
+    const quantityInput = document.getElementById("quantity");
+    const mrpInput = document.getElementById("mrp");
+    const discountValueInput = document.getElementById("discount-value");
+    const dealerPriceInput = document.getElementById("dealer-price");
+
+    salesRepInput.value = user?.name || "";
+    invoiceDateInput.valueAsDate = new Date();
+
+    const setError = (message) => {
+        invoiceError.textContent = message;
+        invoiceError.hidden = !message;
+    };
+
+    const setSuccess = (message) => {
+        invoiceSuccess.textContent = message;
+        invoiceSuccess.hidden = !message;
+    };
+
+    const formatMoney = (value) => {
+        if (Number.isNaN(value) || value === null) {
+            return "";
+        }
+        return value.toFixed(2);
+    };
+
+    const getSelectedDiscount = () => {
+        const selected = document.querySelector('input[name="discount-rate"]:checked');
+        return selected ? Number.parseInt(selected.value, 10) : 26;
+    };
+
+    const updateTotals = () => {
+        const mrpValue = Number.parseFloat(mrpInput.value || "0");
+        const discountRate = getSelectedDiscount();
+        if (!mrpValue) {
+            discountValueInput.value = "";
+            dealerPriceInput.value = "";
+            return;
+        }
+        const discountValue = (mrpValue * discountRate) / 100;
+        const dealerPrice = mrpValue - discountValue;
+        discountValueInput.value = formatMoney(discountValue);
+        dealerPriceInput.value = formatMoney(dealerPrice);
+    };
+
+    const updateQuantity = () => {
+        const selectedCount = Array.from(serialSelect.selectedOptions).length;
+        quantityInput.value = selectedCount ? String(selectedCount) : "";
+    };
+
+    const loadItems = async () => {
+        try {
+            const response = await fetch("/api/exsol/sales/items", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to load Exsol items.");
+            }
+            const items = await response.json();
+            itemCodeSelect.innerHTML = '<option value="">Select item</option>';
+            items.forEach((item) => {
+                const option = document.createElement("option");
+                option.value = item.item_code;
+                option.textContent = item.item_name;
+                itemCodeSelect.appendChild(option);
+            });
+        } catch (error) {
+            setError(error.message || "Unable to load items.");
+        }
+    };
+
+    const loadSerials = async (itemCode) => {
+        serialSelect.innerHTML = "";
+        updateQuantity();
+        if (!itemCode) {
+            return;
+        }
+        try {
+            const response = await fetch(`/api/exsol/sales/available-serials?item_code=${encodeURIComponent(itemCode)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to load serials.");
+            }
+            const serials = await response.json();
+            serials.forEach((serial) => {
+                const option = document.createElement("option");
+                option.value = serial.serial_no;
+                option.textContent = serial.serial_no;
+                serialSelect.appendChild(option);
+            });
+        } catch (error) {
+            setError(error.message || "Unable to load serials.");
+        }
+    };
+
+    itemCodeSelect.addEventListener("change", (event) => {
+        setError("");
+        loadSerials(event.target.value);
+    });
+
+    serialSelect.addEventListener("change", () => {
+        updateQuantity();
+    });
+
+    mrpInput.addEventListener("input", updateTotals);
+    document.querySelectorAll('input[name="discount-rate"]').forEach((input) => {
+        input.addEventListener("change", updateTotals);
+    });
+
+    invoiceForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setError("");
+        setSuccess("");
+
+        const serialNumbers = Array.from(serialSelect.selectedOptions).map((option) => option.value);
+        const payload = {
+            invoice_no: invoiceNoInput.value.trim(),
+            invoice_date: invoiceDateInput.value,
+            customer_name: customerNameInput.value.trim(),
+            city: customerCityInput.value.trim(),
+            district: customerDistrictInput.value.trim(),
+            province: customerProvinceInput.value.trim(),
+            item_code: itemCodeSelect.value,
+            serial_numbers: serialNumbers,
+            quantity: Number.parseInt(quantityInput.value || "0", 10),
+            mrp: mrpInput.value,
+            discount_rate: getSelectedDiscount(),
+        };
+
+        try {
+            const response = await fetch("/api/exsol/sales/invoice", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const errorText =
+                    data?.errors?.invoice_no ||
+                    data?.errors?.serial_numbers ||
+                    data?.errors?.quantity ||
+                    data?.errors?.mrp ||
+                    data?.errors?.item_name ||
+                    data?.error ||
+                    "Unable to save invoice.";
+                throw new Error(errorText);
+            }
+
+            setSuccess("Invoice saved successfully.");
+            invoiceForm.reset();
+            salesRepInput.value = user?.name || "";
+            invoiceDateInput.valueAsDate = new Date();
+            serialSelect.innerHTML = "";
+            updateQuantity();
+            updateTotals();
+        } catch (error) {
+            setError(error.message || "Unable to save invoice.");
+        }
+    });
+
+    loadItems();
+    updateTotals();
+</script>
+{% endblock %}

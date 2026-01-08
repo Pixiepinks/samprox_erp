@@ -967,7 +967,7 @@
     };
 
     bulkModalCloseTargets.forEach((button) => {
-        button.addEventListener("click", closeBulkModal);
+        button.addEventListener("click", closeBulkModal, { capture: true });
     });
     bulkModalDialog?.addEventListener("click", (event) => {
         event.stopPropagation();

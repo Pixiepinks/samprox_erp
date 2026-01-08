@@ -35,6 +35,7 @@ SHIFT_OPTIONS = {"Morning", "Evening", "Night"}
 SERIAL_REGEX = re.compile(r"^[0-9]{8}$")
 MAX_BULK_QUANTITY = 500
 MAX_BULK_CHUNK_SIZE = 50
+SERIAL_CHUNK_SIZE = 200
 _EXSOL_SEQUENCES_READY = False
 
 def _build_error(message: str, status: int = 400, details: list[str] | None = None):
@@ -283,6 +284,10 @@ def _chunk_rows(rows: list[dict[str, Any]], size: int) -> list[list[dict[str, An
     return [rows[i : i + size] for i in range(0, len(rows), size)]
 
 
+def _chunk_values(values: list[Any], size: int) -> list[list[Any]]:
+    return [values[i : i + size] for i in range(0, len(values), size)]
+
+
 def _log_bulk_event(event: str, payload: dict[str, Any]) -> None:
     current_app.logger.info({"event": event, **payload})
 
@@ -488,8 +493,11 @@ def _prepare_bulk_chunk(
     return entry_rows, row_specs, error_list
 
 
-def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _find_batch_duplicate_errors(
+    row_specs: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], list[str]]:
     errors: list[dict[str, str]] = []
+    duplicate_serials: list[str] = []
     manual_serials: dict[str, int] = {}
     manual_serial_values: list[tuple[str, int]] = []
     ranges: list[tuple[int, int, int]] = []
@@ -509,6 +517,7 @@ def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[s
                             "message": f"Serial {serial} is duplicated in this batch.",
                         }
                     )
+                    duplicate_serials.append(serial)
                 manual_serials[serial] = idx
                 manual_serial_values.append((serial, idx))
         elif spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
@@ -533,6 +542,7 @@ def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[s
                         "message": f"Serial range overlaps existing range starting {str(start).zfill(8)}.",
                     }
                 )
+                duplicate_serials.append(str(start).zfill(8))
             if end > prev_end:
                 prev_start, prev_end, prev_idx = start, end, idx
 
@@ -559,61 +569,122 @@ def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[s
                             "message": f"Serial {serial} is duplicated in this batch.",
                         }
                     )
+                    duplicate_serials.append(serial)
 
-    return errors
+    return errors, duplicate_serials
+
+
+def _find_cross_chunk_duplicate_errors(
+    row_specs: list[dict[str, Any]],
+    seen_serials: set[str],
+    seen_ranges: list[tuple[int, int]],
+) -> tuple[list[dict[str, str]], list[str], set[str], list[tuple[int, int]]]:
+    errors: list[dict[str, str]] = []
+    duplicate_serials: list[str] = []
+    new_serials: set[str] = set()
+    new_ranges: list[tuple[int, int]] = []
+
+    def _serial_in_seen_ranges(serial_int: int) -> bool:
+        return any(start <= serial_int <= end for start, end in seen_ranges)
+
+    for spec in row_specs:
+        idx = spec["row_index"]
+        if spec["serial_mode"] == "Manual":
+            for serial in spec["serials"]:
+                serial_int = int(serial)
+                if serial in seen_serials or _serial_in_seen_ranges(serial_int):
+                    errors.append(
+                        {"row": idx, "field": "serials", "message": f"Serial {serial} is duplicated in this batch."}
+                    )
+                    duplicate_serials.append(serial)
+                new_serials.add(serial)
+        elif spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
+            start_int = spec["start_int"]
+            end_int = spec["end_int"]
+            overlaps_range = next(
+                ((start, end) for start, end in seen_ranges if start_int <= end and end_int >= start),
+                None,
+            )
+            if overlaps_range:
+                errors.append(
+                    {
+                        "row": idx,
+                        "field": "serial_start",
+                        "message": "Serial range overlaps another range in this batch.",
+                    }
+                )
+                duplicate_serials.append(str(max(start_int, overlaps_range[0])).zfill(8))
+            if not overlaps_range and any(
+                start_int <= int(serial) <= end_int for serial in seen_serials
+            ):
+                candidate = next(
+                    (serial for serial in seen_serials if start_int <= int(serial) <= end_int),
+                    str(start_int).zfill(8),
+                )
+                errors.append(
+                    {
+                        "row": idx,
+                        "field": "serial_start",
+                        "message": f"Serial {candidate} is duplicated in this batch.",
+                    }
+                )
+                duplicate_serials.append(candidate)
+            new_ranges.append((start_int, end_int))
+
+    return errors, duplicate_serials, new_serials, new_ranges
 
 
 def _find_existing_serials(
     row_specs: list[dict[str, Any]],
-) -> dict[str, list[str]]:
-    manual_serials_by_item: dict[str, list[str]] = defaultdict(list)
-    range_specs_by_item: dict[str, list[tuple[str, str]]] = defaultdict(list)
+) -> set[str]:
+    manual_serials: list[str] = []
+    range_specs: list[tuple[str, str]] = []
     for spec in row_specs:
-        item_code = spec["item_code"]
         if spec["serial_mode"] == "Manual":
-            manual_serials_by_item[item_code].extend(spec["serials"])
+            manual_serials.extend(spec["serials"])
         elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
-            range_specs_by_item[item_code].append((spec["start_serial"], spec["end_serial"]))
+            range_specs.append((spec["start_serial"], spec["end_serial"]))
 
-    if not manual_serials_by_item and not range_specs_by_item:
-        return {}
+    if not manual_serials and not range_specs:
+        return set()
 
-    filters = []
-    for item_code, serials in manual_serials_by_item.items():
-        if serials:
-            filters.append(
-                (ExsolProductionEntry.item_code == item_code)
-                & (ExsolProductionSerial.serial_no.in_(serials))
+    existing_serials: set[str] = set()
+    if manual_serials:
+        for chunk in _chunk_values(manual_serials, SERIAL_CHUNK_SIZE):
+            rows = (
+                db.session.query(ExsolProductionSerial.serial_no)
+                .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+                .filter(ExsolProductionSerial.serial_no.in_(chunk))
+                .all()
             )
-    for item_code, ranges in range_specs_by_item.items():
-        for start_serial, end_serial in ranges:
-            filters.append(
-                (ExsolProductionEntry.item_code == item_code)
-                & (ExsolProductionSerial.serial_no.between(start_serial, end_serial))
-            )
+            existing_serials.update(serial_no for (serial_no,) in rows)
 
-    existing_serials = (
-        db.session.query(ExsolProductionSerial.serial_no, ExsolProductionEntry.item_code)
-        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
-        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
-        .filter(or_(*filters))
-        .all()
-    )
-    existing_by_item: dict[str, list[str]] = defaultdict(list)
-    for serial_no, item_code in existing_serials:
-        existing_by_item[item_code].append(serial_no)
-    return existing_by_item
+    if range_specs:
+        for chunk in _chunk_values(range_specs, SERIAL_CHUNK_SIZE):
+            filters = [
+                ExsolProductionSerial.serial_no.between(start_serial, end_serial)
+                for start_serial, end_serial in chunk
+            ]
+            rows = (
+                db.session.query(ExsolProductionSerial.serial_no)
+                .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+                .filter(or_(*filters))
+                .all()
+            )
+            existing_serials.update(serial_no for (serial_no,) in rows)
+
+    return existing_serials
 
 
 def _check_existing_serial_errors(
     row_specs: list[dict[str, Any]],
-    existing_lookup: dict[str, list[str]],
-) -> list[dict[str, str]]:
+    existing_serials: set[str],
+) -> tuple[list[dict[str, str]], list[str]]:
     errors: list[dict[str, str]] = []
+    duplicate_serials: list[str] = []
+    existing_serials_sorted = sorted(existing_serials)
     for spec in row_specs:
         idx = spec["row_index"]
-        item_code = spec["item_code"]
-        existing_serials = existing_lookup.get(item_code, [])
         if spec["serial_mode"] == "Manual":
             conflicts = [serial for serial in spec["serials"] if serial in existing_serials]
             for serial in conflicts:
@@ -624,9 +695,9 @@ def _check_existing_serial_errors(
                         "message": f"Serial already exists: {serial}",
                     }
                 )
+                duplicate_serials.append(serial)
         elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
-            if existing_serials:
-                existing_serials_sorted = sorted(existing_serials)
+            if existing_serials_sorted:
                 position = bisect_right(existing_serials_sorted, spec["end_serial"]) - 1
                 if position >= 0:
                     candidate = existing_serials_sorted[position]
@@ -638,7 +709,8 @@ def _check_existing_serial_errors(
                                 "message": f"Serial already exists: {candidate}",
                             }
                         )
-    return errors
+                        duplicate_serials.append(candidate)
+    return errors, duplicate_serials
 
 
 def _insert_bulk_chunk(
@@ -714,12 +786,18 @@ def _insert_bulk_chunk(
             total_serials += len(spec["serials"])
 
     if serial_insert_rows:
+        serial_insert_stmt = insert(ExsolProductionSerial)
         if dialect_name != "postgresql":
             max_serial_id = db.session.query(func.max(ExsolProductionSerial.id)).scalar() or 0
-            for offset, row in enumerate(serial_insert_rows, start=1):
-                row["id"] = max_serial_id + offset
-        serial_insert_stmt = insert(ExsolProductionSerial)
-        db.session.execute(serial_insert_stmt, serial_insert_rows)
+            serial_id_offset = max_serial_id
+            for chunk in _chunk_values(serial_insert_rows, SERIAL_CHUNK_SIZE):
+                for offset, row in enumerate(chunk, start=1):
+                    row["id"] = serial_id_offset + offset
+                serial_id_offset += len(chunk)
+                db.session.execute(serial_insert_stmt, chunk)
+        else:
+            for chunk in _chunk_values(serial_insert_rows, SERIAL_CHUNK_SIZE):
+                db.session.execute(serial_insert_stmt, chunk)
 
     return len(entry_ids), total_serials
 
@@ -822,11 +900,22 @@ def bulk_create_entries():
 
     inserted_rows = 0
     inserted_serials = 0
+    total_quantity = 0
     errors: list[dict[str, Any]] = []
+    duplicate_serials: list[str] = []
+    validation_ms = 0
+    db_check_ms = 0
+    insert_ms = 0
+    commit_ms = 0
+
+    prepared_chunks: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
+    seen_serials: set[str] = set()
+    seen_ranges: list[tuple[int, int]] = []
 
     try:
         for chunk_index, chunk in enumerate(_chunk_rows(rows, MAX_BULK_CHUNK_SIZE)):
             base_index = chunk_index * MAX_BULK_CHUNK_SIZE
+            validation_start = time.monotonic()
             entry_rows, row_specs, chunk_errors = _prepare_bulk_chunk(
                 chunk,
                 base_index,
@@ -835,82 +924,136 @@ def bulk_create_entries():
                 role_name,
                 user_name,
             )
+            validation_ms += int((time.monotonic() - validation_start) * 1000)
             if chunk_errors:
                 errors.extend(chunk_errors)
                 continue
 
-            batch_errors = _find_batch_duplicate_errors(row_specs)
+            batch_errors, batch_duplicates = _find_batch_duplicate_errors(row_specs)
             if batch_errors:
                 errors.extend(batch_errors)
+                duplicate_serials.extend(batch_duplicates)
                 continue
 
-            existing_lookup = _find_existing_serials(row_specs)
-            existing_errors = _check_existing_serial_errors(row_specs, existing_lookup)
+            cross_errors, cross_duplicates, new_serials, new_ranges = _find_cross_chunk_duplicate_errors(
+                row_specs,
+                seen_serials,
+                seen_ranges,
+            )
+            if cross_errors:
+                errors.extend(cross_errors)
+                duplicate_serials.extend(cross_duplicates)
+                continue
+
+            db_check_start = time.monotonic()
+            existing_serials = _find_existing_serials(row_specs)
+            db_check_ms += int((time.monotonic() - db_check_start) * 1000)
+            existing_errors, existing_duplicates = _check_existing_serial_errors(row_specs, existing_serials)
             if existing_errors:
                 errors.extend(existing_errors)
+                duplicate_serials.extend(existing_duplicates)
                 continue
 
-            try:
+            seen_serials.update(new_serials)
+            seen_ranges.extend(new_ranges)
+            prepared_chunks.append((entry_rows, row_specs))
+            total_quantity += sum(spec["quantity"] for spec in row_specs)
+
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        if errors:
+            error_payload = {
+                "user_id": user_id,
+                "role": role_name,
+                "payload": _summarize_payload(rows),
+                "duration_ms": duration_ms,
+                "request_id": request_id,
+                "error_type": "validation_failed",
+                "timings_ms": {
+                    "validation_ms": validation_ms,
+                    "db_check_ms": db_check_ms,
+                },
+            }
+            _log_bulk_error(error_payload)
+            status = 409 if duplicate_serials else 400
+            response_payload = {
+                "ok": False,
+                "message": (
+                    f"Serial already exists: {duplicate_serials[0]}"
+                    if duplicate_serials
+                    else "validation_failed"
+                ),
+                "errors": errors,
+                "request_id": request_id,
+            }
+            if duplicate_serials:
+                response_payload["duplicate_serial"] = duplicate_serials[0]
+            return jsonify(response_payload), status
+
+        db.session.rollback()
+        try:
+            for entry_rows, row_specs in prepared_chunks:
+                chunk_insert_start = time.monotonic()
                 chunk_rows_inserted, chunk_serials_inserted = _insert_bulk_chunk(
                     entry_rows,
                     row_specs,
                 )
-                db.session.commit()
+                insert_ms += int((time.monotonic() - chunk_insert_start) * 1000)
                 inserted_rows += chunk_rows_inserted
                 inserted_serials += chunk_serials_inserted
-            except IntegrityError:
-                db.session.rollback()
-                existing_lookup = _find_existing_serials(row_specs)
-                existing_errors = _check_existing_serial_errors(row_specs, existing_lookup)
-                if existing_errors:
-                    errors.extend(existing_errors)
-                else:
-                    for spec in row_specs:
-                        errors.append(
-                            {
-                                "row": spec["row_index"],
-                                "field": "serial_start",
-                                "message": "Serial already exists.",
-                            }
-                        )
-            except SQLAlchemyError as exc:
-                db.session.rollback()
-                raise exc
-
-        duration_ms = int((time.monotonic() - start_time) * 1000)
-        if errors:
-            _log_bulk_error(
-                {
-                    "user_id": user_id,
-                    "role": role_name,
-                    "payload": _summarize_payload(rows),
-                    "duration_ms": duration_ms,
-                    "request_id": request_id,
-                    "error_type": "validation_failed",
-                }
-            )
+            commit_start = time.monotonic()
+            db.session.commit()
+            commit_ms = int((time.monotonic() - commit_start) * 1000)
+        except IntegrityError:
+            db.session.rollback()
+            duplicate_serial = None
+            for _, row_specs in prepared_chunks:
+                existing_serials = _find_existing_serials(row_specs)
+                _, existing_duplicates = _check_existing_serial_errors(row_specs, existing_serials)
+                if existing_duplicates:
+                    duplicate_serial = existing_duplicates[0]
+                    break
             return (
                 jsonify(
                     {
                         "ok": False,
-                        "message": "validation_failed",
-                        "errors": errors,
-                        "inserted_rows": inserted_rows,
-                        "inserted_serials": inserted_serials,
+                        "message": (
+                            f"Serial already exists: {duplicate_serial}"
+                            if duplicate_serial
+                            else "Serial already exists."
+                        ),
+                        "duplicate_serial": duplicate_serial,
+                        "request_id": request_id,
                     }
                 ),
-                400,
+                409,
             )
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            raise exc
 
+        duration_ms = int((time.monotonic() - start_time) * 1000)
         _log_bulk_event(
             "exsol_production_bulk_done",
             {
                 "duration_ms": duration_ms,
                 "inserted_counts": {"rows": inserted_rows, "serials": inserted_serials},
                 "request_id": request_id,
+                "timings_ms": {
+                    "validation_ms": validation_ms,
+                    "db_check_ms": db_check_ms,
+                    "insert_ms": insert_ms,
+                    "commit_ms": commit_ms,
+                },
             },
         )
-        return jsonify({"ok": True, "inserted_rows": inserted_rows, "inserted_serials": inserted_serials})
+        return jsonify(
+            {
+                "ok": True,
+                "inserted_production": inserted_rows,
+                "inserted_serials": inserted_serials,
+                "total_quantity": total_quantity,
+            }
+        )
     except Exception as exc:  # noqa: BLE001
         duration_ms = int((time.monotonic() - start_time) * 1000)
         _log_bulk_error(
@@ -921,12 +1064,20 @@ def bulk_create_entries():
                 "duration_ms": duration_ms,
                 "request_id": request_id,
                 "error_type": type(exc).__name__,
+                "timings_ms": {
+                    "validation_ms": validation_ms,
+                    "db_check_ms": db_check_ms,
+                    "insert_ms": insert_ms,
+                    "commit_ms": commit_ms,
+                },
             }
         )
         return (
             jsonify({"ok": False, "message": "server_error", "request_id": request_id}),
             500,
         )
+    finally:
+        db.session.close()
 
 
 @bp.post("/confirm")

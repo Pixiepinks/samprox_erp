@@ -329,7 +329,7 @@
         const response = await fetch(url, options);
         const data = await response.json().catch(() => null);
         if (!response.ok) {
-            const message = data?.error || data?.msg || "Request failed.";
+            const message = data?.message || data?.error || data?.msg || "Request failed.";
             const error = new Error(message);
             error.errors = data?.errors;
             throw error;
@@ -766,6 +766,9 @@
             bulkError.hidden = false;
             return;
         }
+        const originalLabel = submitBulkButton.textContent;
+        submitBulkButton.disabled = true;
+        submitBulkButton.textContent = "Saving...";
         try {
             const response = await fetchJson("/api/exsol/production/bulk", {
                 method: "POST",
@@ -773,9 +776,9 @@
                 body: JSON.stringify({ rows }),
             });
             bulkSummary.hidden = false;
-            summaryRows.textContent = response.summary?.rows_processed ?? 0;
-            summaryQty.textContent = response.summary?.total_quantity ?? 0;
-            summarySerials.textContent = response.summary?.total_serials ?? 0;
+            summaryRows.textContent = response.inserted_production ?? response.summary?.rows_processed ?? 0;
+            summaryQty.textContent = response.total_quantity ?? response.summary?.total_quantity ?? 0;
+            summarySerials.textContent = response.inserted_serials ?? response.summary?.total_serials ?? 0;
             bulkGridBody.innerHTML = "";
             addRow();
             await loadEntries();
@@ -786,6 +789,9 @@
                 bulkError.textContent = error.message || "Unable to save entries.";
                 bulkError.hidden = false;
             }
+        } finally {
+            submitBulkButton.disabled = false;
+            submitBulkButton.textContent = originalLabel;
         }
     };
 

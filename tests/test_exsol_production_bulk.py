@@ -97,6 +97,34 @@ class ExsolProductionBulkTestCase(unittest.TestCase):
         serial_count = ExsolProductionSerial.query.count()
         self.assertEqual(serial_count, 50)
 
+    def test_bulk_insert_single_serial_range(self):
+        payload = {
+            "rows": [
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "SerialRange",
+                    "start_serial": "00000001",
+                }
+            ]
+        }
+
+        resp = self.client.post("/api/exsol/production/bulk", headers=self._auth(), json=payload)
+
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["inserted_rows"], 1)
+        self.assertEqual(data["inserted_serials"], 1)
+
+        from models import ExsolProductionSerial
+
+        serials = ExsolProductionSerial.query.all()
+        self.assertEqual(len(serials), 1)
+        self.assertEqual(serials[0].serial_no, "00000001")
+
 
 if __name__ == "__main__":
     unittest.main()

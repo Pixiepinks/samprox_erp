@@ -12,7 +12,7 @@ from bisect import bisect_right
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from openpyxl import Workbook, load_workbook
-from sqlalchemy import BigInteger, cast, func, insert, or_, text
+from sqlalchemy import func, insert, or_, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -377,6 +377,8 @@ def _prepare_bulk_chunk(
         serials: list[str] = []
         start_int = None
         end_int = None
+        start_serial = None
+        end_serial = None
         if serial_mode == "Manual":
             raw_serials = row.get("serials") or row.get("serial_numbers")
             serials = [_normalize_serial(value) or "" for value in _split_serials(raw_serials)]
@@ -427,6 +429,9 @@ def _prepare_bulk_chunk(
                                 "message": "Serial range exceeds 8 digits. Adjust the starting serial or quantity.",
                             }
                         )
+                    else:
+                        start_serial = str(start_int).zfill(8)
+                        end_serial = str(end_int).zfill(8)
 
         if quantity is None:
             errors[idx].append(
@@ -458,6 +463,8 @@ def _prepare_bulk_chunk(
                 "serials": serials,
                 "start_int": start_int,
                 "end_int": end_int,
+                "start_serial": start_serial,
+                "end_serial": end_serial,
             }
         )
 
@@ -558,47 +565,55 @@ def _find_batch_duplicate_errors(row_specs: list[dict[str, Any]]) -> list[dict[s
 
 def _find_existing_serials(
     row_specs: list[dict[str, Any]],
-) -> dict[str, set[str] | list[int]]:
-    manual_serials = []
-    range_specs = []
+) -> dict[str, list[str]]:
+    manual_serials_by_item: dict[str, list[str]] = defaultdict(list)
+    range_specs_by_item: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for spec in row_specs:
+        item_code = spec["item_code"]
         if spec["serial_mode"] == "Manual":
-            manual_serials.extend(spec["serials"])
-        elif spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
-            range_specs.append((spec["start_int"], spec["end_int"]))
+            manual_serials_by_item[item_code].extend(spec["serials"])
+        elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
+            range_specs_by_item[item_code].append((spec["start_serial"], spec["end_serial"]))
 
-    if not manual_serials and not range_specs:
-        return {"serials": set(), "range_values": []}
+    if not manual_serials_by_item and not range_specs_by_item:
+        return {}
 
     filters = []
-    if manual_serials:
-        filters.append(ExsolProductionSerial.serial_no.in_(manual_serials))
-    if range_specs:
-        serial_numeric = cast(ExsolProductionSerial.serial_no, BigInteger)
-        range_filters = [serial_numeric.between(start, end) for start, end in range_specs]
-        filters.append(or_(*range_filters))
+    for item_code, serials in manual_serials_by_item.items():
+        if serials:
+            filters.append(
+                (ExsolProductionEntry.item_code == item_code)
+                & (ExsolProductionSerial.serial_no.in_(serials))
+            )
+    for item_code, ranges in range_specs_by_item.items():
+        for start_serial, end_serial in ranges:
+            filters.append(
+                (ExsolProductionEntry.item_code == item_code)
+                & (ExsolProductionSerial.serial_no.between(start_serial, end_serial))
+            )
 
     existing_serials = (
-        db.session.query(ExsolProductionSerial.serial_no)
+        db.session.query(ExsolProductionSerial.serial_no, ExsolProductionEntry.item_code)
+        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
         .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
         .filter(or_(*filters))
         .all()
     )
-    existing_list = [serial for (serial,) in existing_serials]
-    existing_set = set(existing_list)
-    existing_ints = [int(serial) for serial in existing_set]
-    return {"serials": existing_set, "range_values": existing_ints}
+    existing_by_item: dict[str, list[str]] = defaultdict(list)
+    for serial_no, item_code in existing_serials:
+        existing_by_item[item_code].append(serial_no)
+    return existing_by_item
 
 
 def _check_existing_serial_errors(
     row_specs: list[dict[str, Any]],
-    existing_lookup: dict[str, set[str] | list[int]],
+    existing_lookup: dict[str, list[str]],
 ) -> list[dict[str, str]]:
     errors: list[dict[str, str]] = []
-    existing_serials = existing_lookup["serials"]
-    existing_ints = existing_lookup["range_values"]
     for spec in row_specs:
         idx = spec["row_index"]
+        item_code = spec["item_code"]
+        existing_serials = existing_lookup.get(item_code, [])
         if spec["serial_mode"] == "Manual":
             conflicts = [serial for serial in spec["serials"] if serial in existing_serials]
             for serial in conflicts:
@@ -609,17 +624,20 @@ def _check_existing_serial_errors(
                         "message": f"Serial already exists: {serial}",
                     }
                 )
-        elif spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
-            for serial_int in existing_ints:
-                if spec["start_int"] <= serial_int <= spec["end_int"]:
-                    errors.append(
-                        {
-                            "row": idx,
-                            "field": "serial_start",
-                            "message": f"Serial already exists: {str(serial_int).zfill(8)}",
-                        }
-                    )
-                    break
+        elif spec["serial_mode"] == "SerialRange" and spec["start_serial"] and spec["end_serial"]:
+            if existing_serials:
+                existing_serials_sorted = sorted(existing_serials)
+                position = bisect_right(existing_serials_sorted, spec["end_serial"]) - 1
+                if position >= 0:
+                    candidate = existing_serials_sorted[position]
+                    if spec["start_serial"] <= candidate <= spec["end_serial"]:
+                        errors.append(
+                            {
+                                "row": idx,
+                                "field": "serial_start",
+                                "message": f"Serial already exists: {candidate}",
+                            }
+                        )
     return errors
 
 

@@ -18,6 +18,7 @@ depends_on = None
 
 
 PRESSURE_CONTROL_NAME = "PRESSURE CONTROL 220-240V 1.5bar"
+PRESSURE_CONTROL_PATTERN = "%PRESSURE CONTROL%220-240V%1.5bar%"
 
 
 def upgrade() -> None:
@@ -28,8 +29,9 @@ def upgrade() -> None:
     op.execute(sa.text("UPDATE exsol_inventory_items SET is_serialized = true"))
     op.execute(
         sa.text(
-            "UPDATE exsol_inventory_items SET is_serialized = false WHERE item_name = :name"
-        ).bindparams(name=PRESSURE_CONTROL_NAME)
+            "UPDATE exsol_inventory_items SET is_serialized = false "
+            "WHERE item_name = :name OR item_name ILIKE :pattern"
+        ).bindparams(name=PRESSURE_CONTROL_NAME, pattern=PRESSURE_CONTROL_PATTERN)
     )
     op.execute(
         sa.text(

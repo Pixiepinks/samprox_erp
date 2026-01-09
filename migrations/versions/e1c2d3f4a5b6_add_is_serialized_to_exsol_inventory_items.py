@@ -25,15 +25,15 @@ def upgrade() -> None:
         "exsol_inventory_items",
         sa.Column("is_serialized", sa.Boolean(), nullable=False, server_default=sa.text("true")),
     )
-    op.execute(sa.text("UPDATE exsol_inventory_items SET is_serialized = 1"))
+    op.execute(sa.text("UPDATE exsol_inventory_items SET is_serialized = true"))
     op.execute(
         sa.text(
-            "UPDATE exsol_inventory_items SET is_serialized = 0 WHERE item_name = :name"
+            "UPDATE exsol_inventory_items SET is_serialized = false WHERE item_name = :name"
         ).bindparams(name=PRESSURE_CONTROL_NAME)
     )
     op.execute(
         sa.text(
-            "UPDATE exsol_inventory_items SET is_serialized = 1 WHERE UPPER(item_name) LIKE '%PUMP%'"
+            "UPDATE exsol_inventory_items SET is_serialized = true WHERE UPPER(item_name) LIKE '%PUMP%'"
         )
     )
     op.alter_column("exsol_inventory_items", "is_serialized", server_default=None)

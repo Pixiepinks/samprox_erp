@@ -52,6 +52,7 @@
                 <label class="form-field form-field--wide">
                     <span>Sales Representative</span>
                     <input type="text" id="sales-rep" name="sales-rep" readonly />
+                    <input type="hidden" id="sales-rep-id" name="sales-rep-id" />
                 </label>
             </div>
             <div class="invoice-lines">
@@ -130,7 +131,15 @@
             </label>
             <label class="form-field form-field--wide">
                 <span>Serial Numbers</span>
-                <select data-field="serial_numbers" multiple size="4" disabled></select>
+                <div class="serial-actions">
+                    <button type="button" class="button button--ghost button--small" data-action="select-all-serials">
+                        Select All
+                    </button>
+                    <button type="button" class="button button--ghost button--small" data-action="clear-serials">
+                        Clear
+                    </button>
+                </div>
+                <div class="serial-list" data-field="serial_numbers" aria-live="polite"></div>
                 <small class="helper" data-field="serial_count">Serial count: 0</small>
             </label>
         </div>
@@ -195,6 +204,42 @@
         font-weight: 600;
     }
 
+    .serial-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .button--small {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .serial-list {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        max-height: 170px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        background: #f8fafc;
+    }
+
+    .serial-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        color: #0f172a;
+    }
+
+    .serial-item input[type="checkbox"] {
+        width: 1rem;
+        height: 1rem;
+    }
+
     .invoice-totals {
         margin-top: 1.5rem;
         display: grid;
@@ -239,6 +284,7 @@
     const customerDistrictInput = document.getElementById("customer-district");
     const customerProvinceInput = document.getElementById("customer-province");
     const salesRepInput = document.getElementById("sales-rep");
+    const salesRepIdInput = document.getElementById("sales-rep-id");
     const lineItemsContainer = document.getElementById("line-items");
     const addLineButton = document.getElementById("add-line");
     const lineTemplate = document.getElementById("line-item-template");
@@ -250,9 +296,11 @@
     let itemOptions = [];
     let customerOptions = [];
     const customerLookup = new Map();
+    const lineSerialSelections = new WeakMap();
     let lineCounter = 0;
 
-    salesRepInput.value = user?.name || "";
+    salesRepInput.value = "";
+    salesRepIdInput.value = "";
     invoiceDateInput.valueAsDate = new Date();
 
     const setError = (message) => {
@@ -287,6 +335,8 @@
         customerCityInput.value = "";
         customerDistrictInput.value = "";
         customerProvinceInput.value = "";
+        salesRepInput.value = "";
+        salesRepIdInput.value = "";
         setCustomerLocationReadOnly(false);
     };
 
@@ -295,6 +345,8 @@
         customerCityInput.value = customer.city || "";
         customerDistrictInput.value = customer.district || "";
         customerProvinceInput.value = customer.province || "";
+        salesRepInput.value = customer.sales_rep_name || "";
+        salesRepIdInput.value = customer.sales_rep_id || "";
         setCustomerLocationReadOnly(true);
     };
 
@@ -372,12 +424,15 @@
         updateInvoiceTotals();
     };
 
+    const getLineSerialSet = (line) => {
+        if (!lineSerialSelections.has(line)) {
+            lineSerialSelections.set(line, new Set());
+        }
+        return lineSerialSelections.get(line);
+    };
+
     const getSelectedSerials = (line) => {
-        const select = line.querySelector('[data-field="serial_numbers"]');
-        const serials = Array.from(select.selectedOptions)
-            .map((option) => option.value.trim())
-            .filter((value) => value.length > 0);
-        return Array.from(new Set(serials));
+        return Array.from(getLineSerialSet(line));
     };
 
     const updateSerialHelper = (line, serials = null) => {
@@ -398,30 +453,122 @@
     };
 
     const setSerialFieldState = (line, enabled) => {
-        const serialSelect = line.querySelector('[data-field="serial_numbers"]');
-        serialSelect.disabled = !enabled;
+        const serialList = line.querySelector('[data-field="serial_numbers"]');
+        serialList.dataset.disabled = (!enabled).toString();
         if (!enabled) {
-            serialSelect.innerHTML = "";
+            serialList.innerHTML = "";
+            getLineSerialSet(line).clear();
             updateSerialHelper(line, []);
+            updateGlobalSerialLocks();
         }
+    };
+
+    const updateGlobalSerialLocks = () => {
+        const serialOwners = new Map();
+        const lines = Array.from(lineItemsContainer.querySelectorAll(".line-item"));
+
+        lines.forEach((line) => {
+            const selected = getLineSerialSet(line);
+            selected.forEach((serial) => {
+                if (!serialOwners.has(serial)) {
+                    serialOwners.set(serial, line);
+                }
+            });
+        });
+
+        lines.forEach((line) => {
+            const selected = getLineSerialSet(line);
+            const checkboxes = line.querySelectorAll(
+                '[data-field="serial_numbers"] input[type="checkbox"]',
+            );
+            checkboxes.forEach((checkbox) => {
+                const owner = serialOwners.get(checkbox.value);
+                if (owner && owner !== line) {
+                    checkbox.disabled = true;
+                    checkbox.checked = false;
+                    selected.delete(checkbox.value);
+                } else {
+                    checkbox.disabled = false;
+                    checkbox.checked = selected.has(checkbox.value);
+                }
+            });
+            updateSerialHelper(line);
+        });
     };
 
     const syncSerialSelections = (line) => {
         const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
-        const serialSelect = line.querySelector('[data-field="serial_numbers"]');
-        let serials = getSelectedSerials(line);
+        const selected = getLineSerialSet(line);
+        const checkboxes = Array.from(
+            line.querySelectorAll('[data-field="serial_numbers"] input[type="checkbox"]'),
+        );
+        const available = new Set(checkboxes.map((checkbox) => checkbox.value));
 
-        if (qty > 0 && serials.length > qty) {
-            serials.slice(qty).forEach((extra) => {
-                const option = Array.from(serialSelect.options).find((entry) => entry.value === extra);
-                if (option) {
-                    option.selected = false;
+        selected.forEach((serial) => {
+            if (!available.has(serial)) {
+                selected.delete(serial);
+            }
+        });
+
+        if (qty > 0 && selected.size > qty) {
+            let count = 0;
+            checkboxes.forEach((checkbox) => {
+                if (selected.has(checkbox.value)) {
+                    count += 1;
+                    if (count > qty) {
+                        checkbox.checked = false;
+                        selected.delete(checkbox.value);
+                    }
                 }
             });
-            serials = getSelectedSerials(line);
         }
 
-        updateSerialHelper(line, serials);
+        updateGlobalSerialLocks();
+        updateSerialHelper(line);
+    };
+
+    const renderSerialList = (line, serials) => {
+        const serialList = line.querySelector('[data-field="serial_numbers"]');
+        const selected = getLineSerialSet(line);
+        const available = new Set(serials);
+        selected.forEach((serial) => {
+            if (!available.has(serial)) {
+                selected.delete(serial);
+            }
+        });
+
+        serialList.innerHTML = "";
+        serials.forEach((serial) => {
+            const label = document.createElement("label");
+            label.className = "serial-item";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = serial;
+            checkbox.checked = selected.has(serial);
+            checkbox.addEventListener("change", () => {
+                const qty = Number.parseInt(
+                    line.querySelector('[data-field="qty"]').value || "0",
+                    10,
+                );
+                if (checkbox.checked) {
+                    selected.add(serial);
+                    if (qty > 0 && selected.size > qty) {
+                        checkbox.checked = false;
+                        selected.delete(serial);
+                    }
+                } else {
+                    selected.delete(serial);
+                }
+                syncSerialSelections(line);
+            });
+            const text = document.createElement("span");
+            text.textContent = serial;
+            label.appendChild(checkbox);
+            label.appendChild(text);
+            serialList.appendChild(label);
+        });
+
+        syncSerialSelections(line);
     };
 
     const populateItemOptions = (select, selectedValue = "") => {
@@ -445,6 +592,8 @@
         const qtyInput = line.querySelector('[data-field="qty"]');
         const mrpInput = line.querySelector('[data-field="mrp"]');
         const serialsInput = line.querySelector('[data-field="serial_numbers"]');
+        const selectAllButton = line.querySelector('[data-action="select-all-serials"]');
+        const clearSerialsButton = line.querySelector('[data-action="clear-serials"]');
         const discountInputs = line.querySelectorAll('[data-field="discount_rate"] input');
         const lineError = line.querySelector('[data-field="line_error"]');
 
@@ -468,12 +617,13 @@
             }
             line.remove();
             updateInvoiceTotals();
+            updateGlobalSerialLocks();
         });
 
         itemSelect.addEventListener("change", () => {
             serialsInput.innerHTML = "";
-            serialsInput.disabled = true;
             delete serialsInput.dataset.itemId;
+            getLineSerialSet(line).clear();
             updateSerialHelper(line, []);
             updateLineTotals(line);
             refreshSerialAvailability(line);
@@ -489,12 +639,34 @@
             refreshSerialAvailability(line);
             syncSerialSelections(line);
         });
-        serialsInput.addEventListener("change", () => {
+        selectAllButton.addEventListener("click", () => {
+            const qty = Number.parseInt(qtyInput.value || "0", 10);
+            if (!qty || qty <= 0) {
+                return;
+            }
+            const selected = getLineSerialSet(line);
+            selected.clear();
+            const checkboxes = Array.from(
+                serialsInput.querySelectorAll('input[type="checkbox"]'),
+            ).filter((checkbox) => !checkbox.disabled);
+            checkboxes.slice(0, qty).forEach((checkbox) => {
+                checkbox.checked = true;
+                selected.add(checkbox.value);
+            });
+            syncSerialSelections(line);
+        });
+        clearSerialsButton.addEventListener("click", () => {
+            const selected = getLineSerialSet(line);
+            selected.clear();
+            serialsInput.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                checkbox.checked = false;
+            });
             syncSerialSelections(line);
         });
 
         lineError.hidden = true;
         setSerialFieldState(line, false);
+        lineSerialSelections.set(line, new Set());
         lineItemsContainer.appendChild(clone);
         updateLineTotals(line);
         updateSerialHelper(line, []);
@@ -515,6 +687,8 @@
                 city: customer.city || "",
                 district: customer.district || "",
                 province: customer.province || "",
+                sales_rep_id: customer.sales_rep_id ? String(customer.sales_rep_id) : "",
+                sales_rep_name: customer.sales_rep_name || "",
             }));
 
             const datalist = document.getElementById("customer-options");
@@ -566,7 +740,7 @@
 
         setSerialFieldState(line, true);
 
-        if (serialSelect.dataset.itemId === itemId && serialSelect.options.length) {
+        if (serialSelect.dataset.itemId === itemId && serialSelect.children.length) {
             syncSerialSelections(line);
             return;
         }
@@ -580,13 +754,7 @@
             }
             const data = await response.json();
             const serials = data?.serials || [];
-            serialSelect.innerHTML = "";
-            serials.forEach((serial) => {
-                const option = document.createElement("option");
-                option.value = serial;
-                option.textContent = serial;
-                serialSelect.appendChild(option);
-            });
+            renderSerialList(line, serials);
             serialSelect.dataset.itemId = itemId;
             syncSerialSelections(line);
         } catch (error) {
@@ -678,7 +846,7 @@
             if (!serials.length) {
                 errorMessages.push("Enter serial numbers.");
             } else if (qty && serials.length !== qty) {
-                errorMessages.push("Serial count must match quantity.");
+                errorMessages.push("Selected serial count must equal Qty.");
             }
 
             serials.forEach((serial) => {
@@ -718,6 +886,7 @@
             invoice_no: invoiceNoInput.value.trim(),
             invoice_date: invoiceDateInput.value,
             customer_id: customerIdInput.value,
+            sales_rep_id: salesRepIdInput.value || null,
             lines,
         };
 
@@ -744,7 +913,8 @@
 
             setSuccess("Invoice saved successfully.");
             invoiceForm.reset();
-            salesRepInput.value = user?.name || "";
+            salesRepInput.value = "";
+            salesRepIdInput.value = "";
             invoiceDateInput.valueAsDate = new Date();
             clearCustomerSelection();
             lineItemsContainer.innerHTML = "";

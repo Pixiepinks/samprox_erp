@@ -129,7 +129,7 @@
                 <span>Line Total</span>
                 <input type="number" data-field="line_total" readonly />
             </label>
-            <label class="form-field form-field--wide">
+            <label class="form-field form-field--wide" data-field="serial_section">
                 <span>Serial Numbers</span>
                 <div class="serial-actions">
                     <button type="button" class="button button--ghost button--small" data-action="select-all-serials">
@@ -296,6 +296,7 @@
     let itemOptions = [];
     let customerOptions = [];
     const customerLookup = new Map();
+    const itemLookup = new Map();
     const lineSerialSelections = new WeakMap();
     let lineCounter = 0;
 
@@ -431,6 +432,20 @@
         return lineSerialSelections.get(line);
     };
 
+    const getItemConfig = (itemId) => {
+        if (!itemId) {
+            return null;
+        }
+        if (itemLookup.has(itemId)) {
+            return itemLookup.get(itemId);
+        }
+        const item = itemOptions.find((entry) => entry.id === itemId) || null;
+        if (item) {
+            itemLookup.set(itemId, item);
+        }
+        return item;
+    };
+
     const getSelectedSerials = (line) => {
         return Array.from(getLineSerialSet(line));
     };
@@ -460,6 +475,16 @@
             getLineSerialSet(line).clear();
             updateSerialHelper(line, []);
             updateGlobalSerialLocks();
+        }
+    };
+
+    const setSerialSectionVisibility = (line, visible) => {
+        const serialSection = line.querySelector('[data-field="serial_section"]');
+        if (serialSection) {
+            serialSection.hidden = !visible;
+        }
+        if (!visible) {
+            setSerialFieldState(line, false);
         }
     };
 
@@ -665,7 +690,7 @@
         });
 
         lineError.hidden = true;
-        setSerialFieldState(line, false);
+        setSerialSectionVisibility(line, false);
         lineSerialSelections.set(line, new Set());
         lineItemsContainer.appendChild(clone);
         updateLineTotals(line);
@@ -719,6 +744,12 @@
             }
             const items = await response.json();
             itemOptions = items || [];
+            itemLookup.clear();
+            itemOptions.forEach((item) => {
+                if (item?.id) {
+                    itemLookup.set(item.id, item);
+                }
+            });
             lineItemsContainer.querySelectorAll('[data-field="item_id"]').forEach((select) => {
                 populateItemOptions(select, select.value);
             });
@@ -731,13 +762,16 @@
         const itemId = line.querySelector('[data-field="item_id"]').value;
         const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
         const serialSelect = line.querySelector('[data-field="serial_numbers"]');
+        const itemConfig = getItemConfig(itemId);
+        const isSerialized = itemConfig ? itemConfig.is_serialized !== false : true;
 
-        if (!itemId || qty <= 0) {
-            setSerialFieldState(line, false);
+        if (!itemId || qty <= 0 || !isSerialized) {
+            setSerialSectionVisibility(line, false);
             delete serialSelect.dataset.itemId;
             return;
         }
 
+        setSerialSectionVisibility(line, true);
         setSerialFieldState(line, true);
 
         if (serialSelect.dataset.itemId === itemId && serialSelect.children.length) {
@@ -759,7 +793,7 @@
             syncSerialSelections(line);
         } catch (error) {
             setError(error.message || "Unable to load serials.");
-            setSerialFieldState(line, false);
+            setSerialSectionVisibility(line, false);
         }
     };
 
@@ -826,6 +860,8 @@
             const errorMessages = [];
             const lineError = line.querySelector('[data-field="line_error"]');
             const itemId = line.querySelector('[data-field="item_id"]').value;
+            const itemConfig = getItemConfig(itemId);
+            const isSerialized = itemConfig ? itemConfig.is_serialized !== false : true;
             const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
             const mrp = Number.parseFloat(line.querySelector('[data-field="mrp"]').value || "0");
             const discountRate = getLineDiscountRate(line);
@@ -843,18 +879,22 @@
             if (!qty || qty <= 0) {
                 errorMessages.push("Quantity must be greater than zero.");
             }
-            if (!serials.length) {
-                errorMessages.push("Enter serial numbers.");
-            } else if (qty && serials.length !== qty) {
-                errorMessages.push("Selected serial count must equal Qty.");
+            if (isSerialized) {
+                if (!serials.length) {
+                    errorMessages.push("Enter serial numbers.");
+                } else if (qty && serials.length !== qty) {
+                    errorMessages.push("Selected serial count must equal Qty.");
+                }
             }
 
-            serials.forEach((serial) => {
-                if (serialTracker.has(serial)) {
-                    errorMessages.push("Duplicate serial numbers found across lines.");
-                }
-                serialTracker.add(serial);
-            });
+            if (isSerialized) {
+                serials.forEach((serial) => {
+                    if (serialTracker.has(serial)) {
+                        errorMessages.push("Duplicate serial numbers found across lines.");
+                    }
+                    serialTracker.add(serial);
+                });
+            }
 
             if (!mrp) {
                 errorMessages.push("MRP is required.");
@@ -871,7 +911,7 @@
                 trade_discount_rate: discountRate,
                 discount_value: discountValue,
                 dealer_price: dealerPrice,
-                serial_numbers: serials,
+                serial_numbers: isSerialized ? serials : [],
             });
         });
 

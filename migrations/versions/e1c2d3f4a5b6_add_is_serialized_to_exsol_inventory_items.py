@@ -23,7 +23,7 @@ PRESSURE_CONTROL_NAME = "PRESSURE CONTROL 220-240V 1.5bar"
 def upgrade() -> None:
     op.add_column(
         "exsol_inventory_items",
-        sa.Column("is_serialized", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("is_serialized", sa.Boolean(), nullable=False, server_default=sa.text("true")),
     )
     op.execute(sa.text("UPDATE exsol_inventory_items SET is_serialized = 1"))
     op.execute(

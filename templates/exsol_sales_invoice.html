@@ -26,7 +26,16 @@
                 </label>
                 <label class="form-field">
                     <span>Customer Name</span>
-                    <input type="text" id="customer-name" name="customer-name" required />
+                    <input
+                        type="text"
+                        id="customer-name"
+                        name="customer-name"
+                        list="customer-options"
+                        autocomplete="off"
+                        required
+                    />
+                    <input type="hidden" id="customer-id" name="customer-id" />
+                    <datalist id="customer-options"></datalist>
                 </label>
                 <label class="form-field">
                     <span>City</span>
@@ -121,7 +130,7 @@
             </label>
             <label class="form-field form-field--wide">
                 <span>Serial Numbers</span>
-                <textarea data-field="serial_numbers" rows="3" placeholder="Enter serials separated by comma, space, or new line"></textarea>
+                <select data-field="serial_numbers" multiple size="4" disabled></select>
                 <small class="helper" data-field="serial_count">Serial count: 0</small>
             </label>
         </div>
@@ -225,6 +234,7 @@
     const invoiceNoInput = document.getElementById("invoice-no");
     const invoiceDateInput = document.getElementById("invoice-date");
     const customerNameInput = document.getElementById("customer-name");
+    const customerIdInput = document.getElementById("customer-id");
     const customerCityInput = document.getElementById("customer-city");
     const customerDistrictInput = document.getElementById("customer-district");
     const customerProvinceInput = document.getElementById("customer-province");
@@ -238,6 +248,8 @@
     const grandTotalEl = document.getElementById("grand-total");
 
     let itemOptions = [];
+    let customerOptions = [];
+    const customerLookup = new Map();
     let lineCounter = 0;
 
     salesRepInput.value = user?.name || "";
@@ -260,11 +272,41 @@
         return value.toFixed(2);
     };
 
-    const parseSerials = (value) => {
-        return (value || "")
-            .split(/[\s,]+/)
-            .map((serial) => serial.trim())
-            .filter((serial) => serial.length > 0);
+    const buildCustomerLabel = (customer) => {
+        return customer.city ? `${customer.name} (${customer.city})` : customer.name;
+    };
+
+    const setCustomerLocationReadOnly = (isReadOnly) => {
+        customerCityInput.readOnly = isReadOnly;
+        customerDistrictInput.readOnly = isReadOnly;
+        customerProvinceInput.readOnly = isReadOnly;
+    };
+
+    const clearCustomerSelection = () => {
+        customerIdInput.value = "";
+        customerCityInput.value = "";
+        customerDistrictInput.value = "";
+        customerProvinceInput.value = "";
+        setCustomerLocationReadOnly(false);
+    };
+
+    const applyCustomerSelection = (customer) => {
+        customerIdInput.value = customer.id;
+        customerCityInput.value = customer.city || "";
+        customerDistrictInput.value = customer.district || "";
+        customerProvinceInput.value = customer.province || "";
+        setCustomerLocationReadOnly(true);
+    };
+
+    const resolveCustomer = (value) => {
+        if (!value) {
+            return null;
+        }
+        const key = value.toLowerCase();
+        if (customerLookup.has(key)) {
+            return customerLookup.get(key);
+        }
+        return customerOptions.find((customer) => customer.name.toLowerCase() === key) || null;
     };
 
     const updateInvoiceTotals = () => {
@@ -330,10 +372,56 @@
         updateInvoiceTotals();
     };
 
-    const updateSerialHelper = (line) => {
-        const serials = parseSerials(line.querySelector('[data-field="serial_numbers"]').value);
+    const getSelectedSerials = (line) => {
+        const select = line.querySelector('[data-field="serial_numbers"]');
+        const serials = Array.from(select.selectedOptions)
+            .map((option) => option.value.trim())
+            .filter((value) => value.length > 0);
+        return Array.from(new Set(serials));
+    };
+
+    const updateSerialHelper = (line, serials = null) => {
+        const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+        const currentSerials = serials ?? getSelectedSerials(line);
         const helper = line.querySelector('[data-field="serial_count"]');
-        helper.textContent = `Serial count: ${serials.length}`;
+        let message = `Serial count: ${currentSerials.length}`;
+
+        if (qty > 0) {
+            if (currentSerials.length < qty) {
+                message += ` — Need ${qty - currentSerials.length} more serials.`;
+            } else if (currentSerials.length > qty) {
+                message += ` — Remove ${currentSerials.length - qty} serials.`;
+            }
+        }
+
+        helper.textContent = message;
+    };
+
+    const setSerialFieldState = (line, enabled) => {
+        const serialSelect = line.querySelector('[data-field="serial_numbers"]');
+        serialSelect.disabled = !enabled;
+        if (!enabled) {
+            serialSelect.innerHTML = "";
+            updateSerialHelper(line, []);
+        }
+    };
+
+    const syncSerialSelections = (line) => {
+        const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+        const serialSelect = line.querySelector('[data-field="serial_numbers"]');
+        let serials = getSelectedSerials(line);
+
+        if (qty > 0 && serials.length > qty) {
+            serials.slice(qty).forEach((extra) => {
+                const option = Array.from(serialSelect.options).find((entry) => entry.value === extra);
+                if (option) {
+                    option.selected = false;
+                }
+            });
+            serials = getSelectedSerials(line);
+        }
+
+        updateSerialHelper(line, serials);
     };
 
     const populateItemOptions = (select, selectedValue = "") => {
@@ -363,7 +451,6 @@
         populateItemOptions(itemSelect, data.item_id || "");
         qtyInput.value = data.qty || "";
         mrpInput.value = data.mrp || "";
-        serialsInput.value = (data.serial_numbers || []).join("\n");
         discountInputs.forEach((input) => {
             input.name = `discount-rate-${lineId}`;
             if (data.trade_discount_rate) {
@@ -383,20 +470,69 @@
             updateInvoiceTotals();
         });
 
+        itemSelect.addEventListener("change", () => {
+            serialsInput.innerHTML = "";
+            serialsInput.disabled = true;
+            delete serialsInput.dataset.itemId;
+            updateSerialHelper(line, []);
+            updateLineTotals(line);
+            refreshSerialAvailability(line);
+        });
+
         [qtyInput, mrpInput].forEach((input) => {
             input.addEventListener("input", () => updateLineTotals(line));
         });
         discountInputs.forEach((input) => {
             input.addEventListener("change", () => updateLineTotals(line));
         });
-        serialsInput.addEventListener("input", () => {
-            updateSerialHelper(line);
+        qtyInput.addEventListener("input", () => {
+            refreshSerialAvailability(line);
+            syncSerialSelections(line);
+        });
+        serialsInput.addEventListener("change", () => {
+            syncSerialSelections(line);
         });
 
         lineError.hidden = true;
+        setSerialFieldState(line, false);
         lineItemsContainer.appendChild(clone);
         updateLineTotals(line);
-        updateSerialHelper(line);
+        updateSerialHelper(line, []);
+    };
+
+    const loadCustomers = async () => {
+        try {
+            const response = await fetch("/api/exsol/customers", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to load customers.");
+            }
+            const customers = await response.json();
+            customerOptions = (customers || []).map((customer) => ({
+                id: String(customer.id),
+                name: customer.name || customer.customer_name || "",
+                city: customer.city || "",
+                district: customer.district || "",
+                province: customer.province || "",
+            }));
+
+            const datalist = document.getElementById("customer-options");
+            datalist.innerHTML = "";
+            customerLookup.clear();
+            customerOptions.forEach((customer) => {
+                const label = buildCustomerLabel(customer);
+                const option = document.createElement("option");
+                option.value = label;
+                datalist.appendChild(option);
+                customerLookup.set(label.toLowerCase(), customer);
+                if (!customerLookup.has(customer.name.toLowerCase())) {
+                    customerLookup.set(customer.name.toLowerCase(), customer);
+                }
+            });
+        } catch (error) {
+            setError(error.message || "Unable to load customers.");
+        }
     };
 
     const loadItems = async () => {
@@ -417,8 +553,80 @@
         }
     };
 
+    const refreshSerialAvailability = async (line) => {
+        const itemId = line.querySelector('[data-field="item_id"]').value;
+        const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+        const serialSelect = line.querySelector('[data-field="serial_numbers"]');
+
+        if (!itemId || qty <= 0) {
+            setSerialFieldState(line, false);
+            delete serialSelect.dataset.itemId;
+            return;
+        }
+
+        setSerialFieldState(line, true);
+
+        if (serialSelect.dataset.itemId === itemId && serialSelect.options.length) {
+            syncSerialSelections(line);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/exsol/serials/available?item_id=${encodeURIComponent(itemId)}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to load serials.");
+            }
+            const data = await response.json();
+            const serials = data?.serials || [];
+            serialSelect.innerHTML = "";
+            serials.forEach((serial) => {
+                const option = document.createElement("option");
+                option.value = serial;
+                option.textContent = serial;
+                serialSelect.appendChild(option);
+            });
+            serialSelect.dataset.itemId = itemId;
+            syncSerialSelections(line);
+        } catch (error) {
+            setError(error.message || "Unable to load serials.");
+            setSerialFieldState(line, false);
+        }
+    };
+
     addLineButton.addEventListener("click", () => {
         addLineItem();
+    });
+
+    customerNameInput.addEventListener("input", () => {
+        const value = customerNameInput.value.trim();
+        if (!value) {
+            clearCustomerSelection();
+            return;
+        }
+        const customer = resolveCustomer(value);
+        if (customer) {
+            customerNameInput.value = buildCustomerLabel(customer);
+            applyCustomerSelection(customer);
+        } else {
+            clearCustomerSelection();
+        }
+    });
+
+    customerNameInput.addEventListener("change", () => {
+        const value = customerNameInput.value.trim();
+        if (!value) {
+            clearCustomerSelection();
+            return;
+        }
+        const customer = resolveCustomer(value);
+        if (customer) {
+            customerNameInput.value = buildCustomerLabel(customer);
+            applyCustomerSelection(customer);
+        } else {
+            clearCustomerSelection();
+        }
     });
 
     invoiceForm.addEventListener("submit", async (event) => {
@@ -433,8 +641,8 @@
         if (!invoiceDateInput.value) {
             headerErrors.push("Invoice Date is required.");
         }
-        if (!customerNameInput.value.trim()) {
-            headerErrors.push("Customer Name is required.");
+        if (!customerIdInput.value) {
+            headerErrors.push("Customer is required.");
         }
 
         const lines = [];
@@ -459,7 +667,7 @@
             const dealerPrice = Number.parseFloat(
                 line.querySelector('[data-field="dealer_price"]').value || "0",
             );
-            const serials = parseSerials(line.querySelector('[data-field="serial_numbers"]').value);
+            const serials = getSelectedSerials(line);
 
             if (!itemId) {
                 errorMessages.push("Select an item.");
@@ -509,10 +717,7 @@
         const payload = {
             invoice_no: invoiceNoInput.value.trim(),
             invoice_date: invoiceDateInput.value,
-            customer_name: customerNameInput.value.trim(),
-            city: customerCityInput.value.trim(),
-            district: customerDistrictInput.value.trim(),
-            province: customerProvinceInput.value.trim(),
+            customer_id: customerIdInput.value,
             lines,
         };
 
@@ -541,6 +746,7 @@
             invoiceForm.reset();
             salesRepInput.value = user?.name || "";
             invoiceDateInput.valueAsDate = new Date();
+            clearCustomerSelection();
             lineItemsContainer.innerHTML = "";
             addLineItem();
             updateInvoiceTotals();
@@ -549,6 +755,7 @@
         }
     });
 
+    loadCustomers();
     loadItems();
     addLineItem();
     updateInvoiceTotals();

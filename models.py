@@ -908,6 +908,7 @@ class ExsolInventoryItem(db.Model):
     item_name = db.Column(db.String(255), nullable=False)
     uom = db.Column(db.String(30))
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    is_serialized = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

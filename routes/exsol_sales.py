@@ -17,6 +17,7 @@ from models import (
     ExsolProductionSerial,
     ExsolSalesInvoice,
     ExsolSalesInvoiceLine,
+    NonSamproxCustomer,
     RoleEnum,
     User,
     normalize_role,
@@ -53,6 +54,16 @@ def _build_error(message: str, status: int = 400, details: dict[str, Any] | None
 def _get_exsol_company_id() -> int | None:
     company = Company.query.filter(Company.name == EXSOL_COMPANY_NAME).one_or_none()
     return company.id if company else None
+
+
+def _serialize_exsol_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
+    return {
+        "id": str(customer.id),
+        "name": customer.customer_name,
+        "city": customer.city,
+        "district": customer.district,
+        "province": customer.province,
+    }
 
 
 def _parse_date(value: Any) -> date | None:
@@ -160,6 +171,65 @@ def list_available_serials():
     return jsonify(payload)
 
 
+@invoices_bp.get("/customers")
+@jwt_required()
+def list_exsol_customers():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    customers = (
+        NonSamproxCustomer.query.filter(
+            NonSamproxCustomer.company_id == company_id,
+            NonSamproxCustomer.is_active.is_(True),
+        )
+        .order_by(NonSamproxCustomer.customer_name.asc())
+        .all()
+    )
+    return jsonify([_serialize_exsol_customer(customer) for customer in customers])
+
+
+@invoices_bp.get("/serials/available")
+@jwt_required()
+def list_exsol_available_serials():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    item_id = (request.args.get("item_id") or "").strip()
+    if not item_id:
+        return jsonify({"item_id": item_id, "serials": []})
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    item = (
+        ExsolInventoryItem.query.filter(
+            ExsolInventoryItem.company_id == company_id,
+            ExsolInventoryItem.id == item_id,
+            ExsolInventoryItem.is_active.is_(True),
+        )
+        .one_or_none()
+    )
+    if not item:
+        return _build_error("Item not found.", 404)
+
+    serial_rows = (
+        db.session.query(ExsolProductionSerial)
+        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolProductionSerial.is_sold.is_(False))
+        .filter(ExsolProductionEntry.item_code == item.item_code)
+        .order_by(ExsolProductionSerial.serial_no.asc())
+        .limit(500)
+        .all()
+    )
+    return jsonify({"item_id": item_id, "serials": [row.serial_no for row in serial_rows]})
+
+
 def _format_money(value: Decimal | None) -> str | None:
     if value is None:
         return None
@@ -215,9 +285,9 @@ def _validate_invoice_payload(payload: dict[str, Any]):
     if not invoice_date:
         errors["invoice_date"] = "Invoice Date is required."
 
-    customer_name = (payload.get("customer_name") or "").strip()
-    if not customer_name:
-        errors["customer_name"] = "Customer Name is required."
+    customer_id = (payload.get("customer_id") or "").strip()
+    if not customer_id:
+        errors["customer_id"] = "Customer selection is required."
 
     lines_payload = payload.get("lines") or []
     if not isinstance(lines_payload, list) or not lines_payload:
@@ -227,6 +297,21 @@ def _validate_invoice_payload(payload: dict[str, Any]):
     company_id = _get_exsol_company_id()
     if not company_id:
         errors["company"] = "Exsol company not configured."
+        return None, None, errors, line_errors
+
+    customer = None
+    if customer_id:
+        customer = (
+            NonSamproxCustomer.query.filter(
+                NonSamproxCustomer.company_id == company_id,
+                NonSamproxCustomer.id == customer_id,
+                NonSamproxCustomer.is_active.is_(True),
+            )
+            .one_or_none()
+        )
+
+    if not customer:
+        errors["customer_id"] = "Customer selection is required."
         return None, None, errors, line_errors
 
     item_ids = {str(line.get("item_id")) for line in lines_payload if line.get("item_id")}
@@ -339,10 +424,10 @@ def _validate_invoice_payload(payload: dict[str, Any]):
         {
             "invoice_no": invoice_no,
             "invoice_date": invoice_date,
-            "customer_name": customer_name,
-            "city": (payload.get("city") or "").strip() or None,
-            "district": (payload.get("district") or "").strip() or None,
-            "province": (payload.get("province") or "").strip() or None,
+            "customer_name": customer.customer_name,
+            "city": (customer.city or "").strip() or None,
+            "district": (customer.district or "").strip() or None,
+            "province": (customer.province or "").strip() or None,
         },
         prepared_lines,
         errors,

@@ -57,12 +57,20 @@ def _get_exsol_company_id() -> int | None:
 
 
 def _serialize_exsol_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
+    sales_rep = customer.managed_by
+    sales_rep_name = None
+    if sales_rep:
+        sales_rep_name = sales_rep.name
+    elif customer.managed_by_label:
+        sales_rep_name = customer.managed_by_label
     return {
         "id": str(customer.id),
         "name": customer.customer_name,
         "city": customer.city,
         "district": customer.district,
         "province": customer.province,
+        "sales_rep_id": str(customer.managed_by_user_id) if customer.managed_by_user_id else None,
+        "sales_rep_name": sales_rep_name,
     }
 
 
@@ -314,6 +322,18 @@ def _validate_invoice_payload(payload: dict[str, Any]):
         errors["customer_id"] = "Customer selection is required."
         return None, None, errors, line_errors
 
+    sales_rep_id = _parse_int(payload.get("sales_rep_id"))
+    if sales_rep_id is None and customer.managed_by_user_id:
+        sales_rep_id = customer.managed_by_user_id
+
+    sales_rep_name = None
+    if sales_rep_id is not None:
+        sales_rep_user = User.query.get(sales_rep_id)
+        if sales_rep_user:
+            sales_rep_name = sales_rep_user.name
+    if sales_rep_name is None and customer.managed_by_label:
+        sales_rep_name = customer.managed_by_label
+
     item_ids = {str(line.get("item_id")) for line in lines_payload if line.get("item_id")}
     items = (
         ExsolInventoryItem.query.filter(
@@ -428,6 +448,8 @@ def _validate_invoice_payload(payload: dict[str, Any]):
             "city": (customer.city or "").strip() or None,
             "district": (customer.district or "").strip() or None,
             "province": (customer.province or "").strip() or None,
+            "sales_rep_id": sales_rep_id,
+            "sales_rep_name": sales_rep_name,
         },
         prepared_lines,
         errors,
@@ -468,8 +490,8 @@ def _create_invoice(payload: dict[str, Any]):
                 city=parsed_header["city"],
                 district=parsed_header["district"],
                 province=parsed_header["province"],
-                sales_rep_id=user.id,
-                sales_rep_name=user.name,
+                sales_rep_id=parsed_header.get("sales_rep_id") or user.id,
+                sales_rep_name=parsed_header.get("sales_rep_name") or user.name,
                 created_by_user_id=user.id,
             )
             db.session.add(invoice)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import re
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -15,7 +16,7 @@ from models import (
     ExsolProductionEntry,
     ExsolProductionSerial,
     ExsolSalesInvoice,
-    ExsolSalesInvoiceItem,
+    ExsolSalesInvoiceLine,
     RoleEnum,
     User,
     normalize_role,
@@ -23,10 +24,11 @@ from models import (
 from schemas import ExsolInventoryItemSchema
 
 bp = Blueprint("exsol_sales", __name__, url_prefix="/api/exsol/sales")
+invoices_bp = Blueprint("exsol_sales_invoices", __name__, url_prefix="/api/exsol")
 
 EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
 EXSOL_COMPANY_KEY = "EXSOL"
-ALLOWED_DISCOUNT_RATES = {26, 31}
+ALLOWED_DISCOUNT_RATES = {Decimal("0.26"), Decimal("0.31")}
 
 items_schema = ExsolInventoryItemSchema(many=True)
 
@@ -85,13 +87,22 @@ def _parse_int(value: Any) -> int | None:
     return parsed
 
 
+def _parse_discount_rate(value: Any) -> Decimal | None:
+    parsed = _parse_decimal(value)
+    if parsed is None:
+        return None
+    if parsed > 1:
+        parsed = (parsed / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return parsed
+
+
 def _normalize_serials(value: Any) -> list[str]:
     if not value:
         return []
     if isinstance(value, (list, tuple, set)):
         serials = [str(entry).strip() for entry in value if str(entry).strip()]
     else:
-        serials = [entry.strip() for entry in str(value).split(",") if entry.strip()]
+        serials = [entry.strip() for entry in re.split(r"[\s,]+", str(value)) if entry.strip()]
     return serials
 
 
@@ -149,14 +160,52 @@ def list_available_serials():
     return jsonify(payload)
 
 
-@bp.post("/invoice")
-@jwt_required()
-def create_invoice():
-    if not _has_exsol_sales_access():
-        return _build_error("Access denied", 403)
+def _format_money(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
 
-    payload = request.get_json(silent=True) or {}
+
+def _build_invoice_response(invoice: ExsolSalesInvoice, lines: list[ExsolSalesInvoiceLine]):
+    total_qty = sum(line.quantity for line in lines)
+    subtotal = sum(Decimal(line.mrp) * line.quantity for line in lines)
+    total_discount = sum(Decimal(line.discount_value) * line.quantity for line in lines)
+    grand_total = sum(Decimal(line.line_total or 0) for line in lines)
+    return {
+        "id": invoice.id,
+        "invoice_no": invoice.invoice_no,
+        "invoice_date": invoice.invoice_date.isoformat(),
+        "customer_name": invoice.customer_name,
+        "city": invoice.city,
+        "district": invoice.district,
+        "province": invoice.province,
+        "sales_representative": invoice.sales_rep_name,
+        "lines": [
+            {
+                "id": line.id,
+                "item_id": line.item_id,
+                "qty": line.quantity,
+                "mrp": _format_money(Decimal(line.mrp)),
+                "trade_discount_rate": str(line.trade_discount_rate),
+                "discount_value": _format_money(Decimal(line.discount_value)),
+                "dealer_price": _format_money(Decimal(line.dealer_price)),
+                "line_total": _format_money(Decimal(line.line_total or 0)),
+                "serial_numbers": line.serials_json,
+            }
+            for line in lines
+        ],
+        "totals": {
+            "total_qty": total_qty,
+            "subtotal": _format_money(subtotal),
+            "total_discount": _format_money(total_discount),
+            "grand_total": _format_money(grand_total),
+        },
+    }
+
+
+def _validate_invoice_payload(payload: dict[str, Any]):
     errors: dict[str, str] = {}
+    line_errors: list[dict[str, str]] = []
 
     invoice_no = (payload.get("invoice_no") or "").strip()
     if not invoice_no:
@@ -170,107 +219,201 @@ def create_invoice():
     if not customer_name:
         errors["customer_name"] = "Customer Name is required."
 
-    item_code = (payload.get("item_code") or "").strip()
-    if not item_code:
-        errors["item_name"] = "Item Name is required."
-
-    serials = _normalize_serials(payload.get("serial_numbers"))
-    if not serials:
-        errors["serial_numbers"] = "At least one serial number is required."
-
-    quantity = _parse_int(payload.get("quantity"))
-    if quantity is None or quantity <= 0:
-        errors["quantity"] = "Quantity must be a positive number."
-    elif serials and quantity != len(serials):
-        errors["quantity"] = "Quantity must match the number of serials selected."
-
-    mrp = _parse_decimal(payload.get("mrp"))
-    if mrp is None or mrp <= 0:
-        errors["mrp"] = "MRP is required."
-
-    discount_rate = _parse_int(payload.get("discount_rate"))
-    if discount_rate not in ALLOWED_DISCOUNT_RATES:
-        errors["discount_rate"] = "Trade discount must be 26% or 31%."
-
-    if errors:
-        return jsonify({"errors": errors}), 400
-
-    if len(serials) != len(set(serials)):
-        return jsonify({"errors": {"serial_numbers": "Duplicate serials are not allowed."}}), 400
+    lines_payload = payload.get("lines") or []
+    if not isinstance(lines_payload, list) or not lines_payload:
+        errors["lines"] = "At least one invoice line is required."
+        return None, None, errors, line_errors
 
     company_id = _get_exsol_company_id()
     if not company_id:
-        return _build_error("Exsol company not configured.", 500)
+        errors["company"] = "Exsol company not configured."
+        return None, None, errors, line_errors
 
-    item = (
+    item_ids = {str(line.get("item_id")) for line in lines_payload if line.get("item_id")}
+    items = (
         ExsolInventoryItem.query.filter(
             ExsolInventoryItem.company_id == company_id,
-            ExsolInventoryItem.item_code == item_code,
+            ExsolInventoryItem.id.in_(item_ids),
             ExsolInventoryItem.is_active.is_(True),
         )
-        .one_or_none()
+        .all()
     )
-    if not item:
-        return jsonify({"errors": {"item_name": "Selected item is not available."}}), 400
+    items_by_id = {str(item.id): item for item in items}
+
+    prepared_lines = []
+    all_serials: list[str] = []
+    for idx, line in enumerate(lines_payload):
+        line_error: dict[str, str] = {}
+        item_id = (line.get("item_id") or "").strip()
+        if not item_id or item_id not in items_by_id:
+            line_error["item_id"] = "Item selection is required."
+
+        qty = _parse_int(line.get("qty"))
+        if qty is None or qty <= 0:
+            line_error["qty"] = "Quantity must be a positive number."
+
+        serials = _normalize_serials(line.get("serial_numbers"))
+        if not serials:
+            line_error["serial_numbers"] = "Serial numbers are required."
+        elif qty is not None and qty != len(serials):
+            line_error["serial_numbers"] = "Serial count must match the quantity."
+
+        if serials:
+            all_serials.extend(serials)
+
+        mrp = _parse_decimal(line.get("mrp"))
+        if mrp is None or mrp <= 0:
+            line_error["mrp"] = "MRP is required."
+
+        discount_rate = _parse_discount_rate(line.get("trade_discount_rate"))
+        if discount_rate not in ALLOWED_DISCOUNT_RATES:
+            line_error["trade_discount_rate"] = "Trade discount must be 26% or 31%."
+
+        discount_value = _parse_decimal(line.get("discount_value"))
+        dealer_price = _parse_decimal(line.get("dealer_price"))
+
+        if not line_error and mrp and discount_rate:
+            if discount_value is None:
+                discount_value = (mrp * discount_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if dealer_price is None:
+                dealer_price = (mrp - discount_value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        if discount_value is None or discount_value < 0:
+            line_error["discount_value"] = "Discount value is required."
+        if dealer_price is None or dealer_price < 0:
+            line_error["dealer_price"] = "Dealer price is required."
+
+        line_errors.append(line_error)
+        prepared_lines.append(
+            {
+                "item_id": item_id,
+                "item": items_by_id.get(item_id),
+                "qty": qty,
+                "serials": serials,
+                "mrp": mrp,
+                "trade_discount_rate": discount_rate,
+                "discount_value": discount_value,
+                "dealer_price": dealer_price,
+            }
+        )
+
+    if errors:
+        return None, None, errors, line_errors
+
+    if any(line_errors):
+        return None, None, errors, line_errors
+
+    if len(all_serials) != len(set(all_serials)):
+        errors["serial_numbers"] = "Duplicate serial numbers are not allowed across invoice lines."
+        return None, None, errors, line_errors
+
+    serial_rows = (
+        db.session.query(ExsolProductionSerial, ExsolProductionEntry)
+        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolProductionSerial.serial_no.in_(all_serials))
+        .filter(ExsolProductionSerial.is_sold.is_(False))
+        .all()
+    )
+    serial_map = {serial.serial_no: (serial, entry.item_code) for serial, entry in serial_rows}
+
+    for idx, prepared in enumerate(prepared_lines):
+        item = prepared["item"]
+        if not item:
+            continue
+        missing = [serial for serial in prepared["serials"] if serial not in serial_map]
+        mismatched = [
+            serial
+            for serial in prepared["serials"]
+            if serial in serial_map and serial_map[serial][1] != item.item_code
+        ]
+        if missing:
+            line_errors[idx]["serial_numbers"] = "Some serial numbers are unavailable or already sold."
+        if mismatched:
+            line_errors[idx]["serial_numbers"] = "Serial numbers do not match the selected item."
+
+    if any(line_errors):
+        return None, None, errors, line_errors
+
+    return (
+        {
+            "invoice_no": invoice_no,
+            "invoice_date": invoice_date,
+            "customer_name": customer_name,
+            "city": (payload.get("city") or "").strip() or None,
+            "district": (payload.get("district") or "").strip() or None,
+            "province": (payload.get("province") or "").strip() or None,
+        },
+        prepared_lines,
+        errors,
+        line_errors,
+    )
+
+
+def _create_invoice(payload: dict[str, Any]):
+    parsed_header, prepared_lines, errors, line_errors = _validate_invoice_payload(payload)
+    if errors or any(line_errors):
+        return jsonify({"errors": errors, "line_errors": line_errors}), 400
 
     current_user_id = get_jwt_identity()
     user = User.query.get(int(current_user_id)) if current_user_id else None
     if not user:
         return _build_error("Unable to resolve the current user.", 401)
 
-    serial_rows = (
-        db.session.query(ExsolProductionSerial)
-        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
-        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
-        .filter(ExsolProductionSerial.serial_no.in_(serials))
-        .filter(ExsolProductionSerial.is_sold.is_(False))
-        .filter(ExsolProductionEntry.item_code == item_code)
-        .all()
-    )
-    found_serials = {row.serial_no for row in serial_rows}
-    missing_serials = sorted(set(serials) - found_serials)
-    if missing_serials:
-        return jsonify(
-            {
-                "errors": {
-                    "serial_numbers": "Some serial numbers are unavailable or already sold.",
-                    "missing": missing_serials,
-                }
-            }
-        ), 400
-
-    discount_value = (mrp * Decimal(discount_rate) / Decimal(100)).quantize(Decimal("0.01"))
-    dealer_price = (mrp - discount_value).quantize(Decimal("0.01"))
+    serial_map = {}
+    if prepared_lines:
+        serials = [serial for line in prepared_lines for serial in line["serials"]]
+        serial_rows = (
+            db.session.query(ExsolProductionSerial)
+            .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+            .filter(ExsolProductionSerial.serial_no.in_(serials))
+            .filter(ExsolProductionSerial.is_sold.is_(False))
+            .all()
+        )
+        serial_map = {row.serial_no: row for row in serial_rows}
 
     try:
         with db.session.begin():
             invoice = ExsolSalesInvoice(
+                company_key=EXSOL_COMPANY_KEY,
                 company_name=EXSOL_COMPANY_NAME,
-                invoice_no=invoice_no,
-                invoice_date=invoice_date,
-                customer_name=customer_name,
-                city=(payload.get("city") or "").strip() or None,
-                district=(payload.get("district") or "").strip() or None,
-                province=(payload.get("province") or "").strip() or None,
+                invoice_no=parsed_header["invoice_no"],
+                invoice_date=parsed_header["invoice_date"],
+                customer_name=parsed_header["customer_name"],
+                city=parsed_header["city"],
+                district=parsed_header["district"],
+                province=parsed_header["province"],
                 sales_rep_id=user.id,
                 sales_rep_name=user.name,
                 created_by_user_id=user.id,
             )
             db.session.add(invoice)
 
-            for serial in serial_rows:
-                serial.is_sold = True
-                item_row = ExsolSalesInvoiceItem(
-                    invoice=invoice,
-                    item_name=item.item_name,
-                    serial_number=serial.serial_no,
-                    quantity=1,
-                    mrp=mrp,
-                    discount_rate=discount_rate,
-                    discount_value=discount_value,
-                    dealer_price=dealer_price,
+            line_models: list[ExsolSalesInvoiceLine] = []
+            for line in prepared_lines:
+                line_total = (line["dealer_price"] * Decimal(line["qty"])).quantize(
+                    Decimal("0.01"),
+                    rounding=ROUND_HALF_UP,
                 )
-                db.session.add(item_row)
+                line_model = ExsolSalesInvoiceLine(
+                    invoice=invoice,
+                    item_id=line["item_id"],
+                    quantity=line["qty"],
+                    mrp=line["mrp"],
+                    trade_discount_rate=line["trade_discount_rate"],
+                    discount_value=line["discount_value"],
+                    dealer_price=line["dealer_price"],
+                    line_total=line_total,
+                    serials_json=line["serials"],
+                )
+                db.session.add(line_model)
+                line_models.append(line_model)
+
+                for serial in line["serials"]:
+                    serial_model = serial_map.get(serial)
+                    if serial_model:
+                        serial_model.is_sold = True
+
     except IntegrityError:
         db.session.rollback()
         return jsonify(
@@ -285,4 +428,42 @@ def create_invoice():
         db.session.rollback()
         return _build_error("Unable to save the invoice right now.", 500)
 
-    return jsonify({"ok": True, "invoice_no": invoice_no}), 201
+    return jsonify({"ok": True, "invoice": _build_invoice_response(invoice, line_models)}), 201
+
+
+@bp.post("/invoice")
+@jwt_required()
+def create_invoice():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    payload = request.get_json(silent=True) or {}
+    return _create_invoice(payload)
+
+
+@invoices_bp.post("/sales-invoices")
+@jwt_required()
+def create_sales_invoice():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    payload = request.get_json(silent=True) or {}
+    return _create_invoice(payload)
+
+
+@invoices_bp.get("/sales-invoices/<int:invoice_id>")
+@jwt_required()
+def get_sales_invoice(invoice_id: int):
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    invoice = ExsolSalesInvoice.query.get(invoice_id)
+    if not invoice:
+        return _build_error("Invoice not found.", 404)
+
+    lines = (
+        ExsolSalesInvoiceLine.query.filter(ExsolSalesInvoiceLine.invoice_id == invoice.id)
+        .order_by(ExsolSalesInvoiceLine.id.asc())
+        .all()
+    )
+    return jsonify({"ok": True, "invoice": _build_invoice_response(invoice, lines)})

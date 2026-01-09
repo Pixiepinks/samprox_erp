@@ -237,6 +237,7 @@ def create_app():
     app.register_blueprint(exsol_inventory.bp)
     app.register_blueprint(exsol_production.bp)
     app.register_blueprint(exsol_sales.bp)
+    app.register_blueprint(exsol_sales.invoices_bp)
 
     def _jwt_role() -> RoleEnum | None:
         try:

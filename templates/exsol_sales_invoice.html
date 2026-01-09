@@ -44,45 +44,31 @@
                     <span>Sales Representative</span>
                     <input type="text" id="sales-rep" name="sales-rep" readonly />
                 </label>
-                <label class="form-field">
-                    <span>Item Name</span>
-                    <select id="item-code" name="item-code" required>
-                        <option value="">Select item</option>
-                    </select>
-                </label>
-                <label class="form-field form-field--wide">
-                    <span>Serial Numbers</span>
-                    <select id="serial-numbers" name="serial-numbers" multiple size="6" required></select>
-                </label>
-                <label class="form-field">
-                    <span>Qty</span>
-                    <input type="number" id="quantity" name="quantity" readonly />
-                </label>
-                <label class="form-field">
-                    <span>MRP</span>
-                    <input type="number" id="mrp" name="mrp" min="0" step="0.01" required />
-                </label>
-                <div class="form-field">
-                    <span>Trade Discount</span>
-                    <div class="discount-options">
-                        <label class="discount-option">
-                            <input type="radio" name="discount-rate" value="26" checked />
-                            26%
-                        </label>
-                        <label class="discount-option">
-                            <input type="radio" name="discount-rate" value="31" />
-                            31%
-                        </label>
-                    </div>
+            </div>
+            <div class="invoice-lines">
+                <div class="invoice-lines__header">
+                    <h2>Invoice Items</h2>
+                    <button type="button" class="button button--ghost" id="add-line">+ Add Item</button>
                 </div>
-                <label class="form-field">
-                    <span>Discount Value</span>
-                    <input type="number" id="discount-value" name="discount-value" readonly />
-                </label>
-                <label class="form-field">
-                    <span>Dealer Price</span>
-                    <input type="number" id="dealer-price" name="dealer-price" readonly />
-                </label>
+                <div id="line-items"></div>
+            </div>
+            <div class="invoice-totals">
+                <div>
+                    <span>Total Qty</span>
+                    <strong id="total-qty">0</strong>
+                </div>
+                <div>
+                    <span>Subtotal</span>
+                    <strong id="subtotal">0.00</strong>
+                </div>
+                <div>
+                    <span>Total Discount</span>
+                    <strong id="total-discount">0.00</strong>
+                </div>
+                <div>
+                    <span>Grand Total</span>
+                    <strong id="grand-total">0.00</strong>
+                </div>
             </div>
             <div class="card__actions">
                 <button type="submit" class="button button--primary" id="save-invoice">Save</button>
@@ -92,6 +78,59 @@
         </form>
     </div>
 </section>
+
+<template id="line-item-template">
+    <div class="line-item card">
+        <div class="line-item__grid">
+            <label class="form-field">
+                <span>Item</span>
+                <select data-field="item_id" required></select>
+            </label>
+            <label class="form-field">
+                <span>Qty</span>
+                <input type="number" min="1" data-field="qty" required />
+            </label>
+            <label class="form-field">
+                <span>MRP</span>
+                <input type="number" min="0" step="0.01" data-field="mrp" required />
+            </label>
+            <div class="form-field">
+                <span>Trade Discount</span>
+                <div class="discount-options" data-field="discount_rate">
+                    <label class="discount-option">
+                        <input type="radio" value="0.26" />
+                        26%
+                    </label>
+                    <label class="discount-option">
+                        <input type="radio" value="0.31" />
+                        31%
+                    </label>
+                </div>
+            </div>
+            <label class="form-field">
+                <span>Discount Value</span>
+                <input type="number" data-field="discount_value" readonly />
+            </label>
+            <label class="form-field">
+                <span>Dealer Price</span>
+                <input type="number" data-field="dealer_price" readonly />
+            </label>
+            <label class="form-field">
+                <span>Line Total</span>
+                <input type="number" data-field="line_total" readonly />
+            </label>
+            <label class="form-field form-field--wide">
+                <span>Serial Numbers</span>
+                <textarea data-field="serial_numbers" rows="3" placeholder="Enter serials separated by comma, space, or new line"></textarea>
+                <small class="helper" data-field="serial_count">Serial count: 0</small>
+            </label>
+        </div>
+        <div class="line-item__footer">
+            <button type="button" class="button button--danger" data-action="remove-line">Remove</button>
+            <div class="line-item__error" data-field="line_error" hidden></div>
+        </div>
+    </div>
+</template>
 
 <style>
     .discount-options {
@@ -106,6 +145,63 @@
         gap: 0.35rem;
         font-weight: 600;
         color: #0f172a;
+    }
+
+    .invoice-lines {
+        margin-top: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .invoice-lines__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .line-item {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .line-item__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+
+    .line-item__footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .line-item__error {
+        color: #b91c1c;
+        font-weight: 600;
+    }
+
+    .invoice-totals {
+        margin-top: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+        background: #f8fafc;
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+    }
+
+    .invoice-totals span {
+        display: block;
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-bottom: 0.25rem;
     }
 </style>
 
@@ -133,12 +229,16 @@
     const customerDistrictInput = document.getElementById("customer-district");
     const customerProvinceInput = document.getElementById("customer-province");
     const salesRepInput = document.getElementById("sales-rep");
-    const itemCodeSelect = document.getElementById("item-code");
-    const serialSelect = document.getElementById("serial-numbers");
-    const quantityInput = document.getElementById("quantity");
-    const mrpInput = document.getElementById("mrp");
-    const discountValueInput = document.getElementById("discount-value");
-    const dealerPriceInput = document.getElementById("dealer-price");
+    const lineItemsContainer = document.getElementById("line-items");
+    const addLineButton = document.getElementById("add-line");
+    const lineTemplate = document.getElementById("line-item-template");
+    const totalQtyEl = document.getElementById("total-qty");
+    const subtotalEl = document.getElementById("subtotal");
+    const totalDiscountEl = document.getElementById("total-discount");
+    const grandTotalEl = document.getElementById("grand-total");
+
+    let itemOptions = [];
+    let lineCounter = 0;
 
     salesRepInput.value = user?.name || "";
     invoiceDateInput.valueAsDate = new Date();
@@ -160,28 +260,143 @@
         return value.toFixed(2);
     };
 
-    const getSelectedDiscount = () => {
-        const selected = document.querySelector('input[name="discount-rate"]:checked');
-        return selected ? Number.parseInt(selected.value, 10) : 26;
+    const parseSerials = (value) => {
+        return (value || "")
+            .split(/[\s,]+/)
+            .map((serial) => serial.trim())
+            .filter((serial) => serial.length > 0);
     };
 
-    const updateTotals = () => {
-        const mrpValue = Number.parseFloat(mrpInput.value || "0");
-        const discountRate = getSelectedDiscount();
+    const updateInvoiceTotals = () => {
+        let totalQty = 0;
+        let subtotal = 0;
+        let totalDiscount = 0;
+        let grandTotal = 0;
+
+        lineItemsContainer.querySelectorAll(".line-item").forEach((line) => {
+            const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+            const mrp = Number.parseFloat(line.querySelector('[data-field="mrp"]').value || "0");
+            const discountValue = Number.parseFloat(
+                line.querySelector('[data-field="discount_value"]').value || "0",
+            );
+            const dealerPrice = Number.parseFloat(
+                line.querySelector('[data-field="dealer_price"]').value || "0",
+            );
+
+            if (qty > 0) {
+                totalQty += qty;
+                subtotal += mrp * qty;
+                totalDiscount += discountValue * qty;
+                grandTotal += dealerPrice * qty;
+            }
+        });
+
+        totalQtyEl.textContent = String(totalQty);
+        subtotalEl.textContent = formatMoney(subtotal) || "0.00";
+        totalDiscountEl.textContent = formatMoney(totalDiscount) || "0.00";
+        grandTotalEl.textContent = formatMoney(grandTotal) || "0.00";
+    };
+
+    const getLineDiscountRate = (line) => {
+        const selected = line.querySelector('[data-field="discount_rate"] input:checked');
+        return selected ? Number.parseFloat(selected.value) : 0.26;
+    };
+
+    const updateLineTotals = (line) => {
+        const mrpValue = Number.parseFloat(line.querySelector('[data-field="mrp"]').value || "0");
+        const qtyValue = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+        const discountRate = getLineDiscountRate(line);
+        const discountValueInput = line.querySelector('[data-field="discount_value"]');
+        const dealerPriceInput = line.querySelector('[data-field="dealer_price"]');
+        const lineTotalInput = line.querySelector('[data-field="line_total"]');
+
         if (!mrpValue) {
             discountValueInput.value = "";
             dealerPriceInput.value = "";
+            lineTotalInput.value = "";
+            updateInvoiceTotals();
             return;
         }
-        const discountValue = (mrpValue * discountRate) / 100;
+
+        const discountValue = mrpValue * discountRate;
         const dealerPrice = mrpValue - discountValue;
         discountValueInput.value = formatMoney(discountValue);
         dealerPriceInput.value = formatMoney(dealerPrice);
+        if (qtyValue > 0) {
+            lineTotalInput.value = formatMoney(dealerPrice * qtyValue);
+        } else {
+            lineTotalInput.value = "";
+        }
+        updateInvoiceTotals();
     };
 
-    const updateQuantity = () => {
-        const selectedCount = Array.from(serialSelect.selectedOptions).length;
-        quantityInput.value = selectedCount ? String(selectedCount) : "";
+    const updateSerialHelper = (line) => {
+        const serials = parseSerials(line.querySelector('[data-field="serial_numbers"]').value);
+        const helper = line.querySelector('[data-field="serial_count"]');
+        helper.textContent = `Serial count: ${serials.length}`;
+    };
+
+    const populateItemOptions = (select, selectedValue = "") => {
+        select.innerHTML = '<option value="">Select item</option>';
+        itemOptions.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.item_name;
+            if (selectedValue && selectedValue === item.id) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    };
+
+    const addLineItem = (data = {}) => {
+        const clone = lineTemplate.content.cloneNode(true);
+        const line = clone.querySelector(".line-item");
+        const lineId = `line-${Date.now()}-${lineCounter++}`;
+        const itemSelect = line.querySelector('[data-field="item_id"]');
+        const qtyInput = line.querySelector('[data-field="qty"]');
+        const mrpInput = line.querySelector('[data-field="mrp"]');
+        const serialsInput = line.querySelector('[data-field="serial_numbers"]');
+        const discountInputs = line.querySelectorAll('[data-field="discount_rate"] input');
+        const lineError = line.querySelector('[data-field="line_error"]');
+
+        populateItemOptions(itemSelect, data.item_id || "");
+        qtyInput.value = data.qty || "";
+        mrpInput.value = data.mrp || "";
+        serialsInput.value = (data.serial_numbers || []).join("\n");
+        discountInputs.forEach((input) => {
+            input.name = `discount-rate-${lineId}`;
+            if (data.trade_discount_rate) {
+                input.checked = Number.parseFloat(input.value) === Number.parseFloat(data.trade_discount_rate);
+            }
+        });
+        if (![...discountInputs].some((input) => input.checked)) {
+            discountInputs[0].checked = true;
+        }
+
+        line.querySelector('[data-action="remove-line"]').addEventListener("click", () => {
+            if (lineItemsContainer.querySelectorAll(".line-item").length <= 1) {
+                setError("At least one invoice line is required.");
+                return;
+            }
+            line.remove();
+            updateInvoiceTotals();
+        });
+
+        [qtyInput, mrpInput].forEach((input) => {
+            input.addEventListener("input", () => updateLineTotals(line));
+        });
+        discountInputs.forEach((input) => {
+            input.addEventListener("change", () => updateLineTotals(line));
+        });
+        serialsInput.addEventListener("input", () => {
+            updateSerialHelper(line);
+        });
+
+        lineError.hidden = true;
+        lineItemsContainer.appendChild(clone);
+        updateLineTotals(line);
+        updateSerialHelper(line);
     };
 
     const loadItems = async () => {
@@ -193,55 +408,17 @@
                 throw new Error("Unable to load Exsol items.");
             }
             const items = await response.json();
-            itemCodeSelect.innerHTML = '<option value="">Select item</option>';
-            items.forEach((item) => {
-                const option = document.createElement("option");
-                option.value = item.item_code;
-                option.textContent = item.item_name;
-                itemCodeSelect.appendChild(option);
+            itemOptions = items || [];
+            lineItemsContainer.querySelectorAll('[data-field="item_id"]').forEach((select) => {
+                populateItemOptions(select, select.value);
             });
         } catch (error) {
             setError(error.message || "Unable to load items.");
         }
     };
 
-    const loadSerials = async (itemCode) => {
-        serialSelect.innerHTML = "";
-        updateQuantity();
-        if (!itemCode) {
-            return;
-        }
-        try {
-            const response = await fetch(`/api/exsol/sales/available-serials?item_code=${encodeURIComponent(itemCode)}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (!response.ok) {
-                throw new Error("Unable to load serials.");
-            }
-            const serials = await response.json();
-            serials.forEach((serial) => {
-                const option = document.createElement("option");
-                option.value = serial.serial_no;
-                option.textContent = serial.serial_no;
-                serialSelect.appendChild(option);
-            });
-        } catch (error) {
-            setError(error.message || "Unable to load serials.");
-        }
-    };
-
-    itemCodeSelect.addEventListener("change", (event) => {
-        setError("");
-        loadSerials(event.target.value);
-    });
-
-    serialSelect.addEventListener("change", () => {
-        updateQuantity();
-    });
-
-    mrpInput.addEventListener("input", updateTotals);
-    document.querySelectorAll('input[name="discount-rate"]').forEach((input) => {
-        input.addEventListener("change", updateTotals);
+    addLineButton.addEventListener("click", () => {
+        addLineItem();
     });
 
     invoiceForm.addEventListener("submit", async (event) => {
@@ -249,7 +426,86 @@
         setError("");
         setSuccess("");
 
-        const serialNumbers = Array.from(serialSelect.selectedOptions).map((option) => option.value);
+        const headerErrors = [];
+        if (!invoiceNoInput.value.trim()) {
+            headerErrors.push("Invoice No is required.");
+        }
+        if (!invoiceDateInput.value) {
+            headerErrors.push("Invoice Date is required.");
+        }
+        if (!customerNameInput.value.trim()) {
+            headerErrors.push("Customer Name is required.");
+        }
+
+        const lines = [];
+        const lineErrors = [];
+        const serialTracker = new Set();
+
+        const lineItems = Array.from(lineItemsContainer.querySelectorAll(".line-item"));
+        if (!lineItems.length) {
+            headerErrors.push("Add at least one invoice line.");
+        }
+
+        lineItems.forEach((line) => {
+            const errorMessages = [];
+            const lineError = line.querySelector('[data-field="line_error"]');
+            const itemId = line.querySelector('[data-field="item_id"]').value;
+            const qty = Number.parseInt(line.querySelector('[data-field="qty"]').value || "0", 10);
+            const mrp = Number.parseFloat(line.querySelector('[data-field="mrp"]').value || "0");
+            const discountRate = getLineDiscountRate(line);
+            const discountValue = Number.parseFloat(
+                line.querySelector('[data-field="discount_value"]').value || "0",
+            );
+            const dealerPrice = Number.parseFloat(
+                line.querySelector('[data-field="dealer_price"]').value || "0",
+            );
+            const serials = parseSerials(line.querySelector('[data-field="serial_numbers"]').value);
+
+            if (!itemId) {
+                errorMessages.push("Select an item.");
+            }
+            if (!qty || qty <= 0) {
+                errorMessages.push("Quantity must be greater than zero.");
+            }
+            if (!serials.length) {
+                errorMessages.push("Enter serial numbers.");
+            } else if (qty && serials.length !== qty) {
+                errorMessages.push("Serial count must match quantity.");
+            }
+
+            serials.forEach((serial) => {
+                if (serialTracker.has(serial)) {
+                    errorMessages.push("Duplicate serial numbers found across lines.");
+                }
+                serialTracker.add(serial);
+            });
+
+            if (!mrp) {
+                errorMessages.push("MRP is required.");
+            }
+
+            lineError.textContent = errorMessages.join(" ");
+            lineError.hidden = errorMessages.length === 0;
+            lineErrors.push(errorMessages);
+
+            lines.push({
+                item_id: itemId,
+                qty,
+                mrp,
+                trade_discount_rate: discountRate,
+                discount_value: discountValue,
+                dealer_price: dealerPrice,
+                serial_numbers: serials,
+            });
+        });
+
+        if (headerErrors.length || lineErrors.some((entry) => entry.length)) {
+            const summaryError =
+                headerErrors.join(" ") || "Please fix the highlighted invoice line errors.";
+            setError(summaryError);
+            return;
+        }
+
         const payload = {
             invoice_no: invoiceNoInput.value.trim(),
             invoice_date: invoiceDateInput.value,
@@ -257,15 +513,11 @@
             city: customerCityInput.value.trim(),
             district: customerDistrictInput.value.trim(),
             province: customerProvinceInput.value.trim(),
-            item_code: itemCodeSelect.value,
-            serial_numbers: serialNumbers,
-            quantity: Number.parseInt(quantityInput.value || "0", 10),
-            mrp: mrpInput.value,
-            discount_rate: getSelectedDiscount(),
+            lines,
         };
 
         try {
-            const response = await fetch("/api/exsol/sales/invoice", {
+            const response = await fetch("/api/exsol/sales-invoices", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -279,9 +531,7 @@
                 const errorText =
                     data?.errors?.invoice_no ||
                     data?.errors?.serial_numbers ||
-                    data?.errors?.quantity ||
-                    data?.errors?.mrp ||
-                    data?.errors?.item_name ||
+                    data?.errors?.lines ||
                     data?.error ||
                     "Unable to save invoice.";
                 throw new Error(errorText);
@@ -291,15 +541,16 @@
             invoiceForm.reset();
             salesRepInput.value = user?.name || "";
             invoiceDateInput.valueAsDate = new Date();
-            serialSelect.innerHTML = "";
-            updateQuantity();
-            updateTotals();
+            lineItemsContainer.innerHTML = "";
+            addLineItem();
+            updateInvoiceTotals();
         } catch (error) {
             setError(error.message || "Unable to save invoice.");
         }
     });
 
     loadItems();
-    updateTotals();
+    addLineItem();
+    updateInvoiceTotals();
 </script>
 {% endblock %}

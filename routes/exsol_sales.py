@@ -224,6 +224,8 @@ def list_exsol_available_serials():
     )
     if not item:
         return _build_error("Item not found.", 404)
+    if not item.is_serialized:
+        return jsonify({"item_id": item_id, "serials": []})
 
     serial_rows = (
         db.session.query(ExsolProductionSerial)
@@ -353,17 +355,22 @@ def _validate_invoice_payload(payload: dict[str, Any]):
         if not item_id or item_id not in items_by_id:
             line_error["item_id"] = "Item selection is required."
 
+        item = items_by_id.get(item_id)
         qty = _parse_int(line.get("qty"))
         if qty is None or qty <= 0:
             line_error["qty"] = "Quantity must be a positive number."
 
         serials = _normalize_serials(line.get("serial_numbers"))
-        if not serials:
-            line_error["serial_numbers"] = "Serial numbers are required."
-        elif qty is not None and qty != len(serials):
-            line_error["serial_numbers"] = "Serial count must match the quantity."
+        requires_serials = bool(item and item.is_serialized)
+        if requires_serials:
+            if not serials:
+                line_error["serial_numbers"] = "Serial numbers are required."
+            elif qty is not None and qty != len(serials):
+                line_error["serial_numbers"] = "Serial count must match the quantity."
+        else:
+            serials = []
 
-        if serials:
+        if serials and requires_serials:
             all_serials.extend(serials)
 
         mrp = _parse_decimal(line.get("mrp"))
@@ -392,7 +399,7 @@ def _validate_invoice_payload(payload: dict[str, Any]):
         prepared_lines.append(
             {
                 "item_id": item_id,
-                "item": items_by_id.get(item_id),
+                "item": item,
                 "qty": qty,
                 "serials": serials,
                 "mrp": mrp,
@@ -424,7 +431,7 @@ def _validate_invoice_payload(payload: dict[str, Any]):
 
     for idx, prepared in enumerate(prepared_lines):
         item = prepared["item"]
-        if not item:
+        if not item or not item.is_serialized:
             continue
         missing = [serial for serial in prepared["serials"] if serial not in serial_map]
         mismatched = [

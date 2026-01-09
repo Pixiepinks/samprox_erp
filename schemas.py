@@ -509,6 +509,7 @@ class ExsolInventoryItemSchema(Schema):
     item_name = fields.Str(required=True)
     uom = fields.Str(allow_none=True)
     is_active = fields.Bool()
+    is_serialized = fields.Bool()
     created_at = fields.DateTime()
     updated_at = fields.DateTime()
 

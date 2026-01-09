@@ -273,6 +273,7 @@ def create_app():
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
             "ui.sales_production_page",
+            "ui.sales_invoice_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
             "ui.sales_dashboard_redirect",

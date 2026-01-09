@@ -144,6 +144,13 @@ def _has_exsol_production_access() -> bool:
     return True
 
 
+def _has_exsol_sales_access() -> bool:
+    """Return True if the viewer is allowed to access Exsol sales invoices."""
+
+    role = _current_role()
+    return role in {RoleEnum.sales_manager, RoleEnum.sales_executive}
+
+
 def _has_rainbows_end_market_access() -> bool:
     """Grant special market access to the Rainbows End Trading outside manager."""
 
@@ -315,6 +322,7 @@ def _enforce_role_page_restrictions():
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
+            "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",
@@ -411,6 +419,16 @@ def sales_production_page():
         return render_template("403.html"), 403
 
     return render_template("exsol_production.html", active_tab="data-entry")
+
+
+@bp.get("/sales/invoice")
+def sales_invoice_page():
+    """Render the Exsol sales invoice page."""
+
+    if not _has_exsol_sales_access():
+        return render_template("403.html"), 403
+
+    return render_template("exsol_sales_invoice.html", active_tab="data-entry")
 
 
 @bp.get("/exsol/inventory")

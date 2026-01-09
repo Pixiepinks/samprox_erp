@@ -322,6 +322,7 @@ def _enforce_role_page_restrictions():
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
+            "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",

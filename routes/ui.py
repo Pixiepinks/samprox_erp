@@ -334,8 +334,17 @@ def _enforce_role_page_restrictions():
     if endpoint is None:
         return None
 
+    normalized_path = request.path.rstrip("/") or "/"
+    is_exsol_reports_path = (
+        normalized_path == "/sales/exsol/reports"
+        or normalized_path == "/sales/exsol/reports/invoices"
+        or normalized_path.startswith("/sales/exsol/reports/")
+    )
+
     role = _current_role()
     if role in SALES_MANAGER_ROLES:
+        if is_exsol_reports_path:
+            return None
         allowed_endpoints = {
             "ui.login_page",
             "ui.sales_dashboard_page",
@@ -351,17 +360,23 @@ def _enforce_role_page_restrictions():
         return redirect(url_for("ui.sales_dashboard_page"))
 
     if role == RoleEnum.sales:
+        if is_exsol_reports_path:
+            return None
         allowed_endpoints = {"ui.login_page", "ui.money_page", "ui.sales_visits_page", "ui.sales_visits_alias"}
         if endpoint in allowed_endpoints:
             return None
         return redirect(url_for("ui.sales_visits_page"))
 
     if role == RoleEnum.maintenance_manager:
+        if is_exsol_reports_path:
+            return None
         if endpoint in {"ui.machines_page", "ui.login_page"}:
             return None
         return redirect(url_for("ui.machines_page"))
 
     if role == RoleEnum.outside_manager:
+        if is_exsol_reports_path:
+            return None
         allowed_endpoints = {
             "ui.login_page",
             "ui.responsibility_portal",

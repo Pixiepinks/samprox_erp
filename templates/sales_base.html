@@ -67,6 +67,27 @@
             }
         }
 
+        const salesManagerAllowedPaths = new Set([
+            "/sales",
+            "/sales/visits",
+            "/sales/dashboard",
+            "/sales/data-entry",
+            "/sales/reports",
+            "/sales/exsol/reports/invoices",
+            "/sales/production",
+            "/sales/invoice",
+            "/sales_visits",
+        ]);
+
+        const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
+        if (
+            (normalizedRole === "sales_manager" || normalizedRole === "sales_executive") &&
+            normalizedPath.startsWith("/sales") &&
+            !salesManagerAllowedPaths.has(normalizedPath)
+        ) {
+            window.location.replace("/sales/dashboard");
+        }
+
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
         const logoutButton = document.getElementById("logout");

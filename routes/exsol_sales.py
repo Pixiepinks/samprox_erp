@@ -40,7 +40,15 @@ def _has_exsol_sales_access() -> bool:
         return False
 
     role = normalize_role(claims.get("role"))
-    return role in {RoleEnum.sales_manager, RoleEnum.sales_executive}
+    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+
+    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
+        return False
+
+    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
+        return False
+
+    return True
 
 
 def _build_error(message: str, status: int = 400, details: Any | None = None):

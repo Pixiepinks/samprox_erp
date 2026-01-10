@@ -77,6 +77,7 @@ from routes import (
     exsol_inventory,
     exsol_production,
     exsol_sales,
+    exsol_reports,
 )
 
 
@@ -238,6 +239,7 @@ def create_app():
     app.register_blueprint(exsol_production.bp)
     app.register_blueprint(exsol_sales.bp)
     app.register_blueprint(exsol_sales.invoices_bp)
+    app.register_blueprint(exsol_reports.bp)
 
     def _jwt_role() -> RoleEnum | None:
         try:
@@ -273,6 +275,7 @@ def create_app():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_reports_page",
+            "ui.exsol_sales_report_invoices_page",
             "ui.sales_production_page",
             "ui.sales_invoice_page",
             "ui.sales_visits_page",

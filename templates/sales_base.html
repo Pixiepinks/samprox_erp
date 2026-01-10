@@ -79,10 +79,11 @@
             "/sales_visits",
         ]);
 
+        const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
         if (
             (normalizedRole === "sales_manager" || normalizedRole === "sales_executive") &&
-            window.location.pathname.startsWith("/sales") &&
-            !salesManagerAllowedPaths.has(window.location.pathname)
+            normalizedPath.startsWith("/sales") &&
+            !salesManagerAllowedPaths.has(normalizedPath)
         ) {
             window.location.replace("/sales/dashboard");
         }

@@ -147,10 +147,6 @@ def _has_exsol_production_access() -> bool:
 def _has_exsol_sales_access() -> bool:
     """Return True if the viewer is allowed to access Exsol sales invoices."""
 
-    role = _current_role()
-    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
-        return False
-
     claims = None
     try:
         verify_jwt_in_request(optional=True)
@@ -158,19 +154,27 @@ def _has_exsol_sales_access() -> bool:
     except Exception:
         claims = None
 
+    role = None
     company_key = None
     if claims:
+        role = normalize_role(claims.get("role"))
         company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
 
-    if not company_key:
+    if role is None or not company_key:
         user = _current_user()
         if user:
-            company_key = (user.company_key or "").strip().lower()
+            if role is None:
+                role = user.role
+            if not company_key:
+                company_key = (user.company_key or "").strip().lower()
 
-    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
+    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
         return False
 
-    return True
+    if role == RoleEnum.admin:
+        return True
+
+    return company_key == "exsol-engineering"
 
 
 def _has_rainbows_end_market_access() -> bool:

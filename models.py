@@ -991,6 +991,7 @@ class ExsolSalesInvoice(db.Model):
     subtotal = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     discount_total = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     grand_total = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    status = db.Column(db.String(30))
     created_by_user_id = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
@@ -1007,6 +1008,12 @@ class ExsolSalesInvoice(db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    receipts = db.relationship(
+        "ExsolSalesReceipt",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -1016,6 +1023,7 @@ class ExsolSalesInvoice(db.Model):
         ),
         Index("ix_exsol_sales_invoices_company_invoice_no", "company_key", "invoice_no"),
         Index("ix_exsol_sales_invoices_company_invoice_date", "company_key", "invoice_date"),
+        Index("ix_exsol_sales_invoices_company_customer", "company_key", "customer_id"),
     )
 
 
@@ -1083,6 +1091,30 @@ class ExsolSalesInvoiceSerial(db.Model):
             "serial_no",
             name="uq_exsol_sales_invoice_serial_company_item_serial",
         ),
+    )
+
+
+class ExsolSalesReceipt(db.Model):
+    __tablename__ = "exsol_sales_receipts"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    invoice_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    receipt_date = db.Column(db.Date, nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    method = db.Column(db.String(40))
+    reference = db.Column(db.String(120))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    invoice = db.relationship("ExsolSalesInvoice", back_populates="receipts")
+
+    __table_args__ = (
+        Index("ix_exsol_sales_receipts_invoice_date", "invoice_id", "receipt_date"),
     )
 
 
@@ -1930,6 +1962,7 @@ class NonSamproxCustomer(db.Model):
 
     __table_args__ = (
         db.Index("ix_non_samprox_customers_city_district", "city", "district"),
+        db.Index("ix_non_samprox_customers_company_name", "company_id", "customer_name"),
     )
 
 

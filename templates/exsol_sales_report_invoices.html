@@ -1,0 +1,518 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "reports" %}
+{% block page_title %}Exsol Sales Report (Invoice) | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Exsol sales reporting</p>
+            <h1>Exsol Sales Report (Invoice)</h1>
+            <p class="section__description">Review invoice totals, payment status, and customer trends for Exsol Engineering (Pvt) Ltd.</p>
+        </div>
+    </header>
+
+    <div class="report-kpis">
+        <div class="report-card">
+            <p class="report-card__label">Total Invoices</p>
+            <h2 class="report-card__value" id="kpi-invoices">0</h2>
+        </div>
+        <div class="report-card">
+            <p class="report-card__label">Gross Sales</p>
+            <h2 class="report-card__value" id="kpi-gross">0.00</h2>
+        </div>
+        <div class="report-card">
+            <p class="report-card__label">Paid</p>
+            <h2 class="report-card__value" id="kpi-paid">0.00</h2>
+        </div>
+        <div class="report-card">
+            <p class="report-card__label">Due</p>
+            <h2 class="report-card__value" id="kpi-due">0.00</h2>
+        </div>
+    </div>
+
+    <div class="report-controls">
+        <form class="filters" id="filters-form">
+            <label class="form-field">
+                <span>Date from</span>
+                <input type="date" id="filter-from" />
+            </label>
+            <label class="form-field">
+                <span>Date to</span>
+                <input type="date" id="filter-to" />
+            </label>
+            <label class="form-field">
+                <span>Status</span>
+                <select id="filter-status">
+                    <option value="">All statuses</option>
+                    <option value="Unpaid">Unpaid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Cancelled">Cancelled</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Customer</span>
+                <select id="filter-customer">
+                    <option value="">All customers</option>
+                </select>
+            </label>
+            <label class="form-field form-field--stretch">
+                <span>Search</span>
+                <input type="search" id="filter-search" placeholder="Invoice no, customer name" />
+            </label>
+            <div class="filters__actions">
+                <button class="button button--primary button--small" type="submit">Apply</button>
+                <button class="button button--ghost button--small" type="button" id="reset-filters">Reset</button>
+            </div>
+        </form>
+        <div class="report-actions">
+            <button class="button button--secondary button--small" id="export-csv">Export CSV</button>
+        </div>
+    </div>
+
+    <div class="alert" id="report-error" hidden></div>
+    <p class="empty-state" id="report-loading">Loading report…</p>
+
+    <div class="table-wrapper" id="report-table" hidden>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th><button type="button" class="sort-button" data-sort="date">Date</button></th>
+                    <th><button type="button" class="sort-button" data-sort="invoice_no">Invoice No</button></th>
+                    <th><button type="button" class="sort-button" data-sort="customer">Customer</button></th>
+                    <th>City</th>
+                    <th><button type="button" class="sort-button" data-sort="total">Total</button></th>
+                    <th>Paid</th>
+                    <th><button type="button" class="sort-button" data-sort="due">Due</button></th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="report-body"></tbody>
+        </table>
+    </div>
+
+    <p class="empty-state" id="report-empty" hidden>No Exsol invoices match the selected filters.</p>
+
+    <div class="pagination" id="report-pagination" hidden>
+        <button class="button button--ghost button--small" id="page-prev">Previous</button>
+        <span id="page-info">Page 1 of 1</span>
+        <button class="button button--ghost button--small" id="page-next">Next</button>
+    </div>
+</section>
+
+<style>
+    .report-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    .report-card {
+        background: #fff;
+        border-radius: 14px;
+        padding: 16px 18px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .report-card__label {
+        margin: 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.04em;
+    }
+
+    .report-card__value {
+        margin: 8px 0 0;
+        font-size: 24px;
+        color: #0f172a;
+    }
+
+    .report-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        align-items: end;
+        background: #fff;
+        padding: 16px;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .filters__actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .form-field--stretch {
+        grid-column: span 2;
+    }
+
+    .form-field input,
+    .form-field select {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 14px;
+        color: #0f172a;
+    }
+
+    .report-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .table-wrapper {
+        background: #fff;
+        padding: 8px 0 0;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .table th,
+    .table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: left;
+    }
+
+    .table th {
+        font-size: 12px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .sort-button {
+        border: none;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .status-pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .status-pill--paid {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-pill--partial {
+        background: #fef9c3;
+        color: #854d0e;
+    }
+
+    .status-pill--unpaid {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .status-pill--draft {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    .status-pill--cancelled {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .empty-state {
+        margin: 16px 0;
+        color: #94a3b8;
+    }
+
+    @media (max-width: 900px) {
+        .form-field--stretch {
+            grid-column: span 1;
+        }
+    }
+</style>
+
+<script>
+    const token = localStorage.getItem("samprox_token");
+
+    const state = {
+        page: 1,
+        pageSize: 25,
+        sortBy: "date",
+        sortDir: "desc",
+        totalPages: 1,
+    };
+
+    const elements = {
+        form: document.getElementById("filters-form"),
+        dateFrom: document.getElementById("filter-from"),
+        dateTo: document.getElementById("filter-to"),
+        status: document.getElementById("filter-status"),
+        customer: document.getElementById("filter-customer"),
+        search: document.getElementById("filter-search"),
+        reset: document.getElementById("reset-filters"),
+        exportCsv: document.getElementById("export-csv"),
+        kpiInvoices: document.getElementById("kpi-invoices"),
+        kpiGross: document.getElementById("kpi-gross"),
+        kpiPaid: document.getElementById("kpi-paid"),
+        kpiDue: document.getElementById("kpi-due"),
+        error: document.getElementById("report-error"),
+        loading: document.getElementById("report-loading"),
+        table: document.getElementById("report-table"),
+        body: document.getElementById("report-body"),
+        empty: document.getElementById("report-empty"),
+        pagination: document.getElementById("report-pagination"),
+        pagePrev: document.getElementById("page-prev"),
+        pageNext: document.getElementById("page-next"),
+        pageInfo: document.getElementById("page-info"),
+        sortButtons: Array.from(document.querySelectorAll(".sort-button")),
+    };
+
+    const formatMoney = (value) => {
+        const numeric = Number(value || 0);
+        return numeric.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const statusClassMap = {
+        paid: "status-pill--paid",
+        "partially paid": "status-pill--partial",
+        unpaid: "status-pill--unpaid",
+        draft: "status-pill--draft",
+        cancelled: "status-pill--cancelled",
+    };
+
+    const buildParams = () => {
+        const params = new URLSearchParams();
+        if (elements.dateFrom.value) params.set("date_from", elements.dateFrom.value);
+        if (elements.dateTo.value) params.set("date_to", elements.dateTo.value);
+        if (elements.status.value) params.set("status", elements.status.value);
+        if (elements.customer.value) params.set("customer_id", elements.customer.value);
+        if (elements.search.value.trim()) params.set("q", elements.search.value.trim());
+        params.set("page", state.page);
+        params.set("page_size", state.pageSize);
+        params.set("sort_by", state.sortBy);
+        params.set("sort_dir", state.sortDir);
+        return params.toString();
+    };
+
+    const setLoading = (isLoading) => {
+        elements.loading.hidden = !isLoading;
+        elements.table.hidden = isLoading;
+        elements.empty.hidden = true;
+        elements.pagination.hidden = true;
+    };
+
+    const setError = (message) => {
+        elements.error.textContent = message || "";
+        elements.error.hidden = !message;
+    };
+
+    const updateKpis = (kpis) => {
+        elements.kpiInvoices.textContent = kpis.invoice_count || 0;
+        elements.kpiGross.textContent = formatMoney(kpis.gross_sales);
+        elements.kpiPaid.textContent = formatMoney(kpis.paid);
+        elements.kpiDue.textContent = formatMoney(kpis.due);
+    };
+
+    const updateTable = (rows) => {
+        elements.body.innerHTML = "";
+        if (!rows.length) {
+            elements.table.hidden = true;
+            elements.empty.hidden = false;
+            return;
+        }
+
+        rows.forEach((row) => {
+            const tr = document.createElement("tr");
+            const statusLabel = row.status || row.payment_status || "";
+            const statusKey = statusLabel.toLowerCase();
+
+            const invoiceLink = document.createElement("a");
+            invoiceLink.href = `/sales/invoice?invoice_id=${row.invoice_id}`;
+            invoiceLink.textContent = row.invoice_no;
+            invoiceLink.className = "link";
+
+            tr.innerHTML = `
+                <td>${row.invoice_date || ""}</td>
+                <td></td>
+                <td>${row.customer_name || ""}</td>
+                <td>${row.customer_city || ""}</td>
+                <td>${formatMoney(row.total)}</td>
+                <td>${formatMoney(row.paid)}</td>
+                <td>${formatMoney(row.due)}</td>
+                <td></td>
+            `;
+            tr.children[1].appendChild(invoiceLink);
+
+            const statusCell = tr.children[7];
+            const statusPill = document.createElement("span");
+            statusPill.className = `status-pill ${statusClassMap[statusKey] || "status-pill--draft"}`;
+            statusPill.textContent = statusLabel || "N/A";
+            statusCell.appendChild(statusPill);
+
+            elements.body.appendChild(tr);
+        });
+
+        elements.table.hidden = false;
+        elements.empty.hidden = true;
+    };
+
+    const updatePagination = (pagination) => {
+        state.totalPages = pagination.total_pages || 1;
+        elements.pageInfo.textContent = `Page ${pagination.page || 1} of ${state.totalPages}`;
+        elements.pagePrev.disabled = pagination.page <= 1;
+        elements.pageNext.disabled = pagination.page >= state.totalPages;
+        elements.pagination.hidden = state.totalPages <= 1;
+    };
+
+    const loadReport = async () => {
+        setError("");
+        setLoading(true);
+
+        try {
+            const response = await fetch(`/api/exsol/reports/sales/invoices?${buildParams()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (!response.ok) {
+                throw new Error("Unable to load report data.");
+            }
+
+            const data = await response.json();
+            updateKpis(data.kpis || {});
+            updateTable(data.rows || []);
+            updatePagination(data.pagination || {});
+        } catch (error) {
+            setError(error.message || "Unable to load report data.");
+            elements.table.hidden = true;
+            elements.empty.hidden = true;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadCustomers = async () => {
+        try {
+            const response = await fetch("/api/exsol/customers", {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) return;
+            const customers = await response.json();
+
+            customers.forEach((customer) => {
+                const option = document.createElement("option");
+                option.value = customer.id;
+                option.textContent = customer.name;
+                elements.customer.appendChild(option);
+            });
+        } catch (error) {
+            console.warn("Unable to load customers", error);
+        }
+    };
+
+    elements.form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        state.page = 1;
+        loadReport();
+    });
+
+    elements.reset.addEventListener("click", () => {
+        elements.form.reset();
+        state.page = 1;
+        state.sortBy = "date";
+        state.sortDir = "desc";
+        loadReport();
+    });
+
+    elements.pagePrev.addEventListener("click", () => {
+        if (state.page > 1) {
+            state.page -= 1;
+            loadReport();
+        }
+    });
+
+    elements.pageNext.addEventListener("click", () => {
+        if (state.page < state.totalPages) {
+            state.page += 1;
+            loadReport();
+        }
+    });
+
+    elements.sortButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const sortKey = button.dataset.sort;
+            if (state.sortBy === sortKey) {
+                state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+            } else {
+                state.sortBy = sortKey;
+                state.sortDir = "desc";
+            }
+            loadReport();
+        });
+    });
+
+    elements.exportCsv.addEventListener("click", async () => {
+        try {
+            const response = await fetch(`/api/exsol/reports/sales/invoices/export.csv?${buildParams()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to export CSV.");
+            }
+            const blob = await response.blob();
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "exsol_sales_invoices.csv";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            setError(error.message || "Unable to export CSV.");
+        }
+    });
+
+    loadCustomers();
+    loadReport();
+</script>
+{% endblock %}

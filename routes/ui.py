@@ -148,7 +148,29 @@ def _has_exsol_sales_access() -> bool:
     """Return True if the viewer is allowed to access Exsol sales invoices."""
 
     role = _current_role()
-    return role in {RoleEnum.sales_manager, RoleEnum.sales_executive}
+    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
+        return False
+
+    claims = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+    except Exception:
+        claims = None
+
+    company_key = None
+    if claims:
+        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+
+    if not company_key:
+        user = _current_user()
+        if user:
+            company_key = (user.company_key or "").strip().lower()
+
+    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
+        return False
+
+    return True
 
 
 def _has_rainbows_end_market_access() -> bool:
@@ -409,6 +431,16 @@ def sales_data_entry_page():
 def sales_reports_page():
     """Render the Sales Manager reports shell."""
     return render_template("sales_reports.html", active_tab="reports")
+
+
+@bp.get("/sales/exsol/reports/invoices")
+def exsol_sales_report_invoices_page():
+    """Render the Exsol sales invoice report page."""
+
+    if not _has_exsol_sales_access():
+        return render_template("403.html"), 403
+
+    return render_template("exsol_sales_report_invoices.html", active_tab="reports")
 
 
 @bp.get("/sales/production")

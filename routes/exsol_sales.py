@@ -523,8 +523,12 @@ def _create_invoice(payload: dict[str, Any]):
         grand_total += line["line_total"]
 
     try:
+        session = db.session
+        real_session = session if hasattr(session, "in_transaction") else session()
         transaction_ctx = (
-            db.session.begin_nested() if db.session.in_transaction() else db.session.begin()
+            real_session.begin_nested()
+            if real_session.in_transaction()
+            else real_session.begin()
         )
         with transaction_ctx:
             invoice = ExsolSalesInvoice(

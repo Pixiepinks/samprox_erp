@@ -982,27 +982,27 @@ class ExsolProductionSerial(db.Model):
 class ExsolSalesInvoice(db.Model):
     __tablename__ = "exsol_sales_invoices"
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
     company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
-    company_name = db.Column(
-        db.String(255),
-        nullable=False,
-        default="Exsol Engineering (Pvt) Ltd",
-    )
     invoice_no = db.Column(db.String(60), nullable=False)
     invoice_date = db.Column(db.Date, nullable=False)
-    customer_name = db.Column(db.String(255), nullable=False)
-    city = db.Column(db.String(120))
-    district = db.Column(db.String(120))
-    province = db.Column(db.String(120))
+    customer_id = db.Column(GUID(), db.ForeignKey("non_samprox_customers.id"), nullable=False)
     sales_rep_id = db.Column(db.Integer, nullable=False)
-    sales_rep_name = db.Column(db.String(255), nullable=False)
+    subtotal = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    discount_total = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    grand_total = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     created_by_user_id = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    customer = db.relationship("NonSamproxCustomer")
     lines = db.relationship(
         "ExsolSalesInvoiceLine",
+        back_populates="invoice",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    serials = db.relationship(
+        "ExsolSalesInvoiceSerial",
         back_populates="invoice",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -1014,7 +1014,8 @@ class ExsolSalesInvoice(db.Model):
             "invoice_no",
             name="uq_exsol_sales_invoices_company_invoice_no",
         ),
-        Index("ix_exsol_sales_invoices_invoice_date", "invoice_date"),
+        Index("ix_exsol_sales_invoices_company_invoice_no", "company_key", "invoice_no"),
+        Index("ix_exsol_sales_invoices_company_invoice_date", "company_key", "invoice_date"),
         {"schema": "exsol_sales"},
     )
 
@@ -1022,30 +1023,67 @@ class ExsolSalesInvoice(db.Model):
 class ExsolSalesInvoiceLine(db.Model):
     __tablename__ = "exsol_sales_invoice_lines"
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
     invoice_id = db.Column(
-        db.BigInteger,
+        GUID(),
         db.ForeignKey("exsol_sales.exsol_sales_invoices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     item_id = db.Column(db.String(36), db.ForeignKey("exsol_inventory_items.id"), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
-    mrp = db.Column(db.Numeric(14, 2), nullable=False)
-    trade_discount_rate = db.Column(db.Numeric(6, 4), nullable=False)
-    discount_value = db.Column(db.Numeric(14, 2), nullable=False)
-    dealer_price = db.Column(db.Numeric(14, 2), nullable=False)
-    line_total = db.Column(db.Numeric(14, 2), nullable=True)
-    serials_json = db.Column(db.JSON, nullable=False, default=list)
+    qty = db.Column(db.Integer, nullable=False)
+    mrp = db.Column(db.Numeric(14, 2))
+    unit_price = db.Column(db.Numeric(14, 2), nullable=False)
+    discount_rate = db.Column(db.Numeric(6, 4))
+    discount_value = db.Column(db.Numeric(14, 2))
+    line_total = db.Column(db.Numeric(14, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     invoice = db.relationship("ExsolSalesInvoice", back_populates="lines")
+    serials = db.relationship(
+        "ExsolSalesInvoiceSerial",
+        back_populates="line",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
-        CheckConstraint("quantity > 0", name="ck_exsol_sales_invoice_lines_qty_positive"),
-        CheckConstraint(
-            "trade_discount_rate IN (0.26, 0.31)",
-            name="ck_exsol_sales_invoice_lines_discount_rate",
+        CheckConstraint("qty > 0", name="ck_exsol_sales_invoice_lines_qty_positive"),
+        {"schema": "exsol_sales"},
+    )
+
+
+class ExsolSalesInvoiceSerial(db.Model):
+    __tablename__ = "exsol_sales_invoice_serials"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    invoice_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales.exsol_sales_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    line_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales.exsol_sales_invoice_lines.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_id = db.Column(db.String(36), db.ForeignKey("exsol_inventory_items.id"), nullable=False)
+    serial_no = db.Column(db.String(60), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    invoice = db.relationship("ExsolSalesInvoice", back_populates="serials")
+    line = db.relationship("ExsolSalesInvoiceLine", back_populates="serials")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_key",
+            "item_id",
+            "serial_no",
+            name="uq_exsol_sales_invoice_serial_company_item_serial",
         ),
         {"schema": "exsol_sales"},
     )

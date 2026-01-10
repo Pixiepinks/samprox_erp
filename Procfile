@@ -1,1 +1,2 @@
 web: WEB_CONCURRENCY=1 GUNICORN_CMD_ARGS="--timeout 180 --graceful-timeout 180 --workers 1 --threads 8 --worker-class gthread --keep-alive 5 --max-requests 200 --max-requests-jitter 50 --log-level info --access-logfile - --error-logfile -" gunicorn app:app
+release: alembic -c migrations/alembic.ini upgrade head

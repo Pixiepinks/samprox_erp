@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import re
 from typing import Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -17,6 +17,7 @@ from models import (
     ExsolProductionSerial,
     ExsolSalesInvoice,
     ExsolSalesInvoiceLine,
+    ExsolSalesInvoiceSerial,
     NonSamproxCustomer,
     RoleEnum,
     User,
@@ -29,8 +30,6 @@ invoices_bp = Blueprint("exsol_sales_invoices", __name__, url_prefix="/api/exsol
 
 EXSOL_COMPANY_NAME = "Exsol Engineering (Pvt) Ltd"
 EXSOL_COMPANY_KEY = "EXSOL"
-ALLOWED_DISCOUNT_RATES = {Decimal("0.26"), Decimal("0.31")}
-
 items_schema = ExsolInventoryItemSchema(many=True)
 
 
@@ -44,9 +43,9 @@ def _has_exsol_sales_access() -> bool:
     return role in {RoleEnum.sales_manager, RoleEnum.sales_executive}
 
 
-def _build_error(message: str, status: int = 400, details: dict[str, Any] | None = None):
+def _build_error(message: str, status: int = 400, details: Any | None = None):
     payload: dict[str, Any] = {"ok": False, "error": message}
-    if details:
+    if details is not None:
         payload["details"] = details
     return jsonify(payload), status
 
@@ -247,30 +246,58 @@ def _format_money(value: Decimal | None) -> str | None:
 
 
 def _build_invoice_response(invoice: ExsolSalesInvoice, lines: list[ExsolSalesInvoiceLine]):
-    total_qty = sum(line.quantity for line in lines)
-    subtotal = sum(Decimal(line.mrp) * line.quantity for line in lines)
-    total_discount = sum(Decimal(line.discount_value) * line.quantity for line in lines)
-    grand_total = sum(Decimal(line.line_total or 0) for line in lines)
+    total_qty = 0
+    subtotal = Decimal(0)
+    total_discount = Decimal(0)
+    grand_total = Decimal(0)
+
+    line_serials: dict[str, list[str]] = {}
+    if lines:
+        serial_rows = (
+            ExsolSalesInvoiceSerial.query.filter(
+                ExsolSalesInvoiceSerial.invoice_id == invoice.id
+            )
+            .order_by(ExsolSalesInvoiceSerial.serial_no.asc())
+            .all()
+        )
+        for serial in serial_rows:
+            line_serials.setdefault(str(serial.line_id), []).append(serial.serial_no)
+
+    for line in lines:
+        qty = line.qty
+        total_qty += qty
+        if line.mrp is not None:
+            subtotal += Decimal(line.mrp) * qty
+        else:
+            subtotal += Decimal(line.unit_price) * qty
+        if line.discount_value is not None:
+            total_discount += Decimal(line.discount_value) * qty
+        grand_total += Decimal(line.line_total or 0)
+
+    customer = invoice.customer
     return {
-        "id": invoice.id,
+        "id": str(invoice.id),
         "invoice_no": invoice.invoice_no,
         "invoice_date": invoice.invoice_date.isoformat(),
-        "customer_name": invoice.customer_name,
-        "city": invoice.city,
-        "district": invoice.district,
-        "province": invoice.province,
-        "sales_representative": invoice.sales_rep_name,
+        "customer_id": str(invoice.customer_id),
+        "customer_name": customer.customer_name if customer else None,
+        "city": customer.city if customer else None,
+        "district": customer.district if customer else None,
+        "province": customer.province if customer else None,
+        "sales_rep_id": invoice.sales_rep_id,
         "lines": [
             {
-                "id": line.id,
+                "id": str(line.id),
                 "item_id": line.item_id,
-                "qty": line.quantity,
-                "mrp": _format_money(Decimal(line.mrp)),
-                "trade_discount_rate": str(line.trade_discount_rate),
-                "discount_value": _format_money(Decimal(line.discount_value)),
-                "dealer_price": _format_money(Decimal(line.dealer_price)),
+                "qty": line.qty,
+                "mrp": _format_money(Decimal(line.mrp)) if line.mrp is not None else None,
+                "discount_rate": str(line.discount_rate) if line.discount_rate is not None else None,
+                "discount_value": _format_money(Decimal(line.discount_value))
+                if line.discount_value is not None
+                else None,
+                "unit_price": _format_money(Decimal(line.unit_price)),
                 "line_total": _format_money(Decimal(line.line_total or 0)),
-                "serial_numbers": line.serials_json,
+                "serial_numbers": line_serials.get(str(line.id), []),
             }
             for line in lines
         ],
@@ -299,6 +326,15 @@ def _validate_invoice_payload(payload: dict[str, Any]):
     if not customer_id:
         errors["customer_id"] = "Customer selection is required."
 
+    sales_rep_raw = payload.get("sales_rep_id")
+    if sales_rep_raw in (None, ""):
+        errors["sales_rep_id"] = "Sales representative is required."
+        sales_rep_id = None
+    else:
+        sales_rep_id = _parse_int(sales_rep_raw)
+        if sales_rep_id is None:
+            errors["sales_rep_id"] = "Sales representative must be a number."
+
     lines_payload = payload.get("lines") or []
     if not isinstance(lines_payload, list) or not lines_payload:
         errors["lines"] = "At least one invoice line is required."
@@ -323,18 +359,6 @@ def _validate_invoice_payload(payload: dict[str, Any]):
     if not customer:
         errors["customer_id"] = "Customer selection is required."
         return None, None, errors, line_errors
-
-    sales_rep_id = _parse_int(payload.get("sales_rep_id"))
-    if sales_rep_id is None and customer.managed_by_user_id:
-        sales_rep_id = customer.managed_by_user_id
-
-    sales_rep_name = None
-    if sales_rep_id is not None:
-        sales_rep_user = User.query.get(sales_rep_id)
-        if sales_rep_user:
-            sales_rep_name = sales_rep_user.name
-    if sales_rep_name is None and customer.managed_by_label:
-        sales_rep_name = customer.managed_by_label
 
     item_ids = {str(line.get("item_id")) for line in lines_payload if line.get("item_id")}
     items = (
@@ -374,26 +398,21 @@ def _validate_invoice_payload(payload: dict[str, Any]):
             all_serials.extend(serials)
 
         mrp = _parse_decimal(line.get("mrp"))
-        if mrp is None or mrp <= 0:
-            line_error["mrp"] = "MRP is required."
-
-        discount_rate = _parse_discount_rate(line.get("trade_discount_rate"))
-        if discount_rate not in ALLOWED_DISCOUNT_RATES:
-            line_error["trade_discount_rate"] = "Trade discount must be 26% or 31%."
-
+        discount_rate = _parse_discount_rate(line.get("discount_rate") or line.get("trade_discount_rate"))
         discount_value = _parse_decimal(line.get("discount_value"))
-        dealer_price = _parse_decimal(line.get("dealer_price"))
 
-        if not line_error and mrp and discount_rate:
-            if discount_value is None:
-                discount_value = (mrp * discount_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if dealer_price is None:
-                dealer_price = (mrp - discount_value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        unit_price = _parse_decimal(line.get("unit_price") or line.get("dealer_price"))
+        if unit_price is None or unit_price < 0:
+            line_error["unit_price"] = "Unit price is required."
 
-        if discount_value is None or discount_value < 0:
-            line_error["discount_value"] = "Discount value is required."
-        if dealer_price is None or dealer_price < 0:
-            line_error["dealer_price"] = "Dealer price is required."
+        line_total = _parse_decimal(line.get("line_total"))
+        if line_total is None or line_total <= 0:
+            line_error["line_total"] = "Line total is required."
+
+        if discount_rate is not None and discount_rate < 0:
+            line_error["discount_rate"] = "Discount rate must be positive."
+        if discount_value is not None and discount_value < 0:
+            line_error["discount_value"] = "Discount value must be positive."
 
         line_errors.append(line_error)
         prepared_lines.append(
@@ -403,9 +422,10 @@ def _validate_invoice_payload(payload: dict[str, Any]):
                 "qty": qty,
                 "serials": serials,
                 "mrp": mrp,
-                "trade_discount_rate": discount_rate,
+                "discount_rate": discount_rate,
                 "discount_value": discount_value,
-                "dealer_price": dealer_price,
+                "unit_price": unit_price,
+                "line_total": line_total,
             }
         )
 
@@ -451,12 +471,8 @@ def _validate_invoice_payload(payload: dict[str, Any]):
         {
             "invoice_no": invoice_no,
             "invoice_date": invoice_date,
-            "customer_name": customer.customer_name,
-            "city": (customer.city or "").strip() or None,
-            "district": (customer.district or "").strip() or None,
-            "province": (customer.province or "").strip() or None,
+            "customer_id": customer.id,
             "sales_rep_id": sales_rep_id,
-            "sales_rep_name": sales_rep_name,
         },
         prepared_lines,
         errors,
@@ -467,7 +483,13 @@ def _validate_invoice_payload(payload: dict[str, Any]):
 def _create_invoice(payload: dict[str, Any]):
     parsed_header, prepared_lines, errors, line_errors = _validate_invoice_payload(payload)
     if errors or any(line_errors):
-        return jsonify({"errors": errors, "line_errors": line_errors}), 400
+        details: list[str] = []
+        for field, message in errors.items():
+            details.append(f"{field}: {message}")
+        for idx, line_error in enumerate(line_errors, start=1):
+            for field, message in line_error.items():
+                details.append(f"line {idx} {field}: {message}")
+        return jsonify({"error": "Validation failed.", "details": details}), 400
 
     current_user_id = get_jwt_identity()
     user = User.query.get(int(current_user_id)) if current_user_id else None
@@ -486,47 +508,63 @@ def _create_invoice(payload: dict[str, Any]):
         )
         serial_map = {row.serial_no: row for row in serial_rows}
 
+    subtotal = Decimal(0)
+    discount_total = Decimal(0)
+    grand_total = Decimal(0)
+
+    for line in prepared_lines:
+        qty = Decimal(line["qty"] or 0)
+        if line["mrp"] is not None:
+            subtotal += line["mrp"] * qty
+        else:
+            subtotal += line["unit_price"] * qty
+        if line["discount_value"] is not None:
+            discount_total += line["discount_value"] * qty
+        grand_total += line["line_total"]
+
     try:
         with db.session.begin():
             invoice = ExsolSalesInvoice(
                 company_key=EXSOL_COMPANY_KEY,
-                company_name=EXSOL_COMPANY_NAME,
                 invoice_no=parsed_header["invoice_no"],
                 invoice_date=parsed_header["invoice_date"],
-                customer_name=parsed_header["customer_name"],
-                city=parsed_header["city"],
-                district=parsed_header["district"],
-                province=parsed_header["province"],
-                sales_rep_id=parsed_header.get("sales_rep_id") or user.id,
-                sales_rep_name=parsed_header.get("sales_rep_name") or user.name,
+                customer_id=parsed_header["customer_id"],
+                sales_rep_id=parsed_header["sales_rep_id"],
+                subtotal=subtotal,
+                discount_total=discount_total,
+                grand_total=grand_total,
                 created_by_user_id=user.id,
             )
             db.session.add(invoice)
 
             line_models: list[ExsolSalesInvoiceLine] = []
             for line in prepared_lines:
-                line_total = (line["dealer_price"] * Decimal(line["qty"])).quantize(
-                    Decimal("0.01"),
-                    rounding=ROUND_HALF_UP,
-                )
                 line_model = ExsolSalesInvoiceLine(
                     invoice=invoice,
+                    company_key=EXSOL_COMPANY_KEY,
                     item_id=line["item_id"],
-                    quantity=line["qty"],
+                    qty=line["qty"],
                     mrp=line["mrp"],
-                    trade_discount_rate=line["trade_discount_rate"],
+                    discount_rate=line["discount_rate"],
                     discount_value=line["discount_value"],
-                    dealer_price=line["dealer_price"],
-                    line_total=line_total,
-                    serials_json=line["serials"],
+                    unit_price=line["unit_price"],
+                    line_total=line["line_total"],
                 )
                 db.session.add(line_model)
                 line_models.append(line_model)
 
                 for serial in line["serials"]:
-                    serial_model = serial_map.get(serial)
-                    if serial_model:
-                        serial_model.is_sold = True
+                    serial_model = ExsolSalesInvoiceSerial(
+                        company_key=EXSOL_COMPANY_KEY,
+                        invoice=invoice,
+                        line=line_model,
+                        item_id=line["item_id"],
+                        serial_no=serial,
+                    )
+                    db.session.add(serial_model)
+                    production_serial = serial_map.get(serial)
+                    if production_serial:
+                        production_serial.is_sold = True
 
     except IntegrityError:
         db.session.rollback()
@@ -540,6 +578,18 @@ def _create_invoice(payload: dict[str, Any]):
         ), 400
     except SQLAlchemyError:
         db.session.rollback()
+        current_app.logger.exception(
+            {
+                "event": "exsol_invoice_create_failed",
+                "company_key": EXSOL_COMPANY_KEY,
+                "invoice_no": parsed_header.get("invoice_no") if parsed_header else None,
+                "user_id": user.id,
+                "payload_summary": {
+                    "customer_id": str(parsed_header.get("customer_id")) if parsed_header else None,
+                    "line_count": len(prepared_lines or []),
+                },
+            }
+        )
         return _build_error("Unable to save the invoice right now.", 500)
 
     return jsonify({"ok": True, "invoice": _build_invoice_response(invoice, line_models)}), 201
@@ -565,9 +615,9 @@ def create_sales_invoice():
     return _create_invoice(payload)
 
 
-@invoices_bp.get("/sales-invoices/<int:invoice_id>")
+@invoices_bp.get("/sales-invoices/<string:invoice_id>")
 @jwt_required()
-def get_sales_invoice(invoice_id: int):
+def get_sales_invoice(invoice_id: str):
     if not _has_exsol_sales_access():
         return _build_error("Access denied", 403)
 

@@ -37,18 +37,37 @@ def _has_exsol_sales_access() -> bool:
     try:
         claims = get_jwt()
     except Exception:
-        return False
+        claims = None
 
-    role = normalize_role(claims.get("role"))
-    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+    role = None
+    company_key = None
+    if claims:
+        role = normalize_role(claims.get("role"))
+        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+
+    if role is None or not company_key:
+        identity = get_jwt_identity()
+        if identity:
+            try:
+                user_id = int(identity)
+            except (TypeError, ValueError):
+                user_id = None
+
+            if user_id:
+                user = User.query.get(user_id)
+                if user:
+                    if role is None:
+                        role = user.role
+                    if not company_key:
+                        company_key = (user.company_key or "").strip().lower()
 
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
         return False
 
-    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
-        return False
+    if role == RoleEnum.admin:
+        return True
 
-    return True
+    return company_key == "exsol-engineering"
 
 
 def _build_error(message: str, status: int = 400, details: Any | None = None):

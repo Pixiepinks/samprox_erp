@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -34,34 +34,39 @@ items_schema = ExsolInventoryItemSchema(many=True)
 
 
 def _has_exsol_sales_access() -> bool:
+    """
+    API access control for Exsol sales endpoints.
+    Allow: admin, sales_manager, sales_executive
+    For non-admin, require company_key == 'exsol-engineering'.
+    """
     try:
-        claims = get_jwt()
+        # Optional so endpoints can still return False cleanly if missing
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt() or {}
     except Exception:
-        claims = None
+        claims = {}
 
-    role = None
-    company_key = None
-    if claims:
-        role = normalize_role(claims.get("role"))
-        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+    role = normalize_role(claims.get("role"))
+    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
 
+    # Fallback to DB user if JWT claims are incomplete
     if role is None or not company_key:
         identity = get_jwt_identity()
-        if identity:
-            try:
-                user_id = int(identity)
-            except (TypeError, ValueError):
-                user_id = None
+        try:
+            user_id = int(identity) if identity is not None else None
+        except (TypeError, ValueError):
+            user_id = None
 
-            if user_id:
-                user = User.query.get(user_id)
-                if user:
-                    if role is None:
-                        role = user.role
-                    if not company_key:
-                        company_key = (user.company_key or "").strip().lower()
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                if role is None:
+                    role = user.role
+                if not company_key:
+                    company_key = (user.company_key or "").strip().lower()
 
-    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
+    allowed_roles = {RoleEnum.admin, RoleEnum.sales_manager, RoleEnum.sales_executive}
+    if role not in allowed_roles:
         return False
 
     if role == RoleEnum.admin:

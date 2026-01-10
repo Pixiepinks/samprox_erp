@@ -67,24 +67,29 @@
             }
         }
 
+        const normalizedPath = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
+
         const salesManagerAllowedPaths = new Set([
             "/sales",
             "/sales/visits",
             "/sales/dashboard",
             "/sales/data-entry",
             "/sales/reports",
-            "/sales/exsol/reports/invoices",
             "/sales/production",
             "/sales/invoice",
             "/sales_visits",
+            "/sales/exsol/reports/invoices",
         ]);
 
-        const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
-        if (
-            (normalizedRole === "sales_manager" || normalizedRole === "sales_executive") &&
-            normalizedPath.startsWith("/sales") &&
-            !salesManagerAllowedPaths.has(normalizedPath)
-        ) {
+        const isSalesMgr = normalizedRole === "sales_manager" || normalizedRole === "sales_executive";
+        const isSalesArea = normalizedPath.startsWith("/sales");
+
+        // Allow any Exsol report sub-route (prevents redirect loops on trailing slash / filters / subpages)
+        const isExsolReportPath =
+            normalizedPath === "/sales/exsol/reports/invoices" ||
+            normalizedPath.startsWith("/sales/exsol/reports/");
+
+        if (isSalesMgr && isSalesArea && !isExsolReportPath && !salesManagerAllowedPaths.has(normalizedPath)) {
             window.location.replace("/sales/dashboard");
         }
 

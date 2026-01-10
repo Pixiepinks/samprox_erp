@@ -12,7 +12,7 @@ from flask import (
     request,
     url_for,
 )
-from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
 from sqlalchemy import func, tuple_
 
 from material import (
@@ -145,31 +145,23 @@ def _has_exsol_production_access() -> bool:
 
 
 def _has_exsol_sales_access() -> bool:
-    """Return True if the viewer is allowed to access Exsol sales invoices."""
-
-    claims = None
-    try:
-        verify_jwt_in_request(optional=True)
-        claims = get_jwt()
-    except Exception:
-        claims = None
-
-    role = None
-    company_key = None
-    if claims:
-        role = normalize_role(claims.get("role"))
-        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
-
-    if role is None or not company_key:
-        user = _current_user()
-        if user:
-            if role is None:
-                role = user.role
-            if not company_key:
-                company_key = (user.company_key or "").strip().lower()
-
+    """Return True if the viewer is allowed to access Exsol sales invoices UI pages."""
+    role = _current_role()
     if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
         return False
+
+    company_key = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt() or {}
+        company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+    except Exception:
+        company_key = None
+
+    if not company_key:
+        user = _current_user()
+        if user:
+            company_key = (user.company_key or "").strip().lower()
 
     if role == RoleEnum.admin:
         return True
@@ -438,11 +430,12 @@ def sales_reports_page():
 
 
 @bp.get("/sales/exsol/reports/invoices")
+@jwt_required(optional=True)
 def exsol_sales_report_invoices_page():
     """Render the Exsol sales invoice report page."""
 
     if not _has_exsol_sales_access():
-        return render_template("403.html"), 403
+        return render_template("access_denied.html"), 403
 
     return render_template("exsol_sales_report_invoices.html", active_tab="reports")
 

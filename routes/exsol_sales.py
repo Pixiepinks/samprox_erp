@@ -525,8 +525,11 @@ def _create_invoice(payload: dict[str, Any]):
     try:
         session = db.session
         real_session = session if hasattr(session, "in_transaction") else session()
-        used_nested = real_session.in_transaction()
-        transaction_ctx = real_session.begin_nested() if used_nested else real_session.begin()
+        transaction_ctx = (
+            real_session.begin_nested()
+            if real_session.in_transaction()
+            else real_session.begin()
+        )
         with transaction_ctx:
             invoice = ExsolSalesInvoice(
                 company_key=EXSOL_COMPANY_KEY,
@@ -539,7 +542,7 @@ def _create_invoice(payload: dict[str, Any]):
                 grand_total=grand_total,
                 created_by_user_id=user.id,
             )
-            db.session.add(invoice)
+            real_session.add(invoice)
 
             line_models: list[ExsolSalesInvoiceLine] = []
             for line in prepared_lines:
@@ -554,7 +557,7 @@ def _create_invoice(payload: dict[str, Any]):
                     unit_price=line["unit_price"],
                     line_total=line["line_total"],
                 )
-                db.session.add(line_model)
+                real_session.add(line_model)
                 line_models.append(line_model)
 
                 for serial in line["serials"]:
@@ -565,12 +568,11 @@ def _create_invoice(payload: dict[str, Any]):
                         item_id=line["item_id"],
                         serial_no=serial,
                     )
-                    db.session.add(serial_model)
+                    real_session.add(serial_model)
                     production_serial = serial_map.get(serial)
                     if production_serial:
                         production_serial.is_sold = True
-        if used_nested:
-            real_session.commit()
+        real_session.commit()
 
     except IntegrityError:
         db.session.rollback()

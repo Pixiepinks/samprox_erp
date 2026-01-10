@@ -627,8 +627,8 @@
         mrpInput.value = data.mrp || "";
         discountInputs.forEach((input) => {
             input.name = `discount-rate-${lineId}`;
-            if (data.trade_discount_rate) {
-                input.checked = Number.parseFloat(input.value) === Number.parseFloat(data.trade_discount_rate);
+            if (data.discount_rate) {
+                input.checked = Number.parseFloat(input.value) === Number.parseFloat(data.discount_rate);
             }
         });
         if (![...discountInputs].some((input) => input.checked)) {
@@ -846,6 +846,9 @@
         if (!customerIdInput.value) {
             headerErrors.push("Customer is required.");
         }
+        if (!salesRepIdInput.value) {
+            headerErrors.push("Sales representative is required.");
+        }
 
         const lines = [];
         const lineErrors = [];
@@ -870,6 +873,9 @@
             );
             const dealerPrice = Number.parseFloat(
                 line.querySelector('[data-field="dealer_price"]').value || "0",
+            );
+            const lineTotal = Number.parseFloat(
+                line.querySelector('[data-field="line_total"]').value || "0",
             );
             const serials = getSelectedSerials(line);
 
@@ -899,20 +905,29 @@
             if (!mrp) {
                 errorMessages.push("MRP is required.");
             }
+            if (!lineTotal) {
+                errorMessages.push("Line total is required.");
+            }
 
             lineError.textContent = errorMessages.join(" ");
             lineError.hidden = errorMessages.length === 0;
             lineErrors.push(errorMessages);
 
-            lines.push({
+            const linePayload = {
                 item_id: itemId,
                 qty,
                 mrp,
-                trade_discount_rate: discountRate,
+                discount_rate: discountRate,
                 discount_value: discountValue,
-                dealer_price: dealerPrice,
-                serial_numbers: isSerialized ? serials : [],
-            });
+                unit_price: dealerPrice,
+                line_total: lineTotal,
+            };
+
+            if (isSerialized) {
+                linePayload.serial_numbers = serials;
+            }
+
+            lines.push(linePayload);
         });
 
         if (headerErrors.length || lineErrors.some((entry) => entry.length)) {
@@ -926,7 +941,7 @@
             invoice_no: invoiceNoInput.value.trim(),
             invoice_date: invoiceDateInput.value,
             customer_id: customerIdInput.value,
-            sales_rep_id: salesRepIdInput.value || null,
+            sales_rep_id: salesRepIdInput.value ? Number.parseInt(salesRepIdInput.value, 10) : null,
             lines,
         };
 
@@ -942,11 +957,13 @@
 
             const data = await response.json().catch(() => ({}));
             if (!response.ok) {
+                const details = Array.isArray(data?.details) ? data.details.join(" ") : "";
                 const errorText =
+                    data?.error ||
+                    details ||
                     data?.errors?.invoice_no ||
                     data?.errors?.serial_numbers ||
                     data?.errors?.lines ||
-                    data?.error ||
                     "Unable to save invoice.";
                 throw new Error(errorText);
             }

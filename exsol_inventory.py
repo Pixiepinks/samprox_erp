@@ -58,6 +58,18 @@ def validate_item_payload(payload: Dict[str, Any]) -> Dict[str, str]:
     return errors
 
 
+def _parse_bool(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y", "on"}
+    return default
+
+
 def upsert_exsol_item(payload: Dict[str, Any], *, session=None) -> ExsolInventoryItem:
     errors = validate_item_payload(payload)
     if errors:
@@ -79,7 +91,8 @@ def upsert_exsol_item(payload: Dict[str, Any], *, session=None) -> ExsolInventor
         fields = {
             "item_name": (payload.get("item_name") or "").strip(),
             "uom": (payload.get("uom") or "").strip() or None,
-            "is_active": bool(payload.get("is_active", True)),
+            "is_active": _parse_bool(payload.get("is_active"), True),
+            "is_serialized": _parse_bool(payload.get("is_serialized"), True),
         }
 
         if existing:

@@ -71,6 +71,7 @@
                                 <th scope="col">Code</th>
                                 <th scope="col">Name</th>
                                 <th scope="col">UOM</th>
+                                <th scope="col">Serialized</th>
                                 <th scope="col">Active</th>
                                 <th scope="col">Updated</th>
                             </tr>
@@ -107,6 +108,13 @@
                         <select name="is_active">
                             <option value="true" selected>Active</option>
                             <option value="false">Inactive</option>
+                        </select>
+                    </label>
+                    <label class="form-field">
+                        Serialized
+                        <select name="is_serialized">
+                            <option value="true" selected>Yes</option>
+                            <option value="false">No</option>
                         </select>
                     </label>
                     <div class="form-field form-field--wide">
@@ -224,6 +232,7 @@
                     <td>${item.item_code || ""}</td>
                     <td>${item.item_name || ""}</td>
                     <td>${item.uom || ""}</td>
+                    <td>${item.is_serialized ? "Yes" : "No"}</td>
                     <td>${item.is_active ? "Yes" : "No"}</td>
                     <td>${item.updated_at ? new Date(item.updated_at).toLocaleString() : ""}</td>
                 `;
@@ -274,6 +283,7 @@
                 item_name: formData.get("item_name"),
                 uom: formData.get("uom") || "",
                 is_active: (formData.get("is_active") || "true") === "true",
+                is_serialized: (formData.get("is_serialized") || "true") === "true",
             };
         }
 

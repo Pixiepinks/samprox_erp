@@ -1016,7 +1016,6 @@ class ExsolSalesInvoice(db.Model):
         ),
         Index("ix_exsol_sales_invoices_company_invoice_no", "company_key", "invoice_no"),
         Index("ix_exsol_sales_invoices_company_invoice_date", "company_key", "invoice_date"),
-        {"schema": "exsol_sales"},
     )
 
 
@@ -1027,7 +1026,7 @@ class ExsolSalesInvoiceLine(db.Model):
     company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
     invoice_id = db.Column(
         GUID(),
-        db.ForeignKey("exsol_sales.exsol_sales_invoices.id", ondelete="CASCADE"),
+        db.ForeignKey("exsol_sales_invoices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -1050,7 +1049,6 @@ class ExsolSalesInvoiceLine(db.Model):
 
     __table_args__ = (
         CheckConstraint("qty > 0", name="ck_exsol_sales_invoice_lines_qty_positive"),
-        {"schema": "exsol_sales"},
     )
 
 
@@ -1061,13 +1059,13 @@ class ExsolSalesInvoiceSerial(db.Model):
     company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
     invoice_id = db.Column(
         GUID(),
-        db.ForeignKey("exsol_sales.exsol_sales_invoices.id", ondelete="CASCADE"),
+        db.ForeignKey("exsol_sales_invoices.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     line_id = db.Column(
         GUID(),
-        db.ForeignKey("exsol_sales.exsol_sales_invoice_lines.id", ondelete="CASCADE"),
+        db.ForeignKey("exsol_sales_invoice_lines.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -1085,7 +1083,6 @@ class ExsolSalesInvoiceSerial(db.Model):
             "serial_no",
             name="uq_exsol_sales_invoice_serial_company_item_serial",
         ),
-        {"schema": "exsol_sales"},
     )
 
 

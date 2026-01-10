@@ -523,7 +523,11 @@ def _create_invoice(payload: dict[str, Any]):
         grand_total += line["line_total"]
 
     try:
-        with db.session.begin():
+        session = db.session
+        real_session = session if hasattr(session, "in_transaction") else session()
+        used_nested = real_session.in_transaction()
+        transaction_ctx = real_session.begin_nested() if used_nested else real_session.begin()
+        with transaction_ctx:
             invoice = ExsolSalesInvoice(
                 company_key=EXSOL_COMPANY_KEY,
                 invoice_no=parsed_header["invoice_no"],
@@ -565,6 +569,8 @@ def _create_invoice(payload: dict[str, Any]):
                     production_serial = serial_map.get(serial)
                     if production_serial:
                         production_serial.is_sold = True
+        if used_nested:
+            real_session.commit()
 
     except IntegrityError:
         db.session.rollback()

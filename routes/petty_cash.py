@@ -347,7 +347,7 @@ def list_employees():
     if company_key:
         query = query.filter(User.company_key == company_key)
 
-    if user.role == RoleEnum.sales:
+    if user.role in {RoleEnum.sales, RoleEnum.sales_manager}:
         employee_id = _current_employee_id(user)
         query = query.filter(User.id == employee_id)
 
@@ -435,10 +435,9 @@ def list_claims():
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
         RoleEnum.maintenance_manager,
-        RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }
-    if user.role not in manager_roles and user.role != RoleEnum.sales:
+    if user.role not in manager_roles and user.role not in {RoleEnum.sales, RoleEnum.sales_manager}:
         return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
 
     try:
@@ -452,7 +451,7 @@ def list_claims():
     if employee_raw is not None and employee_raw != "" and employee_id is None:
         return jsonify({"msg": "employee_id must be an integer"}), 400
 
-    if user.role == RoleEnum.sales:
+    if user.role in {RoleEnum.sales, RoleEnum.sales_manager}:
         employee_id = _current_employee_id(user)
 
     query = PettyCashWeeklyClaim.query.filter(
@@ -528,7 +527,6 @@ def get_claim(claim_id: int):
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
-        RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }
 
@@ -557,7 +555,7 @@ def update_claim(claim_id: int):
         return jsonify({"msg": "Approved or paid claims cannot be edited."}), 400
 
     payload = request.get_json(silent=True) or {}
-    if user.role == RoleEnum.sales:
+    if user.role in {RoleEnum.sales, RoleEnum.sales_manager}:
         payload["employee_id"] = _current_employee_id(user)
 
     if "employee_id" in payload:
@@ -656,7 +654,6 @@ def update_status(claim_id: int):
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
-        RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }
     is_owner = claim.created_by_id == user.id

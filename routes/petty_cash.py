@@ -29,6 +29,8 @@ _WEEKLY_CLAIM_ROLES = {
     RoleEnum.maintenance_manager,
     RoleEnum.outside_manager,
     RoleEnum.sales,
+    RoleEnum.sales_manager,
+    RoleEnum.sales_executive,
 }
 
 DEFAULT_EXPENSE_TYPES = [

@@ -548,7 +548,8 @@
         const isSales = salesPettyRoles.includes(normalizedRole);
         const isPettyOnly = pettyOnlyRoles.includes(normalizedRole);
         const isTravelClaimsView = document.body.dataset.travelClaimsView === "true";
-        const isSalesManagerCompact = normalizedRole === "sales_manager" && isTravelClaimsView;
+        const isSalesManager = normalizedRole === "sales_manager";
+        const isSalesManagerCompact = isSalesManager && isTravelClaimsView;
 
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
@@ -569,6 +570,7 @@
         }
         if (
             salesVisitsLink &&
+            !isSalesManagerCompact &&
             ["sales", "outside_manager", "admin", "finance_manager", "production_manager", "sales_manager", "sales_executive"].includes(
                 normalizedRole,
             )
@@ -578,11 +580,18 @@
 
         if (isSalesManagerCompact) {
             if (primaryNavLink) {
-                primaryNavLink.hidden = true;
+                primaryNavLink.hidden = false;
+                primaryNavLink.textContent = "Dashboard";
+                primaryNavLink.href = "/sales/dashboard";
             }
             if (salesVisitsLink) {
                 salesVisitsLink.hidden = true;
             }
+            document.querySelectorAll(".topbar__actions .button--ghost").forEach((link) => {
+                if (link !== primaryNavLink && link.getAttribute("href") === "/money") {
+                    link.remove();
+                }
+            });
             const subnav = document.querySelector(".subnav");
             if (subnav) {
                 subnav.remove();
@@ -591,7 +600,7 @@
 
         if (isPettyOnly || isSalesManagerCompact) {
             if (primaryNavLink) {
-                if (isSales) {
+                if (isSales && !isSalesManagerCompact) {
                     primaryNavLink.textContent = "Money";
                     primaryNavLink.href = "/money";
                 } else if (normalizedRole === "outside_manager") {

@@ -274,12 +274,14 @@ def create_app():
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
+            "ui.sales_data_entry_travel_claims",
             "ui.sales_reports_page",
             "ui.exsol_sales_report_invoices_page",
             "ui.sales_production_page",
             "ui.sales_invoice_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
+            "ui.money_page",
             "ui.sales_dashboard_redirect",
             "ui.exsol_inventory_page",
             "health",
@@ -302,6 +304,7 @@ def create_app():
             "/api/market",
             "/api/companies",
             "/api/exsol",
+            "/api/petty-cash",
         )
         if request.path.startswith(allowed_paths):
             return None

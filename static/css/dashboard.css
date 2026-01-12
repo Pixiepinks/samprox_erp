@@ -2981,6 +2981,20 @@ body.modal-open {
     gap: 1.2rem;
 }
 
+.section__grid--two-col {
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
+.section__grid--two-col .tile {
+    height: 100%;
+}
+
+@media (max-width: 640px) {
+    .section__grid--two-col {
+        grid-template-columns: 1fr;
+    }
+}
+
 .hidden {
     display: none !important;
 }
@@ -3167,6 +3181,15 @@ body.modal-open {
     margin: 0;
     font-weight: 600;
     font-size: 1rem;
+}
+
+.tile__subtitle {
+    margin: 0;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #2563eb;
+    font-weight: 700;
 }
 
 .team-table__cell--actions {

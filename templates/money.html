@@ -544,7 +544,8 @@
         };
 
         const pettyOnlyRoles = ["sales", "outside_manager"];
-        const isSales = normalizedRole === "sales";
+        const salesPettyRoles = ["sales", "sales_manager"];
+        const isSales = salesPettyRoles.includes(normalizedRole);
         const isPettyOnly = pettyOnlyRoles.includes(normalizedRole);
 
         const userNameEl = document.getElementById("user-name");
@@ -707,7 +708,6 @@
             "finance_manager",
             "production_manager",
             "maintenance_manager",
-            "sales_manager",
             "sales_executive",
         ];
 

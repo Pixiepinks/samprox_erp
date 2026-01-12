@@ -29,6 +29,8 @@ _WEEKLY_CLAIM_ROLES = {
     RoleEnum.maintenance_manager,
     RoleEnum.outside_manager,
     RoleEnum.sales,
+    RoleEnum.sales_manager,
+    RoleEnum.sales_executive,
 }
 
 DEFAULT_EXPENSE_TYPES = [
@@ -433,6 +435,8 @@ def list_claims():
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
         RoleEnum.maintenance_manager,
+        RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
     }
     if user.role not in manager_roles and user.role != RoleEnum.sales:
         return jsonify({"msg": "You are not allowed to view weekly claims."}), 403
@@ -524,6 +528,8 @@ def get_claim(claim_id: int):
         RoleEnum.admin,
         RoleEnum.finance_manager,
         RoleEnum.production_manager,
+        RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
     }
 
     if not is_owner and not is_manager:
@@ -646,7 +652,13 @@ def update_status(claim_id: int):
     except ValueError:
         return jsonify({"msg": "Invalid status"}), 400
 
-    is_manager = user.role in {RoleEnum.admin, RoleEnum.finance_manager, RoleEnum.production_manager}
+    is_manager = user.role in {
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
+    }
     is_owner = claim.created_by_id == user.id
     if not is_owner and not is_manager:
         return jsonify({"msg": "You are not allowed to update this claim."}), 403

@@ -443,7 +443,7 @@ def sales_data_entry_page():
 @bp.get("/sales/data-entry/travel-claims")
 def sales_data_entry_travel_claims():
     """Redirect to the petty cash travel claims UI."""
-    return redirect(url_for("ui.money_page", tab="petty-cash"))
+    return redirect(url_for("ui.money_page", tab="petty-cash", view="travel-claims"))
 
 
 @bp.get("/sales/reports")
@@ -661,14 +661,18 @@ def money_page():
     role = _current_role()
     is_sales = role == RoleEnum.sales
     is_outside_manager = role == RoleEnum.outside_manager
+    travel_claims_view = (
+        role == RoleEnum.sales_manager
+        and (request.args.get("view") or "").strip().lower() == "travel-claims"
+    )
     can_view_petty_cash = role in {
         RoleEnum.sales,
         RoleEnum.outside_manager,
         RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }
-    petty_only = role in {RoleEnum.sales, RoleEnum.outside_manager}
-    can_view_financial_tabs = role not in {RoleEnum.sales, RoleEnum.outside_manager}
+    petty_only = role in {RoleEnum.sales, RoleEnum.outside_manager} or travel_claims_view
+    can_view_financial_tabs = role not in {RoleEnum.sales, RoleEnum.outside_manager} and not travel_claims_view
     requested_tab = (request.args.get("tab") or "").strip().lower()
     allowed_tabs = {"overview", "petty-cash", "financials"}
     active_tab = requested_tab if requested_tab in allowed_tabs else "overview"
@@ -685,6 +689,7 @@ def money_page():
             "petty_only": petty_only,
             "can_view_petty_cash": can_view_petty_cash,
             "can_view_financial_tabs": can_view_financial_tabs,
+            "travel_claims_view": travel_claims_view,
         }
     )
     return render_template("money.html", **context)

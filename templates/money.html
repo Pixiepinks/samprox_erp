@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 </head>
-<body data-active-tab="{{ active_tab or 'overview' }}">
+<body data-active-tab="{{ active_tab or 'overview' }}" data-travel-claims-view="{{ 'true' if travel_claims_view else 'false' }}">
     <div class="page">
         <header class="topbar">
             <div class="brand">
@@ -547,6 +547,8 @@
         const salesPettyRoles = ["sales", "sales_manager"];
         const isSales = salesPettyRoles.includes(normalizedRole);
         const isPettyOnly = pettyOnlyRoles.includes(normalizedRole);
+        const isTravelClaimsView = document.body.dataset.travelClaimsView === "true";
+        const isSalesManagerCompact = normalizedRole === "sales_manager" && isTravelClaimsView;
 
         const userNameEl = document.getElementById("user-name");
         const userRoleEl = document.getElementById("user-role");
@@ -574,7 +576,20 @@
             salesVisitsLink.hidden = false;
         }
 
-        if (isPettyOnly) {
+        if (isSalesManagerCompact) {
+            if (primaryNavLink) {
+                primaryNavLink.hidden = true;
+            }
+            if (salesVisitsLink) {
+                salesVisitsLink.hidden = true;
+            }
+            const subnav = document.querySelector(".subnav");
+            if (subnav) {
+                subnav.remove();
+            }
+        }
+
+        if (isPettyOnly || isSalesManagerCompact) {
             if (primaryNavLink) {
                 if (isSales) {
                     primaryNavLink.textContent = "Money";
@@ -585,11 +600,13 @@
                 }
             }
 
-            subnavLinks.forEach((link) => {
-                if (!link.getAttribute("href")?.startsWith("/money")) {
-                    link.remove();
-                }
-            });
+            if (!isSalesManagerCompact) {
+                subnavLinks.forEach((link) => {
+                    if (!link.getAttribute("href")?.startsWith("/money")) {
+                        link.remove();
+                    }
+                });
+            }
 
             document.body.dataset.activeTab = "petty-cash";
 

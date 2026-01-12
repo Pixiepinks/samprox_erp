@@ -49,9 +49,11 @@
         <section class="section">
             {% set is_sales = is_sales or false %}
             {% set petty_only = petty_only or false %}
+            {% set can_view_petty_cash = can_view_petty_cash or false %}
+            {% set can_view_financial_tabs = can_view_financial_tabs or false %}
             {% set current_tab = active_tab or 'overview' %}
             <div class="tab-switcher" role="tablist" aria-label="Money sections">
-                {% if not petty_only %}
+                {% if can_view_financial_tabs %}
                     <button
                         class="tab-switcher__button {% if current_tab == 'overview' %}tab-switcher__button--active{% endif %}"
                         data-tab="overview"
@@ -61,15 +63,17 @@
                         Overview
                     </button>
                 {% endif %}
-                <button
-                    class="tab-switcher__button {% if current_tab == 'petty-cash' %}tab-switcher__button--active{% endif %}"
-                    data-tab="petty-cash"
-                    role="tab"
-                    aria-selected="{{ 'true' if current_tab == 'petty-cash' else 'false' }}"
-                >
-                    Petty Cash
-                </button>
-                {% if not petty_only %}
+                {% if can_view_petty_cash %}
+                    <button
+                        class="tab-switcher__button {% if current_tab == 'petty-cash' %}tab-switcher__button--active{% endif %}"
+                        data-tab="petty-cash"
+                        role="tab"
+                        aria-selected="{{ 'true' if current_tab == 'petty-cash' else 'false' }}"
+                    >
+                        Petty Cash
+                    </button>
+                {% endif %}
+                {% if can_view_financial_tabs %}
                     <button
                         class="tab-switcher__button {% if current_tab == 'financials' %}tab-switcher__button--active{% endif %}"
                         data-tab="financials"
@@ -80,7 +84,7 @@
                     </button>
                 {% endif %}
             </div>
-            {% if not petty_only %}
+            {% if can_view_financial_tabs %}
                 <div class="tab-panel {% if current_tab == 'overview' %}tab-panel--active{% endif %}" id="tab-overview" role="tabpanel" aria-label="Financial overview">
                     <header class="section__header">
                         <h1>Financial performance snapshot</h1>
@@ -118,126 +122,127 @@
                 </div>
             {% endif %}
 
-            <div class="tab-panel {% if current_tab == 'petty-cash' %}tab-panel--active{% endif %}" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
-                <header class="section__header">
-                    <div>
-                        <p class="eyebrow">New</p>
-                        <h1>Petty Cash – Weekly Travel Claims</h1>
-                        <p class="section__description">
-                            Capture weekly travel expenses directly inside the table. Edit each weekday cell inline and keep totals in sync automatically.
-                        </p>
-                    </div>
-                    <div class="status-pill" id="petty-status">Draft</div>
-                </header>
+            {% if can_view_petty_cash %}
+                <div class="tab-panel {% if current_tab == 'petty-cash' %}tab-panel--active{% endif %}" id="tab-petty-cash" role="tabpanel" aria-label="Petty cash weekly travel claims">
+                    <header class="section__header">
+                        <div>
+                            <p class="eyebrow">New</p>
+                            <h1>Petty Cash – Weekly Travel Claims</h1>
+                            <p class="section__description">
+                                Capture weekly travel expenses directly inside the table. Edit each weekday cell inline and keep totals in sync automatically.
+                            </p>
+                        </div>
+                        <div class="status-pill" id="petty-status">Draft</div>
+                    </header>
 
-                <div class="petty-review" id="petty-review" hidden>
-                    <div class="petty-review__filters">
-                        <label class="form-field">
-                            <span>Week starting</span>
-                            <input id="petty-filter-week" type="date" required />
-                        </label>
-                        <label class="form-field">
-                            <span>Status</span>
-                            <select id="petty-filter-status">
-                                <option value="ALL">All</option>
-                                <option value="Submitted">Submitted</option>
-                                <option value="Approved">Approved</option>
-                                <option value="Paid">Paid</option>
-                                <option value="Rejected">Rejected</option>
-                            </select>
-                        </label>
-                        {% if not petty_only %}
+                    <div class="petty-review" id="petty-review" hidden>
+                        <div class="petty-review__filters">
                             <label class="form-field">
-                                <span>Employee (optional)</span>
-                                <select id="petty-filter-employee">
-                                    <option value="">All employees</option>
+                                <span>Week starting</span>
+                                <input id="petty-filter-week" type="date" required />
+                            </label>
+                            <label class="form-field">
+                                <span>Status</span>
+                                <select id="petty-filter-status">
+                                    <option value="ALL">All</option>
+                                    <option value="Submitted">Submitted</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Rejected">Rejected</option>
                                 </select>
                             </label>
-                        {% endif %}
+                            {% if not petty_only %}
+                                <label class="form-field">
+                                    <span>Employee (optional)</span>
+                                    <select id="petty-filter-employee">
+                                        <option value="">All employees</option>
+                                    </select>
+                                </label>
+                            {% endif %}
+                        </div>
+
+                        <div class="petty-review__list w-full">
+                            <table class="petty-table petty-table--compact w-full">
+                                <thead>
+                                    <tr>
+                                        <th>Sheet</th>
+                                        <th>Employee</th>
+                                        <th>Status</th>
+                                        <th>Total</th>
+                                        <th>Submitted</th>
+                                        <th>Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="petty-claims-rows"></tbody>
+                            </table>
+                            <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
+                        </div>
                     </div>
 
-                    <div class="petty-review__list w-full">
-                        <table class="petty-table petty-table--compact w-full">
-                            <thead>
-                                <tr>
-                                    <th>Sheet</th>
-                                    <th>Employee</th>
-                                    <th>Status</th>
-                                    <th>Total</th>
-                                    <th>Submitted</th>
-                                    <th>Updated</th>
-                                </tr>
-                            </thead>
-                            <tbody id="petty-claims-rows"></tbody>
-                        </table>
-                        <p class="helper-text" id="petty-claims-empty">Select a week to load claims.</p>
-                    </div>
-                </div>
+                    <div id="petty-card-inline-host"></div>
 
-                <div id="petty-card-inline-host"></div>
+                    <div id="weekly-claim-modal" class="fixed inset-0 hidden items-center justify-center z-40">
+                        <div class="absolute inset-0 bg-black/40" data-modal-close></div>
 
-                <div id="weekly-claim-modal" class="fixed inset-0 hidden items-center justify-center z-40">
-                    <div class="absolute inset-0 bg-black/40" data-modal-close></div>
+                        <div class="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+                            <button
+                                type="button"
+                                class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+                                data-modal-close
+                            >&times;</button>
 
-                    <div class="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-                        <button
-                            type="button"
-                            class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-                            data-modal-close
-                        >&times;</button>
-
-                        <div class="modal-body space-y-4" id="petty-card-modal-host">
-                            <div class="petty-card" id="petty-card">
-                                <div class="form-grid">
-                                    <label class="form-field">
-                                        <span>Company</span>
-                                        <select id="petty-company"></select>
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Employee</span>
-                                        <select id="petty-employee"></select>
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Week starting</span>
-                                        <input id="petty-week-start" type="date" />
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Week ending</span>
-                                        <input id="petty-week-end" type="date" readonly />
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Monday Morning ODO</span>
-                                        <input
-                                            id="petty-monday-odo"
-                                            name="monday_morning_odo"
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="Enter Monday ODO"
-                                        />
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Friday Evening ODO</span>
-                                        <input
-                                            id="petty-friday-odo"
-                                            name="friday_evening_odo"
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="Enter Friday ODO"
-                                        />
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Sheet No</span>
-                                        <input id="petty-sheet" type="text" readonly />
-                                    </label>
-                                    <label class="form-field">
-                                        <span>Vehicle No</span>
-                                        <select id="petty-vehicle"></select>
-                                    </label>
-                                    <label class="form-field form-field--wide">
-                                        <span>Area visited</span>
-                                        <textarea id="petty-area" rows="2" placeholder="Enter locations covered"></textarea>
-                                    </label>
-                                </div>
+                            <div class="modal-body space-y-4" id="petty-card-modal-host">
+                                <div class="petty-card" id="petty-card">
+                                    <div class="form-grid">
+                                        <label class="form-field">
+                                            <span>Company</span>
+                                            <select id="petty-company"></select>
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Employee</span>
+                                            <select id="petty-employee"></select>
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Week starting</span>
+                                            <input id="petty-week-start" type="date" />
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Week ending</span>
+                                            <input id="petty-week-end" type="date" readonly />
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Monday Morning ODO</span>
+                                            <input
+                                                id="petty-monday-odo"
+                                                name="monday_morning_odo"
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="Enter Monday ODO"
+                                            />
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Friday Evening ODO</span>
+                                            <input
+                                                id="petty-friday-odo"
+                                                name="friday_evening_odo"
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="Enter Friday ODO"
+                                            />
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Sheet No</span>
+                                            <input id="petty-sheet" type="text" readonly />
+                                        </label>
+                                        <label class="form-field">
+                                            <span>Vehicle No</span>
+                                            <select id="petty-vehicle"></select>
+                                        </label>
+                                        <label class="form-field form-field--wide">
+                                            <span>Area visited</span>
+                                            <textarea id="petty-area" rows="2" placeholder="Enter locations covered"></textarea>
+                                        </label>
+                                    </div>
 
                                 <div class="petty-table-wrapper">
                                     <table class="petty-table">
@@ -284,8 +289,9 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
-            {% if not petty_only %}
+            {% if can_view_financial_tabs %}
                 <div class="tab-panel {% if current_tab == 'financials' %}tab-panel--active{% endif %}" id="tab-financials" role="tabpanel" aria-label="Financial statements capture">
                 <header class="section__header">
                     <div>
@@ -513,7 +519,11 @@
             window.location.replace("/machines");
         }
 
-        if ((normalizedRole === "sales_manager" || normalizedRole === "sales_executive") && window.location.pathname !== "/sales/dashboard") {
+        const salesManagerPaths = new Set(["/sales/dashboard", "/money"]);
+        if (
+            (normalizedRole === "sales_manager" || normalizedRole === "sales_executive") &&
+            !salesManagerPaths.has(window.location.pathname)
+        ) {
             window.location.replace("/sales/dashboard");
         }
 
@@ -690,8 +700,16 @@
             claimsRows: document.getElementById("petty-claims-rows"),
             claimsEmpty: document.getElementById("petty-claims-empty"),
         };
+        const canViewPettyCash = Boolean(pettyEls.card);
 
-        const managerRoles = ["admin", "finance_manager", "production_manager", "maintenance_manager"];
+        const managerRoles = [
+            "admin",
+            "finance_manager",
+            "production_manager",
+            "maintenance_manager",
+            "sales_manager",
+            "sales_executive",
+        ];
 
         function startOfWeek(date) {
             const d = new Date(date);
@@ -1288,81 +1306,83 @@
             showError("");
         }
 
-        pettyEls.employee.addEventListener("change", (event) => {
-            if (isSales) return;
-            updateHeader({ employee_id: Number(event.target.value) });
-        });
+        if (canViewPettyCash) {
+            pettyEls.employee.addEventListener("change", (event) => {
+                if (isSales) return;
+                updateHeader({ employee_id: Number(event.target.value) });
+            });
 
-        pettyEls.company.addEventListener("change", (event) => {
-            const companyKey = event.target.value;
-            updateHeader({ company_id: companyKey });
-            loadEmployees(companyKey);
-        });
+            pettyEls.company.addEventListener("change", (event) => {
+                const companyKey = event.target.value;
+                updateHeader({ company_id: companyKey });
+                loadEmployees(companyKey);
+            });
 
-        pettyEls.weekStart.addEventListener("change", (event) => {
-            const newWeek = event.target.value;
-            const locked = pettyState.claim
-                ? pettyState.readOnly || ["Approved", "Paid"].includes(pettyState.claim.status)
-                : false;
+            pettyEls.weekStart.addEventListener("change", (event) => {
+                const newWeek = event.target.value;
+                const locked = pettyState.claim
+                    ? pettyState.readOnly || ["Approved", "Paid"].includes(pettyState.claim.status)
+                    : false;
 
-            if (isSales) {
-                loadClaimForWeek(newWeek);
-                return;
+                if (isSales) {
+                    loadClaimForWeek(newWeek);
+                    return;
+                }
+
+                updateHeader({ week_start_date: newWeek });
+            });
+
+            pettyEls.vehicle.addEventListener("change", (event) => {
+                updateHeader({ vehicle_no: event.target.value });
+            });
+
+            pettyEls.area.addEventListener("blur", (event) => {
+                updateHeader({ area_visited: event.target.value });
+            });
+
+            pettyEls.mondayOdo.addEventListener("change", (event) => {
+                const value = event.target.value;
+                updateHeader({ monday_morning_odo: value === "" ? null : value });
+            });
+
+            pettyEls.fridayOdo.addEventListener("change", (event) => {
+                const value = event.target.value;
+                updateHeader({ friday_evening_odo: value === "" ? null : value });
+            });
+
+            if (pettyEls.filterWeek) {
+                pettyEls.filterWeek.addEventListener("change", () => {
+                    pettyState.filters.weekStart = pettyEls.filterWeek.value;
+                    pettyState.claim = null;
+                    hideDetailsPanel();
+                    loadClaimsList();
+                });
             }
 
-            updateHeader({ week_start_date: newWeek });
-        });
+            if (pettyEls.filterStatus) {
+                pettyEls.filterStatus.addEventListener("change", () => {
+                    pettyState.filters.status = pettyEls.filterStatus.value;
+                    pettyState.claim = null;
+                    hideDetailsPanel();
+                    loadClaimsList();
+                });
+            }
 
-        pettyEls.vehicle.addEventListener("change", (event) => {
-            updateHeader({ vehicle_no: event.target.value });
-        });
+            if (pettyEls.filterEmployee) {
+                pettyEls.filterEmployee.addEventListener("change", () => {
+                    pettyState.filters.employeeId = pettyEls.filterEmployee.value;
+                    pettyState.claim = null;
+                    hideDetailsPanel();
+                    loadClaimsList();
+                });
+            }
 
-        pettyEls.area.addEventListener("blur", (event) => {
-            updateHeader({ area_visited: event.target.value });
-        });
-
-        pettyEls.mondayOdo.addEventListener("change", (event) => {
-            const value = event.target.value;
-            updateHeader({ monday_morning_odo: value === "" ? null : value });
-        });
-
-        pettyEls.fridayOdo.addEventListener("change", (event) => {
-            const value = event.target.value;
-            updateHeader({ friday_evening_odo: value === "" ? null : value });
-        });
-
-        if (pettyEls.filterWeek) {
-            pettyEls.filterWeek.addEventListener("change", () => {
-                pettyState.filters.weekStart = pettyEls.filterWeek.value;
-                pettyState.claim = null;
-                hideDetailsPanel();
-                loadClaimsList();
-            });
+            pettyEls.save.addEventListener("click", () => updateStatus("Draft"));
+            pettyEls.submit.addEventListener("click", () => updateStatus("Submitted"));
+            pettyEls.approve.addEventListener("click", () => updateStatus("Approved"));
+            pettyEls.reject.addEventListener("click", () => updateStatus("Rejected"));
+            pettyEls.paid.addEventListener("click", () => updateStatus("Paid"));
         }
-
-        if (pettyEls.filterStatus) {
-            pettyEls.filterStatus.addEventListener("change", () => {
-                pettyState.filters.status = pettyEls.filterStatus.value;
-                pettyState.claim = null;
-                hideDetailsPanel();
-                loadClaimsList();
-            });
-        }
-
-        if (pettyEls.filterEmployee) {
-            pettyEls.filterEmployee.addEventListener("change", () => {
-                pettyState.filters.employeeId = pettyEls.filterEmployee.value;
-                pettyState.claim = null;
-                hideDetailsPanel();
-                loadClaimsList();
-            });
-        }
-
-        pettyEls.save.addEventListener("click", () => updateStatus("Draft"));
-        pettyEls.submit.addEventListener("click", () => updateStatus("Submitted"));
-        pettyEls.approve.addEventListener("click", () => updateStatus("Approved"));
-        pettyEls.reject.addEventListener("click", () => updateStatus("Rejected"));
-        pettyEls.paid.addEventListener("click", () => updateStatus("Paid"));
 
         const financialsNewLineToggle = document.getElementById("financials-new-line-toggle");
         const financialsNewLineForm = document.getElementById("financials-new-line-form");
@@ -1990,7 +2010,9 @@
         }
 
         toggleManagerActions();
-        initPettyCash();
+        if (canViewPettyCash) {
+            initPettyCash();
+        }
     </script>
 </body>
 </html>

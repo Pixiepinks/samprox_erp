@@ -661,17 +661,30 @@ def money_page():
     role = _current_role()
     is_sales = role == RoleEnum.sales
     is_outside_manager = role == RoleEnum.outside_manager
-    petty_only = is_sales or is_outside_manager
+    can_view_petty_cash = role in {
+        RoleEnum.sales,
+        RoleEnum.outside_manager,
+        RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
+    }
+    petty_only = role in {RoleEnum.sales, RoleEnum.outside_manager}
+    can_view_financial_tabs = role not in {RoleEnum.sales, RoleEnum.outside_manager}
     requested_tab = (request.args.get("tab") or "").strip().lower()
     allowed_tabs = {"overview", "petty-cash", "financials"}
     active_tab = requested_tab if requested_tab in allowed_tabs else "overview"
-    if petty_only:
+    if requested_tab == "petty-cash" and not can_view_petty_cash:
+        active_tab = "overview"
+    if requested_tab == "financials" and not can_view_financial_tabs:
+        active_tab = "petty-cash" if can_view_petty_cash else "overview"
+    if petty_only and can_view_petty_cash:
         active_tab = "petty-cash"
     context.update(
         {
             "active_tab": active_tab,
             "is_sales": is_sales,
             "petty_only": petty_only,
+            "can_view_petty_cash": can_view_petty_cash,
+            "can_view_financial_tabs": can_view_financial_tabs,
         }
     )
     return render_template("money.html", **context)
@@ -700,7 +713,8 @@ def sales_visits_page():
 def financials_page():
     """Render the manual financials capture UI."""
 
-    if _current_role() == RoleEnum.sales:
+    role = _current_role()
+    if role == RoleEnum.sales:
         return render_template("403.html"), 403
 
     company_id = request.args.get("company_id")
@@ -714,7 +728,21 @@ def financials_page():
     context = _load_financials_context(
         company_id=company_id, statement_type=statement_type, financial_year=parsed_year
     )
-    context.update({"active_tab": "financials", "is_sales": False})
+    can_view_petty_cash = role in {
+        RoleEnum.sales,
+        RoleEnum.outside_manager,
+        RoleEnum.sales_manager,
+        RoleEnum.sales_executive,
+    }
+    context.update(
+        {
+            "active_tab": "financials",
+            "is_sales": False,
+            "petty_only": False,
+            "can_view_petty_cash": can_view_petty_cash,
+            "can_view_financial_tabs": True,
+        }
+    )
     return render_template("money.html", **context)
 
 

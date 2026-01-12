@@ -349,11 +349,13 @@ def _enforce_role_page_restrictions():
             "ui.login_page",
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
+            "ui.sales_data_entry_travel_claims",
             "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
+            "ui.money_page",
         }
         if endpoint in allowed_endpoints:
             return None
@@ -436,6 +438,12 @@ def sales_dashboard_page():
 def sales_data_entry_page():
     """Render the Sales Manager data entry shell."""
     return render_template("sales_data_entry.html", active_tab="data-entry")
+
+
+@bp.get("/sales/data-entry/travel-claims")
+def sales_data_entry_travel_claims():
+    """Redirect to the petty cash travel claims UI."""
+    return redirect(url_for("ui.money_page", tab="petty-cash"))
 
 
 @bp.get("/sales/reports")
@@ -654,7 +662,11 @@ def money_page():
     is_sales = role == RoleEnum.sales
     is_outside_manager = role == RoleEnum.outside_manager
     petty_only = is_sales or is_outside_manager
-    active_tab = "petty-cash" if petty_only else "overview"
+    requested_tab = (request.args.get("tab") or "").strip().lower()
+    allowed_tabs = {"overview", "petty-cash", "financials"}
+    active_tab = requested_tab if requested_tab in allowed_tabs else "overview"
+    if petty_only:
+        active_tab = "petty-cash"
     context.update(
         {
             "active_tab": active_tab,

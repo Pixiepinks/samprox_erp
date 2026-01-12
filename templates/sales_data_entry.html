@@ -12,7 +12,7 @@
             </p>
         </div>
     </header>
-    <div class="section__grid hidden" id="sales-action-tiles" aria-live="polite">
+    <div class="section__grid section__grid--two-col hidden" id="sales-action-tiles" aria-live="polite">
         <a
             class="tile tile--link"
             href="/sales/invoice"
@@ -45,6 +45,18 @@
             <div class="system-status__item-icon" aria-hidden="true">🏭</div>
             <h2 class="tile__title">Record Production</h2>
             <p class="tile__description">Log production output related to sales orders.</p>
+        </a>
+        <a
+            class="tile tile--link"
+            href="/sales/data-entry/travel-claims"
+            role="link"
+            aria-label="Travel Claims"
+            onkeydown="if(event.key === ' ' || event.key === 'Spacebar'){event.preventDefault(); event.currentTarget.click();}"
+        >
+            <div class="system-status__item-icon" aria-hidden="true">🧳</div>
+            <p class="tile__subtitle">Petty Cash – Weekly Travel Claims</p>
+            <h2 class="tile__title">Travel Claims</h2>
+            <p class="tile__description">Capture weekly travel expenses and submit for approval.</p>
         </a>
     </div>
     <div class="card" id="sales-entry-form">

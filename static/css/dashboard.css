@@ -5810,56 +5810,63 @@ body.modal-polyfill-active::before {
 
 .exsol-stacked-card__header {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1.5rem;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+}
+
+.exsol-stacked-card__top {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 1rem 1.5rem;
+    align-items: start;
 }
 
 .exsol-stacked-card__summary {
     display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-top: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
 .exsol-stacked-kpi {
-    flex: 1 1 200px;
-    padding: 0.85rem 1rem;
-    border-radius: 14px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: fit-content;
+    padding: 0.5rem 0.75rem;
+    border-radius: 12px;
     background: #fff;
     border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 12px 25px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
 }
 
 .exsol-stacked-kpi__label {
     margin: 0;
-    font-size: 0.85rem;
-    color: #2563eb;
+    font-size: 0.75rem;
+    color: #64748b;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .exsol-stacked-kpi__subtitle {
-    margin: 0.2rem 0 0;
-    font-size: 0.85rem;
-    color: #64748b;
+    margin: 0.15rem 0 0;
+    font-size: 0.75rem;
+    color: #94a3b8;
 }
 
 .exsol-stacked-kpi__value {
-    margin: 0.4rem 0 0;
-    font-size: 1.4rem;
+    margin: 0.35rem 0 0;
+    font-size: 1.3rem;
     font-weight: 700;
     color: #0f172a;
 }
 
 .exsol-stacked-card__controls {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, max-content));
     gap: 0.75rem 1rem;
-    align-items: flex-end;
-    justify-content: flex-end;
+    align-items: end;
 }
 
 .exsol-stacked-card__control {
@@ -5873,17 +5880,17 @@ body.modal-polyfill-active::before {
 .exsol-stacked-card__control input,
 .exsol-stacked-card__control select {
     border: 1px solid rgba(148, 163, 184, 0.6);
-    border-radius: 12px;
-    padding: 0.55rem 0.75rem;
+    border-radius: 10px;
+    padding: 0.5rem 0.7rem;
     min-width: 160px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     background: #fff;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .exsol-stacked-card__control select[multiple] {
-    min-width: 200px;
-    min-height: 80px;
+    min-width: 180px;
+    min-height: 72px;
 }
 
 .exsol-stacked-card__control input:focus,
@@ -5902,6 +5909,11 @@ body.modal-polyfill-active::before {
 .exsol-stacked-card__checkbox input {
     width: 1.1rem;
     height: 1.1rem;
+}
+
+.exsol-stacked-card__action {
+    display: flex;
+    align-items: flex-end;
 }
 
 .exsol-stacked-card__body {
@@ -5924,9 +5936,12 @@ body.modal-polyfill-active::before {
 }
 
 @media (max-width: 900px) {
+    .exsol-stacked-card__top {
+        grid-template-columns: 1fr;
+    }
+
     .exsol-stacked-card__controls {
-        width: 100%;
-        justify-content: flex-start;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     }
 
     .exsol-stacked-card__control select[multiple] {

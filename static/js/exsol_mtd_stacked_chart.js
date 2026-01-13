@@ -139,7 +139,7 @@ if (widget) {
         items.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.code;
-            option.textContent = item.name ? `${item.code} — ${item.name}` : item.code;
+            option.textContent = item.code;
             itemsSelect.appendChild(option);
         });
     };

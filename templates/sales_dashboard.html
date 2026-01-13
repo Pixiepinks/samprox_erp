@@ -31,10 +31,12 @@
 <section class="section">
     <article class="card exsol-stacked-card" data-exsol-stacked-widget>
         <div class="exsol-stacked-card__header">
-            <div>
+            <div class="exsol-stacked-card__intro">
                 <p class="eyebrow">Exsol sales</p>
                 <h2 class="card__title">Exsol MTD Sales (Stacked by Item Code)</h2>
                 <p class="card__description">Track month-to-date Exsol sales by salesperson and item.</p>
+            </div>
+            <div class="exsol-stacked-card__top">
                 <div class="exsol-stacked-card__summary">
                     <div class="exsol-stacked-kpi">
                         <p class="exsol-stacked-kpi__label">Sales Amount (Rs.)</p>
@@ -47,32 +49,34 @@
                         <p class="exsol-stacked-kpi__value" id="exsol-mtd-qty">0 Units</p>
                     </div>
                 </div>
-            </div>
-            <div class="exsol-stacked-card__controls">
-                <label class="exsol-stacked-card__control">
-                    <span>Start date</span>
-                    <input type="date" id="exsol-stacked-start" />
-                </label>
-                <label class="exsol-stacked-card__control">
-                    <span>End date</span>
-                    <input type="date" id="exsol-stacked-end" />
-                </label>
-                <label class="exsol-stacked-card__control">
-                    <span>Items</span>
-                    <select id="exsol-stacked-items" multiple></select>
-                </label>
-                <label class="exsol-stacked-card__control">
-                    <span>Metric</span>
-                    <select id="exsol-stacked-metric">
-                        <option value="amount" selected>Sales Amount (LKR)</option>
-                        <option value="qty">Quantity (Units)</option>
-                    </select>
-                </label>
-                <label class="exsol-stacked-card__control exsol-stacked-card__checkbox">
-                    <input type="checkbox" id="exsol-stacked-compare" />
-                    <span>Compare with Previous Month</span>
-                </label>
-                <button type="button" class="button" id="exsol-stacked-apply">Apply</button>
+                <div class="exsol-stacked-card__controls">
+                    <label class="exsol-stacked-card__control">
+                        <span>Start date</span>
+                        <input type="date" id="exsol-stacked-start" />
+                    </label>
+                    <label class="exsol-stacked-card__control">
+                        <span>End date</span>
+                        <input type="date" id="exsol-stacked-end" />
+                    </label>
+                    <label class="exsol-stacked-card__control">
+                        <span>Items</span>
+                        <select id="exsol-stacked-items" multiple></select>
+                    </label>
+                    <label class="exsol-stacked-card__control">
+                        <span>Metric</span>
+                        <select id="exsol-stacked-metric">
+                            <option value="amount" selected>Sales Amount (LKR)</option>
+                            <option value="qty">Quantity (Units)</option>
+                        </select>
+                    </label>
+                    <label class="exsol-stacked-card__control exsol-stacked-card__checkbox">
+                        <input type="checkbox" id="exsol-stacked-compare" />
+                        <span>Compare with Previous Month</span>
+                    </label>
+                    <div class="exsol-stacked-card__action">
+                        <button type="button" class="button" id="exsol-stacked-apply">Apply</button>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="exsol-stacked-card__body">

@@ -353,6 +353,7 @@ def _enforce_role_page_restrictions():
             "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",
+            "ui.exsol_sales_report_sales_by_person_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
             "ui.money_page",
@@ -469,6 +470,17 @@ def exsol_sales_report_invoices_page():
         return render_template("access_denied.html"), 403
 
     return render_template("exsol_sales_report_invoices.html", active_tab="reports")
+
+
+@bp.get("/sales/reports/exsol-sales-by-person")
+@jwt_required(optional=True)
+def exsol_sales_report_sales_by_person_page():
+    """Render the Exsol sales by person report page."""
+
+    if not _has_exsol_sales_access():
+        return render_template("access_denied.html"), 403
+
+    return render_template("exsol_sales_report_sales_by_person.html", active_tab="reports")
 
 
 @bp.get("/sales/production")

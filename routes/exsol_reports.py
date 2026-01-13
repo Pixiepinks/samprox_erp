@@ -66,8 +66,8 @@ def _parse_date(value: Any) -> date | None:
 
 def _parse_decimal(value: Any) -> Decimal | None:
     """Parse a decimal value from request filters."""
-    if value is None or value == "":
-    return None
+    if value in {None, ""}:
+        return None
     try:
         return Decimal(str(value))
     except (InvalidOperation, ValueError):

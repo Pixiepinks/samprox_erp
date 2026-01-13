@@ -5,7 +5,12 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+    verify_jwt_in_request,
+)
 from sqlalchemy import String, case, cast, func, or_
 
 from extensions import db
@@ -28,20 +33,37 @@ EXSOL_COMPANY_KEY = "EXSOL"
 
 def _has_exsol_sales_access() -> bool:
     try:
-        claims = get_jwt()
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt() or {}
     except Exception:
-        return False
+        claims = {}
 
     role = normalize_role(claims.get("role"))
     company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
 
-    if role not in {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}:
+    if role is None or not company_key:
+        identity = get_jwt_identity()
+        try:
+            user_id = int(identity) if identity is not None else None
+        except (TypeError, ValueError):
+            user_id = None
+
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                if role is None:
+                    role = user.role
+                if not company_key:
+                    company_key = (user.company_key or "").strip().lower()
+
+    allowed_roles = {RoleEnum.sales_manager, RoleEnum.sales_executive, RoleEnum.admin}
+    if role not in allowed_roles:
         return False
 
-    if role != RoleEnum.admin and company_key and company_key != "exsol-engineering":
-        return False
+    if role == RoleEnum.admin:
+        return True
 
-    return True
+    return company_key == "exsol-engineering"
 
 
 def _get_exsol_company_id() -> int | None:

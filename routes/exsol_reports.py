@@ -6,7 +6,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
-from sqlalchemy import case, func, or_
+from sqlalchemy import String, case, cast, func, or_
 
 from extensions import db
 from models import (
@@ -65,7 +65,8 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _parse_decimal(value: Any) -> Decimal | None:
-    if value is None or value == "":
+    """Parse a decimal value from request filters."""
+    if value in {None, ""}:
         return None
     try:
         return Decimal(str(value))
@@ -81,6 +82,19 @@ def _parse_int(value: Any, *, min_value: int | None = None) -> int | None:
     if min_value is not None and parsed < min_value:
         return None
     return parsed
+
+
+def _resolve_date_range(args: dict[str, Any]) -> tuple[date, date]:
+    date_from = _parse_date(args.get("date_from"))
+    date_to = _parse_date(args.get("date_to"))
+
+    today = date.today()
+    if not date_from:
+        date_from = today.replace(day=1)
+    if not date_to:
+        date_to = today
+
+    return date_from, date_to
 
 
 def _normalize_status(value: str | None) -> str | None:
@@ -455,4 +469,244 @@ def export_exsol_sales_invoice_report_csv():
         return Response(generate(), mimetype="text/csv", headers=headers)
     except Exception:
         current_app.logger.exception(_build_failure_log(_serialize_filters_for_log(args)))
+        return jsonify({"ok": False, "error": "Unable to export report"}), 500
+
+
+def _clean_geo_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = " ".join(str(value).split()).strip()
+    return cleaned or None
+
+
+def _dedupe_geo_values(values: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for value in values:
+        cleaned = _clean_geo_value(value)
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+    return result
+
+
+@bp.get("/geo-options")
+@jwt_required()
+def exsol_sales_geo_options():
+    if not _has_exsol_sales_access():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    args = request.args.to_dict(flat=True)
+    province = _clean_geo_value(args.get("province"))
+
+    try:
+        company_id = _get_exsol_company_id()
+        if not company_id:
+            return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
+
+        base_filter = [NonSamproxCustomer.company_id == company_id]
+
+        provinces = (
+            db.session.query(func.distinct(NonSamproxCustomer.province))
+            .filter(*base_filter)
+            .filter(NonSamproxCustomer.province.isnot(None))
+            .filter(NonSamproxCustomer.province != "")
+            .order_by(func.lower(NonSamproxCustomer.province))
+            .all()
+        )
+        province_values = _dedupe_geo_values([row[0] for row in provinces])
+
+        district_filters = list(base_filter)
+        if province:
+            district_filters.append(func.lower(NonSamproxCustomer.province) == province.lower())
+
+        districts = (
+            db.session.query(func.distinct(NonSamproxCustomer.district))
+            .filter(*district_filters)
+            .filter(NonSamproxCustomer.district.isnot(None))
+            .filter(NonSamproxCustomer.district != "")
+            .order_by(func.lower(NonSamproxCustomer.district))
+            .all()
+        )
+        district_values = _dedupe_geo_values([row[0] for row in districts])
+
+        return jsonify({"provinces": province_values, "districts": district_values})
+    except Exception:
+        current_app.logger.exception("Unable to load exsol geo options")
+        return jsonify({"ok": False, "error": "Unable to load geo options"}), 500
+
+
+@bp.get("/sales-by-person")
+@jwt_required()
+def exsol_sales_by_person_report():
+    if not _has_exsol_sales_access():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    args = request.args.to_dict(flat=True)
+    province = _clean_geo_value(args.get("province")) or ""
+    district = _clean_geo_value(args.get("district")) or ""
+
+    try:
+        company_id = _get_exsol_company_id()
+        if not company_id:
+            return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
+
+        date_from, date_to = _resolve_date_range(args)
+
+        sales_person_name = func.coalesce(
+            User.name, cast(ExsolSalesInvoice.sales_rep_id, String)
+        ).label("sales_person")
+
+        query = (
+            db.session.query(
+                ExsolSalesInvoice.sales_rep_id.label("sales_person_id"),
+                sales_person_name,
+                NonSamproxCustomer.customer_name.label("customer_name"),
+                func.count(ExsolSalesInvoice.id).label("invoice_count"),
+                func.coalesce(func.sum(ExsolSalesInvoice.grand_total), 0).label("net_total"),
+            )
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+            .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
+            .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+            .filter(NonSamproxCustomer.company_id == company_id)
+            .filter(ExsolSalesInvoice.invoice_date >= date_from)
+            .filter(ExsolSalesInvoice.invoice_date <= date_to)
+        )
+
+        if province:
+            query = query.filter(func.lower(NonSamproxCustomer.province) == province.lower())
+        if district:
+            query = query.filter(func.lower(NonSamproxCustomer.district) == district.lower())
+
+        rows = (
+            query.group_by(
+                ExsolSalesInvoice.sales_rep_id,
+                sales_person_name,
+                NonSamproxCustomer.customer_name,
+            )
+            .order_by(func.sum(ExsolSalesInvoice.grand_total).desc())
+            .all()
+        )
+
+        payload_rows = []
+        total_invoices = 0
+        total_net = Decimal("0")
+
+        for row in rows:
+            invoice_count = int(row.invoice_count or 0)
+            net_total = _quantize_money(row.net_total)
+            total_invoices += invoice_count
+            total_net += net_total
+
+            payload_rows.append(
+                {
+                    "sales_person_id": int(row.sales_person_id) if row.sales_person_id else None,
+                    "sales_person": row.sales_person,
+                    "customer_name": row.customer_name,
+                    "invoice_count": invoice_count,
+                    "net_total": _money_to_float(net_total),
+                }
+            )
+
+        return jsonify(
+            {
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+                "filters": {"province": province, "district": district},
+                "rows": payload_rows,
+                "totals": {
+                    "invoice_count": total_invoices,
+                    "net_total": _money_to_float(total_net),
+                },
+            }
+        )
+    except Exception:
+        current_app.logger.exception("Unable to load exsol sales by person report")
+        return jsonify({"ok": False, "error": "Unable to load report"}), 500
+
+
+@bp.get("/sales-by-person.csv")
+@jwt_required()
+def exsol_sales_by_person_report_csv():
+    if not _has_exsol_sales_access():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    args = request.args.to_dict(flat=True)
+    province = _clean_geo_value(args.get("province")) or ""
+    district = _clean_geo_value(args.get("district")) or ""
+
+    try:
+        company_id = _get_exsol_company_id()
+        if not company_id:
+            return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
+
+        date_from, date_to = _resolve_date_range(args)
+
+        sales_person_name = func.coalesce(
+            User.name, cast(ExsolSalesInvoice.sales_rep_id, String)
+        ).label("sales_person")
+
+        query = (
+            db.session.query(
+                ExsolSalesInvoice.sales_rep_id.label("sales_person_id"),
+                sales_person_name,
+                NonSamproxCustomer.customer_name.label("customer_name"),
+                func.count(ExsolSalesInvoice.id).label("invoice_count"),
+                func.coalesce(func.sum(ExsolSalesInvoice.grand_total), 0).label("net_total"),
+            )
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+            .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
+            .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+            .filter(NonSamproxCustomer.company_id == company_id)
+            .filter(ExsolSalesInvoice.invoice_date >= date_from)
+            .filter(ExsolSalesInvoice.invoice_date <= date_to)
+        )
+
+        if province:
+            query = query.filter(func.lower(NonSamproxCustomer.province) == province.lower())
+        if district:
+            query = query.filter(func.lower(NonSamproxCustomer.district) == district.lower())
+
+        rows = (
+            query.group_by(
+                ExsolSalesInvoice.sales_rep_id,
+                sales_person_name,
+                NonSamproxCustomer.customer_name,
+            )
+            .order_by(func.sum(ExsolSalesInvoice.grand_total).desc())
+            .all()
+        )
+
+        def generate():
+            import csv
+            import io
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["Sales Person", "Customer Name", "Invoice Count", "Net Total"])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+            for row in rows:
+                writer.writerow(
+                    [
+                        row.sales_person,
+                        row.customer_name,
+                        int(row.invoice_count or 0),
+                        f"{_quantize_money(row.net_total):.2f}",
+                    ]
+                )
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+        headers = {"Content-Disposition": "attachment; filename=exsol_sales_by_person.csv"}
+        return Response(generate(), mimetype="text/csv", headers=headers)
+    except Exception:
+        current_app.logger.exception("Unable to export exsol sales by person report")
         return jsonify({"ok": False, "error": "Unable to export report"}), 500

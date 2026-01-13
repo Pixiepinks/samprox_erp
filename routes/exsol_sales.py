@@ -150,6 +150,34 @@ def _resolve_salesperson_label(sales_rep_id: int | None, sales_rep_name: str | N
     return "Unknown"
 
 
+def _exsol_sales_status_filter():
+    return or_(
+        ExsolSalesInvoice.status.is_(None),
+        ~func.lower(ExsolSalesInvoice.status).in_(["cancelled", "canceled", "voided", "void"]),
+    )
+
+
+def _exsol_sales_line_query(*, start_date: date, end_date: date, company_id: int):
+    return (
+        db.session.query(ExsolSalesInvoiceLine)
+        .join(ExsolSalesInvoice, ExsolSalesInvoiceLine.invoice_id == ExsolSalesInvoice.id)
+        .join(ExsolInventoryItem, ExsolInventoryItem.id == ExsolSalesInvoiceLine.item_id)
+        .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoiceLine.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoice.invoice_date >= start_date)
+        .filter(ExsolSalesInvoice.invoice_date <= end_date)
+        .filter(_exsol_sales_status_filter())
+        .filter(ExsolInventoryItem.company_id == company_id)
+    )
+
+
+def _exsol_amount_expression():
+    return case(
+        (ExsolSalesInvoiceLine.line_total.is_(None), ExsolSalesInvoiceLine.qty * ExsolSalesInvoiceLine.unit_price),
+        else_=ExsolSalesInvoiceLine.line_total,
+    )
+
+
 def _fetch_stacked_sales_data(
     *,
     start_date: date,
@@ -158,15 +186,9 @@ def _fetch_stacked_sales_data(
     metric: str,
     company_id: int,
 ) -> list[tuple[int | None, str | None, str, Decimal]]:
-    amount_expr = case(
-        (ExsolSalesInvoiceLine.line_total.is_(None), ExsolSalesInvoiceLine.qty * ExsolSalesInvoiceLine.unit_price),
-        else_=ExsolSalesInvoiceLine.line_total,
-    )
+    amount_expr = _exsol_amount_expression()
     metric_expr = func.sum(amount_expr if metric == "amount" else ExsolSalesInvoiceLine.qty)
-    status_filter = or_(
-        ExsolSalesInvoice.status.is_(None),
-        ~func.lower(ExsolSalesInvoice.status).in_(["cancelled", "canceled", "voided", "void"]),
-    )
+    status_filter = _exsol_sales_status_filter()
 
     query = (
         db.session.query(
@@ -229,6 +251,53 @@ def _parse_date(value: Any) -> date | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_item_codes(*keys: str) -> list[str]:
+    codes: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        for raw_value in request.args.getlist(key):
+            for entry in (raw_value or "").split(","):
+                code = entry.strip()
+                if code and code not in seen:
+                    codes.append(code)
+                    seen.add(code)
+    return codes
+
+
+def _build_water_pump_filter(item_codes: list[str]):
+    if item_codes:
+        return ExsolInventoryItem.item_code.in_(item_codes)
+    return ExsolInventoryItem.item_code.ilike("EXS%")
+
+
+def _sum_exsol_sales_amount(
+    *,
+    start_date: date,
+    end_date: date,
+    company_id: int,
+    item_codes: list[str],
+) -> float:
+    query = _exsol_sales_line_query(start_date=start_date, end_date=end_date, company_id=company_id)
+    if item_codes:
+        query = query.filter(ExsolInventoryItem.item_code.in_(item_codes))
+    amount_expr = _exsol_amount_expression()
+    total = query.with_entities(func.coalesce(func.sum(amount_expr), 0)).scalar()
+    return float(total or 0)
+
+
+def _sum_exsol_water_pump_qty(
+    *,
+    start_date: date,
+    end_date: date,
+    company_id: int,
+    item_codes: list[str],
+) -> int:
+    query = _exsol_sales_line_query(start_date=start_date, end_date=end_date, company_id=company_id)
+    query = query.filter(_build_water_pump_filter(item_codes))
+    total = query.with_entities(func.coalesce(func.sum(ExsolSalesInvoiceLine.qty), 0)).scalar()
+    return _coerce_metric_value(total, "qty")
 
 
 def _parse_decimal(value: Any) -> Decimal | None:
@@ -377,6 +446,44 @@ def exsol_stacked_sales_dashboard():
         payload["previous_range"] = {"start": prev_start.isoformat(), "end": prev_end.isoformat()}
 
     return jsonify(payload)
+
+
+@bp.get("/mtd-summary")
+@jwt_required()
+def exsol_mtd_summary():
+    if not _has_exsol_sales_manager_access():
+        return _build_error("Access denied", 403)
+
+    start_date = _parse_date(request.args.get("start_date") or request.args.get("start"))
+    end_date = _parse_date(request.args.get("end_date") or request.args.get("end"))
+    if not start_date or not end_date:
+        return _build_error("Start and end dates are required.", 400)
+
+    item_codes = _parse_item_codes("item_codes", "items")
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    sales_amount = _sum_exsol_sales_amount(
+        start_date=start_date,
+        end_date=end_date,
+        company_id=company_id,
+        item_codes=item_codes,
+    )
+    water_pump_qty = _sum_exsol_water_pump_qty(
+        start_date=start_date,
+        end_date=end_date,
+        company_id=company_id,
+        item_codes=item_codes,
+    )
+
+    return jsonify(
+        {
+            "sales_amount_lkr": sales_amount,
+            "water_pump_qty": water_pump_qty,
+        }
+    )
 
 
 @bp.get("/available-serials")

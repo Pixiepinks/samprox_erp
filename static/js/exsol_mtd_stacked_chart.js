@@ -12,6 +12,8 @@ if (widget) {
     const applyButton = widget.querySelector("#exsol-stacked-apply");
     const statusEl = widget.querySelector("[data-exsol-stacked-status]");
     const chartCanvas = widget.querySelector("#exsol-stacked-chart");
+    const salesValueEl = widget.querySelector("#exsol-mtd-sales");
+    const qtyValueEl = widget.querySelector("#exsol-mtd-qty");
 
     let chartInstance = null;
 
@@ -20,6 +22,7 @@ if (widget) {
         maximumFractionDigits: 2,
     });
     const qtyFormatter = new Intl.NumberFormat("en-LK", { maximumFractionDigits: 0 });
+    const kpiAmountFormatter = new Intl.NumberFormat("en-LK", { maximumFractionDigits: 0 });
 
     const formatDate = (value) => {
         const year = value.getFullYear();
@@ -141,6 +144,19 @@ if (widget) {
         });
     };
 
+    const getSelectedItems = () => Array.from(itemsSelect.selectedOptions).map((option) => option.value);
+
+    const setKpiValues = (salesAmount, waterPumpQty) => {
+        if (salesValueEl) {
+            const amount = Number.isFinite(salesAmount) ? salesAmount : 0;
+            salesValueEl.textContent = `Rs. ${kpiAmountFormatter.format(amount)}`;
+        }
+        if (qtyValueEl) {
+            const qty = Number.isFinite(waterPumpQty) ? waterPumpQty : 0;
+            qtyValueEl.textContent = `${kpiAmountFormatter.format(qty)} Units`;
+        }
+    };
+
     const loadItems = async () => {
         try {
             const resp = await fetch("/api/exsol/inventory-items/codes", { headers });
@@ -151,6 +167,35 @@ if (widget) {
             populateItems(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Unable to load Exsol items", error);
+        }
+    };
+
+    const loadSummary = async () => {
+        if (!startInput.value || !endInput.value) {
+            setKpiValues(0, 0);
+            return;
+        }
+
+        const params = new URLSearchParams({
+            start_date: startInput.value,
+            end_date: endInput.value,
+        });
+
+        const selectedItems = getSelectedItems();
+        if (selectedItems.length) {
+            selectedItems.forEach((code) => params.append("item_codes", code));
+        }
+
+        try {
+            const resp = await fetch(`/api/exsol/sales/mtd-summary?${params.toString()}`, { headers });
+            if (!resp.ok) {
+                throw new Error(`Failed to load KPI summary (${resp.status})`);
+            }
+            const data = await resp.json();
+            setKpiValues(data?.sales_amount_lkr ?? 0, data?.water_pump_qty ?? 0);
+        } catch (error) {
+            console.error("Unable to load Exsol KPI summary", error);
+            setKpiValues(0, 0);
         }
     };
 
@@ -167,7 +212,7 @@ if (widget) {
             compare: compareCheckbox.checked ? "1" : "0",
         });
 
-        const selectedItems = Array.from(itemsSelect.selectedOptions).map((option) => option.value);
+        const selectedItems = getSelectedItems();
         if (selectedItems.length) {
             params.set("items", selectedItems.join(","));
         }
@@ -210,9 +255,13 @@ if (widget) {
     };
 
     setDefaultDates();
-    loadItems().then(loadChartData);
+    loadItems().then(() => {
+        loadChartData();
+        loadSummary();
+    });
 
     applyButton.addEventListener("click", () => {
         loadChartData();
+        loadSummary();
     });
 }

@@ -5816,6 +5816,44 @@ body.modal-polyfill-active::before {
     align-items: flex-start;
 }
 
+.exsol-stacked-card__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.exsol-stacked-kpi {
+    flex: 1 1 200px;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 12px 25px rgba(15, 23, 42, 0.08);
+}
+
+.exsol-stacked-kpi__label {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #2563eb;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.exsol-stacked-kpi__subtitle {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.exsol-stacked-kpi__value {
+    margin: 0.4rem 0 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
 .exsol-stacked-card__controls {
     display: flex;
     flex-wrap: wrap;

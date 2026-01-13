@@ -5807,3 +5807,91 @@ body.modal-polyfill-active::before {
         align-items: stretch;
     }
 }
+
+.exsol-stacked-card__header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.exsol-stacked-card__controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    align-items: flex-end;
+    justify-content: flex-end;
+}
+
+.exsol-stacked-card__control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.exsol-stacked-card__control input,
+.exsol-stacked-card__control select {
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    border-radius: 12px;
+    padding: 0.55rem 0.75rem;
+    min-width: 160px;
+    font-size: 0.95rem;
+    background: #fff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.exsol-stacked-card__control select[multiple] {
+    min-width: 200px;
+    min-height: 80px;
+}
+
+.exsol-stacked-card__control input:focus,
+.exsol-stacked-card__control select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.exsol-stacked-card__checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.exsol-stacked-card__checkbox input {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.exsol-stacked-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.exsol-stacked-card__status {
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    background: rgba(37, 99, 235, 0.08);
+    color: #1d4ed8;
+    font-weight: 600;
+}
+
+.exsol-stacked-card__canvas {
+    position: relative;
+    min-height: 320px;
+}
+
+@media (max-width: 900px) {
+    .exsol-stacked-card__controls {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .exsol-stacked-card__control select[multiple] {
+        min-width: 100%;
+    }
+}

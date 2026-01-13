@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import re
@@ -7,6 +8,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from extensions import db
@@ -20,6 +22,7 @@ from models import (
     ExsolSalesInvoiceSerial,
     NonSamproxCustomer,
     RoleEnum,
+    SALES_MANAGER_ROLES,
     User,
     normalize_role,
 )
@@ -85,6 +88,114 @@ def _build_error(message: str, status: int = 400, details: Any | None = None):
 def _get_exsol_company_id() -> int | None:
     company = Company.query.filter(Company.name == EXSOL_COMPANY_NAME).one_or_none()
     return company.id if company else None
+
+
+def _add_months(source: date, months: int) -> date:
+    month_index = source.month - 1 + months
+    year = source.year + month_index // 12
+    month = month_index % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(source.day, last_day))
+
+
+def _has_exsol_sales_manager_access() -> bool:
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt() or {}
+    except Exception:
+        claims = {}
+
+    role = normalize_role(claims.get("role"))
+    company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
+
+    if role is None or not company_key:
+        identity = get_jwt_identity()
+        try:
+            user_id = int(identity) if identity is not None else None
+        except (TypeError, ValueError):
+            user_id = None
+
+        if user_id:
+            user = User.query.get(user_id)
+            if user:
+                role = role or user.role
+                company_key = company_key or (user.company_key or "").strip().lower()
+
+    if role == RoleEnum.admin:
+        return True
+
+    if role not in SALES_MANAGER_ROLES or role == RoleEnum.sales_executive:
+        return False
+
+    return company_key == "exsol-engineering"
+
+
+def _coerce_metric_value(value: Any, metric: str) -> float | int:
+    if value is None:
+        return 0
+    if isinstance(value, Decimal):
+        numeric = float(value)
+    else:
+        numeric = float(value)
+    if metric == "qty":
+        return int(round(numeric))
+    return float(numeric)
+
+
+def _resolve_salesperson_label(sales_rep_id: int | None, sales_rep_name: str | None) -> str:
+    if sales_rep_name:
+        return sales_rep_name
+    if sales_rep_id is not None:
+        return f"Sales Rep {sales_rep_id}"
+    return "Unknown"
+
+
+def _fetch_stacked_sales_data(
+    *,
+    start_date: date,
+    end_date: date,
+    item_codes: list[str],
+    metric: str,
+    company_id: int,
+) -> list[tuple[int | None, str | None, str, Decimal]]:
+    amount_expr = case(
+        (ExsolSalesInvoiceLine.line_total.is_(None), ExsolSalesInvoiceLine.qty * ExsolSalesInvoiceLine.unit_price),
+        else_=ExsolSalesInvoiceLine.line_total,
+    )
+    metric_expr = func.sum(amount_expr if metric == "amount" else ExsolSalesInvoiceLine.qty)
+    status_filter = or_(
+        ExsolSalesInvoice.status.is_(None),
+        ~func.lower(ExsolSalesInvoice.status).in_(["cancelled", "canceled", "voided", "void"]),
+    )
+
+    query = (
+        db.session.query(
+            ExsolSalesInvoice.sales_rep_id,
+            User.name.label("sales_rep_name"),
+            ExsolInventoryItem.item_code,
+            metric_expr.label("value"),
+        )
+        .join(ExsolSalesInvoiceLine, ExsolSalesInvoiceLine.invoice_id == ExsolSalesInvoice.id)
+        .join(ExsolInventoryItem, ExsolInventoryItem.id == ExsolSalesInvoiceLine.item_id)
+        .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
+        .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoiceLine.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoice.invoice_date >= start_date)
+        .filter(ExsolSalesInvoice.invoice_date <= end_date)
+        .filter(status_filter)
+        .filter(ExsolInventoryItem.company_id == company_id)
+    )
+
+    if item_codes:
+        query = query.filter(ExsolInventoryItem.item_code.in_(item_codes))
+
+    query = query.group_by(
+        ExsolSalesInvoice.sales_rep_id,
+        User.name,
+        ExsolInventoryItem.item_code,
+    )
+
+    return list(query.all())
 
 
 def _serialize_exsol_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
@@ -175,6 +286,97 @@ def list_exsol_items():
         .all()
     )
     return jsonify(items_schema.dump(items))
+
+
+@bp.get("/dashboard/stacked-sales")
+@jwt_required()
+def exsol_stacked_sales_dashboard():
+    if not _has_exsol_sales_manager_access():
+        return _build_error("Access denied", 403)
+
+    start_date = _parse_date(request.args.get("start"))
+    end_date = _parse_date(request.args.get("end"))
+    if not start_date or not end_date:
+        return _build_error("Start and end dates are required.", 400)
+
+    compare = (request.args.get("compare") or "0").strip().lower() in {"1", "true", "yes"}
+    metric = (request.args.get("metric") or "amount").strip().lower()
+    if metric not in {"amount", "qty"}:
+        return _build_error("Invalid metric selection.", 400)
+
+    items_raw = (request.args.get("items") or "").strip()
+    item_codes = [code.strip() for code in items_raw.split(",") if code.strip()] if items_raw else []
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    current_rows = _fetch_stacked_sales_data(
+        start_date=start_date,
+        end_date=end_date,
+        item_codes=item_codes,
+        metric=metric,
+        company_id=company_id,
+    )
+
+    previous_rows: list[tuple[int | None, str | None, str, Decimal]] = []
+    prev_start = prev_end = None
+    if compare:
+        prev_start = _add_months(start_date, -1)
+        prev_end = _add_months(end_date, -1)
+        previous_rows = _fetch_stacked_sales_data(
+            start_date=prev_start,
+            end_date=prev_end,
+            item_codes=item_codes,
+            metric=metric,
+            company_id=company_id,
+        )
+
+    series_current: dict[str, dict[str, float | int]] = {}
+    series_previous: dict[str, dict[str, float | int]] = {}
+    item_code_set: set[str] = set()
+    label_set: set[str] = set()
+
+    for sales_rep_id, sales_rep_name, item_code, value in current_rows:
+        label = _resolve_salesperson_label(sales_rep_id, sales_rep_name)
+        label_set.add(label)
+        item_code_set.add(item_code)
+        series_current.setdefault(label, {})[item_code] = _coerce_metric_value(value, metric)
+
+    for sales_rep_id, sales_rep_name, item_code, value in previous_rows:
+        label = _resolve_salesperson_label(sales_rep_id, sales_rep_name)
+        label_set.add(label)
+        item_code_set.add(item_code)
+        series_previous.setdefault(label, {})[item_code] = _coerce_metric_value(value, metric)
+
+    labels = list(label_set)
+    item_codes_out = sorted(item_code_set)
+
+    totals_current = {label: sum(series_current.get(label, {}).values()) for label in labels}
+    if compare and all(total == 0 for total in totals_current.values()):
+        totals = {label: sum(series_previous.get(label, {}).values()) for label in labels}
+    else:
+        totals = totals_current
+
+    labels_sorted = sorted(labels, key=lambda label: totals.get(label, 0), reverse=True)
+
+    payload = {
+        "range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+        "compare": compare,
+        "metric": metric,
+        "unit": "LKR" if metric == "amount" else "UNITS",
+        "labels": labels_sorted,
+        "item_codes": item_codes_out,
+        "series": {
+            "current": series_current,
+            "previous": series_previous if compare else {},
+        },
+    }
+
+    if compare and prev_start and prev_end:
+        payload["previous_range"] = {"start": prev_start.isoformat(), "end": prev_end.isoformat()}
+
+    return jsonify(payload)
 
 
 @bp.get("/available-serials")

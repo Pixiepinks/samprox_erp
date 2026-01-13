@@ -27,4 +27,53 @@
         </article>
     </div>
 </section>
+{% if show_exsol_stacked_widget %}
+<section class="section">
+    <article class="card exsol-stacked-card" data-exsol-stacked-widget>
+        <div class="exsol-stacked-card__header">
+            <div>
+                <p class="eyebrow">Exsol sales</p>
+                <h2 class="card__title">Exsol MTD Sales (Stacked by Item Code)</h2>
+                <p class="card__description">Track month-to-date Exsol sales by salesperson and item.</p>
+            </div>
+            <div class="exsol-stacked-card__controls">
+                <label class="exsol-stacked-card__control">
+                    <span>Start date</span>
+                    <input type="date" id="exsol-stacked-start" />
+                </label>
+                <label class="exsol-stacked-card__control">
+                    <span>End date</span>
+                    <input type="date" id="exsol-stacked-end" />
+                </label>
+                <label class="exsol-stacked-card__control">
+                    <span>Items</span>
+                    <select id="exsol-stacked-items" multiple></select>
+                </label>
+                <label class="exsol-stacked-card__control">
+                    <span>Metric</span>
+                    <select id="exsol-stacked-metric">
+                        <option value="amount" selected>Sales Amount (LKR)</option>
+                        <option value="qty">Quantity (Units)</option>
+                    </select>
+                </label>
+                <label class="exsol-stacked-card__control exsol-stacked-card__checkbox">
+                    <input type="checkbox" id="exsol-stacked-compare" />
+                    <span>Compare with Previous Month</span>
+                </label>
+                <button type="button" class="button" id="exsol-stacked-apply">Apply</button>
+            </div>
+        </div>
+        <div class="exsol-stacked-card__body">
+            <div class="exsol-stacked-card__status" data-exsol-stacked-status hidden>Loading…</div>
+            <div class="exsol-stacked-card__canvas">
+                <canvas id="exsol-stacked-chart" aria-label="Exsol stacked bar chart" role="img"></canvas>
+            </div>
+        </div>
+    </article>
+</section>
+{% endif %}
+{% if show_exsol_stacked_widget %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('static', filename='js/exsol_mtd_stacked_chart.js') }}" defer></script>
+{% endif %}
 {% endblock %}

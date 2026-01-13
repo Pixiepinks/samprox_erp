@@ -74,6 +74,28 @@ def list_inventory_items():
     return jsonify(items_schema.dump(items))
 
 
+@bp.get("/inventory-items/codes")
+@jwt_required()
+def list_inventory_item_codes():
+    if not _has_exsol_access():
+        return _build_error("Access denied", 403)
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    items = (
+        ExsolInventoryItem.query.filter(
+            ExsolInventoryItem.company_id == company_id,
+            ExsolInventoryItem.is_active.is_(True),
+        )
+        .order_by(ExsolInventoryItem.item_code.asc())
+        .with_entities(ExsolInventoryItem.item_code, ExsolInventoryItem.item_name)
+        .all()
+    )
+    return jsonify([{"code": code, "name": name} for code, name in items])
+
+
 @bp.post("/inventory-items")
 @jwt_required()
 def create_inventory_item():

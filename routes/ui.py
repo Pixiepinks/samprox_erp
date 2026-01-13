@@ -431,7 +431,15 @@ def sales_visits_alias():
 @bp.get("/sales/dashboard")
 def sales_dashboard_page():
     """Render the Sales Manager dashboard shell."""
-    return render_template("sales_dashboard.html", active_tab="dashboard")
+    role = _current_role()
+    show_exsol_widget = bool(
+        (role in SALES_MANAGER_ROLES and role != RoleEnum.sales_executive) or role == RoleEnum.admin
+    )
+    return render_template(
+        "sales_dashboard.html",
+        active_tab="dashboard",
+        show_exsol_stacked_widget=show_exsol_widget,
+    )
 
 
 @bp.get("/sales/data-entry")

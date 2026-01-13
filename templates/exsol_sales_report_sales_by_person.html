@@ -1,0 +1,349 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "reports" %}
+{% block page_title %}Sales by Sales Person | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Exsol sales reporting</p>
+            <h1>Sales by Sales Person</h1>
+            <p class="section__description">
+                Exsol-only report grouped by sales person and customer. Filter by province, district, and date range.
+            </p>
+        </div>
+    </header>
+
+    <div class="report-controls">
+        <form class="filters" id="filters-form">
+            <label class="form-field">
+                <span>Province</span>
+                <select id="filter-province">
+                    <option value="">All provinces</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>District</span>
+                <select id="filter-district">
+                    <option value="">All districts</option>
+                </select>
+            </label>
+            <label class="form-field">
+                <span>Date from</span>
+                <input type="date" id="filter-from" />
+            </label>
+            <label class="form-field">
+                <span>Date to</span>
+                <input type="date" id="filter-to" />
+            </label>
+            <div class="filters__actions">
+                <button class="button button--primary button--small" type="submit">Apply</button>
+                <button class="button button--ghost button--small" type="button" id="reset-filters">Reset</button>
+            </div>
+        </form>
+        <div class="report-actions">
+            <button class="button button--secondary button--small" id="export-csv">Export CSV</button>
+        </div>
+    </div>
+
+    <div class="alert" id="report-error" hidden></div>
+    <p class="empty-state" id="report-loading">Loading report…</p>
+
+    <div class="table-wrapper" id="report-table" hidden>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Sales Person</th>
+                    <th>Customer Name</th>
+                    <th>Invoices</th>
+                    <th>Net Total</th>
+                </tr>
+            </thead>
+            <tbody id="report-body"></tbody>
+            <tfoot>
+                <tr>
+                    <th>Totals</th>
+                    <th></th>
+                    <th id="total-invoices">0</th>
+                    <th id="total-net">0.00</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <p class="empty-state" id="report-empty" hidden>No Exsol invoices match the selected filters.</p>
+</section>
+
+<style>
+    .report-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        align-items: end;
+        background: #fff;
+        padding: 16px;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .filters__actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: #64748b;
+    }
+
+    .form-field input,
+    .form-field select {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 14px;
+        color: #0f172a;
+    }
+
+    .report-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .table-wrapper {
+        background: #fff;
+        padding: 8px 0 0;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .table th,
+    .table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: left;
+    }
+
+    .table th {
+        font-size: 12px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .table tfoot th {
+        background: #f8fafc;
+        font-weight: 600;
+    }
+
+    .empty-state {
+        margin: 16px 0;
+        color: #94a3b8;
+    }
+</style>
+
+<script>
+    const token = localStorage.getItem("samprox_token");
+
+    const elements = {
+        form: document.getElementById("filters-form"),
+        province: document.getElementById("filter-province"),
+        district: document.getElementById("filter-district"),
+        dateFrom: document.getElementById("filter-from"),
+        dateTo: document.getElementById("filter-to"),
+        reset: document.getElementById("reset-filters"),
+        exportCsv: document.getElementById("export-csv"),
+        error: document.getElementById("report-error"),
+        loading: document.getElementById("report-loading"),
+        table: document.getElementById("report-table"),
+        body: document.getElementById("report-body"),
+        empty: document.getElementById("report-empty"),
+        totalInvoices: document.getElementById("total-invoices"),
+        totalNet: document.getElementById("total-net"),
+    };
+
+    const setDefaultDates = () => {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        elements.dateFrom.value = firstDay.toISOString().split("T")[0];
+        elements.dateTo.value = today.toISOString().split("T")[0];
+    };
+
+    const formatMoney = (value) => {
+        const numeric = Number(value || 0);
+        return numeric.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const buildParams = () => {
+        const params = new URLSearchParams();
+        if (elements.province.value) params.set("province", elements.province.value);
+        if (elements.district.value) params.set("district", elements.district.value);
+        if (elements.dateFrom.value) params.set("date_from", elements.dateFrom.value);
+        if (elements.dateTo.value) params.set("date_to", elements.dateTo.value);
+        return params.toString();
+    };
+
+    const setLoading = (isLoading) => {
+        elements.loading.hidden = !isLoading;
+        elements.table.hidden = isLoading;
+        elements.empty.hidden = true;
+    };
+
+    const setError = (message) => {
+        elements.error.textContent = message || "";
+        elements.error.hidden = !message;
+    };
+
+    const updateTotals = (totals) => {
+        elements.totalInvoices.textContent = totals.invoice_count || 0;
+        elements.totalNet.textContent = formatMoney(totals.net_total);
+    };
+
+    const updateTable = (rows) => {
+        elements.body.innerHTML = "";
+        if (!rows.length) {
+            elements.table.hidden = true;
+            elements.empty.hidden = false;
+            updateTotals({ invoice_count: 0, net_total: 0 });
+            return;
+        }
+
+        rows.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${row.sales_person || ""}</td>
+                <td>${row.customer_name || ""}</td>
+                <td>${row.invoice_count || 0}</td>
+                <td>${formatMoney(row.net_total)}</td>
+            `;
+            elements.body.appendChild(tr);
+        });
+
+        elements.table.hidden = false;
+        elements.empty.hidden = true;
+    };
+
+    const loadReport = async () => {
+        setError("");
+        setLoading(true);
+
+        try {
+            const response = await fetch(`/api/exsol/reports/sales-by-person?${buildParams()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (!response.ok) {
+                throw new Error("Unable to load report data.");
+            }
+
+            const data = await response.json();
+            updateTable(data.rows || []);
+            updateTotals(data.totals || { invoice_count: 0, net_total: 0 });
+        } catch (error) {
+            setError(error.message || "Unable to load report data.");
+            elements.table.hidden = true;
+            elements.empty.hidden = true;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const setSelectOptions = (select, values, placeholder) => {
+        const currentValue = select.value;
+        select.innerHTML = "";
+
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = placeholder;
+        select.appendChild(defaultOption);
+
+        values.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+        });
+
+        if (currentValue && values.includes(currentValue)) {
+            select.value = currentValue;
+        }
+    };
+
+    const loadGeoOptions = async (provinceValue = "") => {
+        try {
+            const url = provinceValue
+                ? `/api/exsol/reports/geo-options?province=${encodeURIComponent(provinceValue)}`
+                : "/api/exsol/reports/geo-options";
+            const response = await fetch(url, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            setSelectOptions(elements.province, data.provinces || [], "All provinces");
+            setSelectOptions(elements.district, data.districts || [], "All districts");
+        } catch (error) {
+            console.warn("Unable to load geo options", error);
+        }
+    };
+
+    elements.form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        loadReport();
+    });
+
+    elements.reset.addEventListener("click", () => {
+        elements.form.reset();
+        setDefaultDates();
+        loadGeoOptions();
+        loadReport();
+    });
+
+    elements.province.addEventListener("change", () => {
+        elements.district.value = "";
+        loadGeoOptions(elements.province.value);
+    });
+
+    elements.exportCsv.addEventListener("click", async () => {
+        try {
+            const response = await fetch(`/api/exsol/reports/sales-by-person.csv?${buildParams()}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error("Unable to export CSV.");
+            }
+            const blob = await response.blob();
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "exsol_sales_by_person.csv";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            setError(error.message || "Unable to export CSV.");
+        }
+    });
+
+    setDefaultDates();
+    loadGeoOptions();
+    loadReport();
+</script>
+{% endblock %}

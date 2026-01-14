@@ -491,7 +491,44 @@ def exsol_sales_report_invoices_page():
     if not _has_exsol_sales_access():
         return render_template("access_denied.html"), 403
 
-    return render_template("exsol_sales_report_invoices.html", active_tab="reports")
+    args = request.args.to_dict(flat=True)
+    sortable_columns = {
+        "date",
+        "invoice_no",
+        "customer",
+        "city",
+        "total",
+        "paid",
+        "due",
+        "status",
+    }
+    sort_by = (args.get("sort_by") or "date").strip().lower()
+    if sort_by not in sortable_columns:
+        sort_by = "date"
+    sort_dir = (args.get("sort_dir") or "desc").strip().lower()
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
+
+    base_params = {key: value for key, value in args.items() if value}
+    base_params.pop("sort_by", None)
+    base_params.pop("sort_dir", None)
+    sort_urls = {}
+    for column in sortable_columns:
+        params = dict(base_params)
+        params["sort_by"] = column
+        if column == sort_by:
+            params["sort_dir"] = "asc" if sort_dir == "desc" else "desc"
+        else:
+            params["sort_dir"] = "desc"
+        sort_urls[column] = url_for("ui.exsol_sales_report_invoices_page", **params)
+
+    return render_template(
+        "exsol_sales_report_invoices.html",
+        active_tab="reports",
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        sort_urls=sort_urls,
+    )
 
 
 @bp.get("/sales/reports/exsol-sales-by-person")

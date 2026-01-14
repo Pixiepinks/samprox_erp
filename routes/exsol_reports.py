@@ -306,18 +306,28 @@ def _serialize_filters_for_log(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _resolve_sort(sort_by: str | None, sort_dir: str | None, *, due_col):
+def _resolve_sort(
+    sort_by: str | None,
+    sort_dir: str | None,
+    *,
+    due_col,
+    paid_col,
+    status_col,
+):
     sort_by_value = (sort_by or "date").strip().lower()
     sort_dir_value = (sort_dir or "desc").strip().lower()
 
-    sort_map = {
+    SORTABLE_COLUMNS = {
         "date": ExsolSalesInvoice.invoice_date,
         "invoice_no": ExsolSalesInvoice.invoice_no,
         "customer": NonSamproxCustomer.customer_name,
+        "city": NonSamproxCustomer.city,
         "total": ExsolSalesInvoice.grand_total,
+        "paid": paid_col,
         "due": due_col,
+        "status": status_col,
     }
-    sort_col = sort_map.get(sort_by_value, ExsolSalesInvoice.invoice_date)
+    sort_col = SORTABLE_COLUMNS.get(sort_by_value, ExsolSalesInvoice.invoice_date)
     direction = sort_col.asc() if sort_dir_value == "asc" else sort_col.desc()
     return direction
 
@@ -363,9 +373,13 @@ def exsol_sales_invoice_report():
         if not company_id:
             return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
 
-        base_query, status_col, _payment_status_col, _paid_col, due_col = _build_report_query(
-            company_id
-        )
+        (
+            base_query,
+            status_col,
+            _payment_status_col,
+            paid_col,
+            due_col,
+        ) = _build_report_query(company_id)
         filtered_query = _apply_filters(base_query, status_col=status_col, filters=args)
 
         filtered_subquery = filtered_query.subquery()
@@ -379,7 +393,13 @@ def exsol_sales_invoice_report():
         if page > total_pages:
             page = total_pages
 
-        order_by = _resolve_sort(args.get("sort_by"), args.get("sort_dir"), due_col=due_col)
+        order_by = _resolve_sort(
+            args.get("sort_by"),
+            args.get("sort_dir"),
+            due_col=due_col,
+            paid_col=paid_col,
+            status_col=status_col,
+        )
 
         rows = (
             filtered_query.order_by(order_by)
@@ -455,11 +475,21 @@ def export_exsol_sales_invoice_report_csv():
         if not company_id:
             return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
 
-        base_query, status_col, _payment_status_col, _paid_col, due_col = _build_report_query(
-            company_id
-        )
+        (
+            base_query,
+            status_col,
+            _payment_status_col,
+            paid_col,
+            due_col,
+        ) = _build_report_query(company_id)
         filtered_query = _apply_filters(base_query, status_col=status_col, filters=args)
-        order_by = _resolve_sort(args.get("sort_by"), args.get("sort_dir"), due_col=due_col)
+        order_by = _resolve_sort(
+            args.get("sort_by"),
+            args.get("sort_dir"),
+            due_col=due_col,
+            paid_col=paid_col,
+            status_col=status_col,
+        )
         rows = filtered_query.order_by(order_by).all()
 
         def generate():

@@ -361,6 +361,14 @@
         });
     };
 
+    const buildAuthHeaders = () => {
+        const headers = {};
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        return headers;
+    };
+
     const fetchReport = async () => {
         const itemCode = resolveItemCode(elements.itemCodeInput.value);
         if (!itemCode) {
@@ -375,9 +383,8 @@
         try {
             const params = buildQuery();
             const response = await fetch(`/api/exsol/reports/item-serials?${params.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: buildAuthHeaders(),
+                credentials: "same-origin",
             });
             if (!response.ok) {
                 const payload = await response.json().catch(() => ({}));
@@ -440,8 +447,9 @@
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    ...buildAuthHeaders(),
                 },
+                credentials: "same-origin",
                 body: JSON.stringify({
                     record_id: selectedRecord.id,
                     record_type: selectedRecord.type,
@@ -465,9 +473,8 @@
     const loadInventoryItems = async () => {
         try {
             const response = await fetch("/api/exsol/inventory-items/codes", {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: buildAuthHeaders(),
+                credentials: "same-origin",
             });
             if (!response.ok) return;
             inventoryItems = await response.json();

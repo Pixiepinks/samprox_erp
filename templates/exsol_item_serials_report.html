@@ -66,7 +66,7 @@
     <p class="empty-state" id="report-empty" hidden>No serial numbers found for the selected item.</p>
 </section>
 
-<div class="modal" id="edit-modal" hidden>
+<div class="modal" id="edit-modal" hidden aria-hidden="true">
     <div class="modal__backdrop" id="edit-backdrop"></div>
     <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
         <header class="modal__header">
@@ -197,6 +197,11 @@
         align-items: center;
         justify-content: center;
         z-index: 1000;
+    }
+
+    .modal[hidden] {
+        display: none;
+        pointer-events: none;
     }
 
     .modal__backdrop {
@@ -407,20 +412,24 @@
         }
     };
 
-    const openModal = (button) => {
+    const openEditModal = (rowData) => {
         selectedRecord = {
-            id: button.dataset.recordId,
-            type: button.dataset.recordType,
+            id: rowData.recordId,
+            type: rowData.recordType,
         };
-        elements.editSerial.value = button.dataset.serialNumber || "";
-        elements.editItemCode.value = button.dataset.itemCode || "";
+        elements.editSerial.value = rowData.serialNumber || "";
+        elements.editItemCode.value = rowData.itemCode || "";
         setEditError("");
         elements.modal.hidden = false;
+        elements.modal.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
     };
 
-    const closeModal = () => {
+    const closeEditModal = () => {
         elements.modal.hidden = true;
+        elements.modal.setAttribute("aria-hidden", "true");
         selectedRecord = null;
+        document.body.style.overflow = "";
     };
 
     const submitEdit = async (event) => {
@@ -461,7 +470,7 @@
             if (!response.ok) {
                 throw new Error(payload.error || "Unable to update serial right now.");
             }
-            closeModal();
+            closeEditModal();
             await fetchReport();
         } catch (error) {
             setEditError(error.message || "Unable to update serial right now.");
@@ -515,13 +524,27 @@
     elements.body.addEventListener("click", (event) => {
         const button = event.target.closest("button[data-record-id]");
         if (button) {
-            openModal(button);
+            openEditModal({
+                recordId: button.dataset.recordId,
+                recordType: button.dataset.recordType,
+                serialNumber: button.dataset.serialNumber,
+                itemCode: button.dataset.itemCode,
+            });
         }
     });
 
-    elements.closeModal.addEventListener("click", closeModal);
-    elements.backdrop.addEventListener("click", closeModal);
+    elements.closeModal.addEventListener("click", closeEditModal);
+    elements.backdrop.addEventListener("click", (event) => {
+        if (event.target === elements.backdrop) {
+            closeEditModal();
+        }
+    });
     elements.editForm.addEventListener("submit", submitEdit);
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !elements.modal.hidden) {
+            closeEditModal();
+        }
+    });
 
     loadInventoryItems();
 </script>

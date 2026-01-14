@@ -483,6 +483,17 @@ def exsol_sales_report_sales_by_person_page():
     return render_template("exsol_sales_report_sales_by_person.html", active_tab="reports")
 
 
+@bp.get("/sales/reports/item-serials")
+@jwt_required(optional=True)
+def exsol_item_serials_report_page():
+    """Render the Exsol item serials report page."""
+
+    if not _has_exsol_sales_access():
+        return render_template("access_denied.html"), 403
+
+    return render_template("exsol_item_serials_report.html", active_tab="reports")
+
+
 @bp.get("/sales/production")
 def sales_production_page():
     """Render the Exsol production entry workspace."""

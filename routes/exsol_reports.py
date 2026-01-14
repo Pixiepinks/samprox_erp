@@ -732,8 +732,7 @@ def exsol_sales_by_person_report_csv():
                 output.truncate(0)
 
         headers = {"Content-Disposition": "attachment; filename=exsol_sales_by_person.csv"}
-        response = Response(generate(), mimetype="text/csv", headers=headers)
-        return response
+        return Response(generate(), mimetype="text/csv", headers=headers)
     except Exception:
         current_app.logger.exception("Unable to export exsol sales by person report")
         return jsonify({"ok": False, "error": "Unable to export report"}), 500

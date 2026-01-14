@@ -916,6 +916,7 @@ class ExsolInventoryItem(db.Model):
 
     __table_args__ = (
         UniqueConstraint("company_id", "item_code", name="uq_exsol_inventory_items_company_code"),
+        Index("ix_exsol_inventory_items_company_item_code", "company_id", "item_code"),
     )
 
 
@@ -976,6 +977,7 @@ class ExsolProductionSerial(db.Model):
             name="uq_exsol_production_serial_company_serial",
         ),
         Index("ix_exsol_production_serial_company_entry", "company_key", "entry_id"),
+        Index("ix_exsol_production_serial_company_serial", "company_key", "serial_no"),
     )
 
 
@@ -1091,6 +1093,7 @@ class ExsolSalesInvoiceSerial(db.Model):
             "serial_no",
             name="uq_exsol_sales_invoice_serial_company_item_serial",
         ),
+        Index("ix_exsol_sales_invoice_serial_company_serial", "company_key", "serial_no"),
     )
 
 

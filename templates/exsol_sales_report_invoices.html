@@ -78,14 +78,46 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th><button type="button" class="sort-button" data-sort="date">Date</button></th>
-                    <th><button type="button" class="sort-button" data-sort="invoice_no">Invoice No</button></th>
-                    <th><button type="button" class="sort-button" data-sort="customer">Customer</button></th>
-                    <th>City</th>
-                    <th><button type="button" class="sort-button" data-sort="total">Total</button></th>
-                    <th>Paid</th>
-                    <th><button type="button" class="sort-button" data-sort="due">Due</button></th>
-                    <th>Status</th>
+                    <th>
+                        <a class="sort-link" data-sort="date" href="{{ sort_urls['date'] }}">
+                            Date{% if sort_by == "date" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="invoice_no" href="{{ sort_urls['invoice_no'] }}">
+                            Invoice No{% if sort_by == "invoice_no" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="customer" href="{{ sort_urls['customer'] }}">
+                            Customer{% if sort_by == "customer" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="city" href="{{ sort_urls['city'] }}">
+                            City{% if sort_by == "city" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="total" href="{{ sort_urls['total'] }}">
+                            Total{% if sort_by == "total" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="paid" href="{{ sort_urls['paid'] }}">
+                            Paid{% if sort_by == "paid" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="due" href="{{ sort_urls['due'] }}">
+                            Due{% if sort_by == "due" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a class="sort-link" data-sort="status" href="{{ sort_urls['status'] }}">
+                            Status{% if sort_by == "status" %} {{ "↑" if sort_dir == "asc" else "↓" }}{% endif %}
+                        </a>
+                    </th>
                 </tr>
             </thead>
             <tbody id="report-body"></tbody>
@@ -207,13 +239,15 @@
         letter-spacing: 0.04em;
     }
 
-    .sort-button {
-        border: none;
-        background: transparent;
-        font: inherit;
+    .sort-link {
         color: inherit;
+        text-decoration: none;
         cursor: pointer;
-        padding: 0;
+    }
+
+    .sort-link:hover,
+    .sort-link:focus {
+        text-decoration: underline;
     }
 
     .status-pill {
@@ -279,6 +313,7 @@
         sortBy: "date",
         sortDir: "desc",
         totalPages: 1,
+        customerId: "",
     };
 
     const elements = {
@@ -303,8 +338,19 @@
         pagePrev: document.getElementById("page-prev"),
         pageNext: document.getElementById("page-next"),
         pageInfo: document.getElementById("page-info"),
-        sortButtons: Array.from(document.querySelectorAll(".sort-button")),
+        sortLinks: Array.from(document.querySelectorAll(".sort-link")),
     };
+
+    const sortableColumns = new Set([
+        "date",
+        "invoice_no",
+        "customer",
+        "city",
+        "total",
+        "paid",
+        "due",
+        "status",
+    ]);
 
     const formatMoney = (value) => {
         const numeric = Number(value || 0);
@@ -327,13 +373,71 @@
         if (elements.dateFrom.value) params.set("date_from", elements.dateFrom.value);
         if (elements.dateTo.value) params.set("date_to", elements.dateTo.value);
         if (elements.status.value) params.set("status", elements.status.value);
-        if (elements.customer.value) params.set("customer_id", elements.customer.value);
+        const customerId = elements.customer.value || state.customerId;
+        if (customerId) params.set("customer_id", customerId);
         if (elements.search.value.trim()) params.set("q", elements.search.value.trim());
         params.set("page", state.page);
         params.set("page_size", state.pageSize);
         params.set("sort_by", state.sortBy);
         params.set("sort_dir", state.sortDir);
         return params.toString();
+    };
+
+    const syncUrl = () => {
+        const params = new URLSearchParams(buildParams());
+        const nextUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.replaceState({}, "", nextUrl);
+    };
+
+    const updateSortLinks = () => {
+        elements.sortLinks.forEach((link) => {
+            const sortKey = link.dataset.sort;
+            if (!sortableColumns.has(sortKey)) return;
+            const params = new URLSearchParams();
+            if (elements.dateFrom.value) params.set("date_from", elements.dateFrom.value);
+            if (elements.dateTo.value) params.set("date_to", elements.dateTo.value);
+            if (elements.status.value) params.set("status", elements.status.value);
+            const customerId = elements.customer.value || state.customerId;
+            if (customerId) params.set("customer_id", customerId);
+            if (elements.search.value.trim()) params.set("q", elements.search.value.trim());
+            params.set("page", state.page);
+            params.set("page_size", state.pageSize);
+            params.set("sort_by", sortKey);
+            if (state.sortBy === sortKey) {
+                params.set("sort_dir", state.sortDir === "asc" ? "desc" : "asc");
+            } else {
+                params.set("sort_dir", "desc");
+            }
+            link.href = `${window.location.pathname}?${params.toString()}`;
+        });
+    };
+
+    const applyQueryParams = () => {
+        const params = new URLSearchParams(window.location.search);
+        const dateFrom = params.get("date_from");
+        const dateTo = params.get("date_to");
+        const status = params.get("status");
+        const customerId = params.get("customer_id");
+        const search = params.get("q");
+        const page = Number.parseInt(params.get("page"), 10);
+        const sortBy = params.get("sort_by");
+        const sortDir = params.get("sort_dir");
+
+        if (dateFrom) elements.dateFrom.value = dateFrom;
+        if (dateTo) elements.dateTo.value = dateTo;
+        if (status) elements.status.value = status;
+        if (search) elements.search.value = search;
+        if (customerId) state.customerId = customerId;
+
+        if (!Number.isNaN(page) && page > 0) state.page = page;
+        if (sortableColumns.has((sortBy || "").toLowerCase())) {
+            state.sortBy = sortBy.toLowerCase();
+        }
+        if (sortDir === "asc" || sortDir === "desc") {
+            state.sortDir = sortDir;
+        }
+
+        return { customerId };
     };
 
     const setLoading = (isLoading) => {
@@ -432,7 +536,7 @@
         }
     };
 
-    const loadCustomers = async () => {
+    const loadCustomers = async (selectedCustomerId) => {
         try {
             const response = await fetch("/api/exsol/customers", {
                 headers: { Authorization: `Bearer ${token}` },
@@ -446,6 +550,11 @@
                 option.textContent = customer.name;
                 elements.customer.appendChild(option);
             });
+
+            if (selectedCustomerId) {
+                elements.customer.value = selectedCustomerId;
+                state.customerId = selectedCustomerId;
+            }
         } catch (error) {
             console.warn("Unable to load customers", error);
         }
@@ -454,6 +563,9 @@
     elements.form.addEventListener("submit", (event) => {
         event.preventDefault();
         state.page = 1;
+        state.customerId = elements.customer.value;
+        syncUrl();
+        updateSortLinks();
         loadReport();
     });
 
@@ -462,12 +574,17 @@
         state.page = 1;
         state.sortBy = "date";
         state.sortDir = "desc";
+        state.customerId = "";
+        syncUrl();
+        updateSortLinks();
         loadReport();
     });
 
     elements.pagePrev.addEventListener("click", () => {
         if (state.page > 1) {
             state.page -= 1;
+            syncUrl();
+            updateSortLinks();
             loadReport();
         }
     });
@@ -475,21 +592,10 @@
     elements.pageNext.addEventListener("click", () => {
         if (state.page < state.totalPages) {
             state.page += 1;
+            syncUrl();
+            updateSortLinks();
             loadReport();
         }
-    });
-
-    elements.sortButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            const sortKey = button.dataset.sort;
-            if (state.sortBy === sortKey) {
-                state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
-            } else {
-                state.sortBy = sortKey;
-                state.sortDir = "desc";
-            }
-            loadReport();
-        });
     });
 
     elements.exportCsv.addEventListener("click", async () => {
@@ -512,7 +618,10 @@
         }
     });
 
-    loadCustomers();
+    const { customerId } = applyQueryParams();
+    loadCustomers(customerId);
+    syncUrl();
+    updateSortLinks();
     loadReport();
 </script>
 {% endblock %}

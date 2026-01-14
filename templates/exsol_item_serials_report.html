@@ -81,7 +81,7 @@
                 </label>
                 <label class="form-field">
                     <span>Item Code</span>
-                    <input type="text" id="edit-item-code" list="item-code-options" required />
+                    <select id="edit-item-code" required></select>
                 </label>
                 <p class="form-hint">Saving will prevent duplicate serial numbers.</p>
                 <div class="alert" id="edit-error" hidden></div>
@@ -306,11 +306,21 @@
 
     const buildItemOptions = () => {
         elements.dataList.innerHTML = "";
+        elements.editItemCode.innerHTML = "";
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = "Select item code";
+        elements.editItemCode.appendChild(placeholderOption);
         inventoryItems.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.code;
             option.label = `${item.code} — ${item.name}`;
             elements.dataList.appendChild(option);
+
+            const selectOption = document.createElement("option");
+            selectOption.value = item.code;
+            selectOption.textContent = `${item.code} — ${item.name}`;
+            elements.editItemCode.appendChild(selectOption);
         });
     };
 

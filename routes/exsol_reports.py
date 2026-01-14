@@ -665,77 +665,73 @@ def exsol_sales_by_person_report_csv():
     province = _clean_geo_value(args.get("province")) or ""
     district = _clean_geo_value(args.get("district")) or ""
 
-    try:
-        company_id = _get_exsol_company_id()
-        if not company_id:
-            return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return jsonify({"ok": False, "error": "Exsol company not configured"}), 500
 
-        date_from, date_to = _resolve_date_range(args)
+    date_from, date_to = _resolve_date_range(args)
 
-        sales_person_name = func.coalesce(
-            User.name, cast(ExsolSalesInvoice.sales_rep_id, String)
-        ).label("sales_person")
+    sales_person_name = func.coalesce(
+        User.name, cast(ExsolSalesInvoice.sales_rep_id, String)
+    ).label("sales_person")
 
-        query = (
-            db.session.query(
-                ExsolSalesInvoice.sales_rep_id.label("sales_person_id"),
-                sales_person_name,
-                NonSamproxCustomer.customer_name.label("customer_name"),
-                func.count(ExsolSalesInvoice.id).label("invoice_count"),
-                func.coalesce(func.sum(ExsolSalesInvoice.grand_total), 0).label("net_total"),
-            )
-            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
-            .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
-            .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
-            .filter(NonSamproxCustomer.company_id == company_id)
-            .filter(ExsolSalesInvoice.invoice_date >= date_from)
-            .filter(ExsolSalesInvoice.invoice_date <= date_to)
+    query = (
+        db.session.query(
+            ExsolSalesInvoice.sales_rep_id.label("sales_person_id"),
+            sales_person_name,
+            NonSamproxCustomer.customer_name.label("customer_name"),
+            func.count(ExsolSalesInvoice.id).label("invoice_count"),
+            func.coalesce(func.sum(ExsolSalesInvoice.grand_total), 0).label("net_total"),
         )
+        .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+        .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
+        .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+        .filter(NonSamproxCustomer.company_id == company_id)
+        .filter(ExsolSalesInvoice.invoice_date >= date_from)
+        .filter(ExsolSalesInvoice.invoice_date <= date_to)
+    )
 
-        if province:
-            query = query.filter(func.lower(NonSamproxCustomer.province) == province.lower())
-        if district:
-            query = query.filter(func.lower(NonSamproxCustomer.district) == district.lower())
+    if province:
+        query = query.filter(func.lower(NonSamproxCustomer.province) == province.lower())
+    if district:
+        query = query.filter(func.lower(NonSamproxCustomer.district) == district.lower())
 
-        rows = (
-            query.group_by(
-                ExsolSalesInvoice.sales_rep_id,
-                sales_person_name,
-                NonSamproxCustomer.customer_name,
-            )
-            .order_by(func.sum(ExsolSalesInvoice.grand_total).desc())
-            .all()
+    rows = (
+        query.group_by(
+            ExsolSalesInvoice.sales_rep_id,
+            sales_person_name,
+            NonSamproxCustomer.customer_name,
         )
+        .order_by(func.sum(ExsolSalesInvoice.grand_total).desc())
+        .all()
+    )
 
-        def generate():
-            import csv
-            import io
+    def generate():
+        import csv
+        import io
 
-            output = io.StringIO()
-            writer = csv.writer(output)
-            writer.writerow(["Sales Person", "Customer Name", "Invoice Count", "Net Total"])
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Sales Person", "Customer Name", "Invoice Count", "Net Total"])
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for row in rows:
+            writer.writerow(
+                [
+                    row.sales_person,
+                    row.customer_name,
+                    int(row.invoice_count or 0),
+                    f"{_quantize_money(row.net_total):.2f}",
+                ]
+            )
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)
 
-            for row in rows:
-                writer.writerow(
-                    [
-                        row.sales_person,
-                        row.customer_name,
-                        int(row.invoice_count or 0),
-                        f"{_quantize_money(row.net_total):.2f}",
-                    ]
-                )
-                yield output.getvalue()
-                output.seek(0)
-                output.truncate(0)
-
-        headers = {"Content-Disposition": "attachment; filename=exsol_sales_by_person.csv"}
+    headers = {"Content-Disposition": "attachment; filename=exsol_sales_by_person.csv"}
     return Response(generate(), mimetype="text/csv", headers=headers)
-    except Exception:
-        current_app.logger.exception("Unable to export exsol sales by person report")
-        return jsonify({"ok": False, "error": "Unable to export report"}), 500
 
 
 @bp.get("/item-serials")

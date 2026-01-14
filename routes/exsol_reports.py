@@ -6,6 +6,7 @@ from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request
 from flask_jwt_extended import (
+    decode_token,
     get_jwt,
     get_jwt_identity,
     jwt_required,
@@ -36,11 +37,22 @@ EXSOL_COMPANY_KEY = "EXSOL"
 
 
 def _has_exsol_sales_access() -> bool:
+    claims = None
     try:
         verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt() or {}
     except Exception:
-        claims = {}
+        claims = None
+
+    if not claims:
+        token = request.cookies.get("access_token_cookie")
+        if token:
+            try:
+                claims = decode_token(token)
+            except Exception:
+                claims = {}
+        else:
+            claims = {}
 
     role = normalize_role(claims.get("role"))
     company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()

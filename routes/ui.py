@@ -12,7 +12,13 @@ from flask import (
     request,
     url_for,
 )
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
+from flask_jwt_extended import (
+    decode_token,
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+    verify_jwt_in_request,
+)
 from sqlalchemy import func, tuple_
 
 from material import (
@@ -43,18 +49,28 @@ from models import (
 bp = Blueprint("ui", __name__)
 
 
-def _current_role() -> RoleEnum | None:
-    """Return the current user's role if a JWT is provided."""
-
+def _decode_cookie_claims() -> dict | None:
+    token = request.cookies.get("access_token_cookie")
+    if not token:
+        return None
     try:
-        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
+        return decode_token(token)
     except Exception:  # pragma: no cover - defensive safety net
         return None
 
+
+def _current_role() -> RoleEnum | None:
+    """Return the current user's role if a JWT is provided."""
+
+    claims = None
     try:
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt()
-    except RuntimeError:
-        return None
+    except Exception:  # pragma: no cover - defensive safety net
+        claims = None
+
+    if not claims:
+        claims = _decode_cookie_claims() or {}
 
     role = claims.get("role") if claims else None
     if not role:
@@ -65,13 +81,16 @@ def _current_role() -> RoleEnum | None:
 
 def _current_user() -> User | None:
     """Return the current user model if a JWT identity is present."""
-
+    identity = None
     try:
         verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
+        identity = get_jwt_identity()
     except Exception:  # pragma: no cover - defensive safety net
-        return None
+        identity = None
 
-    identity = get_jwt_identity()
+    if not identity:
+        claims = _decode_cookie_claims() or {}
+        identity = claims.get("sub")
     if not identity:
         return None
 

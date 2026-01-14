@@ -47,7 +47,7 @@ def _current_role() -> RoleEnum | None:
     """Return the current user's role if a JWT is provided."""
 
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
     except Exception:  # pragma: no cover - defensive safety net
         return None
 
@@ -67,7 +67,7 @@ def _current_user() -> User | None:
     """Return the current user model if a JWT identity is present."""
 
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
     except Exception:  # pragma: no cover - defensive safety net
         return None
 
@@ -88,7 +88,7 @@ def _has_exsol_inventory_access(require_admin: bool = False) -> bool:
 
     claims = None
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt()
     except Exception:  # pragma: no cover - defensive
         claims = None
@@ -124,7 +124,7 @@ def _has_exsol_production_access() -> bool:
 
     claims = None
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt()
     except Exception:
         claims = None
@@ -152,7 +152,7 @@ def _has_exsol_sales_access() -> bool:
 
     company_key = None
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt() or {}
         company_key = (claims.get("company_key") or claims.get("company") or "").strip().lower()
     except Exception:

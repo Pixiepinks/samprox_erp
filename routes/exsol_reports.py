@@ -37,7 +37,7 @@ EXSOL_COMPANY_KEY = "EXSOL"
 
 def _has_exsol_sales_access() -> bool:
     try:
-        verify_jwt_in_request(optional=True)
+        verify_jwt_in_request(optional=True, locations=["cookies", "headers"])
         claims = get_jwt() or {}
     except Exception:
         claims = {}

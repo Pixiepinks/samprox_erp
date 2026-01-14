@@ -81,7 +81,7 @@
                 </label>
                 <label class="form-field">
                     <span>Item Code</span>
-                    <input type="text" id="edit-item-code" list="item-code-options" required />
+                    <select id="edit-item-code" required></select>
                 </label>
                 <p class="form-hint">Saving will prevent duplicate serial numbers.</p>
                 <div class="alert" id="edit-error" hidden></div>
@@ -283,6 +283,7 @@
     };
 
     let inventoryItems = [];
+    let inventoryItemsPromise = null;
     let selectedRecord = null;
     let searchTimer = null;
 
@@ -305,11 +306,21 @@
 
     const buildItemOptions = () => {
         elements.dataList.innerHTML = "";
+        elements.editItemCode.innerHTML = "";
+        const placeholderOption = document.createElement("option");
+        placeholderOption.value = "";
+        placeholderOption.textContent = "Select item code";
+        elements.editItemCode.appendChild(placeholderOption);
         inventoryItems.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.code;
             option.label = `${item.code} — ${item.name}`;
             elements.dataList.appendChild(option);
+
+            const selectOption = document.createElement("option");
+            selectOption.value = item.code;
+            selectOption.textContent = `${item.code} — ${item.name}`;
+            elements.editItemCode.appendChild(selectOption);
         });
     };
 
@@ -412,7 +423,7 @@
         }
     };
 
-    const openEditModal = (rowData) => {
+    const openEditModal = async (rowData) => {
         selectedRecord = {
             id: rowData.recordId,
             type: rowData.recordType,
@@ -423,6 +434,9 @@
         elements.modal.hidden = false;
         elements.modal.setAttribute("aria-hidden", "false");
         document.body.style.overflow = "hidden";
+
+        await loadInventoryItems();
+        elements.editItemCode.value = rowData.itemCode || "";
     };
 
     const closeEditModal = () => {
@@ -480,17 +494,27 @@
     };
 
     const loadInventoryItems = async () => {
-        try {
-            const response = await fetch("/api/exsol/inventory-items/codes", {
-                headers: buildAuthHeaders(),
-                credentials: "same-origin",
-            });
-            if (!response.ok) return;
-            inventoryItems = await response.json();
-            buildItemOptions();
-        } catch (error) {
-            console.warn("Unable to load inventory items", error);
+        if (inventoryItems.length) {
+            return inventoryItems;
         }
+        if (inventoryItemsPromise) {
+            return inventoryItemsPromise;
+        }
+        inventoryItemsPromise = (async () => {
+            try {
+                const response = await fetch("/api/exsol/inventory-items/codes", {
+                    headers: buildAuthHeaders(),
+                    credentials: "same-origin",
+                });
+                if (!response.ok) return inventoryItems;
+                inventoryItems = await response.json();
+                buildItemOptions();
+            } catch (error) {
+                console.warn("Unable to load inventory items", error);
+            }
+            return inventoryItems;
+        })();
+        return inventoryItemsPromise;
     };
 
     elements.form.addEventListener("submit", (event) => {

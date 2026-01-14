@@ -1,0 +1,521 @@
+{% extends "sales_base.html" %}
+{% set active_tab = "reports" %}
+{% block page_title %}Item by Serial Number | SAMPROX ERP{% endblock %}
+{% block content %}
+<section class="section">
+    <header class="section__header">
+        <div>
+            <p class="eyebrow">Exsol sales reporting</p>
+            <h1>Item by Serial Number</h1>
+            <p class="section__description">
+                View, search, and manage Exsol items by serial number and status.
+            </p>
+        </div>
+    </header>
+
+    <div class="report-toolbar">
+        <form class="toolbar" id="filters-form">
+            <label class="form-field">
+                <span>Item Code</span>
+                <input
+                    type="text"
+                    id="item-code-input"
+                    list="item-code-options"
+                    placeholder="Select item code"
+                    autocomplete="off"
+                    required
+                />
+                <small class="helper">Required to load results.</small>
+            </label>
+            <label class="form-field">
+                <span>Search</span>
+                <input
+                    type="search"
+                    id="serial-search"
+                    placeholder="Search by Serial Number or Item Name"
+                    autocomplete="off"
+                />
+            </label>
+            <div class="toolbar__actions">
+                <button class="button button--primary button--small" type="submit">Search</button>
+                <button class="button button--ghost button--small" type="button" id="clear-filters">Reset</button>
+            </div>
+        </form>
+    </div>
+
+    <datalist id="item-code-options"></datalist>
+
+    <div class="alert" id="report-error" hidden></div>
+    <p class="empty-state" id="report-placeholder">Select an item code to view serial numbers.</p>
+    <p class="empty-state" id="report-loading" hidden>Loading serial numbers…</p>
+
+    <div class="table-wrapper" id="report-table" hidden>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Item Name</th>
+                    <th>Serial Number</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="report-body"></tbody>
+        </table>
+    </div>
+
+    <p class="empty-state" id="report-empty" hidden>No serial numbers found for the selected item.</p>
+</section>
+
+<div class="modal" id="edit-modal" hidden>
+    <div class="modal__backdrop" id="edit-backdrop"></div>
+    <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+        <header class="modal__header">
+            <h2 id="edit-modal-title">Edit Serial</h2>
+            <button class="button button--ghost button--small" type="button" id="close-modal">Close</button>
+        </header>
+        <form id="edit-form">
+            <div class="modal__body">
+                <label class="form-field">
+                    <span>Serial Number</span>
+                    <input type="text" id="edit-serial-number" required />
+                </label>
+                <label class="form-field">
+                    <span>Item Code</span>
+                    <input type="text" id="edit-item-code" list="item-code-options" required />
+                </label>
+                <p class="form-hint">Saving will prevent duplicate serial numbers.</p>
+                <div class="alert" id="edit-error" hidden></div>
+            </div>
+            <footer class="modal__footer">
+                <button class="button button--primary" type="submit" id="save-edit">Save changes</button>
+            </footer>
+        </form>
+    </div>
+</div>
+
+<style>
+    .report-toolbar {
+        margin-bottom: 16px;
+    }
+
+    .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-end;
+        background: #fff;
+        padding: 16px;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .toolbar__actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: #64748b;
+        min-width: 200px;
+    }
+
+    .form-field input {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 14px;
+        color: #0f172a;
+        min-width: 220px;
+    }
+
+    .helper,
+    .form-hint {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .table-wrapper {
+        background: #fff;
+        padding: 8px 0 0;
+        border-radius: 14px;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .table th,
+    .table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: left;
+    }
+
+    .table th {
+        font-size: 12px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-pill--sold {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .status-pill--stored {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .empty-state {
+        margin: 16px 0;
+        color: #94a3b8;
+    }
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal__backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.5);
+    }
+
+    .modal__content {
+        position: relative;
+        background: #fff;
+        padding: 20px;
+        border-radius: 16px;
+        width: min(480px, 90vw);
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+        z-index: 1;
+    }
+
+    .modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .modal__body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .modal__footer {
+        margin-top: 16px;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    @media (max-width: 720px) {
+        .toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .form-field,
+        .form-field input {
+            min-width: unset;
+            width: 100%;
+        }
+
+        .toolbar__actions {
+            justify-content: flex-start;
+        }
+    }
+</style>
+
+<script>
+    const token = localStorage.getItem("samprox_token");
+
+    const elements = {
+        form: document.getElementById("filters-form"),
+        itemCodeInput: document.getElementById("item-code-input"),
+        searchInput: document.getElementById("serial-search"),
+        clearButton: document.getElementById("clear-filters"),
+        dataList: document.getElementById("item-code-options"),
+        error: document.getElementById("report-error"),
+        placeholder: document.getElementById("report-placeholder"),
+        loading: document.getElementById("report-loading"),
+        table: document.getElementById("report-table"),
+        body: document.getElementById("report-body"),
+        empty: document.getElementById("report-empty"),
+        modal: document.getElementById("edit-modal"),
+        backdrop: document.getElementById("edit-backdrop"),
+        closeModal: document.getElementById("close-modal"),
+        editForm: document.getElementById("edit-form"),
+        editSerial: document.getElementById("edit-serial-number"),
+        editItemCode: document.getElementById("edit-item-code"),
+        editError: document.getElementById("edit-error"),
+        saveEdit: document.getElementById("save-edit"),
+    };
+
+    let inventoryItems = [];
+    let selectedRecord = null;
+    let searchTimer = null;
+
+    const setReportState = ({ loading = false, showTable = false, showEmpty = false, showPlaceholder = false }) => {
+        elements.loading.hidden = !loading;
+        elements.table.hidden = !showTable;
+        elements.empty.hidden = !showEmpty;
+        elements.placeholder.hidden = !showPlaceholder;
+    };
+
+    const setError = (message) => {
+        elements.error.textContent = message || "";
+        elements.error.hidden = !message;
+    };
+
+    const setEditError = (message) => {
+        elements.editError.textContent = message || "";
+        elements.editError.hidden = !message;
+    };
+
+    const buildItemOptions = () => {
+        elements.dataList.innerHTML = "";
+        inventoryItems.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.code;
+            option.label = `${item.code} — ${item.name}`;
+            elements.dataList.appendChild(option);
+        });
+    };
+
+    const normalizeCode = (value) => (value || "").trim().toLowerCase();
+
+    const resolveItemCode = (value) => {
+        const normalized = normalizeCode(value);
+        if (!normalized) return null;
+        const match = inventoryItems.find((item) => normalizeCode(item.code) === normalized);
+        return match ? match.code : null;
+    };
+
+    const buildQuery = () => {
+        const params = new URLSearchParams();
+        const itemCode = resolveItemCode(elements.itemCodeInput.value);
+        if (itemCode) {
+            params.set("item_code", itemCode);
+        }
+        const search = elements.searchInput.value.trim();
+        if (search) {
+            params.set("search", search);
+        }
+        return params;
+    };
+
+    const formatStatus = (status) => {
+        const lower = (status || "").toLowerCase();
+        const className = lower === "sold" ? "status-pill--sold" : "status-pill--stored";
+        return `<span class="status-pill ${className}">${status}</span>`;
+    };
+
+    const renderRows = (rows) => {
+        elements.body.innerHTML = "";
+        rows.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${row.item_name || ""}</td>
+                <td>${row.serial_number || ""}</td>
+                <td>${formatStatus(row.status)}</td>
+                <td>
+                    <button
+                        class="button button--ghost button--small"
+                        type="button"
+                        data-record-id="${row.record_id}"
+                        data-record-type="${row.record_type}"
+                        data-serial-number="${row.serial_number || ""}"
+                        data-item-code="${row.item_code || ""}"
+                    >
+                        Edit
+                    </button>
+                </td>
+            `;
+            elements.body.appendChild(tr);
+        });
+    };
+
+    const fetchReport = async () => {
+        const itemCode = resolveItemCode(elements.itemCodeInput.value);
+        if (!itemCode) {
+            setReportState({ showPlaceholder: true });
+            setError("");
+            return;
+        }
+
+        setError("");
+        setReportState({ loading: true });
+
+        try {
+            const params = buildQuery();
+            const response = await fetch(`/api/exsol/reports/item-serials?${params.toString()}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.error || "Unable to load serials right now.");
+            }
+            const payload = await response.json();
+            const rows = payload.data || [];
+            if (!rows.length) {
+                setReportState({ showEmpty: true });
+                renderRows([]);
+                return;
+            }
+            renderRows(rows);
+            setReportState({ showTable: true });
+        } catch (error) {
+            setReportState({ showPlaceholder: false });
+            setError(error.message || "Unable to load serials right now.");
+        } finally {
+            elements.loading.hidden = true;
+        }
+    };
+
+    const openModal = (button) => {
+        selectedRecord = {
+            id: button.dataset.recordId,
+            type: button.dataset.recordType,
+        };
+        elements.editSerial.value = button.dataset.serialNumber || "";
+        elements.editItemCode.value = button.dataset.itemCode || "";
+        setEditError("");
+        elements.modal.hidden = false;
+    };
+
+    const closeModal = () => {
+        elements.modal.hidden = true;
+        selectedRecord = null;
+    };
+
+    const submitEdit = async (event) => {
+        event.preventDefault();
+        if (!selectedRecord) return;
+
+        const itemCode = resolveItemCode(elements.editItemCode.value);
+        if (!itemCode) {
+            setEditError("Select a valid item code.");
+            return;
+        }
+
+        const serialNumber = elements.editSerial.value.trim();
+        if (!serialNumber) {
+            setEditError("Serial number is required.");
+            return;
+        }
+
+        setEditError("");
+        elements.saveEdit.disabled = true;
+
+        try {
+            const response = await fetch("/api/exsol/reports/item-serials", {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    record_id: selectedRecord.id,
+                    record_type: selectedRecord.type,
+                    serial_number: serialNumber,
+                    item_code: itemCode,
+                }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.error || "Unable to update serial right now.");
+            }
+            closeModal();
+            await fetchReport();
+        } catch (error) {
+            setEditError(error.message || "Unable to update serial right now.");
+        } finally {
+            elements.saveEdit.disabled = false;
+        }
+    };
+
+    const loadInventoryItems = async () => {
+        try {
+            const response = await fetch("/api/exsol/inventory-items/codes", {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!response.ok) return;
+            inventoryItems = await response.json();
+            buildItemOptions();
+        } catch (error) {
+            console.warn("Unable to load inventory items", error);
+        }
+    };
+
+    elements.form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        fetchReport();
+    });
+
+    elements.itemCodeInput.addEventListener("change", () => {
+        fetchReport();
+    });
+
+    elements.searchInput.addEventListener("input", () => {
+        if (searchTimer) {
+            window.clearTimeout(searchTimer);
+        }
+        searchTimer = window.setTimeout(() => {
+            if (resolveItemCode(elements.itemCodeInput.value)) {
+                fetchReport();
+            }
+        }, 350);
+    });
+
+    elements.clearButton.addEventListener("click", () => {
+        elements.itemCodeInput.value = "";
+        elements.searchInput.value = "";
+        setError("");
+        renderRows([]);
+        setReportState({ showPlaceholder: true });
+    });
+
+    elements.body.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-record-id]");
+        if (button) {
+            openModal(button);
+        }
+    });
+
+    elements.closeModal.addEventListener("click", closeModal);
+    elements.backdrop.addEventListener("click", closeModal);
+    elements.editForm.addEventListener("submit", submitEdit);
+
+    loadInventoryItems();
+</script>
+{% endblock %}

@@ -16,8 +16,12 @@ from sqlalchemy import String, case, cast, func, or_
 from extensions import db
 from models import (
     Company,
+    ExsolInventoryItem,
+    ExsolProductionEntry,
+    ExsolProductionSerial,
     ExsolSalesInvoice,
     ExsolSalesInvoiceLine,
+    ExsolSalesInvoiceSerial,
     ExsolSalesReceipt,
     NonSamproxCustomer,
     RoleEnum,
@@ -732,3 +736,240 @@ def exsol_sales_by_person_report_csv():
     except Exception:
         current_app.logger.exception("Unable to export exsol sales by person report")
         return jsonify({"ok": False, "error": "Unable to export report"}), 500
+
+
+@bp.get("/item-serials")
+@jwt_required(optional=True)
+def exsol_item_serials_report():
+    if not _has_exsol_sales_access():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    item_code = (request.args.get("item_code") or "").strip()
+    if not item_code:
+        return jsonify({"ok": False, "error": "Item code is required."}), 400
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return jsonify({"ok": False, "error": "Exsol company not configured."}), 500
+
+    search = (request.args.get("search") or "").strip()
+    like = f"%{search}%"
+
+    stored_query = (
+        db.session.query(
+            ExsolProductionSerial.id.label("record_id"),
+            ExsolProductionSerial.serial_no.label("serial_number"),
+            ExsolProductionEntry.item_code.label("item_code"),
+            ExsolProductionEntry.item_name.label("item_name"),
+        )
+        .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+        .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolProductionEntry.item_code == item_code)
+        .filter(ExsolProductionSerial.is_sold.is_(False))
+    )
+
+    if search:
+        stored_query = stored_query.filter(
+            or_(
+                ExsolProductionSerial.serial_no.ilike(like),
+                ExsolProductionEntry.item_name.ilike(like),
+                ExsolProductionEntry.item_code.ilike(like),
+            )
+        )
+
+    sold_query = (
+        db.session.query(
+            ExsolSalesInvoiceSerial.id.label("record_id"),
+            ExsolSalesInvoiceSerial.serial_no.label("serial_number"),
+            ExsolInventoryItem.item_code.label("item_code"),
+            ExsolInventoryItem.item_name.label("item_name"),
+        )
+        .join(ExsolInventoryItem, ExsolSalesInvoiceSerial.item_id == ExsolInventoryItem.id)
+        .filter(ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolInventoryItem.company_id == company_id)
+        .filter(ExsolInventoryItem.item_code == item_code)
+    )
+
+    if search:
+        sold_query = sold_query.filter(
+            or_(
+                ExsolSalesInvoiceSerial.serial_no.ilike(like),
+                ExsolInventoryItem.item_name.ilike(like),
+                ExsolInventoryItem.item_code.ilike(like),
+            )
+        )
+
+    stored_rows = stored_query.order_by(ExsolProductionSerial.serial_no.asc()).all()
+    sold_rows = sold_query.order_by(ExsolSalesInvoiceSerial.serial_no.asc()).all()
+
+    payload = [
+        {
+            "record_id": str(row.record_id),
+            "record_type": "stored",
+            "item_code": row.item_code,
+            "item_name": row.item_name,
+            "serial_number": row.serial_number,
+            "status": "Stored",
+        }
+        for row in stored_rows
+    ]
+    payload.extend(
+        [
+            {
+                "record_id": str(row.record_id),
+                "record_type": "sold",
+                "item_code": row.item_code,
+                "item_name": row.item_name,
+                "serial_number": row.serial_number,
+                "status": "Sold",
+            }
+            for row in sold_rows
+        ]
+    )
+
+    return jsonify({"ok": True, "data": payload})
+
+
+@bp.patch("/item-serials")
+@jwt_required()
+def update_exsol_item_serial():
+    if not _has_exsol_sales_access():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    record_id = payload.get("record_id")
+    record_type = (payload.get("record_type") or "").strip().lower()
+    serial_number = (payload.get("serial_number") or "").strip()
+    item_code = (payload.get("item_code") or "").strip()
+
+    if not record_id or record_type not in {"stored", "sold"}:
+        return jsonify({"ok": False, "error": "Record details are required."}), 400
+
+    if not serial_number:
+        return jsonify({"ok": False, "error": "Serial number is required."}), 400
+
+    if not item_code:
+        return jsonify({"ok": False, "error": "Item code is required."}), 400
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return jsonify({"ok": False, "error": "Exsol company not configured."}), 500
+
+    item = (
+        ExsolInventoryItem.query.filter(
+            ExsolInventoryItem.company_id == company_id,
+            ExsolInventoryItem.item_code == item_code,
+        )
+        .one_or_none()
+    )
+    if not item:
+        return jsonify({"ok": False, "error": "Item code not found."}), 400
+
+    entry = (
+        ExsolProductionEntry.query.filter(
+            ExsolProductionEntry.company_key == EXSOL_COMPANY_KEY,
+            ExsolProductionEntry.item_code == item_code,
+        )
+        .order_by(ExsolProductionEntry.production_date.desc(), ExsolProductionEntry.id.desc())
+        .first()
+    )
+
+    try:
+        if record_type == "stored":
+            try:
+                record_id_int = int(record_id)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "Invalid record id."}), 400
+
+            serial = (
+                ExsolProductionSerial.query.filter(
+                    ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY,
+                    ExsolProductionSerial.id == record_id_int,
+                )
+                .one_or_none()
+            )
+            if not serial:
+                return jsonify({"ok": False, "error": "Serial not found."}), 404
+            if not entry:
+                return jsonify(
+                    {"ok": False, "error": "No production entry found for the selected item."}
+                ), 400
+
+            if serial.serial_no != serial_number:
+                duplicate_production = (
+                    ExsolProductionSerial.query.filter(
+                        ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY,
+                        ExsolProductionSerial.serial_no == serial_number,
+                        ExsolProductionSerial.id != serial.id,
+                    )
+                    .first()
+                )
+                duplicate_sales = (
+                    ExsolSalesInvoiceSerial.query.filter(
+                        ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY,
+                        ExsolSalesInvoiceSerial.serial_no == serial_number,
+                    )
+                    .first()
+                )
+                if duplicate_production or duplicate_sales:
+                    return jsonify({"ok": False, "error": "Serial number already exists."}), 409
+
+            serial.serial_no = serial_number
+            serial.entry_id = entry.id
+        else:
+            serial = (
+                ExsolSalesInvoiceSerial.query.filter(
+                    ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY,
+                    ExsolSalesInvoiceSerial.id == record_id,
+                )
+                .one_or_none()
+            )
+            if not serial:
+                return jsonify({"ok": False, "error": "Serial not found."}), 404
+
+            old_serial = serial.serial_no
+            if serial.serial_no != serial_number:
+                duplicate_production = (
+                    ExsolProductionSerial.query.filter(
+                        ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY,
+                        ExsolProductionSerial.serial_no == serial_number,
+                    )
+                    .first()
+                )
+                duplicate_sales = (
+                    ExsolSalesInvoiceSerial.query.filter(
+                        ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY,
+                        ExsolSalesInvoiceSerial.serial_no == serial_number,
+                        ExsolSalesInvoiceSerial.id != serial.id,
+                    )
+                    .first()
+                )
+                if duplicate_production or duplicate_sales:
+                    return jsonify({"ok": False, "error": "Serial number already exists."}), 409
+
+            production_serial = (
+                ExsolProductionSerial.query.filter(
+                    ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY,
+                    ExsolProductionSerial.serial_no == old_serial,
+                )
+                .one_or_none()
+            )
+            if production_serial and not entry:
+                return jsonify(
+                    {"ok": False, "error": "No production entry found for the selected item."}
+                ), 400
+
+            serial.serial_no = serial_number
+            serial.item_id = item.id
+
+            if production_serial:
+                production_serial.serial_no = serial_number
+                production_serial.entry_id = entry.id
+
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Unable to update Exsol item serial")
+        return jsonify({"ok": False, "error": "Unable to update serial right now."}), 500
+
+    return jsonify({"ok": True})

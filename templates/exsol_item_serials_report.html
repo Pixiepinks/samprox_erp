@@ -283,6 +283,7 @@
     };
 
     let inventoryItems = [];
+    let inventoryItemsPromise = null;
     let selectedRecord = null;
     let searchTimer = null;
 
@@ -412,7 +413,7 @@
         }
     };
 
-    const openEditModal = (rowData) => {
+    const openEditModal = async (rowData) => {
         selectedRecord = {
             id: rowData.recordId,
             type: rowData.recordType,
@@ -423,6 +424,9 @@
         elements.modal.hidden = false;
         elements.modal.setAttribute("aria-hidden", "false");
         document.body.style.overflow = "hidden";
+
+        await loadInventoryItems();
+        elements.editItemCode.value = rowData.itemCode || "";
     };
 
     const closeEditModal = () => {
@@ -480,17 +484,27 @@
     };
 
     const loadInventoryItems = async () => {
-        try {
-            const response = await fetch("/api/exsol/inventory-items/codes", {
-                headers: buildAuthHeaders(),
-                credentials: "same-origin",
-            });
-            if (!response.ok) return;
-            inventoryItems = await response.json();
-            buildItemOptions();
-        } catch (error) {
-            console.warn("Unable to load inventory items", error);
+        if (inventoryItems.length) {
+            return inventoryItems;
         }
+        if (inventoryItemsPromise) {
+            return inventoryItemsPromise;
+        }
+        inventoryItemsPromise = (async () => {
+            try {
+                const response = await fetch("/api/exsol/inventory-items/codes", {
+                    headers: buildAuthHeaders(),
+                    credentials: "same-origin",
+                });
+                if (!response.ok) return inventoryItems;
+                inventoryItems = await response.json();
+                buildItemOptions();
+            } catch (error) {
+                console.warn("Unable to load inventory items", error);
+            }
+            return inventoryItems;
+        })();
+        return inventoryItemsPromise;
     };
 
     elements.form.addEventListener("submit", (event) => {

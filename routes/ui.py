@@ -359,10 +359,11 @@ def _enforce_role_page_restrictions():
         or normalized_path == "/sales/exsol/reports/invoices"
         or normalized_path.startswith("/sales/exsol/reports/")
     )
+    is_sales_reports_path = normalized_path == "/sales/reports" or normalized_path.startswith("/sales/reports/")
 
     role = _current_role()
     if role in SALES_MANAGER_ROLES:
-        if is_exsol_reports_path:
+        if is_exsol_reports_path or is_sales_reports_path:
             return None
         allowed_endpoints = {
             "ui.login_page",
@@ -372,7 +373,9 @@ def _enforce_role_page_restrictions():
             "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",
+            "ui.exsol_item_serials_report_page",
             "ui.exsol_sales_report_sales_by_person_page",
+            "ui.exsol_sales_report_invoices_page",
             "ui.sales_visits_page",
             "ui.sales_visits_alias",
             "ui.money_page",

@@ -722,6 +722,41 @@
             });
         });
 
+        linesBody.addEventListener("click", (event) => {
+            const trigger = event.target.closest('[data-action="select-serials"]');
+            if (!trigger) return;
+            event.preventDefault();
+            const lineId = trigger.dataset.lineId;
+            if (!lineId) return;
+            const invoiceNo = summaryInvoiceNo.textContent?.trim();
+            const itemCode = trigger.closest("tr")?.querySelector("td")?.textContent?.trim() || "";
+            const rowIndex = trigger.dataset.rowIndex;
+            openModal(lineId, { invoiceNo, itemCode, rowIndex });
+        });
+
+        modalSearch.addEventListener("input", () => {
+            if (!activeLineId) return;
+            const lineEntry = returnLines.get(activeLineId);
+            if (!lineEntry) return;
+            renderModalRows(lineEntry, lineEntry.availableSerials || []);
+        });
+
+        modalSelectAll.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (checkbox.checked) return;
+                checkbox.checked = true;
+                checkbox.dispatchEvent(new Event("change"));
+            });
+        });
+
+        modalClear.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (!checkbox.checked) return;
+                checkbox.checked = false;
+                checkbox.dispatchEvent(new Event("change"));
+            });
+        });
+
         modalApply.addEventListener("click", applySerialSelection);
         modal.addEventListener("click", (event) => {
             if (event.target?.matches("[data-serial-close]")) {

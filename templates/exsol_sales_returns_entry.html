@@ -198,6 +198,9 @@
     }
 
     .modal--app {
+        position: fixed;
+        inset: 0;
+        overflow-y: auto;
         z-index: 2000;
     }
 
@@ -263,6 +266,7 @@
 
         const invoiceLookupMap = new Map();
         const returnLines = new Map();
+        let returnableData = null;
         let activeLineId = null;
         let activeSelection = new Map();
         let lookupTimer = null;
@@ -328,6 +332,7 @@
             emptyState.textContent = "Select an invoice to view returnable lines.";
             emptyState.hidden = false;
             returnLines.clear();
+            returnableData = null;
             setFeedback(errorBox, "");
             setFeedback(successBox, "");
         };
@@ -379,9 +384,10 @@
                         <div class="return-serials">
                             <button
                                 type="button"
-                                class="button button--ghost button--small"
+                                class="button button--ghost button--small select-serials-link"
                                 data-action="select-serials"
                                 data-line-id="${line.line_id}"
+                                data-item-code="${line.item_code}"
                                 data-row-index="${index + 1}"
                                 ${line.is_serialized ? "" : "disabled"}
                             >
@@ -428,6 +434,8 @@
             linesWrapper.hidden = true;
 
             const payload = await fetchJson(`/api/exsol/sales/invoices/${invoiceId}/returnable`);
+            returnableData = payload;
+            window.returnableData = payload;
             summaryInvoiceNo.textContent = payload.invoice.invoice_no || "-";
             summaryInvoiceDate.textContent = payload.invoice.invoice_date || "-";
             summaryCustomer.textContent = payload.invoice.customer_name || "-";
@@ -499,7 +507,7 @@
             });
         };
 
-        const openModal = async (lineId, context = {}) => {
+        const openModal = (lineId, context = {}) => {
             const lineEntry = returnLines.get(lineId);
             if (!lineEntry) return;
             activeLineId = lineId;
@@ -518,32 +526,28 @@
             modal.setAttribute("aria-hidden", "false");
             document.body.classList.add("modal-open");
 
-            const invoiceId = invoiceIdInput.value;
-            if (!invoiceId) {
+            if (!returnableData?.lines?.length) {
                 modalEmpty.textContent = "Select an invoice to load serials.";
                 return;
             }
 
-            try {
-                const payload = await fetchJson(`/api/exsol/sales/invoices/${invoiceId}/returnable`);
-                const updatedLine = payload?.lines?.find((line) => String(line.line_id) === String(lineId));
-                if (!updatedLine) {
-                    throw new Error("Unable to load serials for this line.");
-                }
-                const available = (updatedLine.sold_serials || []).filter(
-                    (serial) => !(updatedLine.already_returned_serials || []).includes(serial)
-                );
-                lineEntry.availableSerials = available;
-                modalEmpty.textContent = "No returnable serials found.";
-                renderModalRows(lineEntry, available);
-            } catch (err) {
-                const message = err?.message || "Unable to load serials right now.";
-                showToast(message);
-                console.error("Unable to load returnable serials", err);
+            const updatedLine =
+                returnableData.lines.find((line) => String(line.line_id) === String(lineId)) ||
+                returnableData.lines.find((line) => line.item_code === context.itemCode);
+
+            if (!updatedLine) {
                 modalBody.innerHTML = "";
-                modalEmpty.textContent = message;
+                modalEmpty.textContent = "Unable to locate serials for this line.";
                 modalEmpty.hidden = false;
+                return;
             }
+
+            const available = (updatedLine.sold_serials || []).filter(
+                (serial) => !(updatedLine.already_returned_serials || []).includes(serial)
+            );
+            lineEntry.availableSerials = available;
+            modalEmpty.textContent = "No serials available for this line.";
+            renderModalRows(lineEntry, available);
         };
 
         const closeModal = () => {
@@ -674,7 +678,48 @@
                 return;
             }
             invoiceIdInput.value = selected.id;
-            loadReturnable(selected.id).catch((err) => setFeedback(errorBox, err.message));
+            loadReturnable(selected.id).catch((err) => {
+                const message = err?.message || "Unable to load returnable invoice data.";
+                setFeedback(errorBox, message);
+                showToast(message);
+                console.error("Unable to load returnable invoice data", err);
+            });
+        });
+
+        document.addEventListener("click", (event) => {
+            const trigger = event.target.closest(".select-serials-link");
+            if (!trigger) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const lineId = trigger.dataset.lineId;
+            if (!lineId) return;
+            const invoiceNo = summaryInvoiceNo.textContent?.trim();
+            const itemCode = trigger.dataset.itemCode || "";
+            const rowIndex = trigger.dataset.rowIndex;
+            openModal(lineId, { invoiceNo, itemCode, rowIndex });
+        });
+
+        modalSearch.addEventListener("input", () => {
+            if (!activeLineId) return;
+            const lineEntry = returnLines.get(activeLineId);
+            if (!lineEntry) return;
+            renderModalRows(lineEntry, lineEntry.availableSerials || []);
+        });
+
+        modalSelectAll.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (checkbox.checked) return;
+                checkbox.checked = true;
+                checkbox.dispatchEvent(new Event("change"));
+            });
+        });
+
+        modalClear.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (!checkbox.checked) return;
+                checkbox.checked = false;
+                checkbox.dispatchEvent(new Event("change"));
+            });
         });
 
         linesBody.addEventListener("click", (event) => {

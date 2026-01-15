@@ -20,6 +20,9 @@ from models import (
     ExsolSalesInvoice,
     ExsolSalesInvoiceLine,
     ExsolSalesInvoiceSerial,
+    ExsolSalesReturn,
+    ExsolSalesReturnLine,
+    ExsolSalesReturnSerial,
     NonSamproxCustomer,
     RoleEnum,
     SALES_MANAGER_ROLES,
@@ -586,6 +589,24 @@ def _format_money(value: Decimal | None) -> str | None:
     return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}"
 
 
+def _generate_sales_return_no(*, company_id: int, session) -> str:
+    prefix = "SR-"
+    last_return = (
+        session.query(ExsolSalesReturn.return_no)
+        .filter(ExsolSalesReturn.company_id == company_id)
+        .filter(ExsolSalesReturn.return_no.ilike(f"{prefix}%"))
+        .order_by(ExsolSalesReturn.return_no.desc())
+        .limit(1)
+        .scalar()
+    )
+    next_number = 1
+    if last_return:
+        match = re.search(r"SR-(\d+)", last_return)
+        if match:
+            next_number = int(match.group(1)) + 1
+    return f"{prefix}{next_number:06d}"
+
+
 def _build_invoice_response(invoice: ExsolSalesInvoice, lines: list[ExsolSalesInvoiceLine]):
     total_qty = 0
     subtotal = Decimal(0)
@@ -908,6 +929,7 @@ def _create_invoice(payload: dict[str, Any]):
                         line=line_model,
                         item_id=line["item_id"],
                         serial_no=serial,
+                        status="SOLD",
                     )
                     real_session.add(serial_model)
                     production_serial = serial_map.get(serial)
@@ -980,3 +1002,366 @@ def get_sales_invoice(invoice_id: str):
         .all()
     )
     return jsonify({"ok": True, "invoice": _build_invoice_response(invoice, lines)})
+
+
+@bp.get("/invoices/lookup")
+@jwt_required()
+def lookup_exsol_invoices():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    query_text = (request.args.get("q") or "").strip()
+    if not query_text:
+        return jsonify([])
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    invoices = (
+        db.session.query(ExsolSalesInvoice, NonSamproxCustomer)
+        .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+        .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+        .filter(NonSamproxCustomer.company_id == company_id)
+        .filter(
+            or_(
+                ExsolSalesInvoice.invoice_no.ilike(f"%{query_text}%"),
+                NonSamproxCustomer.customer_name.ilike(f"%{query_text}%"),
+            )
+        )
+        .order_by(ExsolSalesInvoice.invoice_date.desc(), ExsolSalesInvoice.invoice_no.desc())
+        .limit(25)
+        .all()
+    )
+
+    return jsonify(
+        [
+            {
+                "id": str(invoice.id),
+                "invoice_no": invoice.invoice_no,
+                "invoice_date": invoice.invoice_date.isoformat(),
+                "customer_name": customer.customer_name,
+            }
+            for invoice, customer in invoices
+        ]
+    )
+
+
+@bp.get("/invoices/<string:invoice_id>/returnable")
+@jwt_required()
+def get_returnable_invoice(invoice_id: str):
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    invoice = ExsolSalesInvoice.query.get(invoice_id)
+    if not invoice or invoice.company_key != EXSOL_COMPANY_KEY:
+        return _build_error("Invoice not found.", 404)
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    customer = invoice.customer
+    if customer and customer.company_id != company_id:
+        return _build_error("Invoice not found.", 404)
+
+    line_rows = (
+        db.session.query(ExsolSalesInvoiceLine, ExsolInventoryItem)
+        .join(ExsolInventoryItem, ExsolInventoryItem.id == ExsolSalesInvoiceLine.item_id)
+        .filter(ExsolSalesInvoiceLine.invoice_id == invoice.id)
+        .order_by(ExsolSalesInvoiceLine.id.asc())
+        .all()
+    )
+
+    serial_rows = (
+        ExsolSalesInvoiceSerial.query.filter(ExsolSalesInvoiceSerial.invoice_id == invoice.id)
+        .order_by(ExsolSalesInvoiceSerial.serial_no.asc())
+        .all()
+    )
+    serials_by_line: dict[str, list[ExsolSalesInvoiceSerial]] = {}
+    for serial in serial_rows:
+        serials_by_line.setdefault(str(serial.line_id), []).append(serial)
+
+    lines_payload = []
+    for line, item in line_rows:
+        serials = serials_by_line.get(str(line.id), [])
+        sold_serials = [row.serial_no for row in serials]
+        returned_serials = [row.serial_no for row in serials if (row.status or "").upper() == "RETURNED"]
+        lines_payload.append(
+            {
+                "line_id": str(line.id),
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty_sold": line.qty,
+                "is_serialized": bool(item.is_serialized),
+                "sold_serials": sold_serials,
+                "already_returned_serials": returned_serials,
+            }
+        )
+
+    return jsonify(
+        {
+            "invoice": {
+                "id": str(invoice.id),
+                "invoice_no": invoice.invoice_no,
+                "invoice_date": invoice.invoice_date.isoformat(),
+                "customer_id": str(invoice.customer_id),
+                "customer_name": customer.customer_name if customer else None,
+            },
+            "lines": lines_payload,
+        }
+    )
+
+
+@bp.post("/returns")
+@jwt_required()
+def create_exsol_sales_return():
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    payload = request.get_json(silent=True) or {}
+    invoice_id = (payload.get("invoice_id") or "").strip()
+    if not invoice_id:
+        return _build_error("Invoice is required.", 400)
+
+    invoice = ExsolSalesInvoice.query.get(invoice_id)
+    if not invoice or invoice.company_key != EXSOL_COMPANY_KEY:
+        return _build_error("Invoice not found.", 404)
+
+    company_id = _get_exsol_company_id()
+    if not company_id:
+        return _build_error("Exsol company not configured.", 500)
+
+    customer = invoice.customer
+    if customer and customer.company_id != company_id:
+        return _build_error("Invoice not found.", 404)
+
+    return_date = _parse_date(payload.get("return_date")) or date.today()
+    reason = (payload.get("reason") or "").strip() or None
+    lines_payload = payload.get("lines") or []
+    if not isinstance(lines_payload, list) or not lines_payload:
+        return _build_error("At least one return line is required.", 400)
+
+    current_user_id = get_jwt_identity()
+    user = User.query.get(int(current_user_id)) if current_user_id else None
+    if not user:
+        return _build_error("Unable to resolve the current user.", 401)
+
+    line_rows = (
+        db.session.query(ExsolSalesInvoiceLine, ExsolInventoryItem)
+        .join(ExsolInventoryItem, ExsolInventoryItem.id == ExsolSalesInvoiceLine.item_id)
+        .filter(ExsolSalesInvoiceLine.invoice_id == invoice.id)
+        .all()
+    )
+    line_map = {
+        str(line.id): {
+            "line": line,
+            "item": item,
+            "item_code": item.item_code,
+            "item_name": item.item_name,
+            "is_serialized": bool(item.is_serialized),
+            "qty_sold": line.qty,
+        }
+        for line, item in line_rows
+    }
+    item_code_qty = {}
+    for entry in line_map.values():
+        item_code_qty[entry["item_code"]] = item_code_qty.get(entry["item_code"], 0) + entry["qty_sold"]
+
+    invoice_serials = (
+        ExsolSalesInvoiceSerial.query.filter(ExsolSalesInvoiceSerial.invoice_id == invoice.id)
+        .all()
+    )
+    serial_map = {row.serial_no: row for row in invoice_serials}
+
+    returned_qty_rows = (
+        db.session.query(ExsolSalesReturnLine.item_code, func.coalesce(func.sum(ExsolSalesReturnLine.qty), 0))
+        .join(ExsolSalesReturn, ExsolSalesReturn.id == ExsolSalesReturnLine.return_id)
+        .filter(ExsolSalesReturn.invoice_id == invoice.id)
+        .group_by(ExsolSalesReturnLine.item_code)
+        .all()
+    )
+    returned_qty_map = {row[0]: int(row[1] or 0) for row in returned_qty_rows}
+
+    errors: list[str] = []
+    prepared_lines: list[dict[str, Any]] = []
+    seen_serials: set[str] = set()
+    pending_qty: dict[str, int] = {}
+
+    for idx, line_payload in enumerate(lines_payload, start=1):
+        line_id = (line_payload.get("line_id") or "").strip()
+        payload_item_code = (line_payload.get("item_code") or "").strip()
+        qty = _parse_int(line_payload.get("qty"))
+        if qty is None or qty <= 0:
+            errors.append(f"line {idx}: quantity must be a positive number.")
+            continue
+
+        line_info = line_map.get(line_id) if line_id else None
+        if not line_info:
+            line_info = next(
+                (info for info in line_map.values() if info["item_code"] == payload_item_code),
+                None,
+            )
+
+        if not line_info:
+            errors.append(f"line {idx}: item is not found on the invoice.")
+            continue
+
+        item_code = line_info["item_code"]
+        item_name = line_info["item_name"]
+        is_serialized = line_info["is_serialized"]
+        qty_sold = item_code_qty.get(item_code, 0)
+        qty_returned = returned_qty_map.get(item_code, 0)
+        already_pending = pending_qty.get(item_code, 0)
+        available_qty = max(qty_sold - qty_returned - already_pending, 0)
+        if qty > available_qty:
+            errors.append(
+                f"line {idx}: return qty exceeds available quantity ({available_qty})."
+            )
+
+        pending_qty[item_code] = already_pending + qty
+
+        serials_payload = line_payload.get("serials") or []
+        serials_list: list[dict[str, str]] = []
+        if is_serialized:
+            if not isinstance(serials_payload, list) or not serials_payload:
+                errors.append(f"line {idx}: serials are required for serialized items.")
+            else:
+                for serial_payload in serials_payload:
+                    serial_number = (serial_payload.get("serial_number") or "").strip()
+                    if not serial_number:
+                        continue
+                    condition = (serial_payload.get("condition") or "GOOD").strip().upper()
+                    restock_status = (serial_payload.get("restock_status") or "STORED").strip().upper()
+                    if serial_number in seen_serials:
+                        errors.append(f"line {idx}: duplicate serial {serial_number}.")
+                    seen_serials.add(serial_number)
+                    serials_list.append(
+                        {
+                            "serial_number": serial_number,
+                            "condition": condition or "GOOD",
+                            "restock_status": restock_status or "STORED",
+                        }
+                    )
+
+                if qty != len(serials_list):
+                    errors.append(
+                        f"line {idx}: quantity must match selected serial count ({len(serials_list)})."
+                    )
+
+                for serial_entry in serials_list:
+                    serial_number = serial_entry["serial_number"]
+                    serial_row = serial_map.get(serial_number)
+                    if not serial_row:
+                        errors.append(f"line {idx}: serial {serial_number} not found on invoice.")
+                        continue
+                    if (serial_row.status or "").upper() == "RETURNED":
+                        errors.append(f"line {idx}: serial {serial_number} already returned.")
+                    if line_id and str(serial_row.line_id) != line_id:
+                        errors.append(f"line {idx}: serial {serial_number} does not match the invoice line.")
+        else:
+            serials_list = []
+
+        prepared_lines.append(
+            {
+                "item_code": item_code,
+                "item_name": item_name,
+                "qty": qty,
+                "is_serialized": is_serialized,
+                "serials": serials_list,
+            }
+        )
+
+    if errors:
+        return _build_error("Validation failed.", 400, errors)
+
+    serials_to_update = [serial["serial_number"] for line in prepared_lines for serial in line["serials"]]
+    serials_to_restock = [
+        serial["serial_number"]
+        for line in prepared_lines
+        for serial in line["serials"]
+        if serial["condition"] == "GOOD" and serial["restock_status"] == "STORED"
+    ]
+
+    try:
+        session = db.session
+        real_session = session if hasattr(session, "in_transaction") else session()
+        transaction_ctx = (
+            real_session.begin_nested()
+            if real_session.in_transaction()
+            else real_session.begin()
+        )
+        with transaction_ctx:
+            return_no = _generate_sales_return_no(company_id=company_id, session=real_session)
+            return_header = ExsolSalesReturn(
+                company_id=company_id,
+                company_key=EXSOL_COMPANY_KEY,
+                return_no=return_no,
+                invoice_id=invoice.id,
+                customer_id=invoice.customer_id,
+                return_date=return_date,
+                reason=reason,
+                status="SUBMITTED",
+                created_by_user_id=user.id,
+            )
+            real_session.add(return_header)
+
+            return_lines = []
+            for line in prepared_lines:
+                line_model = ExsolSalesReturnLine(
+                    return_header=return_header,
+                    item_code=line["item_code"],
+                    item_name=line["item_name"],
+                    qty=line["qty"],
+                    is_serialized=line["is_serialized"],
+                )
+                real_session.add(line_model)
+                return_lines.append(line_model)
+
+                for serial in line["serials"]:
+                    serial_model = ExsolSalesReturnSerial(
+                        return_line=line_model,
+                        serial_number=serial["serial_number"],
+                        condition=serial["condition"],
+                        restock_status=serial["restock_status"],
+                    )
+                    real_session.add(serial_model)
+
+            if serials_to_update:
+                serial_rows = (
+                    real_session.query(ExsolSalesInvoiceSerial)
+                    .filter(ExsolSalesInvoiceSerial.invoice_id == invoice.id)
+                    .filter(ExsolSalesInvoiceSerial.serial_no.in_(serials_to_update))
+                    .all()
+                )
+                for serial in serial_rows:
+                    serial.status = "RETURNED"
+
+            if serials_to_restock:
+                production_rows = (
+                    real_session.query(ExsolProductionSerial)
+                    .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+                    .filter(ExsolProductionSerial.serial_no.in_(serials_to_restock))
+                    .all()
+                )
+                for serial in production_rows:
+                    serial.is_sold = False
+
+        real_session.commit()
+
+    except IntegrityError:
+        db.session.rollback()
+        return _build_error("Unable to save return because of a duplicate number.", 409)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception(
+            {
+                "event": "exsol_sales_return_create_failed",
+                "company_key": EXSOL_COMPANY_KEY,
+                "invoice_id": str(invoice.id),
+                "user_id": user.id,
+            }
+        )
+        return _build_error("Unable to save the return right now.", 500)
+
+    return jsonify({"ok": True, "return_id": str(return_header.id), "return_no": return_header.return_no}), 201

@@ -981,6 +981,21 @@ class ExsolProductionSerial(db.Model):
     )
 
 
+class ExsolSerialEvent(db.Model):
+    __tablename__ = "exsol_serial_events"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    serial_no = db.Column(db.String(60), nullable=False, index=True)
+    event_type = db.Column(db.String(40), nullable=False)
+    notes = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_exsol_serial_events_company_serial", "company_key", "serial_no"),
+    )
+
+
 class ExsolSalesInvoice(db.Model):
     __tablename__ = "exsol_sales_invoices"
 

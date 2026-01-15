@@ -478,7 +478,6 @@ def sales_data_entry_travel_claims():
 
 
 @bp.get("/sales/data-entry/returns")
-@jwt_required(optional=True)
 def sales_data_entry_returns_page():
     """Render the Exsol sales return entry page."""
     if not _has_exsol_sales_access():

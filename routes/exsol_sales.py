@@ -23,7 +23,6 @@ from models import (
     ExsolSalesReturn,
     ExsolSalesReturnLine,
     ExsolSalesReturnSerial,
-    ExsolSerialEvent,
     NonSamproxCustomer,
     RoleEnum,
     SALES_MANAGER_ROLES,
@@ -1467,8 +1466,6 @@ def create_exsol_sales_return():
             real_session.add(return_header)
 
             return_lines = []
-            event_rows: list[ExsolSerialEvent] = []
-            event_date = datetime.combine(return_date, datetime.min.time())
             for line in prepared_lines:
                 line_model = ExsolSalesReturnLine(
                     return_header=return_header,
@@ -1488,21 +1485,6 @@ def create_exsol_sales_return():
                         restock_status=serial["restock_status"],
                     )
                     real_session.add(serial_model)
-                    event_rows.append(
-                        ExsolSerialEvent(
-                            company_key=EXSOL_COMPANY_KEY,
-                            item_code=line["item_code"],
-                            serial_number=serial["serial_number"],
-                            event_type="RETURNED",
-                            event_date=event_date,
-                            ref_type="SALES_RETURN",
-                            ref_id=str(return_header.id),
-                            ref_no=return_header.return_no,
-                            customer_id=invoice.customer_id,
-                            customer_name=customer.customer_name if customer else None,
-                            notes=reason,
-                        )
-                    )
 
             if serials_to_update:
                 serial_rows = (
@@ -1523,8 +1505,6 @@ def create_exsol_sales_return():
                 )
                 for serial in production_rows:
                     serial.is_sold = False
-            if event_rows:
-                real_session.add_all(event_rows)
 
         real_session.commit()
 

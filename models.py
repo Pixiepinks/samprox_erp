@@ -1203,37 +1203,6 @@ class ExsolSalesReturnSerial(db.Model):
     return_line = db.relationship("ExsolSalesReturnLine", back_populates="serials")
 
 
-class ExsolSerialEvent(db.Model):
-    __tablename__ = "exsol_serial_events"
-
-    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
-    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
-    item_code = db.Column(db.String(60), nullable=False)
-    serial_number = db.Column(db.String(60), nullable=False)
-    event_type = db.Column(db.String(30), nullable=False)
-    event_date = db.Column(db.DateTime, nullable=False)
-    ref_type = db.Column(db.String(60))
-    ref_id = db.Column(db.String(64))
-    ref_no = db.Column(db.String(120))
-    customer_id = db.Column(GUID(), db.ForeignKey("non_samprox_customers.id"))
-    customer_name = db.Column(db.String(255))
-    notes = db.Column(db.String(500))
-    meta_json = db.Column(db.JSON)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    customer = db.relationship("NonSamproxCustomer")
-
-    __table_args__ = (
-        Index(
-            "ix_exsol_serial_events_company_item_serial",
-            "company_key",
-            "item_code",
-            "serial_number",
-        ),
-        Index("ix_exsol_serial_events_event_date", "event_date"),
-    )
-
-
 class MRNHeader(db.Model):
     __tablename__ = "mrn_headers"
 

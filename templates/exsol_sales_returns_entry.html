@@ -314,9 +314,14 @@
 
                 const qtyInput = row.querySelector(".return-qty");
                 const serialCount = row.querySelector(`[data-serial-count="${line.line_id}"]`);
+                const selectButton = row.querySelector('[data-action="select-serials"]');
                 const availableSerials = (line.sold_serials || []).filter(
                     (serial) => !(line.already_returned_serials || []).includes(serial)
                 );
+
+                if (selectButton) {
+                    selectButton.addEventListener("click", () => openModal(line.line_id));
+                }
 
                 returnLines.set(line.line_id, {
                     line,
@@ -515,13 +520,6 @@
             }
             invoiceIdInput.value = selected.id;
             loadReturnable(selected.id).catch((err) => setFeedback(errorBox, err.message));
-        });
-
-        linesBody.addEventListener("click", (event) => {
-            const button = event.target.closest('[data-action="select-serials"]');
-            if (!button) return;
-            const lineId = button.dataset.lineId;
-            openModal(lineId);
         });
 
         modalApply.addEventListener("click", applySerialSelection);

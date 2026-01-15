@@ -1032,25 +1032,115 @@ def get_serial_timeline(serial_number: str):
         .all()
     )
 
+    def _serialize_event(event: ExsolSerialEvent) -> dict[str, Any]:
+        return {
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "event_date": event.event_date.isoformat() if event.event_date else None,
+            "ref_type": event.ref_type,
+            "ref_id": event.ref_id,
+            "ref_no": event.ref_no,
+            "customer_id": str(event.customer_id) if event.customer_id else None,
+            "customer_name": event.customer_name,
+            "notes": event.notes,
+            "meta_json": event.meta_json,
+            "created_at": event.created_at.isoformat() if event.created_at else None,
+        }
+
+    timeline_events = [_serialize_event(event) for event in events]
+
+    if not timeline_events:
+        synthesized: list[dict[str, Any]] = []
+
+        production_row = (
+            db.session.query(ExsolProductionSerial, ExsolProductionEntry)
+            .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+            .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+            .filter(ExsolProductionSerial.serial_no == serial_number)
+            .filter(ExsolProductionEntry.item_code == item_code)
+            .first()
+        )
+        if production_row:
+            serial, entry = production_row
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "PRODUCED",
+                    "event_date": entry.created_at.isoformat() if entry.created_at else None,
+                    "ref_type": "PRODUCTION_ENTRY",
+                    "ref_id": str(entry.id),
+                    "ref_no": None,
+                    "customer_id": None,
+                    "customer_name": None,
+                    "notes": None,
+                    "meta_json": None,
+                    "created_at": serial.created_at.isoformat() if serial.created_at else None,
+                }
+            )
+
+        invoice_rows = (
+            db.session.query(ExsolSalesInvoiceSerial, ExsolSalesInvoice, NonSamproxCustomer)
+            .join(ExsolSalesInvoice, ExsolSalesInvoiceSerial.invoice_id == ExsolSalesInvoice.id)
+            .join(ExsolInventoryItem, ExsolSalesInvoiceSerial.item_id == ExsolInventoryItem.id)
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+            .filter(ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY)
+            .filter(ExsolSalesInvoiceSerial.serial_no == serial_number)
+            .filter(ExsolInventoryItem.item_code == item_code)
+            .all()
+        )
+        for serial, invoice, customer in invoice_rows:
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "INVOICED",
+                    "event_date": invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                    "ref_type": "SALES_INVOICE",
+                    "ref_id": str(invoice.id),
+                    "ref_no": invoice.invoice_no,
+                    "customer_id": str(invoice.customer_id),
+                    "customer_name": customer.customer_name,
+                    "notes": None,
+                    "meta_json": None,
+                    "created_at": serial.created_at.isoformat() if serial.created_at else None,
+                }
+            )
+
+        return_rows = (
+            db.session.query(ExsolSalesReturnSerial, ExsolSalesReturnLine, ExsolSalesReturn, NonSamproxCustomer)
+            .join(ExsolSalesReturnLine, ExsolSalesReturnSerial.return_line_id == ExsolSalesReturnLine.id)
+            .join(ExsolSalesReturn, ExsolSalesReturnLine.return_id == ExsolSalesReturn.id)
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesReturn.customer_id)
+            .filter(ExsolSalesReturnSerial.serial_number == serial_number)
+            .filter(ExsolSalesReturnLine.item_code == item_code)
+            .filter(ExsolSalesReturn.company_key == EXSOL_COMPANY_KEY)
+            .all()
+        )
+        for serial, line, return_header, customer in return_rows:
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "RETURNED",
+                    "event_date": return_header.return_date.isoformat() if return_header.return_date else None,
+                    "ref_type": "SALES_RETURN",
+                    "ref_id": str(return_header.id),
+                    "ref_no": return_header.return_no,
+                    "customer_id": str(return_header.customer_id),
+                    "customer_name": customer.customer_name,
+                    "notes": return_header.reason,
+                    "meta_json": None,
+                    "created_at": None,
+                }
+            )
+
+        timeline_events = sorted(
+            synthesized,
+            key=lambda event: (event["event_date"] or "", event.get("created_at") or ""),
+        )
+
     payload = {
         "item_code": item_code,
         "serial_number": serial_number,
-        "events": [
-            {
-                "id": str(event.id),
-                "event_type": event.event_type,
-                "event_date": event.event_date.isoformat() if event.event_date else None,
-                "ref_type": event.ref_type,
-                "ref_id": event.ref_id,
-                "ref_no": event.ref_no,
-                "customer_id": str(event.customer_id) if event.customer_id else None,
-                "customer_name": event.customer_name,
-                "notes": event.notes,
-                "meta_json": event.meta_json,
-                "created_at": event.created_at.isoformat() if event.created_at else None,
-            }
-            for event in events
-        ],
+        "events": timeline_events,
     }
 
     return jsonify(payload)

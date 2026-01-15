@@ -57,6 +57,7 @@
                     <th>Serial Number</th>
                     <th>Status</th>
                     <th>Action</th>
+                    <th>Item Log</th>
                 </tr>
             </thead>
             <tbody id="report-body"></tbody>
@@ -90,6 +91,45 @@
                 <button class="button button--primary" type="submit" id="save-edit">Save changes</button>
             </footer>
         </form>
+    </div>
+</div>
+
+<div class="modal" id="log-modal" hidden aria-hidden="true">
+    <div class="modal__backdrop" id="log-backdrop"></div>
+    <div class="modal__content modal__content--wide" role="dialog" aria-modal="true" aria-labelledby="log-modal-title">
+        <header class="modal__header">
+            <div>
+                <h2 id="log-modal-title">Serial Timeline</h2>
+                <p class="form-hint" id="log-serial-label"></p>
+            </div>
+            <button class="button button--ghost button--small" type="button" id="close-log" aria-label="Close">
+                ✕
+            </button>
+        </header>
+        <div class="modal__body">
+            <div class="timeline-skeleton" id="log-loading" hidden>
+                <div class="skeleton-line skeleton-line--wide"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line skeleton-line--wide"></div>
+            </div>
+            <div class="alert" id="log-error" hidden></div>
+            <div class="table-wrapper timeline-table" id="log-table-wrapper" hidden>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Event</th>
+                            <th>Ref</th>
+                            <th>Customer</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-table-body"></tbody>
+                </table>
+            </div>
+            <p class="empty-state" id="log-empty" hidden>No events found for this serial number.</p>
+        </div>
     </div>
 </div>
 
@@ -196,7 +236,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 1000;
+        z-index: 9999;
     }
 
     .modal[hidden] {
@@ -220,11 +260,16 @@
         z-index: 1;
     }
 
+    .modal__content--wide {
+        width: min(860px, 92vw);
+    }
+
     .modal__header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 12px;
+        gap: 12px;
     }
 
     .modal__body {
@@ -237,6 +282,47 @@
         margin-top: 16px;
         display: flex;
         justify-content: flex-end;
+    }
+
+    .timeline-table {
+        padding-top: 0;
+    }
+
+    .timeline-table .table {
+        font-size: 13px;
+    }
+
+    .timeline-table .table th,
+    .timeline-table .table td {
+        padding: 10px 12px;
+        vertical-align: top;
+    }
+
+    .timeline-skeleton {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .skeleton-line {
+        height: 12px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 50%, #e2e8f0 100%);
+        background-size: 200% 100%;
+        animation: shimmer 1.4s ease infinite;
+    }
+
+    .skeleton-line--wide {
+        width: 85%;
+    }
+
+    @keyframes shimmer {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
     }
 
     @media (max-width: 720px) {
@@ -280,6 +366,15 @@
         editItemCode: document.getElementById("edit-item-code"),
         editError: document.getElementById("edit-error"),
         saveEdit: document.getElementById("save-edit"),
+        logModal: document.getElementById("log-modal"),
+        logBackdrop: document.getElementById("log-backdrop"),
+        logClose: document.getElementById("close-log"),
+        logSerialLabel: document.getElementById("log-serial-label"),
+        logLoading: document.getElementById("log-loading"),
+        logError: document.getElementById("log-error"),
+        logTableWrapper: document.getElementById("log-table-wrapper"),
+        logTableBody: document.getElementById("log-table-body"),
+        logEmpty: document.getElementById("log-empty"),
     };
 
     let inventoryItems = [];
@@ -303,6 +398,11 @@
         elements.editError.textContent = message || "";
         elements.editError.hidden = !message;
     };
+
+    function toggleBodyScrollLock() {
+        const isModalOpen = !elements.modal.hidden || !elements.logModal.hidden;
+        document.body.style.overflow = isModalOpen ? "hidden" : "";
+    }
 
     const buildItemOptions = () => {
         elements.dataList.innerHTML = "";
@@ -372,6 +472,16 @@
                         Edit
                     </button>
                 </td>
+                <td>
+                    <button
+                        class="button button--ghost button--small"
+                        type="button"
+                        data-log-serial="${row.serial_number || ""}"
+                        data-item-code="${row.item_code || ""}"
+                    >
+                        View Log
+                    </button>
+                </td>
             `;
             elements.body.appendChild(tr);
         });
@@ -433,7 +543,7 @@
         setEditError("");
         elements.modal.hidden = false;
         elements.modal.setAttribute("aria-hidden", "false");
-        document.body.style.overflow = "hidden";
+        toggleBodyScrollLock();
 
         await loadInventoryItems();
         elements.editItemCode.value = rowData.itemCode || "";
@@ -443,7 +553,99 @@
         elements.modal.hidden = true;
         elements.modal.setAttribute("aria-hidden", "true");
         selectedRecord = null;
-        document.body.style.overflow = "";
+        toggleBodyScrollLock();
+    };
+
+    const setLogState = ({ loading = false, showTable = false, showEmpty = false }) => {
+        elements.logLoading.hidden = !loading;
+        elements.logTableWrapper.hidden = !showTable;
+        elements.logEmpty.hidden = !showEmpty;
+    };
+
+    const setLogError = (message) => {
+        elements.logError.textContent = message || "";
+        elements.logError.hidden = !message;
+    };
+
+    const formatTimelineDate = (value) => {
+        if (!value) return "-";
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return value;
+        return parsed.toLocaleString();
+    };
+
+    const formatTimelineRef = (event) => {
+        if (event.ref_no) return `${event.ref_type || "Ref"} #${event.ref_no}`;
+        if (event.ref_id) return `${event.ref_type || "Ref"} ${event.ref_id}`;
+        return event.ref_type || "-";
+    };
+
+    const renderTimeline = (events) => {
+        elements.logTableBody.innerHTML = "";
+        events.forEach((event) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${formatTimelineDate(event.event_date)}</td>
+                <td>${event.event_type || "-"}</td>
+                <td>${formatTimelineRef(event)}</td>
+                <td>${event.customer_name || "-"}</td>
+                <td>${event.notes || "-"}</td>
+            `;
+            elements.logTableBody.appendChild(tr);
+        });
+    };
+
+    const fetchSerialTimeline = async (itemCode, serialNumber) => {
+        if (!itemCode || !serialNumber) return;
+        setLogError("");
+        setLogState({ loading: true });
+        elements.logTableWrapper.hidden = true;
+        elements.logEmpty.hidden = true;
+        elements.logTableBody.innerHTML = "";
+
+        try {
+            const params = new URLSearchParams({ item_code: itemCode });
+            const response = await fetch(
+                `/api/exsol/serials/${encodeURIComponent(serialNumber)}/timeline?${params.toString()}`,
+                {
+                    headers: buildAuthHeaders(),
+                    credentials: "same-origin",
+                }
+            );
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.error || "Unable to load the serial timeline.");
+            }
+            const events = payload.events || [];
+            if (!events.length) {
+                setLogState({ showEmpty: true });
+                return;
+            }
+            renderTimeline(events);
+            setLogState({ showTable: true });
+        } catch (error) {
+            setLogState({ showEmpty: false });
+            setLogError(error.message || "Unable to load the serial timeline.");
+        } finally {
+            elements.logLoading.hidden = true;
+        }
+    };
+
+    const openLogModal = (rowData) => {
+        elements.logSerialLabel.textContent = `${rowData.itemCode || ""} • ${rowData.serialNumber || ""}`;
+        elements.logModal.hidden = false;
+        elements.logModal.setAttribute("aria-hidden", "false");
+        toggleBodyScrollLock();
+        fetchSerialTimeline(rowData.itemCode, rowData.serialNumber);
+    };
+
+    const closeLogModal = () => {
+        elements.logModal.hidden = true;
+        elements.logModal.setAttribute("aria-hidden", "true");
+        setLogError("");
+        setLogState({ showTable: false, showEmpty: false, loading: false });
+        elements.logTableBody.innerHTML = "";
+        toggleBodyScrollLock();
     };
 
     const submitEdit = async (event) => {
@@ -555,6 +757,13 @@
                 itemCode: button.dataset.itemCode,
             });
         }
+        const logButton = event.target.closest("button[data-log-serial]");
+        if (logButton) {
+            openLogModal({
+                serialNumber: logButton.dataset.logSerial,
+                itemCode: logButton.dataset.itemCode,
+            });
+        }
     });
 
     elements.closeModal.addEventListener("click", closeEditModal);
@@ -563,10 +772,20 @@
             closeEditModal();
         }
     });
+    elements.logClose.addEventListener("click", closeLogModal);
+    elements.logBackdrop.addEventListener("click", (event) => {
+        if (event.target === elements.logBackdrop) {
+            closeLogModal();
+        }
+    });
     elements.editForm.addEventListener("submit", submitEdit);
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !elements.modal.hidden) {
-            closeEditModal();
+        if (event.key === "Escape") {
+            if (!elements.logModal.hidden) {
+                closeLogModal();
+            } else if (!elements.modal.hidden) {
+                closeEditModal();
+            }
         }
     });
 

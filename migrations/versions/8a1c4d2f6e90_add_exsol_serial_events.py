@@ -39,7 +39,13 @@ def upgrade() -> None:
         if "serial_no" not in existing_columns:
             op.add_column(
                 "exsol_serial_events",
-                sa.Column("serial_no", sa.String(length=60), nullable=False),
+                sa.Column("serial_no", sa.String(length=60), nullable=True),
+            )
+            op.execute(
+                "UPDATE exsol_serial_events SET serial_no = 'UNKNOWN' WHERE serial_no IS NULL"
+            )
+            op.execute(
+                "ALTER TABLE exsol_serial_events ALTER COLUMN serial_no SET NOT NULL"
             )
         if "event_type" not in existing_columns:
             op.add_column(

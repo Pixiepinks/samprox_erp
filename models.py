@@ -1081,6 +1081,7 @@ class ExsolSalesInvoiceSerial(db.Model):
     )
     item_id = db.Column(db.String(36), db.ForeignKey("exsol_inventory_items.id"), nullable=False)
     serial_no = db.Column(db.String(60), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="SOLD")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     invoice = db.relationship("ExsolSalesInvoice", back_populates="serials")
@@ -1119,6 +1120,87 @@ class ExsolSalesReceipt(db.Model):
     __table_args__ = (
         Index("ix_exsol_sales_receipts_invoice_date", "invoice_id", "receipt_date"),
     )
+
+
+class ExsolSalesReturn(db.Model):
+    __tablename__ = "exsol_sales_returns"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False, index=True)
+    company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
+    return_no = db.Column(db.String(60), nullable=False)
+    invoice_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = db.Column(GUID(), db.ForeignKey("non_samprox_customers.id"), nullable=False)
+    return_date = db.Column(db.Date, nullable=False, default=date.today)
+    reason = db.Column(db.String(255))
+    status = db.Column(db.String(20), nullable=False, default="DRAFT")
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    invoice = db.relationship("ExsolSalesInvoice")
+    customer = db.relationship("NonSamproxCustomer")
+    lines = db.relationship(
+        "ExsolSalesReturnLine",
+        back_populates="return_header",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "return_no",
+            name="uq_exsol_sales_returns_company_return_no",
+        ),
+        Index("ix_exsol_sales_returns_company_return_no", "company_id", "return_no"),
+    )
+
+
+class ExsolSalesReturnLine(db.Model):
+    __tablename__ = "exsol_sales_return_lines"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    return_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales_returns.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_code = db.Column(db.String(50), nullable=False)
+    item_name = db.Column(db.String(255), nullable=False)
+    qty = db.Column(db.Integer, nullable=False)
+    is_serialized = db.Column(db.Boolean, nullable=False, default=False)
+
+    return_header = db.relationship("ExsolSalesReturn", back_populates="lines")
+    serials = db.relationship(
+        "ExsolSalesReturnSerial",
+        back_populates="return_line",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class ExsolSalesReturnSerial(db.Model):
+    __tablename__ = "exsol_sales_return_serials"
+
+    id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
+    return_line_id = db.Column(
+        GUID(),
+        db.ForeignKey("exsol_sales_return_lines.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    serial_number = db.Column(db.String(60), nullable=False, index=True)
+    condition = db.Column(db.String(20), nullable=False, default="GOOD")
+    restock_status = db.Column(db.String(20), nullable=False, default="STORED")
+
+    return_line = db.relationship("ExsolSalesReturnLine", back_populates="serials")
 
 
 class MRNHeader(db.Model):

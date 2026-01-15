@@ -370,6 +370,7 @@ def _enforce_role_page_restrictions():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_data_entry_travel_claims",
+            "ui.sales_data_entry_returns_page",
             "ui.sales_invoice_page",
             "ui.sales_production_page",
             "ui.sales_reports_page",

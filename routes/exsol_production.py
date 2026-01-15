@@ -21,6 +21,7 @@ from models import (
     ExsolInventoryItem,
     ExsolProductionEntry,
     ExsolProductionSerial,
+    ExsolSerialEvent,
     RoleEnum,
     User,
     normalize_role,
@@ -742,10 +743,13 @@ def _insert_bulk_chunk(
 
     total_serials = 0
     serial_insert_rows: list[dict[str, Any]] = []
+    event_insert_rows: list[dict[str, Any]] = []
     bind = db.session.get_bind()
     dialect_name = bind.dialect.name if bind else ""
 
-    for entry_id, spec in zip(entry_ids, row_specs):
+    event_created_at = datetime.utcnow()
+    for entry_id, spec, entry_row in zip(entry_ids, row_specs, entry_rows):
+        event_date = entry_row.get("created_at") or event_created_at
         if spec["serial_mode"] == "SerialRange" and spec["start_int"] is not None and spec["end_int"] is not None:
             total_serials += spec["quantity"]
             if dialect_name == "postgresql":
@@ -775,6 +779,19 @@ def _insert_bulk_chunk(
                             "created_at": datetime.utcnow(),
                         }
                     )
+            for serial_value in range(spec["start_int"], spec["end_int"] + 1):
+                event_insert_rows.append(
+                    {
+                        "company_key": EXSOL_COMPANY_KEY,
+                        "item_code": spec["item_code"],
+                        "serial_number": str(serial_value).zfill(8),
+                        "event_type": "PRODUCED",
+                        "event_date": event_date,
+                        "ref_type": "PRODUCTION_ENTRY",
+                        "ref_id": str(entry_id),
+                        "created_at": event_created_at,
+                    }
+                )
         else:
             for serial in spec["serials"]:
                 serial_insert_rows.append(
@@ -783,6 +800,18 @@ def _insert_bulk_chunk(
                         "serial_no": serial,
                         "entry_id": entry_id,
                         "created_at": datetime.utcnow(),
+                    }
+                )
+                event_insert_rows.append(
+                    {
+                        "company_key": EXSOL_COMPANY_KEY,
+                        "item_code": spec["item_code"],
+                        "serial_number": serial,
+                        "event_type": "PRODUCED",
+                        "event_date": event_date,
+                        "ref_type": "PRODUCTION_ENTRY",
+                        "ref_id": str(entry_id),
+                        "created_at": event_created_at,
                     }
                 )
             total_serials += len(spec["serials"])
@@ -800,6 +829,11 @@ def _insert_bulk_chunk(
         else:
             for chunk in _chunk_values(serial_insert_rows, SERIAL_CHUNK_SIZE):
                 db.session.execute(serial_insert_stmt, chunk)
+
+    if event_insert_rows:
+        event_insert_stmt = insert(ExsolSerialEvent)
+        for chunk in _chunk_values(event_insert_rows, SERIAL_CHUNK_SIZE):
+            db.session.execute(event_insert_stmt, chunk)
 
     return len(entry_ids), total_serials
 
@@ -1296,6 +1330,48 @@ def upload_excel():
         _ensure_exsol_sequences()
         for entry in entries:
             db.session.add(entry)
+        db.session.flush()
+        event_rows = []
+        event_created_at = datetime.utcnow()
+        for entry in entries:
+            event_date = entry.created_at or event_created_at
+            for serial in entry.serials:
+                event_rows.append(
+                    {
+                        "company_key": EXSOL_COMPANY_KEY,
+                        "item_code": entry.item_code,
+                        "serial_number": serial.serial_no,
+                        "event_type": "PRODUCED",
+                        "event_date": event_date,
+                        "ref_type": "PRODUCTION_ENTRY",
+                        "ref_id": str(entry.id),
+                        "created_at": event_created_at,
+                    }
+                )
+        if not event_rows:
+            entry_ids = [entry.id for entry in entries]
+            if entry_ids:
+                serial_rows = (
+                    db.session.query(ExsolProductionSerial, ExsolProductionEntry)
+                    .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+                    .filter(ExsolProductionSerial.entry_id.in_(entry_ids))
+                    .all()
+                )
+                for serial, entry in serial_rows:
+                    event_rows.append(
+                        {
+                            "company_key": EXSOL_COMPANY_KEY,
+                            "item_code": entry.item_code,
+                            "serial_number": serial.serial_no,
+                            "event_type": "PRODUCED",
+                            "event_date": entry.created_at or event_created_at,
+                            "ref_type": "PRODUCTION_ENTRY",
+                            "ref_id": str(entry.id),
+                            "created_at": event_created_at,
+                        }
+                    )
+        if event_rows:
+            db.session.execute(insert(ExsolSerialEvent), event_rows)
         db.session.commit()
     except IntegrityError:
         db.session.rollback()

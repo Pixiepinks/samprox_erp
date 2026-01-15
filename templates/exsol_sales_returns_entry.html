@@ -95,7 +95,21 @@
                 &times;
             </button>
         </header>
-        <div class="modal__body">
+        <div class="modal__body serial-modal__body">
+            <div class="serial-modal__toolbar">
+                <label class="serial-modal__search">
+                    <span class="sr-only">Search serials</span>
+                    <input type="search" id="serial-search" placeholder="Search serial number" />
+                </label>
+                <div class="serial-modal__buttons">
+                    <button type="button" class="button button--ghost button--small" id="serial-select-all">
+                        Select All
+                    </button>
+                    <button type="button" class="button button--ghost button--small" id="serial-clear">
+                        Clear
+                    </button>
+                </div>
+            </div>
             <div class="table-wrapper modal-table">
                 <table class="table">
                     <thead>
@@ -112,7 +126,7 @@
             <p class="modal__hint" id="serial-modal-empty" hidden>No returnable serials found.</p>
             <div class="modal__actions">
                 <button type="button" class="button button--ghost" data-serial-close>Cancel</button>
-                <button type="button" class="button button--primary" id="serial-apply">Apply Selection</button>
+                <button type="button" class="button button--primary" id="serial-apply">Confirm</button>
             </div>
         </div>
     </div>
@@ -156,9 +170,58 @@
         color: #475569;
     }
 
+    .return-line-error {
+        font-size: 0.8rem;
+        color: #b91c1c;
+        font-weight: 600;
+    }
+
+    .toast-container {
+        position: fixed;
+        top: 1.5rem;
+        right: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        z-index: 3000;
+    }
+
+    .toast {
+        min-width: 240px;
+        max-width: 360px;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        background: #fee2e2;
+        color: #991b1b;
+        box-shadow: 0 16px 30px rgba(15, 23, 42, 0.15);
+        font-weight: 600;
+    }
+
+    .modal--app {
+        z-index: 2000;
+    }
+
     .modal-table {
         max-height: 320px;
         overflow: auto;
+    }
+
+    .serial-modal__body {
+        max-height: calc(100vh - 220px);
+        overflow-y: auto;
+    }
+
+    .serial-modal__toolbar {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .serial-modal__search input {
+        min-width: 220px;
     }
 
     .serial-inputs select:disabled {
@@ -190,10 +253,18 @@
         const modalEmpty = document.getElementById("serial-modal-empty");
         const modalTitle = document.getElementById("serial-modal-title");
         const modalApply = document.getElementById("serial-apply");
+        const modalSearch = document.getElementById("serial-search");
+        const modalSelectAll = document.getElementById("serial-select-all");
+        const modalClear = document.getElementById("serial-clear");
+
+        const toastContainer = document.createElement("div");
+        toastContainer.className = "toast-container";
+        document.body.appendChild(toastContainer);
 
         const invoiceLookupMap = new Map();
         const returnLines = new Map();
         let activeLineId = null;
+        let activeSelection = new Map();
         let lookupTimer = null;
 
         const today = new Date();
@@ -231,6 +302,17 @@
                 box.textContent = "";
                 box.hidden = true;
             }
+        };
+
+        const showToast = (message) => {
+            if (!message) return;
+            const toast = document.createElement("div");
+            toast.className = "toast";
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
         };
 
         const resetForm = () => {
@@ -283,7 +365,7 @@
             emptyState.hidden = true;
             linesWrapper.hidden = false;
 
-            payload.lines.forEach((line) => {
+            payload.lines.forEach((line, index) => {
                 const row = document.createElement("tr");
                 row.innerHTML = `
                     <td>${line.item_code}</td>
@@ -300,6 +382,7 @@
                                 class="button button--ghost button--small"
                                 data-action="select-serials"
                                 data-line-id="${line.line_id}"
+                                data-row-index="${index + 1}"
                                 ${line.is_serialized ? "" : "disabled"}
                             >
                                 Select Serials
@@ -307,6 +390,7 @@
                             <span class="return-serials__count" data-serial-count="${line.line_id}">
                                 Selected: 0
                             </span>
+                            <span class="return-line-error" data-line-error="${line.line_id}" hidden></span>
                         </div>
                     </td>
                 `;
@@ -314,19 +398,17 @@
 
                 const qtyInput = row.querySelector(".return-qty");
                 const serialCount = row.querySelector(`[data-serial-count="${line.line_id}"]`);
-                const selectButton = row.querySelector('[data-action="select-serials"]');
                 const availableSerials = (line.sold_serials || []).filter(
                     (serial) => !(line.already_returned_serials || []).includes(serial)
                 );
-
-                if (selectButton) {
-                    selectButton.addEventListener("click", () => openModal(line.line_id));
-                }
+                const lineError = row.querySelector(`[data-line-error="${line.line_id}"]`);
+                qtyInput.addEventListener("input", () => validateLine(line.line_id));
 
                 returnLines.set(line.line_id, {
                     line,
                     qtyInput,
                     serialCount,
+                    lineError,
                     availableSerials,
                     selectedSerials: new Map(),
                 });
@@ -353,22 +435,21 @@
             renderLines(payload);
         };
 
-        const openModal = (lineId) => {
-            const lineEntry = returnLines.get(lineId);
-            if (!lineEntry) return;
-            activeLineId = lineId;
+        const renderModalRows = (lineEntry, serials) => {
+            const query = modalSearch.value.trim().toLowerCase();
+            const filteredSerials = serials.filter((serial) => serial.toLowerCase().includes(query));
 
             modalBody.innerHTML = "";
-            modalTitle.textContent = `Select Serials (${lineEntry.line.item_code})`;
-            const available = lineEntry.availableSerials || [];
-            modalEmpty.hidden = available.length > 0;
+            modalEmpty.hidden = filteredSerials.length > 0;
 
-            available.forEach((serial) => {
-                const existing = lineEntry.selectedSerials.get(serial);
+            filteredSerials.forEach((serial) => {
+                const existing = activeSelection.get(serial);
                 const row = document.createElement("tr");
                 row.innerHTML = `
                     <td>
-                        <input type="checkbox" class="serial-select" data-serial="${serial}" ${existing ? "checked" : ""} />
+                        <input type="checkbox" class="serial-select" data-serial="${serial}" ${
+                            existing ? "checked" : ""
+                        } />
                     </td>
                     <td>${serial}</td>
                     <td class="serial-inputs">
@@ -379,8 +460,12 @@
                     </td>
                     <td class="serial-inputs">
                         <select class="serial-restock" ${existing ? "" : "disabled"}>
-                            <option value="STORED" ${existing?.restock_status === "STORED" ? "selected" : ""}>STORED</option>
-                            <option value="SERVICE" ${existing?.restock_status === "SERVICE" ? "selected" : ""}>SERVICE</option>
+                            <option value="STORED" ${existing?.restock_status === "STORED" ? "selected" : ""}>
+                                STORED
+                            </option>
+                            <option value="SERVICE" ${existing?.restock_status === "SERVICE" ? "selected" : ""}>
+                                SERVICE
+                            </option>
                             <option value="SCRAP" ${existing?.restock_status === "SCRAP" ? "selected" : ""}>SCRAP</option>
                         </select>
                     </td>
@@ -390,16 +475,75 @@
                 const conditionSelect = row.querySelector(".serial-condition");
                 const restockSelect = row.querySelector(".serial-restock");
 
+                const syncSelection = () => {
+                    if (checkbox.checked) {
+                        activeSelection.set(serial, {
+                            serial_number: serial,
+                            condition: conditionSelect.value,
+                            restock_status: restockSelect.value,
+                        });
+                    } else {
+                        activeSelection.delete(serial);
+                    }
+                };
+
                 checkbox.addEventListener("change", () => {
                     const enabled = checkbox.checked;
                     conditionSelect.disabled = !enabled;
                     restockSelect.disabled = !enabled;
+                    syncSelection();
                 });
+
+                conditionSelect.addEventListener("change", syncSelection);
+                restockSelect.addEventListener("change", syncSelection);
             });
+        };
+
+        const openModal = async (lineId, context = {}) => {
+            const lineEntry = returnLines.get(lineId);
+            if (!lineEntry) return;
+            activeLineId = lineId;
+            activeSelection = new Map(lineEntry.selectedSerials);
+
+            modalBody.innerHTML = "";
+            const invoiceLabel = context.invoiceNo ? ` • Invoice ${context.invoiceNo}` : "";
+            const lineLabel = context.rowIndex ? `Line ${context.rowIndex}` : "Line";
+            const itemCodeLabel = context.itemCode || lineEntry.line.item_code;
+            modalTitle.textContent = `Select Serials (${lineLabel}: ${itemCodeLabel}${invoiceLabel})`;
+            modalEmpty.textContent = "Loading serials...";
+            modalEmpty.hidden = false;
+            modalSearch.value = "";
 
             modal.hidden = false;
             modal.setAttribute("aria-hidden", "false");
             document.body.classList.add("modal-open");
+
+            const invoiceId = invoiceIdInput.value;
+            if (!invoiceId) {
+                modalEmpty.textContent = "Select an invoice to load serials.";
+                return;
+            }
+
+            try {
+                const payload = await fetchJson(`/api/exsol/sales/invoices/${invoiceId}/returnable`);
+                const updatedLine = payload?.lines?.find((line) => String(line.line_id) === String(lineId));
+                if (!updatedLine) {
+                    throw new Error("Unable to load serials for this line.");
+                }
+                const available = (updatedLine.sold_serials || []).filter(
+                    (serial) => !(updatedLine.already_returned_serials || []).includes(serial)
+                );
+                lineEntry.availableSerials = available;
+                modalEmpty.textContent = "No returnable serials found.";
+                renderModalRows(lineEntry, available);
+            } catch (err) {
+                const message = err?.message || "Unable to load serials right now.";
+                showToast(message);
+                console.error("Unable to load returnable serials", err);
+                modalBody.innerHTML = "";
+                modalEmpty.textContent = message;
+                modalEmpty.hidden = false;
+            }
         };
 
         const closeModal = () => {
@@ -407,6 +551,7 @@
             modal.setAttribute("aria-hidden", "true");
             document.body.classList.remove("modal-open");
             activeLineId = null;
+            activeSelection = new Map();
         };
 
         const applySerialSelection = () => {
@@ -419,26 +564,30 @@
                 closeModal();
                 return;
             }
-            const selections = new Map();
-            modalBody.querySelectorAll("tr").forEach((row) => {
-                const checkbox = row.querySelector(".serial-select");
-                if (!checkbox?.checked) return;
-                const serial = checkbox.dataset.serial;
-                const condition = row.querySelector(".serial-condition").value;
-                const restockStatus = row.querySelector(".serial-restock").value;
-                selections.set(serial, {
-                    serial_number: serial,
-                    condition,
-                    restock_status: restockStatus,
-                });
-            });
-
-            lineEntry.selectedSerials = selections;
-            lineEntry.serialCount.textContent = `Selected: ${selections.size}`;
+            lineEntry.selectedSerials = new Map(activeSelection);
+            lineEntry.serialCount.textContent = `Selected: ${activeSelection.size}`;
             if (!lineEntry.qtyInput.value || Number(lineEntry.qtyInput.value) === 0) {
-                lineEntry.qtyInput.value = selections.size;
+                lineEntry.qtyInput.value = activeSelection.size;
             }
+            validateLine(activeLineId);
             closeModal();
+        };
+
+        const validateLine = (lineId) => {
+            const entry = returnLines.get(lineId);
+            if (!entry || !entry.lineError) return;
+            const qty = Number(entry.qtyInput.value || 0);
+            let message = "";
+            if (entry.line.is_serialized && qty > 0 && entry.selectedSerials.size !== qty) {
+                message = "Selected serial count must match return qty.";
+            }
+            if (message) {
+                entry.lineError.textContent = message;
+                entry.lineError.hidden = false;
+            } else {
+                entry.lineError.textContent = "";
+                entry.lineError.hidden = true;
+            }
         };
 
         const handleSubmit = async (event) => {
@@ -458,6 +607,7 @@
             returnLines.forEach((entry, lineId) => {
                 const qty = Number(entry.qtyInput.value || 0);
                 if (!qty || qty <= 0) {
+                    validateLine(lineId);
                     return;
                 }
                 if (entry.line.is_serialized) {
@@ -465,6 +615,7 @@
                         errors.push(`Line ${entry.line.item_code}: selected serial count must match return qty.`);
                     }
                 }
+                validateLine(lineId);
                 lines.push({
                     line_id: lineId,
                     item_code: entry.line.item_code,
@@ -503,6 +654,10 @@
             }
         };
 
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+
         invoiceInput.addEventListener("input", () => {
             const value = invoiceInput.value.trim();
             clearTimeout(lookupTimer);
@@ -520,6 +675,41 @@
             }
             invoiceIdInput.value = selected.id;
             loadReturnable(selected.id).catch((err) => setFeedback(errorBox, err.message));
+        });
+
+        linesBody.addEventListener("click", (event) => {
+            const trigger = event.target.closest('[data-action="select-serials"]');
+            if (!trigger) return;
+            event.preventDefault();
+            const lineId = trigger.dataset.lineId;
+            if (!lineId) return;
+            const invoiceNo = summaryInvoiceNo.textContent?.trim();
+            const itemCode = trigger.closest("tr")?.querySelector("td")?.textContent?.trim() || "";
+            const rowIndex = trigger.dataset.rowIndex;
+            openModal(lineId, { invoiceNo, itemCode, rowIndex });
+        });
+
+        modalSearch.addEventListener("input", () => {
+            if (!activeLineId) return;
+            const lineEntry = returnLines.get(activeLineId);
+            if (!lineEntry) return;
+            renderModalRows(lineEntry, lineEntry.availableSerials || []);
+        });
+
+        modalSelectAll.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (checkbox.checked) return;
+                checkbox.checked = true;
+                checkbox.dispatchEvent(new Event("change"));
+            });
+        });
+
+        modalClear.addEventListener("click", () => {
+            modalBody.querySelectorAll(".serial-select").forEach((checkbox) => {
+                if (!checkbox.checked) return;
+                checkbox.checked = false;
+                checkbox.dispatchEvent(new Event("change"));
+            });
         });
 
         modalApply.addEventListener("click", applySerialSelection);

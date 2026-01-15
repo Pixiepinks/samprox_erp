@@ -23,6 +23,7 @@ from models import (
     ExsolSalesReturn,
     ExsolSalesReturnLine,
     ExsolSalesReturnSerial,
+    ExsolSerialEvent,
     NonSamproxCustomer,
     RoleEnum,
     SALES_MANAGER_ROLES,
@@ -858,6 +859,8 @@ def _create_invoice(payload: dict[str, Any]):
     if not user:
         return _build_error("Unable to resolve the current user.", 401)
 
+    customer = NonSamproxCustomer.query.get(parsed_header["customer_id"]) if parsed_header else None
+
     serial_map = {}
     if prepared_lines:
         serials = [serial for line in prepared_lines for serial in line["serials"]]
@@ -907,6 +910,8 @@ def _create_invoice(payload: dict[str, Any]):
             real_session.add(invoice)
 
             line_models: list[ExsolSalesInvoiceLine] = []
+            event_rows: list[ExsolSerialEvent] = []
+            event_date = datetime.combine(invoice.invoice_date, datetime.min.time())
             for line in prepared_lines:
                 line_model = ExsolSalesInvoiceLine(
                     invoice=invoice,
@@ -935,6 +940,23 @@ def _create_invoice(payload: dict[str, Any]):
                     production_serial = serial_map.get(serial)
                     if production_serial:
                         production_serial.is_sold = True
+                    if line.get("item"):
+                        event_rows.append(
+                            ExsolSerialEvent(
+                                company_key=EXSOL_COMPANY_KEY,
+                                item_code=line["item"].item_code,
+                                serial_number=serial,
+                                event_type="INVOICED",
+                                event_date=event_date,
+                                ref_type="SALES_INVOICE",
+                                ref_id=str(invoice.id),
+                                ref_no=invoice.invoice_no,
+                                customer_id=invoice.customer_id,
+                                customer_name=customer.customer_name if customer else None,
+                            )
+                        )
+            if event_rows:
+                real_session.add_all(event_rows)
         real_session.commit()
 
     except IntegrityError:
@@ -984,6 +1006,144 @@ def create_sales_invoice():
 
     payload = request.get_json(silent=True) or {}
     return _create_invoice(payload)
+
+
+@invoices_bp.get("/serials/<string:serial_number>/timeline")
+@jwt_required(optional=True)
+def get_serial_timeline(serial_number: str):
+    if not _has_exsol_sales_access():
+        return _build_error("Access denied", 403)
+
+    serial_number = (serial_number or "").strip()
+    if not serial_number:
+        return _build_error("Serial number is required.", 400)
+
+    item_code = (request.args.get("item_code") or "").strip()
+    if not item_code:
+        return _build_error("Item code is required.", 400)
+
+    events = (
+        ExsolSerialEvent.query.filter(
+            ExsolSerialEvent.company_key == EXSOL_COMPANY_KEY,
+            ExsolSerialEvent.item_code == item_code,
+            ExsolSerialEvent.serial_number == serial_number,
+        )
+        .order_by(ExsolSerialEvent.event_date.asc(), ExsolSerialEvent.created_at.asc())
+        .all()
+    )
+
+    def _serialize_event(event: ExsolSerialEvent) -> dict[str, Any]:
+        return {
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "event_date": event.event_date.isoformat() if event.event_date else None,
+            "ref_type": event.ref_type,
+            "ref_id": event.ref_id,
+            "ref_no": event.ref_no,
+            "customer_id": str(event.customer_id) if event.customer_id else None,
+            "customer_name": event.customer_name,
+            "notes": event.notes,
+            "meta_json": event.meta_json,
+            "created_at": event.created_at.isoformat() if event.created_at else None,
+        }
+
+    timeline_events = [_serialize_event(event) for event in events]
+
+    if not timeline_events:
+        synthesized: list[dict[str, Any]] = []
+
+        production_row = (
+            db.session.query(ExsolProductionSerial, ExsolProductionEntry)
+            .join(ExsolProductionEntry, ExsolProductionSerial.entry_id == ExsolProductionEntry.id)
+            .filter(ExsolProductionSerial.company_key == EXSOL_COMPANY_KEY)
+            .filter(ExsolProductionSerial.serial_no == serial_number)
+            .filter(ExsolProductionEntry.item_code == item_code)
+            .first()
+        )
+        if production_row:
+            serial, entry = production_row
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "PRODUCED",
+                    "event_date": entry.created_at.isoformat() if entry.created_at else None,
+                    "ref_type": "PRODUCTION_ENTRY",
+                    "ref_id": str(entry.id),
+                    "ref_no": None,
+                    "customer_id": None,
+                    "customer_name": None,
+                    "notes": None,
+                    "meta_json": None,
+                    "created_at": serial.created_at.isoformat() if serial.created_at else None,
+                }
+            )
+
+        invoice_rows = (
+            db.session.query(ExsolSalesInvoiceSerial, ExsolSalesInvoice, NonSamproxCustomer)
+            .join(ExsolSalesInvoice, ExsolSalesInvoiceSerial.invoice_id == ExsolSalesInvoice.id)
+            .join(ExsolInventoryItem, ExsolSalesInvoiceSerial.item_id == ExsolInventoryItem.id)
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesInvoice.customer_id)
+            .filter(ExsolSalesInvoiceSerial.company_key == EXSOL_COMPANY_KEY)
+            .filter(ExsolSalesInvoiceSerial.serial_no == serial_number)
+            .filter(ExsolInventoryItem.item_code == item_code)
+            .all()
+        )
+        for serial, invoice, customer in invoice_rows:
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "INVOICED",
+                    "event_date": invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                    "ref_type": "SALES_INVOICE",
+                    "ref_id": str(invoice.id),
+                    "ref_no": invoice.invoice_no,
+                    "customer_id": str(invoice.customer_id),
+                    "customer_name": customer.customer_name,
+                    "notes": None,
+                    "meta_json": None,
+                    "created_at": serial.created_at.isoformat() if serial.created_at else None,
+                }
+            )
+
+        return_rows = (
+            db.session.query(ExsolSalesReturnSerial, ExsolSalesReturnLine, ExsolSalesReturn, NonSamproxCustomer)
+            .join(ExsolSalesReturnLine, ExsolSalesReturnSerial.return_line_id == ExsolSalesReturnLine.id)
+            .join(ExsolSalesReturn, ExsolSalesReturnLine.return_id == ExsolSalesReturn.id)
+            .join(NonSamproxCustomer, NonSamproxCustomer.id == ExsolSalesReturn.customer_id)
+            .filter(ExsolSalesReturnSerial.serial_number == serial_number)
+            .filter(ExsolSalesReturnLine.item_code == item_code)
+            .filter(ExsolSalesReturn.company_key == EXSOL_COMPANY_KEY)
+            .all()
+        )
+        for serial, line, return_header, customer in return_rows:
+            synthesized.append(
+                {
+                    "id": None,
+                    "event_type": "RETURNED",
+                    "event_date": return_header.return_date.isoformat() if return_header.return_date else None,
+                    "ref_type": "SALES_RETURN",
+                    "ref_id": str(return_header.id),
+                    "ref_no": return_header.return_no,
+                    "customer_id": str(return_header.customer_id),
+                    "customer_name": customer.customer_name,
+                    "notes": return_header.reason,
+                    "meta_json": None,
+                    "created_at": None,
+                }
+            )
+
+        timeline_events = sorted(
+            synthesized,
+            key=lambda event: (event["event_date"] or "", event.get("created_at") or ""),
+        )
+
+    payload = {
+        "item_code": item_code,
+        "serial_number": serial_number,
+        "events": timeline_events,
+    }
+
+    return jsonify(payload)
 
 
 @invoices_bp.get("/sales-invoices/<string:invoice_id>")
@@ -1307,6 +1467,8 @@ def create_exsol_sales_return():
             real_session.add(return_header)
 
             return_lines = []
+            event_rows: list[ExsolSerialEvent] = []
+            event_date = datetime.combine(return_date, datetime.min.time())
             for line in prepared_lines:
                 line_model = ExsolSalesReturnLine(
                     return_header=return_header,
@@ -1326,6 +1488,21 @@ def create_exsol_sales_return():
                         restock_status=serial["restock_status"],
                     )
                     real_session.add(serial_model)
+                    event_rows.append(
+                        ExsolSerialEvent(
+                            company_key=EXSOL_COMPANY_KEY,
+                            item_code=line["item_code"],
+                            serial_number=serial["serial_number"],
+                            event_type="RETURNED",
+                            event_date=event_date,
+                            ref_type="SALES_RETURN",
+                            ref_id=str(return_header.id),
+                            ref_no=return_header.return_no,
+                            customer_id=invoice.customer_id,
+                            customer_name=customer.customer_name if customer else None,
+                            notes=reason,
+                        )
+                    )
 
             if serials_to_update:
                 serial_rows = (
@@ -1346,6 +1523,8 @@ def create_exsol_sales_return():
                 )
                 for serial in production_rows:
                     serial.is_sold = False
+            if event_rows:
+                real_session.add_all(event_rows)
 
         real_session.commit()
 

@@ -477,6 +477,15 @@ def sales_data_entry_travel_claims():
     return redirect(url_for("ui.money_page", tab="petty-cash", view="travel-claims"))
 
 
+@bp.get("/sales/data-entry/returns")
+def sales_data_entry_returns_page():
+    """Render the Exsol sales return entry page."""
+    if not _has_exsol_sales_access():
+        return render_template("access_denied.html"), 403
+
+    return render_template("exsol_sales_returns_entry.html", active_tab="data-entry")
+
+
 @bp.get("/sales/reports")
 def sales_reports_page():
     """Render the Sales Manager reports shell."""

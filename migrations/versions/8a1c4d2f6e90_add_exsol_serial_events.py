@@ -16,30 +16,37 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "exsol_serial_events",
-        sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("company_key", sa.String(length=20), nullable=False, server_default="EXSOL"),
-        sa.Column("serial_no", sa.String(length=60), nullable=False),
-        sa.Column("event_type", sa.String(length=40), nullable=False),
-        sa.Column("notes", sa.String(length=255)),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-    )
-    op.create_index(
-        "ix_exsol_serial_events_company_key",
-        "exsol_serial_events",
-        ["company_key"],
-    )
-    op.create_index(
-        "ix_exsol_serial_events_serial_no",
-        "exsol_serial_events",
-        ["serial_no"],
-    )
-    op.create_index(
-        "ix_exsol_serial_events_company_serial",
-        "exsol_serial_events",
-        ["company_key", "serial_no"],
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if not inspector.has_table("exsol_serial_events"):
+        op.create_table(
+            "exsol_serial_events",
+            sa.Column("id", sa.String(length=36), primary_key=True),
+            sa.Column("company_key", sa.String(length=20), nullable=False, server_default="EXSOL"),
+            sa.Column("serial_no", sa.String(length=60), nullable=False),
+            sa.Column("event_type", sa.String(length=40), nullable=False),
+            sa.Column("notes", sa.String(length=255)),
+            sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        )
+    existing_indexes = {index["name"] for index in inspector.get_indexes("exsol_serial_events")}
+    if "ix_exsol_serial_events_company_key" not in existing_indexes:
+        op.create_index(
+            "ix_exsol_serial_events_company_key",
+            "exsol_serial_events",
+            ["company_key"],
+        )
+    if "ix_exsol_serial_events_serial_no" not in existing_indexes:
+        op.create_index(
+            "ix_exsol_serial_events_serial_no",
+            "exsol_serial_events",
+            ["serial_no"],
+        )
+    if "ix_exsol_serial_events_company_serial" not in existing_indexes:
+        op.create_index(
+            "ix_exsol_serial_events_company_serial",
+            "exsol_serial_events",
+            ["company_key", "serial_no"],
+        )
 
 
 def downgrade() -> None:

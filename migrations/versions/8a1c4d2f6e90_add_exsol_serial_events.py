@@ -18,6 +18,7 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
+    existing_columns = {col["name"] for col in inspector.get_columns("exsol_serial_events")}
     if not inspector.has_table("exsol_serial_events"):
         op.create_table(
             "exsol_serial_events",
@@ -28,20 +29,52 @@ def upgrade() -> None:
             sa.Column("notes", sa.String(length=255)),
             sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         )
+        existing_columns = {"id", "company_key", "serial_no", "event_type", "notes", "created_at"}
+    else:
+        if "company_key" not in existing_columns:
+            op.add_column(
+                "exsol_serial_events",
+                sa.Column("company_key", sa.String(length=20), nullable=False, server_default="EXSOL"),
+            )
+        if "serial_no" not in existing_columns:
+            op.add_column(
+                "exsol_serial_events",
+                sa.Column("serial_no", sa.String(length=60), nullable=False),
+            )
+        if "event_type" not in existing_columns:
+            op.add_column(
+                "exsol_serial_events",
+                sa.Column("event_type", sa.String(length=40), nullable=False),
+            )
+        if "notes" not in existing_columns:
+            op.add_column(
+                "exsol_serial_events",
+                sa.Column("notes", sa.String(length=255)),
+            )
+        if "created_at" not in existing_columns:
+            op.add_column(
+                "exsol_serial_events",
+                sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            )
+        existing_columns = {col["name"] for col in inspector.get_columns("exsol_serial_events")}
     existing_indexes = {index["name"] for index in inspector.get_indexes("exsol_serial_events")}
-    if "ix_exsol_serial_events_company_key" not in existing_indexes:
+    if "company_key" in existing_columns and "ix_exsol_serial_events_company_key" not in existing_indexes:
         op.create_index(
             "ix_exsol_serial_events_company_key",
             "exsol_serial_events",
             ["company_key"],
         )
-    if "ix_exsol_serial_events_serial_no" not in existing_indexes:
+    if "serial_no" in existing_columns and "ix_exsol_serial_events_serial_no" not in existing_indexes:
         op.create_index(
             "ix_exsol_serial_events_serial_no",
             "exsol_serial_events",
             ["serial_no"],
         )
-    if "ix_exsol_serial_events_company_serial" not in existing_indexes:
+    if (
+        "company_key" in existing_columns
+        and "serial_no" in existing_columns
+        and "ix_exsol_serial_events_company_serial" not in existing_indexes
+    ):
         op.create_index(
             "ix_exsol_serial_events_company_serial",
             "exsol_serial_events",

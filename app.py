@@ -275,6 +275,7 @@ def create_app():
             "ui.sales_dashboard_page",
             "ui.sales_data_entry_page",
             "ui.sales_data_entry_travel_claims",
+            "ui.sales_data_entry_returns_page",
             "ui.sales_reports_page",
             "ui.exsol_sales_report_invoices_page",
             "ui.exsol_sales_report_sales_by_person_page",

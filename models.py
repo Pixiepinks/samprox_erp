@@ -9,6 +9,7 @@ from math import radians, sin, cos, sqrt, atan2
 
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint, event, func, select
 from sqlalchemy.orm import validates
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from extensions import db
@@ -1014,14 +1015,14 @@ class ExsolSerialEvent(db.Model):
 
     @validates("serial_number")
     def _sync_serial_no(self, _key, value):  # pragma: no cover - model sync
-        if value:
-            self.serial_no = value
+        if value and self.serial_no != value:
+            set_committed_value(self, "serial_no", value)
         return value
 
     @validates("serial_no")
     def _sync_serial_number(self, _key, value):  # pragma: no cover - model sync
-        if value:
-            self.serial_number = value
+        if value and self.serial_number != value:
+            set_committed_value(self, "serial_number", value)
         return value
 
 

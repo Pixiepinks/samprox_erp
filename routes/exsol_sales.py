@@ -15,6 +15,7 @@ from extensions import db
 from models import (
     Company,
     ExsolInventoryItem,
+    ExsolSerialEvent,
     ExsolProductionEntry,
     ExsolProductionSerial,
     ExsolSalesInvoice,

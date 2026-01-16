@@ -315,6 +315,9 @@
             const message = data?.message || data?.error || data?.msg || "Request failed.";
             const error = new Error(message);
             error.errors = data?.errors;
+            error.duplicate_serial = data?.duplicate_serial;
+            error.conflict_source = data?.conflict_source;
+            error.conflict_record_id = data?.conflict_record_id;
             throw error;
         }
         return data;
@@ -789,13 +792,27 @@
         const bulkGridBody = bulkModalElements?.bulkGridBody;
         if (!bulkGridBody) return;
         clearRowErrors();
-        errors.forEach((error) => {
-            const row = bulkGridBody.querySelectorAll("tr")[error.row_index];
+        const grouped = new Map();
+        (errors || []).forEach((error) => {
+            const rowIndex = error.row_index ?? error.row;
+            if (rowIndex === undefined || rowIndex === null) return;
+            const messages = error.messages
+                ? error.messages
+                : error.message
+                    ? [error.message]
+                    : [];
+            if (!grouped.has(rowIndex)) {
+                grouped.set(rowIndex, []);
+            }
+            grouped.get(rowIndex).push(...messages);
+        });
+        Array.from(grouped.entries()).forEach(([rowIndex, messages]) => {
+            const row = bulkGridBody.querySelectorAll("tr")[rowIndex];
             if (!row) return;
             const list = row.querySelector(".bulk-grid__errors");
             if (!list) return;
             list.innerHTML = "";
-            error.messages.forEach((message) => {
+            messages.forEach((message) => {
                 const li = document.createElement("li");
                 li.textContent = message;
                 list.appendChild(li);
@@ -809,6 +826,52 @@
             .split(/[\s,]+/)
             .map((serial) => serial.trim())
             .filter(Boolean);
+    };
+
+    const validateBulkRows = (rows) => {
+        const errors = new Map();
+        const addError = (rowIndex, message) => {
+            if (!errors.has(rowIndex)) {
+                errors.set(rowIndex, []);
+            }
+            errors.get(rowIndex).push(message);
+        };
+        rows.forEach((row, index) => {
+            const mode = row.serial_mode || "SerialRange";
+            if (mode === "Manual") {
+                const serials = row.serials || [];
+                if (!serials.length) {
+                    addError(index, "Serial numbers are required for manual entry.");
+                    return;
+                }
+                const invalid = serials.filter((serial) => !serial.trim() || /^0+$/.test(serial.trim()));
+                if (invalid.length) {
+                    addError(index, "Remove blank or placeholder serials before saving.");
+                }
+            }
+        });
+        return Array.from(errors.entries()).map(([row_index, messages]) => ({ row_index, messages }));
+    };
+
+    const findDuplicateRowIndex = (rows, duplicateSerial) => {
+        if (!duplicateSerial) return null;
+        return rows.findIndex((row) => {
+            if (row.serial_mode === "Manual") {
+                return (row.serials || []).includes(duplicateSerial);
+            }
+            if (row.serial_mode === "SerialRange") {
+                const start = (row.start_serial || "").trim();
+                const qty = Number(row.quantity);
+                if (!start || !Number.isInteger(qty) || qty <= 0) return false;
+                const startInt = Number(start);
+                if (!Number.isInteger(startInt)) return false;
+                const endInt = startInt + qty - 1;
+                const endLabel = endInt.toString().padStart(8, "0");
+                const startLabel = startInt.toString().padStart(8, "0");
+                return startLabel <= duplicateSerial && duplicateSerial <= endLabel;
+            }
+            return false;
+        });
     };
 
     const collectRows = () => {
@@ -859,6 +922,13 @@
             bulkError.hidden = false;
             return;
         }
+        const clientErrors = validateBulkRows(rows);
+        if (clientErrors.length) {
+            applyRowErrors(clientErrors);
+            bulkError.textContent = "Fix highlighted serial inputs before saving.";
+            bulkError.hidden = false;
+            return;
+        }
         const originalLabel = submitBulkButton.textContent;
         submitBulkButton.disabled = true;
         submitBulkButton.textContent = "Saving...";
@@ -877,7 +947,17 @@
             await loadEntries();
         } catch (error) {
             if (error?.errors) {
-                applyRowErrors(error.errors);
+                const rowErrors = Array.isArray(error.errors) ? [...error.errors] : [];
+                if (error.duplicate_serial) {
+                    const rowIndex = findDuplicateRowIndex(rows, error.duplicate_serial);
+                    if (rowIndex !== null && rowIndex >= 0) {
+                        rowErrors.push({
+                            row_index: rowIndex,
+                            messages: [`Serial already exists: ${error.duplicate_serial}`],
+                        });
+                    }
+                }
+                applyRowErrors(rowErrors);
             } else {
                 bulkError.textContent = error.message || "Unable to save entries.";
                 bulkError.hidden = false;

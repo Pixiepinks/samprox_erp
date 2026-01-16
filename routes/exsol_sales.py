@@ -224,6 +224,40 @@ def _fetch_stacked_sales_data(
     return list(query.all())
 
 
+def _fetch_sales_rep_summary(
+    *,
+    start_date: date,
+    end_date: date,
+    company_id: int,
+) -> list[tuple[int | None, str | None, Decimal, Decimal]]:
+    amount_expr = _exsol_amount_expression()
+    water_pump_qty_expr = func.sum(
+        case(
+            (ExsolInventoryItem.item_code.in_(WATER_PUMP_ITEM_CODES), ExsolSalesInvoiceLine.qty),
+            else_=0,
+        )
+    )
+    query = (
+        db.session.query(
+            ExsolSalesInvoice.sales_rep_id,
+            User.name.label("sales_rep_name"),
+            func.coalesce(func.sum(amount_expr), 0).label("sales_amount"),
+            func.coalesce(water_pump_qty_expr, 0).label("water_pump_qty"),
+        )
+        .join(ExsolSalesInvoiceLine, ExsolSalesInvoiceLine.invoice_id == ExsolSalesInvoice.id)
+        .join(ExsolInventoryItem, ExsolInventoryItem.id == ExsolSalesInvoiceLine.item_id)
+        .outerjoin(User, User.id == ExsolSalesInvoice.sales_rep_id)
+        .filter(ExsolSalesInvoice.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoiceLine.company_key == EXSOL_COMPANY_KEY)
+        .filter(ExsolSalesInvoice.invoice_date >= start_date)
+        .filter(ExsolSalesInvoice.invoice_date <= end_date)
+        .filter(_exsol_sales_status_filter())
+        .filter(ExsolInventoryItem.company_id == company_id)
+        .group_by(ExsolSalesInvoice.sales_rep_id, User.name)
+    )
+    return list(query.all())
+
+
 def _serialize_exsol_customer(customer: NonSamproxCustomer) -> dict[str, Any]:
     sales_rep = customer.managed_by
     sales_rep_name = None
@@ -494,6 +528,20 @@ def exsol_stacked_sales_dashboard():
         item_code_set.add(item_code)
         series_previous.setdefault(label, {})[item_code] = _coerce_metric_value(value, metric)
 
+    rep_summary_rows = _fetch_sales_rep_summary(
+        start_date=start_date,
+        end_date=end_date,
+        company_id=company_id,
+    )
+    rep_summary_map: dict[str, dict[str, float | int]] = {}
+    for sales_rep_id, sales_rep_name, sales_amount, water_pump_qty in rep_summary_rows:
+        label = _resolve_salesperson_label(sales_rep_id, sales_rep_name)
+        rep_summary_map[label] = {
+            "rep": label,
+            "sales_amount": float(sales_amount or 0),
+            "water_pump_qty": _coerce_metric_value(water_pump_qty, "qty"),
+        }
+
     labels = list(label_set)
     item_codes_out = sorted(item_code_set)
 
@@ -504,6 +552,17 @@ def exsol_stacked_sales_dashboard():
         totals = totals_current
 
     labels_sorted = sorted(labels, key=lambda label: totals.get(label, 0), reverse=True)
+    rep_summary = [
+        rep_summary_map.get(
+            label,
+            {
+                "rep": label,
+                "sales_amount": 0,
+                "water_pump_qty": 0,
+            },
+        )
+        for label in labels_sorted
+    ]
 
     payload = {
         "range": {"start": start_date.isoformat(), "end": end_date.isoformat()},
@@ -512,6 +571,7 @@ def exsol_stacked_sales_dashboard():
         "unit": "LKR" if metric == "amount" else "UNITS",
         "labels": labels_sorted,
         "item_codes": item_codes_out,
+        "rep_summary": rep_summary,
         "series": {
             "current": series_current,
             "previous": series_previous if compare else {},

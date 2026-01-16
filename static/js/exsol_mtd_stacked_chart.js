@@ -26,6 +26,47 @@ if (widget) {
     });
     const qtyFormatter = new Intl.NumberFormat("en-LK", { maximumFractionDigits: 0 });
     const kpiAmountFormatter = new Intl.NumberFormat("en-LK", { maximumFractionDigits: 0 });
+    const repAmountFormatter = new Intl.NumberFormat("en-LK", { maximumFractionDigits: 0 });
+
+    const repSummaryPlugin = {
+        id: "repSummaryLabels",
+        afterDatasetsDraw(chart, _args, options) {
+            const repSummary = options?.repSummary;
+            if (!Array.isArray(repSummary) || repSummary.length === 0) {
+                return;
+            }
+
+            const xScale = chart.scales?.x;
+            const yScale = chart.scales?.y;
+            if (!xScale || !yScale) {
+                return;
+            }
+
+            const ctx = chart.ctx;
+            const baseY = yScale.bottom + (options?.offsetY ?? 10);
+            const lineHeight = options?.lineHeight ?? 14;
+            const labelColor = options?.color ?? "#1f2937";
+
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = labelColor;
+
+            repSummary.forEach((summary, index) => {
+                const x = xScale.getPixelForTick(index);
+                const pumps = Number.isFinite(summary?.water_pump_qty) ? summary.water_pump_qty : 0;
+                const amount = Number.isFinite(summary?.sales_amount) ? summary.sales_amount : 0;
+
+                ctx.font = options?.pumpsFont ?? "600 11px Inter, sans-serif";
+                ctx.fillText(`${qtyFormatter.format(pumps)} Pumps`, x, baseY);
+
+                ctx.font = options?.amountFont ?? "600 11px Inter, sans-serif";
+                ctx.fillText(`Rs.${repAmountFormatter.format(amount)}`, x, baseY + lineHeight);
+            });
+
+            ctx.restore();
+        },
+    };
 
     const formatDate = (value) => {
         const year = value.getFullYear();
@@ -76,7 +117,7 @@ if (widget) {
         return datasets;
     };
 
-    const buildChart = (labels, datasets, metric) => {
+    const buildChart = (labels, datasets, metric, repSummary) => {
         const yTitle = metric === "qty" ? "Quantity (Units)" : "Sales Amount (LKR)";
         if (!chartInstance) {
             const context = chartCanvas.getContext("2d");
@@ -86,8 +127,16 @@ if (widget) {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: { bottom: 50 },
+                    },
                     scales: {
-                        x: { stacked: true },
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                padding: 22,
+                            },
+                        },
                         y: {
                             stacked: true,
                             beginAtZero: true,
@@ -123,14 +172,23 @@ if (widget) {
                                     chartData.datasets[item.datasetIndex]?.stack !== "previous",
                             },
                         },
+                        repSummaryLabels: {
+                            repSummary,
+                            offsetY: 8,
+                            lineHeight: 14,
+                        },
                     },
                 },
+                plugins: [repSummaryPlugin],
             });
         } else {
             chartInstance.data.labels = labels;
             chartInstance.data.datasets = datasets;
             if (chartInstance.options.scales?.y?.title) {
                 chartInstance.options.scales.y.title.text = yTitle;
+            }
+            if (chartInstance.options.plugins?.repSummaryLabels) {
+                chartInstance.options.plugins.repSummaryLabels.repSummary = repSummary;
             }
             chartInstance.update();
         }
@@ -271,13 +329,13 @@ if (widget) {
             const itemCodes = data.item_codes || [];
             if (!labels.length || !itemCodes.length) {
                 setStatus("empty", "No data for selected filters.");
-                buildChart([], [], metricSelect.value);
+                buildChart([], [], metricSelect.value, []);
                 return;
             }
 
             const datasets = buildDatasets(labels, itemCodes, data.series || {}, data.compare);
             setStatus("none", "");
-            buildChart(labels, datasets, metricSelect.value);
+            buildChart(labels, datasets, metricSelect.value, data.rep_summary || []);
         } catch (error) {
             console.error("Unable to load Exsol stacked chart", error);
             setStatus("error", "Unable to load data.");

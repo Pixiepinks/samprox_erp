@@ -13,7 +13,10 @@ if (widget) {
     const statusEl = widget.querySelector("[data-exsol-stacked-status]");
     const chartCanvas = widget.querySelector("#exsol-stacked-chart");
     const salesValueEl = widget.querySelector("#exsol-mtd-sales");
+    const salesWaterPumpsEl = widget.querySelector("#exsol-mtd-sales-water-pumps");
+    const salesPressureSwitchEl = widget.querySelector("#exsol-mtd-sales-pressure-switch");
     const qtyValueEl = widget.querySelector("#exsol-mtd-qty");
+    const qtyPressureSwitchEl = widget.querySelector("#exsol-mtd-qty-pressure-switch");
 
     let chartInstance = null;
 
@@ -146,14 +149,32 @@ if (widget) {
 
     const getSelectedItems = () => Array.from(itemsSelect.selectedOptions).map((option) => option.value);
 
-    const setKpiValues = (salesAmount, waterPumpQty) => {
+    const setKpiValues = ({
+        salesAmountTotal,
+        salesWaterPumps,
+        salesPressureSwitch,
+        waterPumpQty,
+        pressureSwitchQty,
+    }) => {
         if (salesValueEl) {
-            const amount = Number.isFinite(salesAmount) ? salesAmount : 0;
+            const amount = Number.isFinite(salesAmountTotal) ? salesAmountTotal : 0;
             salesValueEl.textContent = `Rs. ${kpiAmountFormatter.format(amount)}`;
+        }
+        if (salesWaterPumpsEl) {
+            const amount = Number.isFinite(salesWaterPumps) ? salesWaterPumps : 0;
+            salesWaterPumpsEl.textContent = `Water Pumps: Rs. ${kpiAmountFormatter.format(amount)}`;
+        }
+        if (salesPressureSwitchEl) {
+            const amount = Number.isFinite(salesPressureSwitch) ? salesPressureSwitch : 0;
+            salesPressureSwitchEl.textContent = `Pressure Switch: Rs. ${kpiAmountFormatter.format(amount)}`;
         }
         if (qtyValueEl) {
             const qty = Number.isFinite(waterPumpQty) ? waterPumpQty : 0;
             qtyValueEl.textContent = `${kpiAmountFormatter.format(qty)} Units`;
+        }
+        if (qtyPressureSwitchEl) {
+            const qty = Number.isFinite(pressureSwitchQty) ? pressureSwitchQty : 0;
+            qtyPressureSwitchEl.textContent = `Pressure Switch: ${kpiAmountFormatter.format(qty)} Units`;
         }
     };
 
@@ -172,7 +193,13 @@ if (widget) {
 
     const loadSummary = async () => {
         if (!startInput.value || !endInput.value) {
-            setKpiValues(0, 0);
+            setKpiValues({
+                salesAmountTotal: 0,
+                salesWaterPumps: 0,
+                salesPressureSwitch: 0,
+                waterPumpQty: 0,
+                pressureSwitchQty: 0,
+            });
             return;
         }
 
@@ -192,10 +219,22 @@ if (widget) {
                 throw new Error(`Failed to load KPI summary (${resp.status})`);
             }
             const data = await resp.json();
-            setKpiValues(data?.sales_amount_lkr ?? 0, data?.water_pump_qty ?? 0);
+            setKpiValues({
+                salesAmountTotal: data?.mtd_sales_amount_total ?? data?.sales_amount_lkr ?? 0,
+                salesWaterPumps: data?.mtd_sales_amount_water_pumps ?? 0,
+                salesPressureSwitch: data?.mtd_sales_amount_pressure_switch ?? 0,
+                waterPumpQty: data?.mtd_water_pump_qty ?? data?.water_pump_qty ?? 0,
+                pressureSwitchQty: data?.mtd_pressure_switch_qty ?? 0,
+            });
         } catch (error) {
             console.error("Unable to load Exsol KPI summary", error);
-            setKpiValues(0, 0);
+            setKpiValues({
+                salesAmountTotal: 0,
+                salesWaterPumps: 0,
+                salesPressureSwitch: 0,
+                waterPumpQty: 0,
+                pressureSwitchQty: 0,
+            });
         }
     };
 

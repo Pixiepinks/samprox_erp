@@ -5862,6 +5862,20 @@ body.modal-polyfill-active::before {
     color: #0f172a;
 }
 
+.exsol-stacked-kpi__details {
+    margin-top: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.exsol-stacked-kpi__detail {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #6b7280;
+    line-height: 1.2;
+}
+
 .exsol-stacked-card__controls {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, max-content));

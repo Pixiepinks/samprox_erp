@@ -276,6 +276,21 @@ def _build_water_pump_filter(item_codes: list[str]):
     return ExsolInventoryItem.item_code.ilike("EXS%")
 
 
+WATER_PUMP_ITEM_CODES = {
+    "EXS0.50HP1X1",
+    "EXS0.75HP1X1",
+    "EXS1.00HP1X1",
+    "EXS1.50HP1X1",
+    "EXS2.00HP2X2",
+    "EXS60HP1X1",
+    "EXSCU0.5HP",
+    "EXSCU0.75HP",
+    "EXSCU1.00HP",
+    "EXSCU60",
+}
+PRESSURE_SWITCH_ITEM_CODES = {"PCU1.5BAR"}
+
+
 def _sum_exsol_sales_amount(
     *,
     start_date: date,
@@ -302,6 +317,63 @@ def _sum_exsol_water_pump_qty(
     query = query.filter(_build_water_pump_filter(item_codes))
     total = query.with_entities(func.coalesce(func.sum(ExsolSalesInvoiceLine.qty), 0)).scalar()
     return _coerce_metric_value(total, "qty")
+
+
+def _fetch_exsol_item_code_totals(
+    *,
+    start_date: date,
+    end_date: date,
+    company_id: int,
+    item_codes: list[str],
+) -> dict[str, dict[str, float | int]]:
+    query = _exsol_sales_line_query(start_date=start_date, end_date=end_date, company_id=company_id)
+    if item_codes:
+        query = query.filter(ExsolInventoryItem.item_code.in_(item_codes))
+
+    amount_expr = _exsol_amount_expression()
+    rows = (
+        query.with_entities(
+            ExsolInventoryItem.item_code,
+            func.coalesce(func.sum(amount_expr), 0).label("amount_sum"),
+            func.coalesce(func.sum(ExsolSalesInvoiceLine.qty), 0).label("qty_sum"),
+        )
+        .group_by(ExsolInventoryItem.item_code)
+        .all()
+    )
+
+    totals: dict[str, dict[str, float | int]] = {}
+    for item_code, amount_sum, qty_sum in rows:
+        totals[item_code] = {
+            "amount": float(amount_sum or 0),
+            "qty": _coerce_metric_value(qty_sum, "qty"),
+        }
+    return totals
+
+
+def _rollup_exsol_kpi_totals(item_totals: dict[str, dict[str, float | int]]):
+    water_pump_amount = 0.0
+    water_pump_qty = 0
+    pressure_switch_amount = 0.0
+    pressure_switch_qty = 0
+
+    for item_code in WATER_PUMP_ITEM_CODES:
+        entry = item_totals.get(item_code)
+        if entry:
+            water_pump_amount += float(entry.get("amount") or 0)
+            water_pump_qty += int(entry.get("qty") or 0)
+
+    for item_code in PRESSURE_SWITCH_ITEM_CODES:
+        entry = item_totals.get(item_code)
+        if entry:
+            pressure_switch_amount += float(entry.get("amount") or 0)
+            pressure_switch_qty += int(entry.get("qty") or 0)
+
+    return {
+        "water_pump_amount": water_pump_amount,
+        "water_pump_qty": water_pump_qty,
+        "pressure_switch_amount": pressure_switch_amount,
+        "pressure_switch_qty": pressure_switch_qty,
+    }
 
 
 def _parse_decimal(value: Any) -> Decimal | None:
@@ -475,17 +547,23 @@ def exsol_mtd_summary():
         company_id=company_id,
         item_codes=item_codes,
     )
-    water_pump_qty = _sum_exsol_water_pump_qty(
+    item_totals = _fetch_exsol_item_code_totals(
         start_date=start_date,
         end_date=end_date,
         company_id=company_id,
         item_codes=item_codes,
     )
+    rollups = _rollup_exsol_kpi_totals(item_totals)
 
     return jsonify(
         {
             "sales_amount_lkr": sales_amount,
-            "water_pump_qty": water_pump_qty,
+            "water_pump_qty": rollups["water_pump_qty"],
+            "mtd_sales_amount_total": sales_amount,
+            "mtd_sales_amount_water_pumps": rollups["water_pump_amount"],
+            "mtd_sales_amount_pressure_switch": rollups["pressure_switch_amount"],
+            "mtd_water_pump_qty": rollups["water_pump_qty"],
+            "mtd_pressure_switch_qty": rollups["pressure_switch_qty"],
         }
     )
 

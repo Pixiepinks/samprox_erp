@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from math import radians, sin, cos, sqrt, atan2
 
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint, event, func, select
+from sqlalchemy.orm import validates
 from sqlalchemy.types import CHAR, TypeDecorator
 
 from extensions import db
@@ -987,6 +988,7 @@ class ExsolSerialEvent(db.Model):
     id = db.Column(GUID(), primary_key=True, default=uuid.uuid4)
     company_key = db.Column(db.String(20), nullable=False, default="EXSOL", index=True)
     item_code = db.Column(db.String(60), nullable=False)
+    serial_no = db.Column(db.String(60), nullable=False)
     serial_number = db.Column(db.String(60), nullable=False)
     event_type = db.Column(db.String(30), nullable=False)
     event_date = db.Column(db.DateTime, nullable=False)
@@ -1006,8 +1008,21 @@ class ExsolSerialEvent(db.Model):
             "item_code",
             "serial_number",
         ),
+        Index("ix_exsol_serial_events_company_serial", "company_key", "serial_no"),
         Index("ix_exsol_serial_events_event_date", "event_date"),
     )
+
+    @validates("serial_number")
+    def _sync_serial_no(self, _key, value):  # pragma: no cover - model sync
+        if value:
+            self.serial_no = value
+        return value
+
+    @validates("serial_no")
+    def _sync_serial_number(self, _key, value):  # pragma: no cover - model sync
+        if value:
+            self.serial_number = value
+        return value
 
 
 class ExsolSalesInvoice(db.Model):

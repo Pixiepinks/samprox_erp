@@ -88,7 +88,7 @@ class ExsolProductionBulkTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
         data = resp.get_json()
         self.assertTrue(data["ok"])
-        self.assertEqual(data["inserted_rows"], 1)
+        self.assertEqual(data["inserted_production"], 1)
         self.assertEqual(data["inserted_serials"], 50)
         self.assertLess(elapsed, 5.0)
 
@@ -116,7 +116,7 @@ class ExsolProductionBulkTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
         data = resp.get_json()
         self.assertTrue(data["ok"])
-        self.assertEqual(data["inserted_rows"], 1)
+        self.assertEqual(data["inserted_production"], 1)
         self.assertEqual(data["inserted_serials"], 1)
 
         from models import ExsolProductionSerial
@@ -124,6 +124,88 @@ class ExsolProductionBulkTestCase(unittest.TestCase):
         serials = ExsolProductionSerial.query.all()
         self.assertEqual(len(serials), 1)
         self.assertEqual(serials[0].serial_no, "00000001")
+
+    def test_bulk_manual_serials_trim_and_require(self):
+        payload = {
+            "rows": [
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "Manual",
+                    "serial_numbers": " 24123007 ",
+                }
+            ]
+        }
+
+        resp = self.client.post("/api/exsol/production/bulk", headers=self._auth(), json=payload)
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["inserted_serials"], 1)
+
+    def test_bulk_duplicate_serial_in_payload(self):
+        payload = {
+            "rows": [
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "Manual",
+                    "serial_numbers": "24123007",
+                },
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "Manual",
+                    "serial_numbers": "24123007",
+                },
+            ]
+        }
+
+        resp = self.client.post("/api/exsol/production/bulk", headers=self._auth(), json=payload)
+        self.assertEqual(resp.status_code, 409, resp.get_data(as_text=True))
+        data = resp.get_json()
+        self.assertEqual(data["duplicate_serial"], "24123007")
+        self.assertEqual(data["conflict_source"], "payload")
+
+    def test_bulk_duplicate_serial_existing(self):
+        initial_payload = {
+            "rows": [
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "SerialRange",
+                    "start_serial": "00001000",
+                }
+            ]
+        }
+        resp = self.client.post("/api/exsol/production/bulk", headers=self._auth(), json=initial_payload)
+        self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
+
+        payload = {
+            "rows": [
+                {
+                    "production_date": date.today().isoformat(),
+                    "item_code": "EX-ITEM-001",
+                    "quantity": 1,
+                    "production_shift": "Morning",
+                    "serial_mode": "Manual",
+                    "serial_numbers": "00001000",
+                }
+            ]
+        }
+        resp = self.client.post("/api/exsol/production/bulk", headers=self._auth(), json=payload)
+        self.assertEqual(resp.status_code, 409, resp.get_data(as_text=True))
+        data = resp.get_json()
+        self.assertEqual(data["duplicate_serial"], "00001000")
+        self.assertEqual(data["conflict_source"], "production_serials")
 
 
 if __name__ == "__main__":

@@ -766,8 +766,12 @@ def money_page():
         and (request.args.get("view") or "").strip().lower() == "travel-claims"
     )
     can_view_petty_cash = role in {
-        RoleEnum.sales,
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
         RoleEnum.outside_manager,
+        RoleEnum.sales,
         RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }
@@ -834,8 +838,12 @@ def financials_page():
         company_id=company_id, statement_type=statement_type, financial_year=parsed_year
     )
     can_view_petty_cash = role in {
-        RoleEnum.sales,
+        RoleEnum.admin,
+        RoleEnum.finance_manager,
+        RoleEnum.production_manager,
+        RoleEnum.maintenance_manager,
         RoleEnum.outside_manager,
+        RoleEnum.sales,
         RoleEnum.sales_manager,
         RoleEnum.sales_executive,
     }

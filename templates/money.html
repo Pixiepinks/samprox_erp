@@ -270,6 +270,14 @@
                                         </tfoot>
                                     </table>
                                 </div>
+                                <datalist id="petty-expense-types">
+                                    <option value="Breakfast"></option>
+                                    <option value="Lunch"></option>
+                                    <option value="Dinner"></option>
+                                    <option value="Lodging"></option>
+                                    <option value="High Way"></option>
+                                    <option value="Parking Fee"></option>
+                                </datalist>
 
                                 <div class="petty-toolbar">
                                     <div class="petty-actions">
@@ -1076,6 +1084,7 @@
             input.disabled = locked;
             input.id = inputId;
             input.name = inputId;
+            input.setAttribute("list", "petty-expense-types");
             input.addEventListener("blur", () => {
                 persistLineUpdate(line.id, { expense_type: input.value });
             });

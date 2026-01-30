@@ -290,26 +290,33 @@ def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
 def _ensure_default_lines(claim: PettyCashWeeklyClaim) -> bool:
     existing = {(line.expense_type or "").strip().lower(): line for line in claim.lines}
     added = False
+    max_order = (
+        db.session.query(db.func.max(PettyCashWeeklyLine.line_order))
+        .filter(PettyCashWeeklyLine.claim_id == claim.id)
+        .scalar()
+        or 0
+    )
 
     for expense in DEFAULT_EXPENSE_TYPES:
         normalized = expense.strip().lower()
         if normalized in existing:
             continue
+        max_order += 1
         line = PettyCashWeeklyLine(
             claim_id=claim.id,
             expense_type=expense,
+            line_order=max_order,
         )
         line.recalculate_total()
         db.session.add(line)
         added = True
 
-    reordered = _normalize_default_line_order(claim)
-    if added or reordered:
+    if added:
         claim.recalculate_totals()
         db.session.commit()
         db.session.refresh(claim)
 
-    return added or reordered
+    return added
 
 
 def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:

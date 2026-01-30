@@ -39,6 +39,7 @@ DEFAULT_EXPENSE_TYPES = [
     "Dinner",
     "Lodging",
     "High Way",
+    "Parking Fee",
 ]
 
 DISALLOWED_DEFAULT_EXPENSE_TYPES = {
@@ -249,6 +250,26 @@ def _resequence_lines(claim: PettyCashWeeklyClaim) -> None:
         line.line_order = index
 
 
+def _normalize_default_line_order(claim: PettyCashWeeklyClaim) -> bool:
+    default_order = {
+        expense.strip().lower(): index for index, expense in enumerate(DEFAULT_EXPENSE_TYPES)
+    }
+
+    def _sort_key(line: PettyCashWeeklyLine) -> tuple[int, int]:
+        normalized = (line.expense_type or "").strip().lower()
+        if normalized in default_order:
+            return (0, default_order[normalized])
+        return (1, line.line_order or 0)
+
+    ordered = sorted(claim.lines, key=_sort_key)
+    changed = False
+    for index, line in enumerate(ordered, start=1):
+        if line.line_order != index:
+            line.line_order = index
+            changed = True
+    return changed
+
+
 def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
     removed = False
     for line in list(claim.lines):
@@ -258,7 +279,7 @@ def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
             removed = True
 
     if removed:
-        _resequence_lines(claim)
+        _normalize_default_line_order(claim)
         claim.recalculate_totals()
         db.session.commit()
         db.session.refresh(claim)
@@ -268,8 +289,6 @@ def _prune_disallowed_lines(claim: PettyCashWeeklyClaim) -> bool:
 
 def _ensure_default_lines(claim: PettyCashWeeklyClaim) -> bool:
     existing = {(line.expense_type or "").strip().lower(): line for line in claim.lines}
-    existing_orders = [line.line_order or 0 for line in claim.lines]
-    next_order = (max(existing_orders) if existing_orders else 0) + 1
     added = False
 
     for expense in DEFAULT_EXPENSE_TYPES:
@@ -278,21 +297,19 @@ def _ensure_default_lines(claim: PettyCashWeeklyClaim) -> bool:
             continue
         line = PettyCashWeeklyLine(
             claim_id=claim.id,
-            line_order=next_order,
             expense_type=expense,
         )
         line.recalculate_total()
         db.session.add(line)
-        next_order += 1
         added = True
 
-    if added:
-        _resequence_lines(claim)
+    reordered = _normalize_default_line_order(claim)
+    if added or reordered:
         claim.recalculate_totals()
         db.session.commit()
         db.session.refresh(claim)
 
-    return added
+    return added or reordered
 
 
 def _claim_is_locked(claim: PettyCashWeeklyClaim, user: User | None) -> bool:
